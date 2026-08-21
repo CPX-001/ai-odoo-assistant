@@ -37,6 +37,7 @@ class OdooDeployment:
     database_host: str | None = None
     database_port: int | None = None
     database_user: str | None = None
+    database_names: tuple[str, ...] = ()
     data_dir: Path | None = None
     log_file: Path | None = None
 
@@ -131,12 +132,20 @@ def parse_odoo_config(path: Path) -> OdooDeployment:
     except ValueError as error:
         raise DiscoveryError("Odoo db_port must be an integer") from error
 
+    raw_database_names = options.get("db_name", "").strip()
+    database_names = tuple(
+        name.strip()
+        for name in raw_database_names.split(",")
+        if name.strip() and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$-]*", name.strip())
+    )
+
     return OdooDeployment(
         config_path=path,
         addons_paths=addons_paths,
         database_host=options.get("db_host", "").strip() or None,
         database_port=database_port,
         database_user=options.get("db_user", "").strip() or None,
+        database_names=database_names,
         data_dir=_optional_path(options.get("data_dir", "")),
         log_file=_optional_path(options.get("logfile", "")),
     )
@@ -148,6 +157,7 @@ def resolve_odoo_deployment(
     addons_paths: tuple[Path, ...] = (),
     data_dir: Path | None = None,
     log_file: Path | None = None,
+    database_names: tuple[str, ...] = (),
 ) -> OdooDeployment:
     """Combine discovered config hints with explicit operator overrides.
 
@@ -164,6 +174,7 @@ def resolve_odoo_deployment(
         addons_paths=addons_paths or deployment.addons_paths,
         data_dir=data_dir if data_dir is not None else deployment.data_dir,
         log_file=log_file if log_file is not None else deployment.log_file,
+        database_names=database_names or deployment.database_names,
     )
 
 

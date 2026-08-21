@@ -22,6 +22,7 @@ from installer.bootstrap.discovery import (
     select_odoo_config,
     select_odoo_service,
 )
+from installer.bootstrap.postgres import PostgresBootstrapper, PostgresSettings
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -38,6 +39,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--odoo-data-dir", type=Path)
     parser.add_argument("--odoo-log-file", type=Path)
+    parser.add_argument(
+        "--odoo-db-name",
+        action="append",
+        default=[],
+        help="Odoo database to deny to the Assistant role; repeat when needed",
+    )
     parser.add_argument("--service-user", default="odoo-ai")
     parser.add_argument("--service-group", default="odoo-ai")
     parser.add_argument("--install-dir", type=Path, default=Path("/opt/odoo-ai-assistant"))
@@ -47,6 +54,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--assistant-host", default="127.0.0.1")
     parser.add_argument("--assistant-port", type=int, default=8000)
     parser.add_argument("--assistant-db-name", default="odoo_ai")
+    parser.add_argument("--assistant-db-role", default="odoo_ai_service")
+    parser.add_argument("--assistant-db-host", default="127.0.0.1")
+    parser.add_argument("--assistant-db-port", type=int, default=5432)
+    parser.add_argument("--postgres-admin-host", default="/var/run/postgresql")
+    parser.add_argument(
+        "--postgres-mode",
+        choices=("managed-local", "external-existing"),
+        default="managed-local",
+    )
+    parser.add_argument("--assistant-database-url-file", type=Path)
+    parser.add_argument("--psql-path", type=Path, default=Path("/usr/bin/psql"))
+    parser.add_argument("--postgres-os-user", default="postgres")
     parser.add_argument("--alembic-config", type=Path)
     parser.add_argument(
         "--preflight-only",
@@ -67,6 +86,7 @@ def main(arguments: list[str] | None = None) -> int:
             addons_paths=tuple(options.addons_path),
             data_dir=options.odoo_data_dir,
             log_file=options.odoo_log_file,
+            database_names=tuple(options.odoo_db_name),
         )
         odoo_service = select_odoo_service(
             discover_odoo_services(explicit_unit=options.odoo_service),
@@ -90,6 +110,8 @@ def main(arguments: list[str] | None = None) -> int:
                         ),
                         "odoo_service": odoo_service.unit,
                         "odoo_user": odoo_service.user,
+                        "odoo_database_names": list(deployment.database_names),
+                        "postgres_mode": options.postgres_mode,
                     },
                     sort_keys=True,
                 )
@@ -98,13 +120,39 @@ def main(arguments: list[str] | None = None) -> int:
         if os.geteuid() != 0:
             raise BootstrapError("Bootstrap changes require one privileged execution as root")
 
+        paths = BootstrapPaths(
+            install_dir=options.install_dir,
+            config_dir=options.config_dir,
+            state_dir=options.state_dir,
+            runtime_dir=options.runtime_dir,
+        )
+        alembic_config = options.alembic_config or paths.install_dir / "alembic.ini"
+        postgres_settings = PostgresSettings(
+            mode=options.postgres_mode,
+            database_name=options.assistant_db_name,
+            role_name=options.assistant_db_role,
+            host=options.assistant_db_host,
+            port=options.assistant_db_port,
+            admin_host=options.postgres_admin_host,
+            odoo_database_names=deployment.database_names,
+            odoo_os_user=odoo_service.user,
+            alembic_config=alembic_config,
+            external_url_file=options.assistant_database_url_file,
+            psql_path=options.psql_path,
+            postgres_os_user=options.postgres_os_user,
+        )
+        database_manager = None
+        database_manager_factory = None
+        if options.postgres_mode == "external-existing":
+            database_manager = PostgresBootstrapper(settings=postgres_settings)
+        else:
+            def create_database_manager(password: str) -> PostgresBootstrapper:
+                return PostgresBootstrapper(settings=postgres_settings, password=password)
+
+            database_manager_factory = create_database_manager
+
         result = Bootstrapper(
-            paths=BootstrapPaths(
-                install_dir=options.install_dir,
-                config_dir=options.config_dir,
-                state_dir=options.state_dir,
-                runtime_dir=options.runtime_dir,
-            ),
+            paths=paths,
             account_manager=SystemAccountManager(),
             service_user=options.service_user,
             service_group=options.service_group,
@@ -112,8 +160,10 @@ def main(arguments: list[str] | None = None) -> int:
                 host=options.assistant_host,
                 port=options.assistant_port,
                 database_name=options.assistant_db_name,
-                alembic_config=options.alembic_config,
+                alembic_config=alembic_config,
             ),
+            database_manager=database_manager,
+            database_manager_factory=database_manager_factory,
         ).run(host=host, deployment=deployment, odoo_service=odoo_service)
         print(json.dumps(asdict(result), sort_keys=True))
         return 0

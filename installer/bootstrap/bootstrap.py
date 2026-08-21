@@ -34,6 +34,10 @@ class BootstrapPaths:
     def shared_secret(self) -> Path:
         return self.config_dir / "shared-secret"
 
+    @property
+    def database_password(self) -> Path:
+        return self.config_dir / "database-password"
+
 
 @dataclass(frozen=True, slots=True)
 class ServiceSettings:
@@ -42,6 +46,7 @@ class ServiceSettings:
     host: str = "127.0.0.1"
     port: int = 8000
     database_name: str = "odoo_ai"
+    database_url: str | None = None
     alembic_config: Path | None = None
 
 
@@ -58,6 +63,10 @@ class AccountManager(Protocol):
     def ensure(
         self, *, user: str, group: str, home: Path, shared_reader_user: str
     ) -> AccountState: ...
+
+
+class DatabaseManager(Protocol):
+    def ensure(self) -> object: ...
 
 
 class SystemAccountManager:
@@ -145,6 +154,13 @@ class BootstrapResult:
     directories_created: tuple[str, ...]
     config_changed: bool
     secret_created: bool
+    database_password_created: bool
+    postgres_mode: str | None
+    database_created: bool
+    database_role_created: bool
+    postgres_hba_changed: bool
+    postgres_isolation_verified: bool
+    migrations_applied: bool
 
 
 def _generate_secret() -> str:
@@ -171,6 +187,8 @@ class Bootstrapper:
         service_settings: ServiceSettings | None = None,
         privileged_uid: int = 0,
         secret_factory: Callable[[], str] = _generate_secret,
+        database_manager: DatabaseManager | None = None,
+        database_manager_factory: Callable[[str], DatabaseManager] | None = None,
     ) -> None:
         self._paths = paths
         self._account_manager = account_manager
@@ -179,6 +197,8 @@ class Bootstrapper:
         self._service_settings = service_settings or ServiceSettings()
         self._privileged_uid = privileged_uid
         self._secret_factory = secret_factory
+        self._database_manager = database_manager
+        self._database_manager_factory = database_manager_factory
 
     def run(
         self, *, host: LinuxHost, deployment: OdooDeployment, odoo_service: OdooService
@@ -201,8 +221,23 @@ class Bootstrapper:
             if self._ensure_directory(path, mode=mode, uid=uid, gid=accounts.gid):
                 created.append(str(path))
 
-        config_changed = self._ensure_config(accounts)
         secret_created = self._ensure_secret(accounts)
+        database_password_created = False
+        postgres_result = None
+        database_manager = self._database_manager
+        if self._database_manager_factory is not None:
+            password, database_password_created = self._ensure_database_password(accounts)
+            database_manager = self._database_manager_factory(password)
+        if database_manager is not None:
+            postgres_result = database_manager.ensure()
+            self._service_settings = ServiceSettings(
+                host=self._service_settings.host,
+                port=self._service_settings.port,
+                database_name=self._service_settings.database_name,
+                database_url=postgres_result.runtime_url,
+                alembic_config=self._service_settings.alembic_config,
+            )
+        config_changed = self._ensure_config(accounts)
         return BootstrapResult(
             host=f"{host.distribution_id}:{host.version_id}",
             odoo_config=str(deployment.config_path) if deployment.config_path else None,
@@ -217,6 +252,15 @@ class Bootstrapper:
             directories_created=tuple(created),
             config_changed=config_changed,
             secret_created=secret_created,
+            database_password_created=database_password_created,
+            postgres_mode=postgres_result.mode if postgres_result else None,
+            database_created=postgres_result.database_created if postgres_result else False,
+            database_role_created=postgres_result.role_created if postgres_result else False,
+            postgres_hba_changed=postgres_result.hba_changed if postgres_result else False,
+            postgres_isolation_verified=(
+                postgres_result.isolation_verified if postgres_result else False
+            ),
+            migrations_applied=postgres_result.migrations_applied if postgres_result else False,
         )
 
     @staticmethod
@@ -262,6 +306,8 @@ class Bootstrapper:
             "ODOO_AI_ALEMBIC_CONFIG": str(alembic_config),
             "ODOO_AI_SHARED_SECRET_FILE": str(self._paths.shared_secret),
         }
+        if settings.database_url is not None:
+            values["ODOO_AI_DATABASE_URL"] = settings.database_url
         return "".join(f"{key}={_quote_env_value(value)}\n" for key, value in values.items())
 
     def _ensure_config(self, accounts: AccountState) -> bool:
@@ -313,3 +359,31 @@ class Bootstrapper:
             os.fchmod(stream.fileno(), 0o640)
             os.fchown(stream.fileno(), self._privileged_uid, accounts.gid)
         return True
+
+    def _ensure_database_password(self, accounts: AccountState) -> tuple[str, bool]:
+        path = self._paths.database_password
+        existing = self._validate_regular_file(path)
+        if existing is not None:
+            password = path.read_text(encoding="utf-8").strip()
+            if len(password) < 43:
+                raise BootstrapError(
+                    "Existing database password is invalid; rotate it explicitly"
+                )
+            os.chmod(path, 0o640)
+            os.chown(path, self._privileged_uid, accounts.gid)
+            return password, False
+
+        password = self._secret_factory()
+        if len(password) < 43 or "\n" in password or "\r" in password:
+            raise BootstrapError("Generated database password does not meet policy")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(path, flags, 0o640)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(f"{password}\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+            os.fchmod(stream.fileno(), 0o640)
+            os.fchown(stream.fileno(), self._privileged_uid, accounts.gid)
+        return password, True

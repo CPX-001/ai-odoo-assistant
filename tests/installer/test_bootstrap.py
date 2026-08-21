@@ -9,6 +9,7 @@ from installer.bootstrap.bootstrap import (
     ServiceSettings,
 )
 from installer.bootstrap.discovery import LinuxHost, OdooDeployment, OdooService
+from installer.bootstrap.postgres import PostgresBootstrapResult
 
 
 class FakeAccountManager:
@@ -24,6 +25,25 @@ class FakeAccountManager:
             user_created=self.calls == 1,
             group_created=self.calls == 1,
             reader_added=self.calls == 1,
+        )
+
+
+class FakeDatabaseManager:
+    def __init__(self, password: str) -> None:
+        self.password = password
+
+    def ensure(self) -> PostgresBootstrapResult:
+        return PostgresBootstrapResult(
+            mode="managed-local",
+            database_created=True,
+            role_created=True,
+            hba_changed=True,
+            isolation_verified=True,
+            migrations_applied=True,
+            runtime_url=(
+                "postgresql+psycopg://odoo_ai_service:"
+                f"{self.password}@db.internal:5544/customer_ai"
+            ),
         )
 
 
@@ -151,3 +171,46 @@ def test_bootstrap_repairs_safe_file_mode_drift_without_rotating_secret(
     assert not result.secret_created
     assert paths.shared_secret.read_bytes() == secret_before
     assert _mode(paths.shared_secret) == 0o640
+
+
+def test_bootstrap_persists_database_password_and_sanitized_result(tmp_path: Path) -> None:
+    paths = BootstrapPaths(
+        install_dir=tmp_path / "install",
+        config_dir=tmp_path / "config",
+        state_dir=tmp_path / "state",
+        runtime_dir=tmp_path / "runtime",
+    )
+    accounts = FakeAccountManager()
+    observed_passwords: list[str] = []
+
+    def manager_factory(password: str) -> FakeDatabaseManager:
+        observed_passwords.append(password)
+        return FakeDatabaseManager(password)
+
+    bootstrapper = Bootstrapper(
+        paths=paths,
+        account_manager=accounts,
+        service_settings=ServiceSettings(database_name="customer_ai"),
+        privileged_uid=os.getuid(),
+        secret_factory=lambda: "p" * 64,
+        database_manager_factory=manager_factory,
+    )
+    arguments = {
+        "host": LinuxHost(distribution_id="ubuntu", version_id="24.04"),
+        "deployment": OdooDeployment(
+            config_path=None, database_names=("customer_odoo",)
+        ),
+        "odoo_service": OdooService(unit=None, user="odoo"),
+    }
+
+    first = bootstrapper.run(**arguments)
+    second = bootstrapper.run(**arguments)
+
+    assert first.database_password_created
+    assert not second.database_password_created
+    assert observed_passwords == ["p" * 64, "p" * 64]
+    assert _mode(paths.database_password) == 0o640
+    assert first.postgres_isolation_verified and first.migrations_applied
+    assert "runtime_url" not in repr(first)
+    service_config = paths.service_config.read_text(encoding="utf-8")
+    assert 'ODOO_AI_DATABASE_URL="postgresql+psycopg://odoo_ai_service:' in service_config

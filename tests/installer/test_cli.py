@@ -26,6 +26,18 @@ def test_parser_exposes_customer_deployment_overrides() -> None:
             "8123",
             "--assistant-db-name",
             "acme_ai",
+            "--assistant-db-role",
+            "acme_ai_runtime",
+            "--assistant-db-host",
+            "db.internal",
+            "--assistant-db-port",
+            "5544",
+            "--postgres-mode",
+            "external-existing",
+            "--assistant-database-url-file",
+            "/run/secrets/acme-ai-db",
+            "--odoo-db-name",
+            "acme_odoo",
         ]
     )
 
@@ -37,6 +49,12 @@ def test_parser_exposes_customer_deployment_overrides() -> None:
     assert options.odoo_log_file == Path("/srv/acme/logs/prod.log")
     assert options.assistant_port == 8123
     assert options.assistant_db_name == "acme_ai"
+    assert options.assistant_db_role == "acme_ai_runtime"
+    assert options.assistant_db_host == "db.internal"
+    assert options.assistant_db_port == 5544
+    assert options.postgres_mode == "external-existing"
+    assert options.assistant_database_url_file == Path("/run/secrets/acme-ai-db")
+    assert options.odoo_db_name == ["acme_odoo"]
 
 
 def test_preflight_can_use_explicit_user_without_config_or_systemd(monkeypatch, capsys) -> None:

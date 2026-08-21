@@ -20,6 +20,11 @@ from installer.bootstrap.discovery import (
     select_odoo_config,
     select_odoo_service,
 )
+from installer.bootstrap.postgres import (
+    PostgresBootstrapper,
+    PostgresBootstrapResult,
+    PostgresSettings,
+)
 
 __all__ = [
     "BootstrapError",
@@ -32,6 +37,9 @@ __all__ = [
     "OdooService",
     "ServiceSettings",
     "SystemAccountManager",
+    "PostgresBootstrapResult",
+    "PostgresBootstrapper",
+    "PostgresSettings",
     "discover_linux_host",
     "discover_odoo_services",
     "parse_odoo_config",
