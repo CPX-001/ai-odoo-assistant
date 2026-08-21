@@ -1,6 +1,6 @@
 # M0 — Repo y contratos
 
-M0 es el milestone actual. El bootstrap previo dejó preparado el repositorio y las instrucciones, pero M0 todavía no está implementado: no existe `service/pyproject.toml` ni el package Python del Assistant Service.
+Estado: **DONE**. La gate M0-06 está superada; M1 todavía no se ha iniciado.
 
 Objetivo del milestone: crear el esqueleto ejecutable mínimo del monorepo, los contratos y ports base, y una baseline de tests/lint/type-checking sin implementar features del producto.
 
@@ -29,3 +29,11 @@ M0 sólo se considera terminado cuando:
 - no se ha implementado FastAPI, PostgreSQL, Odoo addon funcional, scanner, Codex App Server ni otras features de M1+.
 
 Tras superar esta gate, el siguiente milestone es M1 — Runtime/install.
+
+## Resultado de la gate M0-06
+
+- 34 tests superados.
+- 16 JSON Schemas públicos generados de forma determinista y serializable.
+- Ruff y mypy estricto superados.
+- Boundaries de `contracts`, `ports`, `application` condicional y clases versionadas verificadas por AST.
+- Sin FastAPI, PostgreSQL, addon funcional, scanner, retrieval, providers concretos de logs ni adapter de Codex.

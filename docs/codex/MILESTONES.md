@@ -2,6 +2,8 @@
 
 Este roadmap resume el Source of Truth. No autoriza por sí mismo la implementación de ningún milestone.
 
+Estado actual: M0 completado; M1 todavía no iniciado.
+
 | Milestone | Objetivo observable |
 | --- | --- |
 | M0 — Repo / contratos | Monorepo y contratos mínimos con tests unitarios verdes y arquitectura congelada. |
