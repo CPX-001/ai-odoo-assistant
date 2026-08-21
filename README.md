@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-M0 y M1 están completados; M1 gate es PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico y el bootstrap instalable de host. M2 todavía no se ha iniciado.
+M0 y M1 están completados; M1 gate es PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico y el bootstrap instalable de host. Los task packets de M2 están preparados; la implementación de M2 todavía no se ha iniciado.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 
@@ -35,7 +35,7 @@ curl http://127.0.0.1:8000/health
 # {"status":"ok"}
 ```
 
-Este endpoint no comprueba DB, migraciones ni readiness; esas capacidades se incorporan durante M1.
+Este endpoint no comprueba DB, migraciones ni readiness; el estado administrativo se consulta mediante `/v1/admin/status`.
 
 ## Migraciones de la Assistant DB
 
@@ -47,7 +47,7 @@ Con ambas variables disponibles, aplica las migraciones desde la raíz del repos
 .venv/bin/alembic -c alembic.ini upgrade head
 ```
 
-La configuración y los logs no deben contener credenciales reales. La creación aislada del role y de la DB de producción pertenece a M1-06.
+La configuración y los logs no deben contener credenciales reales. La creación y el aislamiento del role y de la Assistant DB están implementados por el bootstrap de M1.
 
 ## Estado administrativo
 
