@@ -56,7 +56,24 @@ apt-get install -y \
 
 log "Preparing PostgreSQL"
 systemctl enable --now postgresql
-if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${ODOO_USER}'" | grep -qx 1; then
+PG_HBA="$(find /etc/postgresql -type f -path '*/main/pg_hba.conf' -print | sort -V | tail -n 1)"
+if [[ -z "${PG_HBA}" ]]; then
+    fail "PostgreSQL pg_hba.conf was not found"
+fi
+if ! grep -q '^# odoo-ai-assistant managed local access$' "${PG_HBA}"; then
+    PG_HBA_TEMP="$(mktemp)"
+    {
+        printf '%s\n' '# odoo-ai-assistant managed local access'
+        printf '%s\n' 'local   all   postgres   peer'
+        printf 'local   all   %s   peer\n' "${ODOO_USER}"
+        cat "${PG_HBA}"
+    } >"${PG_HBA_TEMP}"
+    install -o postgres -g postgres -m 0640 "${PG_HBA_TEMP}" "${PG_HBA}"
+    rm -f "${PG_HBA_TEMP}"
+    systemctl reload postgresql
+fi
+if ! runuser -u postgres -- env PGCONNECT_TIMEOUT=5 psql -tAc \
+    "SELECT 1 FROM pg_roles WHERE rolname='${ODOO_USER}'" | grep -qx 1; then
     runuser -u postgres -- createuser --createdb "${ODOO_USER}"
 fi
 
