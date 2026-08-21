@@ -1,5 +1,12 @@
 # Instrucciones del repositorio
 
+## Flujo Git
+
+- Trabajar siempre directamente sobre `main`.
+- No crear ramas de trabajo, ramas de feature ni pull requests para cambios ordinarios.
+- Hacer commit y push directamente a `main` después de verificar los cambios.
+- Usar otra rama únicamente cuando el usuario lo ordene explícitamente para una tarea concreta.
+
 ## Fuente de verdad
 
 - `docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf` es la especificación principal.
