@@ -11,6 +11,7 @@ from odoo_ai.storage.runtime_repository import (
     create_trace_event,
     get_instance_profile,
     get_latest_capability_snapshot,
+    get_latest_instance_profile,
     list_trace_events,
 )
 
@@ -29,6 +30,7 @@ __all__ = [
     "create_trace_event",
     "get_instance_profile",
     "get_latest_capability_snapshot",
+    "get_latest_instance_profile",
     "list_trace_events",
     "session_scope",
 ]

@@ -48,3 +48,7 @@ Con ambas variables disponibles, aplica las migraciones desde la raíz del repos
 ```
 
 La configuración y los logs no deben contener credenciales reales. La creación aislada del role y de la DB de producción pertenece a M1-06.
+
+## Estado administrativo
+
+`GET /v1/admin/status` comprueba el proceso, la conexión a la Assistant DB y la revisión de Alembic. También resume el perfil/snapshot más reciente cuando existe. En M1 el resultado correcto sigue siendo `DEGRADED`, porque source, logs y reasoning engine todavía no están implementados.

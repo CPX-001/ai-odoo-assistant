@@ -81,6 +81,14 @@ def create_capability_snapshot(
     return snapshot
 
 
+def get_latest_instance_profile(session: Session) -> InstanceProfile | None:
+    return session.scalar(
+        select(InstanceProfile)
+        .order_by(InstanceProfile.updated_at.desc(), InstanceProfile.id.desc())
+        .limit(1)
+    )
+
+
 def get_latest_capability_snapshot(
     session: Session, *, instance_profile_id: UUID
 ) -> CapabilitySnapshot | None:
