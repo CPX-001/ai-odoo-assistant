@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-M0 está completado y M1 está en curso. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, y un runtime HTTP mínimo.
+M0 está completado y M1 está en curso. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, un runtime HTTP mínimo y la base del bootstrap de host.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 
@@ -14,7 +14,7 @@ Assistant Service
 Evidence / Tools / Reasoning
 ```
 
-La especificación principal está en [`docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf`](docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf). La referencia operativa resumida está en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+La especificación principal está en [`docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf`](docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf). La referencia operativa resumida está en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) y la política de deployments configurables en [`docs/DEPLOYMENT_CONFIG.md`](docs/DEPLOYMENT_CONFIG.md).
 
 El roadmap va de M0 (repo y contratos) a M8 (compatibilidad Odoo 19) y se resume en [`docs/codex/MILESTONES.md`](docs/codex/MILESTONES.md).
 
@@ -28,18 +28,18 @@ python3 -m venv .venv
 .venv/bin/odoo-ai-service
 ```
 
-El proceso escucha en `127.0.0.1:8000`. La comprobación de liveness es:
+El proceso escucha por defecto en `127.0.0.1:8000`. La comprobación de liveness es:
 
 ```bash
 curl http://127.0.0.1:8000/health
 # {"status":"ok"}
 ```
 
-Este endpoint no comprueba DB, migraciones ni readiness; esas capacidades se incorporan en tasks posteriores de M1.
+Este endpoint no comprueba DB, migraciones ni readiness; esas capacidades se incorporan durante M1.
 
 ## Migraciones de la Assistant DB
 
-La conexión se configura externamente mediante `ODOO_AI_DATABASE_URL`. El nombre de DB debe coincidir con `ODOO_AI_DATABASE_NAME`, cuyo valor por defecto es `odoo_ai`; una URL dirigida a otra DB se rechaza antes de crear el engine.
+La conexión se configura externamente mediante `ODOO_AI_DATABASE_URL`. El nombre esperado se controla mediante `ODOO_AI_DATABASE_NAME` (default `odoo_ai`); una URL dirigida a otra DB se rechaza antes de crear el engine.
 
 Con ambas variables disponibles, aplica las migraciones desde la raíz del repositorio:
 
@@ -55,16 +55,38 @@ La configuración y los logs no deben contener credenciales reales. La creación
 
 ## Bootstrap del host
 
-El preflight es seguro y no modifica el host:
+Las rutas convencionales son sólo hints. Primero puede ejecutarse un preflight seguro:
 
 ```bash
-python3 -m installer.bootstrap --preflight-only --odoo-conf /etc/odoo-server.conf
+python3 -m installer.bootstrap --preflight-only
 ```
 
-La preparación real requiere una única ejecución privilegiada. Crea/reutiliza el usuario y grupo `odoo-ai`, directorios bajo `/opt`, `/etc`, `/var/lib` y `/run`, config no secreta y un shared secret con permisos `0640`:
+Si la instalación usa nombres/rutas no convencionales, se pasan como overrides sin tocar código:
 
 ```bash
-python3 -m installer.bootstrap --odoo-conf /etc/odoo-server.conf
+python3 -m installer.bootstrap --preflight-only \
+  --odoo-conf /srv/acme/config/production.conf \
+  --odoo-service acme-erp.service \
+  --odoo-user acme-odoo \
+  --addons-path /srv/acme/addons \
+  --addons-path /mnt/oca \
+  --odoo-data-dir /srv/acme/data \
+  --odoo-log-file '/srv/acme/logs/odoo production.log'
 ```
 
-El comando no modifica `odoo.conf`, no configura PostgreSQL ni instala una unit systemd. Repetirlo valida los recursos y corrige únicamente drift seguro.
+`odoo.conf` y systemd no son requisitos absolutos para detectar Odoo: si no hay config conocida, los valores pueden quedar sin resolver y aportarse mediante overrides; si Odoo no usa systemd, `--odoo-user` permite continuar sin inventar un unit.
+
+La preparación real requiere una única ejecución privilegiada. Crea/reutiliza el usuario y grupo del Assistant, directorios runtime, config no secreta y un shared secret con permisos restrictivos:
+
+```bash
+sudo python3 -m installer.bootstrap \
+  --odoo-user acme-odoo \
+  --install-dir /opt/odoo-ai-assistant \
+  --config-dir /etc/odoo-ai-assistant \
+  --state-dir /var/lib/odoo-ai-assistant \
+  --runtime-dir /run/odoo-ai-assistant \
+  --assistant-port 8000 \
+  --assistant-db-name odoo_ai
+```
+
+El bind del Assistant Service permanece limitado a loopback en el MVP por seguridad. El bootstrap actual todavía no configura PostgreSQL ni instala una unit systemd; esas partes pertenecen a las siguientes tasks de M1. Repetirlo valida recursos y corrige únicamente drift seguro.
