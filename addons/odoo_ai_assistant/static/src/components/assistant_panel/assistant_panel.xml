@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="odoo_ai_assistant.AssistantSystray">
+        <div class="o_ai_assistant_systray d-flex">
+            <button
+                type="button"
+                class="o_nav_entry border-0 px-3"
+                title="AI Assistant"
+                aria-label="Abrir AI Assistant"
+                t-att-aria-expanded="state.isOpen ? 'true' : 'false'"
+                t-on-click="togglePanel"
+            >
+                <i class="fa fa-magic" aria-hidden="true"/>
+            </button>
+        </div>
+    </t>
+
+    <t t-name="odoo_ai_assistant.AssistantPanel">
+        <aside
+            t-if="state.isOpen"
+            class="o_ai_assistant_panel position-fixed end-0 bottom-0 bg-body border-start shadow d-flex flex-column"
+            aria-label="AI Assistant"
+        >
+            <header class="d-flex align-items-center justify-content-between border-bottom px-3 py-2">
+                <div>
+                    <h2 class="h5 mb-0">AI Assistant</h2>
+                    <small class="text-muted">Comprobación contextual M2</small>
+                </div>
+                <button
+                    type="button"
+                    class="btn btn-link text-body"
+                    aria-label="Cerrar AI Assistant"
+                    title="Cerrar"
+                    t-on-click="closePanel"
+                >
+                    <i class="fa fa-times" aria-hidden="true"/>
+                </button>
+            </header>
+
+            <div class="flex-grow-1 overflow-auto p-3">
+                <section class="alert alert-light border" aria-live="polite">
+                    <div class="small text-uppercase text-muted fw-bold mb-1">Contexto detectado</div>
+                    <div class="font-monospace text-break" t-esc="contextLabel"/>
+                </section>
+
+                <div t-if="state.errorCode" class="alert alert-danger" role="alert">
+                    <t t-esc="errorMessage"/>
+                </div>
+
+                <section t-if="state.result" class="o_ai_assistant_result" aria-live="polite">
+                    <div class="alert alert-success mb-3">
+                        <i class="fa fa-check-circle me-1" aria-hidden="true"/>
+                        <t t-esc="state.result.message"/>
+                    </div>
+                    <dl class="row small mb-0">
+                        <t t-foreach="resultFields" t-as="field" t-key="field[0]">
+                            <dt class="col-5 text-break" t-esc="field[0]"/>
+                            <dd class="col-7 text-break" t-esc="field[1]"/>
+                        </t>
+                    </dl>
+                </section>
+            </div>
+
+            <form class="border-top p-3" t-on-submit.prevent="submit">
+                <label class="form-label fw-bold" for="o_ai_assistant_question">Pregunta</label>
+                <textarea
+                    id="o_ai_assistant_question"
+                    class="form-control mb-2"
+                    rows="3"
+                    maxlength="4000"
+                    placeholder="Pregunta sobre el registro abierto"
+                    t-model="form.question"
+                    t-att-disabled="state.loading"
+                />
+                <button
+                    type="submit"
+                    class="btn btn-primary w-100"
+                    t-att-disabled="state.loading or !form.question.trim()"
+                >
+                    <i
+                        t-if="state.loading"
+                        class="fa fa-spinner fa-spin me-1"
+                        aria-hidden="true"
+                    />
+                    <t t-if="state.loading">Comprobando...</t>
+                    <t t-else="">Enviar</t>
+                </button>
+                <p class="small text-muted mb-0 mt-2">
+                    M2 relee el contexto y valida permisos; todavía no interpreta la pregunta con un LLM.
+                </p>
+            </form>
+        </aside>
+    </t>
+</templates>

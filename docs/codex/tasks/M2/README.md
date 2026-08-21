@@ -1,6 +1,6 @@
 # M2 — UI / context / delegation
 
-Estado: en curso. M2-01 a M2-04 implementados y verificados; M2-05 es el siguiente task packet.
+Estado: en curso. M2-01 a M2-06 implementados y verificados; M2-07 es el siguiente task packet.
 
 M2 empieza únicamente después del **M1 GATE: PASS**. Su objetivo es demostrar el primer flujo contextual real del producto sin introducir todavía Codex ni un agent loop: desde un registro abierto en Odoo, el usuario puede abrir el asistente, enviar una pregunta y el sistema vuelve a leer ese registro por ORM bajo la identidad efectiva del mismo usuario mediante una delegación firmada y acotada.
 

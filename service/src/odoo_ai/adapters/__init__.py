@@ -1,5 +1,6 @@
 """Replaceable infrastructure adapters for stable service ports."""
 
+from odoo_ai.adapters.context_runtime import load_instance_summary, persist_trace_events
 from odoo_ai.adapters.odoo_http import (
     HttpOdooGateway,
     OdooGatewayError,
@@ -12,4 +13,6 @@ __all__ = [
     "OdooGatewayError",
     "OdooGatewayFactory",
     "OdooGatewaySettings",
+    "load_instance_summary",
+    "persist_trace_events",
 ]

@@ -1,14 +1,25 @@
 {
     "name": "Odoo AI Assistant",
-    "summary": "Local Assistant Service diagnostics",
-    "version": "18.0.2.3.0",
+    "summary": "Context-aware local AI assistant for Odoo",
+    "version": "18.0.2.6.0",
     "category": "Administration",
     "license": "LGPL-3",
-    "depends": ["base"],
+    "depends": ["base", "web"],
     "data": [
         "security/ir.model.access.csv",
         "views/assistant_diagnostics_views.xml",
     ],
+    "assets": {
+        "web.assets_backend": [
+            "odoo_ai_assistant/static/src/services/*.js",
+            "odoo_ai_assistant/static/src/components/**/*.js",
+            "odoo_ai_assistant/static/src/components/**/*.xml",
+            "odoo_ai_assistant/static/src/components/**/*.scss",
+        ],
+        "web.assets_unit_tests": [
+            "odoo_ai_assistant/static/tests/**/*.test.js",
+        ],
+    },
     "installable": True,
     "application": False,
 }

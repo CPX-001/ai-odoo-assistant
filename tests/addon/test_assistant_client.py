@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,6 +29,7 @@ AssistantServiceError = client_module.AssistantServiceError
 
 class AssistantHandler(BaseHTTPRequestHandler):
     secret = "addon-test-secret-" + "s" * 48
+    last_post: dict[str, object] | None = None
 
     def do_GET(self) -> None:
         if self.path == "/health":
@@ -40,6 +42,21 @@ class AssistantHandler(BaseHTTPRequestHandler):
                     200,
                     b'{"readiness":"DEGRADED","components":{},"instance":null}',
                 )
+        else:
+            self._json(404, b'{}')
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        payload = json.loads(self.rfile.read(length))
+        type(self).last_post = {
+            "headers": dict(self.headers.items()),
+            "path": self.path,
+            "payload": payload,
+        }
+        if self.headers.get("X-Odoo-AI-Shared-Secret") != self.secret:
+            self._json(401, b'{"error":{"code":"invalid"},"ok":false}')
+        elif self.path == "/v1/turns/context-read":
+            self._json(200, b'{"ok":true,"turn_id":"example"}')
         else:
             self._json(404, b'{}')
 
@@ -116,3 +133,30 @@ def test_client_rejects_other_readable_secret(tmp_path: Path) -> None:
     with pytest.raises(AssistantServiceError) as unavailable:
         client.admin_status()
     assert unavailable.value.code == "authentication_unavailable"
+
+
+def test_context_read_posts_only_to_the_narrow_authenticated_route(
+    tmp_path: Path, local_service: ThreadingHTTPServer
+) -> None:
+    secret_file = tmp_path / "shared-secret"
+    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
+    secret_file.chmod(0o640)
+    client = AssistantServiceClient(
+        base_url=f"http://127.0.0.1:{local_service.server_port}",
+        shared_secret_file=str(secret_file),
+    )
+    payload = {
+        "turn_id": "12345678-1234-5678-1234-567812345678",
+        "message": "question",
+        "screen": {"model": "sale.order", "res_id": 42},
+    }
+
+    response = client.context_read(payload)
+
+    assert response == {"ok": True, "turn_id": "example"}
+    assert AssistantHandler.last_post is not None
+    assert AssistantHandler.last_post["path"] == "/v1/turns/context-read"
+    assert AssistantHandler.last_post["payload"] == payload
+    headers = AssistantHandler.last_post["headers"]
+    assert headers["X-Odoo-AI-Shared-Secret"] == AssistantHandler.secret
+    assert headers["Content-Type"] == "application/json"

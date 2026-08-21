@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-M0 y M1 están completados; M1 gate es PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico y el bootstrap instalable de host. M2 está activo: M2-01 a M2-04 están implementados y el siguiente task packet es M2-05.
+M0 y M1 están completados; M1 gate es PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico y el bootstrap instalable de host. M2 está activo: M2-01 a M2-06 están implementados y verificados; el siguiente task packet es M2-07.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 
@@ -46,6 +46,61 @@ debe ser `http` o `https`, sin credentials, path, query ni fragmento. El
 shared secret continúa leyéndose desde `ODOO_AI_SHARED_SECRET_FILE`; el token
 de delegación y el `turn_id` se ligan a una instancia del gateway por turn y no
 forman parte del port público.
+
+## Turno contextual determinista de M2
+
+El Odoo server envía el contexto actual a `POST /v1/turns/context-read`; deriva
+la identidad efectiva y la delegación sin confiar esos datos al navegador. El
+servicio descubre metadata y relee por ORM sólo los campos disponibles entre
+`display_name`, `name`, `state` y `company_id`.
+
+Ejemplo de request server-to-server, con la delegación deliberadamente
+redactada:
+
+```json
+{
+  "turn_id": "018f6f1d-9d66-7b8c-a274-29f820cfad53",
+  "message": "What is the state of this record?",
+  "screen": {
+    "view_type": "form",
+    "model": "sale.order",
+    "res_id": 42,
+    "selected_ids": [42],
+    "allowed_context_subset": {
+      "active_model": "sale.order",
+      "active_id": 42,
+      "active_ids": [42]
+    },
+    "captured_at": "2026-08-21T10:30:00Z"
+  },
+  "user": {
+    "uid": 17,
+    "company_id": 1,
+    "allowed_company_ids": [1],
+    "lang": "en_US"
+  },
+  "delegation_token": "<server-only redacted>",
+  "gateway": {"database": "acme"}
+}
+```
+
+La respuesta que Odoo reduce para el browser no incluye evidencia interna,
+identidad, instancia ni tokens:
+
+```json
+{
+  "ok": true,
+  "turn_id": "018f6f1d-9d66-7b8c-a274-29f820cfad53",
+  "message": "El registro actual se ha releído mediante ORM.",
+  "context": {
+    "model": "sale.order",
+    "res_id": 42,
+    "display_name": "S00042",
+    "captured_at": "2026-08-21T10:30:00Z"
+  },
+  "fields": {"name": "S00042", "state": "sale"}
+}
+```
 
 ## Migraciones de la Assistant DB
 

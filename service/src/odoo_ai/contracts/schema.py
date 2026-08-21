@@ -15,6 +15,7 @@ from odoo_ai.contracts.context import (
 )
 from odoo_ai.contracts.delegation import (
     ContextReadTurnRequest,
+    ContextReadTurnResponse,
     DelegationClaims,
     OdooGatewayReference,
 )
@@ -29,6 +30,7 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     AnswerEnvelope,
     ContextPack,
     ContextReadTurnRequest,
+    ContextReadTurnResponse,
     ConversationState,
     Evidence,
     DelegationClaims,

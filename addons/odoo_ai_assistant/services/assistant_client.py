@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-MAX_RESPONSE_BYTES = 64 * 1024
+MAX_REQUEST_BYTES = 16 * 1024
+MAX_RESPONSE_BYTES = 128 * 1024
 SHARED_SECRET_HEADER = "X-Odoo-AI-Shared-Secret"
 
 
@@ -68,6 +69,33 @@ class AssistantServiceClient:
             "/v1/admin/status", headers={SHARED_SECRET_HEADER: secret}
         )
 
+    def context_read(self, payload: dict[str, object]) -> dict[str, Any]:
+        """Submit one bounded server-to-server M2 contextual read turn."""
+
+        secret = self._read_shared_secret()
+        try:
+            body = json.dumps(
+                payload,
+                allow_nan=False,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        except (TypeError, ValueError) as error:
+            raise AssistantServiceError("invalid_request") from error
+        if not body or len(body) > MAX_REQUEST_BYTES:
+            raise AssistantServiceError("invalid_request")
+        return self._request_json(
+            "POST",
+            "/v1/turns/context-read",
+            body=body,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                SHARED_SECRET_HEADER: secret,
+            },
+        )
+
     def _read_shared_secret(self) -> str:
         if not self._shared_secret_file:
             raise AssistantServiceError("authentication_unconfigured")
@@ -90,23 +118,44 @@ class AssistantServiceClient:
     def _get_json(
         self, path: str, *, headers: dict[str, str] | None = None
     ) -> dict[str, Any]:
+        return self._request_json("GET", path, headers=headers)
+
+    def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: bytes | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         connection = http.client.HTTPConnection(self._host, self._port, timeout=self._timeout)
         try:
-            connection.request("GET", path, headers=headers or {})
+            connection.request(method, path, body=body, headers=headers or {})
             response = connection.getresponse()
-            body = response.read(MAX_RESPONSE_BYTES + 1)
+            response_body = response.read(MAX_RESPONSE_BYTES + 1)
         except OSError as error:
             raise AssistantServiceError("service_unavailable") from error
         finally:
             connection.close()
         if response.status == 401:
             raise AssistantServiceError("authentication_rejected")
-        if response.status != 200 or len(body) > MAX_RESPONSE_BYTES:
+        if response.status == 403:
+            raise AssistantServiceError("access_denied")
+        if response.status == 422:
+            raise AssistantServiceError("invalid_context")
+        if response.status >= 500:
+            raise AssistantServiceError("service_unavailable")
+        content_type = response.getheader("Content-Type", "").partition(";")[0].strip()
+        if (
+            response.status != 200
+            or content_type != "application/json"
+            or len(response_body) > MAX_RESPONSE_BYTES
+        ):
             raise AssistantServiceError("invalid_response")
         try:
-            payload = json.loads(body)
+            response_payload = json.loads(response_body)
         except (UnicodeError, ValueError) as error:
             raise AssistantServiceError("invalid_response") from error
-        if not isinstance(payload, dict):
+        if not isinstance(response_payload, dict):
             raise AssistantServiceError("invalid_response")
-        return payload
+        return response_payload

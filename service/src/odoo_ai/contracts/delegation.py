@@ -1,5 +1,6 @@
 """Versioned delegation claims and the M2 contextual-turn ingress contract."""
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Final, Literal, Self
 from uuid import UUID
@@ -14,6 +15,8 @@ from pydantic import (
 )
 
 from odoo_ai.contracts.context import UserExecutionContext
+from odoo_ai.contracts.evidence import Evidence
+from odoo_ai.contracts.records import RecordSnapshot
 from odoo_ai.contracts.screen_context import ScreenContext
 
 DELEGATION_FORMAT_VERSION: Final = 1
@@ -119,3 +122,19 @@ class ContextReadTurnRequest(BaseModel):
     user: UserExecutionContext
     delegation_token: SecretStr = Field(min_length=1, max_length=4096)
     gateway: OdooGatewayReference
+
+
+class ContextReadTurnResponse(BaseModel):
+    """Sanitized deterministic result returned to the authenticated Odoo server."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    turn_id: UUID
+    status: Literal["ok"] = "ok"
+    message: str = Field(min_length=1, max_length=512)
+    instance_state: Literal["detected", "unknown"]
+    instance_id: str | None = Field(default=None, max_length=255)
+    fields_read: tuple[str, ...] = Field(min_length=1, max_length=4)
+    record: RecordSnapshot
+    evidence: Evidence
+    completed_at: datetime

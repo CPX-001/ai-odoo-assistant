@@ -19,6 +19,7 @@ from odoo_ai.contracts.context import (
 from odoo_ai.contracts.delegation import (
     DELEGATION_FORMAT_VERSION,
     ContextReadTurnRequest,
+    ContextReadTurnResponse,
     DelegationClaims,
     DelegationScope,
     OdooGatewayReference,
@@ -45,6 +46,7 @@ __all__ = [
     "ContextPack",
     "ConversationState",
     "ContextReadTurnRequest",
+    "ContextReadTurnResponse",
     "DELEGATION_FORMAT_VERSION",
     "DelegationClaims",
     "DelegationScope",
