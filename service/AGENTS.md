@@ -15,4 +15,13 @@
 - Aplicar límites server-side; no confiar en límites expresados sólo en prompts.
 - Evitar plugin frameworks prematuros.
 
-No implementar estos componentes hasta que un task packet posterior lo autorice.
+## Configuración y deployment
+
+- Leer `docs/DEPLOYMENT_CONFIG.md` para cualquier adapter/provider que toque filesystem, logs, source, servicios o PostgreSQL.
+- No hardcodear paths, nombres de services, users, log files, addons roots o endpoints PostgreSQL del cliente dentro de `application`.
+- Defaults locales pueden existir en adapters/entrypoints sólo como hints o valores sustituibles por configuración externa.
+- Source/log providers deben recibir roots/units/paths resueltos; no descubrir el host mediante scans globales.
+- Los valores desconocidos deben propagarse como capability/config pendiente, no rellenarse con el layout DEV.
+- Cambiar un path/endpoint administrable no debe exigir modificar Python.
+
+No implementar componentes fuera del task packet activo.

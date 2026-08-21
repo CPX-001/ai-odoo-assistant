@@ -6,6 +6,7 @@ from installer.bootstrap.bootstrap import (
     AccountState,
     BootstrapPaths,
     Bootstrapper,
+    ServiceSettings,
 )
 from installer.bootstrap.discovery import LinuxHost, OdooDeployment, OdooService
 
@@ -40,8 +41,6 @@ def test_bootstrap_first_run_and_second_run_are_idempotent(tmp_path: Path) -> No
     deployment = OdooDeployment(
         config_path=Path("/etc/odoo-server.conf"),
         addons_paths=(Path("/odoo/custom/addons"),),
-        database_host=None,
-        database_port=None,
         database_user="odoo",
     )
     accounts = FakeAccountManager()
@@ -71,9 +70,51 @@ def test_bootstrap_first_run_and_second_run_are_idempotent(tmp_path: Path) -> No
     assert _mode(paths.service_config) == 0o640
     assert _mode(paths.shared_secret) == 0o640
     config = paths.service_config.read_text(encoding="utf-8")
-    assert "ODOO_AI_HOST=127.0.0.1" in config
-    assert "ODOO_AI_DATABASE_NAME=odoo_ai" in config
+    assert 'ODOO_AI_HOST="127.0.0.1"' in config
+    assert 'ODOO_AI_DATABASE_NAME="odoo_ai"' in config
     assert secret_before.strip() not in config
+
+
+def test_bootstrap_customer_runtime_settings_and_paths_are_not_code_constants(tmp_path: Path) -> None:
+    paths = BootstrapPaths(
+        install_dir=tmp_path / "install with spaces",
+        config_dir=tmp_path / "config with spaces",
+        state_dir=tmp_path / "state",
+        runtime_dir=tmp_path / "runtime",
+    )
+    accounts = FakeAccountManager()
+    bootstrapper = Bootstrapper(
+        paths=paths,
+        account_manager=accounts,
+        service_settings=ServiceSettings(
+            host="::1",
+            port=8123,
+            database_name="customer_ai",
+            alembic_config=tmp_path / "migration config" / "alembic.ini",
+        ),
+        privileged_uid=os.getuid(),
+        secret_factory=lambda: "z" * 64,
+    )
+    deployment = OdooDeployment(
+        config_path=None,
+        addons_paths=(Path("/srv/customer/addons"),),
+        data_dir=Path("/srv/customer/data"),
+        log_file=Path("/srv/customer/logs/odoo prod.log"),
+    )
+
+    result = bootstrapper.run(
+        host=LinuxHost(distribution_id="debian", version_id="12"),
+        deployment=deployment,
+        odoo_service=OdooService(unit=None, user="odoo"),
+    )
+
+    assert result.odoo_config is None
+    assert result.odoo_log_file == "/srv/customer/logs/odoo prod.log"
+    config = paths.service_config.read_text(encoding="utf-8")
+    assert 'ODOO_AI_HOST="::1"' in config
+    assert 'ODOO_AI_PORT="8123"' in config
+    assert 'ODOO_AI_DATABASE_NAME="customer_ai"' in config
+    assert "migration config" in config
 
 
 def test_bootstrap_repairs_safe_file_mode_drift_without_rotating_secret(
@@ -95,9 +136,6 @@ def test_bootstrap_repairs_safe_file_mode_drift_without_rotating_secret(
     deployment = OdooDeployment(
         config_path=Path("/etc/odoo.conf"),
         addons_paths=(Path("/odoo/addons"),),
-        database_host=None,
-        database_port=None,
-        database_user=None,
     )
     arguments = {
         "host": LinuxHost(distribution_id="ubuntu", version_id="24.04"),

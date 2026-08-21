@@ -36,6 +36,16 @@ class BootstrapPaths:
 
 
 @dataclass(frozen=True, slots=True)
+class ServiceSettings:
+    """Customer-adjustable runtime settings that are safe to persist outside code."""
+
+    host: str = "127.0.0.1"
+    port: int = 8000
+    database_name: str = "odoo_ai"
+    alembic_config: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class AccountState:
     uid: int
     gid: int
@@ -123,8 +133,10 @@ class SystemAccountManager:
 @dataclass(frozen=True, slots=True)
 class BootstrapResult:
     host: str
-    odoo_config: str
+    odoo_config: str | None
     addons_paths: tuple[str, ...]
+    odoo_data_dir: str | None
+    odoo_log_file: str | None
     odoo_service: str | None
     odoo_user: str
     user_created: bool
@@ -139,6 +151,13 @@ def _generate_secret() -> str:
     return secrets.token_urlsafe(48)
 
 
+def _quote_env_value(value: str) -> str:
+    if "\n" in value or "\r" in value:
+        raise BootstrapError("Bootstrap config values cannot contain newlines")
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 class Bootstrapper:
     """Create only the non-DB, non-systemd foundation authorized by M1-05."""
 
@@ -149,6 +168,7 @@ class Bootstrapper:
         account_manager: AccountManager,
         service_user: str = "odoo-ai",
         service_group: str = "odoo-ai",
+        service_settings: ServiceSettings | None = None,
         privileged_uid: int = 0,
         secret_factory: Callable[[], str] = _generate_secret,
     ) -> None:
@@ -156,6 +176,7 @@ class Bootstrapper:
         self._account_manager = account_manager
         self._service_user = service_user
         self._service_group = service_group
+        self._service_settings = service_settings or ServiceSettings()
         self._privileged_uid = privileged_uid
         self._secret_factory = secret_factory
 
@@ -184,8 +205,10 @@ class Bootstrapper:
         secret_created = self._ensure_secret(accounts)
         return BootstrapResult(
             host=f"{host.distribution_id}:{host.version_id}",
-            odoo_config=str(deployment.config_path),
+            odoo_config=str(deployment.config_path) if deployment.config_path else None,
             addons_paths=tuple(str(path) for path in deployment.addons_paths),
+            odoo_data_dir=str(deployment.data_dir) if deployment.data_dir else None,
+            odoo_log_file=str(deployment.log_file) if deployment.log_file else None,
             odoo_service=odoo_service.unit,
             odoo_user=odoo_service.user,
             user_created=accounts.user_created,
@@ -221,17 +244,25 @@ class Bootstrapper:
         return created
 
     def _service_config_content(self) -> str:
+        settings = self._service_settings
+        if settings.host not in {"127.0.0.1", "::1", "localhost"}:
+            raise BootstrapError("MVP Assistant Service host must remain loopback")
+        if not 1 <= settings.port <= 65535:
+            raise BootstrapError("Assistant Service port must be between 1 and 65535")
+        if not settings.database_name or any(
+            character in settings.database_name for character in "\r\n="
+        ):
+            raise BootstrapError("Assistant database name is invalid")
+
+        alembic_config = settings.alembic_config or self._paths.install_dir / "alembic.ini"
         values = {
-            "ODOO_AI_HOST": "127.0.0.1",
-            "ODOO_AI_PORT": "8000",
-            "ODOO_AI_DATABASE_NAME": "odoo_ai",
-            "ODOO_AI_ALEMBIC_CONFIG": str(self._paths.install_dir / "alembic.ini"),
+            "ODOO_AI_HOST": settings.host,
+            "ODOO_AI_PORT": str(settings.port),
+            "ODOO_AI_DATABASE_NAME": settings.database_name,
+            "ODOO_AI_ALEMBIC_CONFIG": str(alembic_config),
             "ODOO_AI_SHARED_SECRET_FILE": str(self._paths.shared_secret),
         }
-        for value in values.values():
-            if any(character.isspace() for character in value):
-                raise BootstrapError("Bootstrap paths and config values cannot contain whitespace")
-        return "".join(f"{key}={value}\n" for key, value in values.items())
+        return "".join(f"{key}={_quote_env_value(value)}\n" for key, value in values.items())
 
     def _ensure_config(self, accounts: AccountState) -> bool:
         path = self._paths.service_config

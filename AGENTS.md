@@ -11,6 +11,7 @@
 
 - `docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf` es la especificación principal.
 - `docs/ARCHITECTURE.md` es una referencia operativa resumida, no un sustituto.
+- `docs/DEPLOYMENT_CONFIG.md` concreta la política de autodetección y overrides de deployment sin cambiar las invariantes del Source of Truth.
 - Todo cambio de una invariante arquitectónica requiere un ADR y la actualización explícita del Source of Truth cuando corresponda.
 - No reinterpretar decisiones cerradas sin nueva evidencia. Señalar cualquier conflicto antes de continuar.
 
@@ -28,6 +29,22 @@ Priorizar corrección, seguridad, simplicidad, capacidades nativas de Odoo, reut
 - Monorepo propio.
 - Odoo addon + Assistant Service local.
 - Codex App Server como primer `ReasoningEngine`.
+
+El baseline anterior define el primer perfil probado; no autoriza asumir rutas, nombres de servicios, usuarios, logs, addons o topología PostgreSQL concretos del entorno DEV.
+
+## Adaptabilidad del deployment
+
+**Los defaults son hints, no contratos.**
+
+- No hardcodear como requisito `/etc/odoo.conf`, `odoo.service`, `/var/log/odoo/...`, `/opt/odoo/...`, usuario `odoo`, PostgreSQL local ni una lista fija de `addons_path`.
+- Paths y parámetros relevantes para el cliente deben autodetectarse cuando sea fiable y tener override configurable sin modificar código.
+- La prioridad conceptual es: override explícito → runtime confirmado → metadata de proceso/supervisor → config Odoo → hints convencionales.
+- Si un dato no puede resolverse de forma fiable, conservar `unknown`/capability degradada o pedir configuración; no adivinar.
+- Source/log providers sólo reciben roots/providers resueltos y validados; nunca escanean el host entero.
+- No hace falta soportar todos los deployment managers desde el MVP. Casos complejos pueden quedar detrás de adapters/providers ampliables, pero application code no debe depender de paths o layouts de un cliente.
+- Odoo Settings debe ser la superficie normal futura para overrides administrables; no conceder root a Odoo para aplicarlos.
+
+Ver `docs/DEPLOYMENT_CONFIG.md` antes de introducir cualquier nuevo path, nombre de servicio o assumption de host.
 
 ## Invariantes de seguridad
 

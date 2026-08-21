@@ -5,6 +5,7 @@ from installer.bootstrap.bootstrap import (
     BootstrapPaths,
     Bootstrapper,
     BootstrapResult,
+    ServiceSettings,
     SystemAccountManager,
 )
 from installer.bootstrap.discovery import (
@@ -15,6 +16,7 @@ from installer.bootstrap.discovery import (
     discover_linux_host,
     discover_odoo_services,
     parse_odoo_config,
+    resolve_odoo_deployment,
     select_odoo_config,
     select_odoo_service,
 )
@@ -28,10 +30,12 @@ __all__ = [
     "LinuxHost",
     "OdooDeployment",
     "OdooService",
+    "ServiceSettings",
     "SystemAccountManager",
     "discover_linux_host",
     "discover_odoo_services",
     "parse_odoo_config",
+    "resolve_odoo_deployment",
     "select_odoo_config",
     "select_odoo_service",
 ]
