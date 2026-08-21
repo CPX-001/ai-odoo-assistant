@@ -25,10 +25,22 @@ ALEMBIC_CONFIG = REPO_ROOT / "alembic.ini"
 TEST_DATABASE_URL_ENV = "ODOO_AI_TEST_DATABASE_URL"
 
 
-async def _get_status() -> Response:
+ADMIN_SECRET = "test-admin-secret-" + "s" * 48
+
+
+async def _get_status(secret: str | None = ADMIN_SECRET) -> Response:
     transport = ASGITransport(app=create_app())
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        return await client.get("/v1/admin/status")
+        headers = {"X-Odoo-AI-Shared-Secret": secret} if secret is not None else {}
+        return await client.get("/v1/admin/status", headers=headers)
+
+
+@pytest.fixture(autouse=True)
+def configured_admin_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    secret_file = tmp_path / "shared-secret"
+    secret_file.write_text(f"{ADMIN_SECRET}\n", encoding="utf-8")
+    secret_file.chmod(0o640)
+    monkeypatch.setenv("ODOO_AI_SHARED_SECRET_FILE", str(secret_file))
 
 
 @pytest.fixture
@@ -116,3 +128,13 @@ def test_admin_status_reports_migration_mismatch(configured_engine: Engine) -> N
         assert payload["instance"] is None
     finally:
         command.stamp(config, "head")
+
+
+def test_admin_status_requires_the_local_shared_secret() -> None:
+    missing = asyncio.run(_get_status(secret=None))
+    wrong = asyncio.run(_get_status(secret="wrong-secret"))
+
+    assert missing.status_code == 401
+    assert wrong.status_code == 401
+    assert ADMIN_SECRET not in missing.text
+    assert ADMIN_SECRET not in wrong.text

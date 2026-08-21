@@ -172,6 +172,7 @@ def main(arguments: list[str] | None = None) -> int:
                 service_group=options.service_group,
                 working_directory=paths.install_dir,
                 environment_file=paths.service_config,
+                shared_secret_file=paths.shared_secret,
                 executable=service_executable,
                 host=options.assistant_host,
                 port=options.assistant_port,

@@ -2,10 +2,11 @@
 
 from typing import Literal
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from pydantic import BaseModel, ConfigDict
 
 from odoo_ai.runtime.status import AdminStatus, inspect_admin_status
+from odoo_ai.security import require_shared_secret
 
 
 class HealthResponse(BaseModel):
@@ -25,7 +26,11 @@ def create_app() -> FastAPI:
     async def health() -> HealthResponse:
         return HealthResponse()
 
-    @application.get("/v1/admin/status", response_model=AdminStatus)
+    @application.get(
+        "/v1/admin/status",
+        response_model=AdminStatus,
+        dependencies=[Depends(require_shared_secret)],
+    )
     async def admin_status() -> AdminStatus:
         return inspect_admin_status()
 

@@ -52,6 +52,8 @@ def _settings(tmp_path: Path) -> SystemdSettings:
     environment = tmp_path / "custom config" / "service.env"
     environment.parent.mkdir()
     environment.write_text('ODOO_AI_HOST="127.0.0.1"\nSECRET="not-in-unit"\n')
+    secret = tmp_path / "custom config" / "shared-secret"
+    secret.write_text("s" * 64 + "\n")
     executable = tmp_path / "runtime with spaces" / "bin" / "assistant"
     executable.parent.mkdir(parents=True)
     executable.write_text("#!/bin/sh\nexit 0\n")
@@ -64,6 +66,7 @@ def _settings(tmp_path: Path) -> SystemdSettings:
         service_group="assistant-group",
         working_directory=tmp_path / "runtime with spaces",
         environment_file=environment,
+        shared_secret_file=secret,
         executable=executable,
         host="127.0.0.1",
         port=8123,

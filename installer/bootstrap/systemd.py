@@ -31,6 +31,7 @@ class SystemdSettings:
     service_group: str
     working_directory: Path
     environment_file: Path
+    shared_secret_file: Path
     executable: Path
     host: str
     port: int
@@ -132,6 +133,7 @@ class SystemdInstaller:
         for path, label in (
             (settings.template_path, "systemd template"),
             (settings.environment_file, "service environment file"),
+            (settings.shared_secret_file, "shared secret file"),
             (settings.executable, "service executable"),
         ):
             try:
@@ -245,14 +247,23 @@ class SystemdInstaller:
         host = "127.0.0.1" if self._settings.host == "localhost" else self._settings.host
         display_host = f"[{host}]" if ":" in host else host
         results: list[bool] = []
+        try:
+            shared_secret = self._settings.shared_secret_file.read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeError) as error:
+            raise BootstrapError("Assistant shared secret is unavailable for runtime smoke") from error
+        if len(shared_secret) < 43:
+            raise BootstrapError("Assistant shared secret is invalid for runtime smoke")
         for path, expected_status in (("/health", "ok"), ("/v1/admin/status", None)):
             deadline = time.monotonic() + 5
             last_error: Exception | None = None
             while time.monotonic() < deadline:
                 try:
-                    with urllib.request.urlopen(
-                        f"http://{display_host}:{self._settings.port}{path}", timeout=1
-                    ) as response:
+                    request = urllib.request.Request(
+                        f"http://{display_host}:{self._settings.port}{path}"
+                    )
+                    if path == "/v1/admin/status":
+                        request.add_header("X-Odoo-AI-Shared-Secret", shared_secret)
+                    with urllib.request.urlopen(request, timeout=1) as response:
                         payload = json.loads(response.read())
                     break
                 except (OSError, ValueError, urllib.error.URLError) as error:

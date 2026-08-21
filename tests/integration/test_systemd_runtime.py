@@ -62,6 +62,7 @@ def test_real_systemd_runtime_is_idempotent_non_root_and_loopback() -> None:
         service_group="nogroup",
         working_directory=repo_root,
         environment_file=environment,
+        shared_secret_file=secret,
         executable=executable,
         host="127.0.0.1",
         port=port,
