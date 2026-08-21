@@ -45,15 +45,18 @@ class FakeDatabaseManager:
                 "postgresql+psycopg://odoo_ai_service:"
                 f"{self.password}@db.internal:5544/customer_ai"
             ),
+            backup_path=None,
         )
 
 
 class FakeSystemdManager:
     def __init__(self, service_config: Path) -> None:
         self.service_config = service_config
+        self.config_changes: list[bool] = []
 
-    def ensure(self) -> SystemdBootstrapResult:
+    def ensure(self, *, config_changed: bool = False) -> SystemdBootstrapResult:
         assert self.service_config.is_file()
+        self.config_changes.append(config_changed)
         return SystemdBootstrapResult(
             unit_name="customer-assistant.service",
             unit_changed=True,
@@ -206,6 +209,7 @@ def test_bootstrap_persists_database_password_and_sanitized_result(tmp_path: Pat
         observed_passwords.append(password)
         return FakeDatabaseManager(password)
 
+    systemd_manager = FakeSystemdManager(paths.service_config)
     bootstrapper = Bootstrapper(
         paths=paths,
         account_manager=accounts,
@@ -213,7 +217,7 @@ def test_bootstrap_persists_database_password_and_sanitized_result(tmp_path: Pat
         privileged_uid=os.getuid(),
         secret_factory=lambda: "p" * 64,
         database_manager_factory=manager_factory,
-        systemd_manager=FakeSystemdManager(paths.service_config),
+        systemd_manager=systemd_manager,
     )
     arguments = {
         "host": LinuxHost(distribution_id="ubuntu", version_id="24.04"),
@@ -229,6 +233,7 @@ def test_bootstrap_persists_database_password_and_sanitized_result(tmp_path: Pat
     assert first.database_password_created
     assert not second.database_password_created
     assert observed_passwords == ["p" * 64, "p" * 64]
+    assert systemd_manager.config_changes == [True, False]
     assert _mode(paths.database_password) == 0o640
     assert first.postgres_isolation_verified and first.migrations_applied
     assert first.service_active and first.loopback_verified

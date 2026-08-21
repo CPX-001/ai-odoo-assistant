@@ -88,6 +88,7 @@ def test_managed_postgres_first_second_run_and_isolation(tmp_path: Path) -> None
             alembic_config=Path(__file__).parents[2] / "alembic.ini",
             psql_path=psql,
             postgres_os_user=getpass.getuser(),
+            backup_dir=tmp_path / "backups",
         )
         manager = PostgresBootstrapper(
             settings=settings,
@@ -97,11 +98,33 @@ def test_managed_postgres_first_second_run_and_isolation(tmp_path: Path) -> None
 
         first = manager.ensure()
         second = manager.ensure()
+        migration_environment = os.environ.copy()
+        migration_environment["ODOO_AI_DATABASE_URL"] = first.runtime_url
+        migration_environment["ODOO_AI_DATABASE_NAME"] = settings.database_name
+        subprocess.run(
+            [
+                str(Path(__file__).parents[2] / ".venv/bin/python"),
+                "-m",
+                "alembic",
+                "-c",
+                str(settings.alembic_config),
+                "downgrade",
+                "0001_m1_02_baseline",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=migration_environment,
+        )
+        upgraded = manager.ensure()
 
         assert first.database_created and first.role_created and first.hba_changed
         assert first.isolation_verified and first.migrations_applied
         assert not second.database_created and not second.role_created and not second.hba_changed
         assert second.isolation_verified and second.migrations_applied
+        assert upgraded.backup_path is not None
+        assert Path(upgraded.backup_path).is_file()
+        assert Path(upgraded.backup_path).stat().st_mode & 0o077 == 0
         assert "assistant_task_role" in (data_dir / "pg_hba.conf").read_text()
     finally:
         subprocess.run(

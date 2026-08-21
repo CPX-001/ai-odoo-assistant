@@ -16,10 +16,13 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Protocol
 
 import psycopg
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from psycopg import sql
 from sqlalchemy.engine import URL, make_url
 
@@ -44,6 +47,8 @@ class PostgresSettings:
     external_url_file: Path | None = None
     psql_path: Path = Path("/usr/bin/psql")
     postgres_os_user: str = "postgres"
+    backup_dir: Path | None = None
+    pg_dump_path: Path = Path("/usr/bin/pg_dump")
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +60,7 @@ class PostgresBootstrapResult:
     isolation_verified: bool
     migrations_applied: bool
     runtime_url: str
+    backup_path: str | None
 
 
 class DatabaseBootstrapManager(Protocol):
@@ -140,6 +146,7 @@ class PostgresBootstrapper:
                 settings.external_url_file, expected_database=settings.database_name
             )
             self._verify_runtime_connection(runtime_url)
+            backup_path = self._backup_before_pending_upgrade(runtime_url)
             self._run_migrations(runtime_url)
             return PostgresBootstrapResult(
                 mode=settings.mode,
@@ -149,6 +156,7 @@ class PostgresBootstrapper:
                 isolation_verified=False,
                 migrations_applied=True,
                 runtime_url=runtime_url,
+                backup_path=backup_path,
             )
 
         if self._password is None:
@@ -222,6 +230,7 @@ class PostgresBootstrapper:
         hba_changed = self._ensure_hba_isolation()
         self._verify_isolation(runtime_url)
         self._verify_odoo_access()
+        backup_path = self._backup_before_pending_upgrade(runtime_url)
         self._run_migrations(runtime_url)
         return PostgresBootstrapResult(
             mode=settings.mode,
@@ -231,6 +240,7 @@ class PostgresBootstrapper:
             isolation_verified=True,
             migrations_applied=True,
             runtime_url=runtime_url,
+            backup_path=backup_path,
         )
 
     def _psql_command(self) -> list[str]:
@@ -408,3 +418,83 @@ class PostgresBootstrapper:
             detail = " | ".join(sanitized.strip().splitlines()[-3:])[:600]
             suffix = f": {detail}" if detail else ""
             raise BootstrapError(f"Assistant database migrations failed{suffix}")
+
+    def _backup_before_pending_upgrade(self, runtime_url: str) -> str | None:
+        try:
+            with psycopg.connect(_psycopg_url(runtime_url), connect_timeout=5) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT to_regclass('public.alembic_version')")
+                    if cursor.fetchone()[0] is None:
+                        return None
+                    cursor.execute("SELECT version_num FROM alembic_version")
+                    row = cursor.fetchone()
+                    current = str(row[0]) if row else None
+        except psycopg.Error as error:
+            raise BootstrapError("Cannot inspect Assistant migration revision") from error
+
+        expected = ScriptDirectory.from_config(
+            Config(self._settings.alembic_config)
+        ).get_current_head()
+        if current is None or current == expected:
+            return None
+        if self._settings.backup_dir is None:
+            raise BootstrapError(
+                "Pending Assistant migrations require --assistant-backup-dir for a pre-upgrade backup"
+            )
+        return str(self._create_backup(runtime_url, current_revision=current))
+
+    def _create_backup(self, runtime_url: str, *, current_revision: str) -> Path:
+        backup_dir = self._settings.backup_dir
+        assert backup_dir is not None
+        try:
+            backup_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
+            metadata = backup_dir.lstat()
+        except OSError as error:
+            raise BootstrapError("Cannot prepare Assistant database backup directory") from error
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise BootstrapError("Assistant database backup path must be a directory")
+        os.chmod(backup_dir, 0o700)
+
+        safe_revision = re.sub(r"[^A-Za-z0-9_.-]", "_", current_revision)[:80]
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        destination = backup_dir / (
+            f"{self._settings.database_name}-{timestamp}-from-{safe_revision}.dump"
+        )
+        descriptor, temporary_name = tempfile.mkstemp(dir=backup_dir, prefix=".assistant-db-")
+        os.close(descriptor)
+        temporary = Path(temporary_name)
+        parsed = make_url(runtime_url)
+        environment = os.environ.copy()
+        if parsed.host:
+            environment["PGHOST"] = parsed.host
+        if parsed.port:
+            environment["PGPORT"] = str(parsed.port)
+        if parsed.username:
+            environment["PGUSER"] = parsed.username
+        if parsed.password:
+            environment["PGPASSWORD"] = parsed.password
+        environment["PGDATABASE"] = parsed.database or self._settings.database_name
+        if sslmode := parsed.query.get("sslmode"):
+            environment["PGSSLMODE"] = str(sslmode)
+        try:
+            completed = subprocess.run(
+                [
+                    str(self._settings.pg_dump_path),
+                    "--format=custom",
+                    "--no-owner",
+                    "--no-privileges",
+                    "--file",
+                    str(temporary),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            if completed.returncode != 0 or temporary.stat().st_size == 0:
+                raise BootstrapError("Assistant database pre-upgrade backup failed")
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return destination

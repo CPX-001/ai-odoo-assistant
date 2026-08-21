@@ -39,6 +39,7 @@ class SystemdSettings:
     privileged_gid: int = 0
     systemctl_path: Path = Path("/usr/bin/systemctl")
     ss_path: Path = Path("/usr/bin/ss")
+    force_restart: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,13 +66,12 @@ class SubprocessRunner:
 def _escape_unit_path(value: str) -> str:
     if "\n" in value or "\r" in value or "\x00" in value:
         raise BootstrapError("systemd unit values cannot contain control characters")
-    safe = frozenset("/._-" + "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-    return "".join(
-        character
-        if character in safe
-        else "".join(f"\\x{byte:02x}" for byte in character.encode("utf-8"))
-        for character in value
-    )
+    return value.replace("\\", "\\\\").replace("%", "%%")
+
+
+def _quote_exec_path(value: str) -> str:
+    escaped = _escape_unit_path(value).replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 class SystemdInstaller:
@@ -81,7 +81,7 @@ class SystemdInstaller:
         self._settings = settings
         self._runner = runner or SubprocessRunner()
 
-    def ensure(self) -> SystemdBootstrapResult:
+    def ensure(self, *, config_changed: bool = False) -> SystemdBootstrapResult:
         self._validate()
         content = self._render_unit()
         unit_path = self._settings.unit_dir / self._settings.unit_name
@@ -96,7 +96,7 @@ class SystemdInstaller:
             enabled = True
 
         active = self._systemctl_status("is-active", self._settings.unit_name)
-        if active and changed:
+        if active and (changed or config_changed or self._settings.force_restart):
             self._systemctl("restart", self._settings.unit_name)
             restarted = True
         elif not active:
@@ -155,7 +155,7 @@ class SystemdInstaller:
             "@SERVICE_GROUP@": self._settings.service_group,
             "@WORKING_DIRECTORY@": _escape_unit_path(str(self._settings.working_directory)),
             "@ENVIRONMENT_FILE@": _escape_unit_path(str(self._settings.environment_file)),
-            "@SERVICE_EXECUTABLE@": _escape_unit_path(str(self._settings.executable)),
+            "@SERVICE_EXECUTABLE@": _quote_exec_path(str(self._settings.executable)),
         }
         for marker, value in replacements.items():
             template = template.replace(marker, value)

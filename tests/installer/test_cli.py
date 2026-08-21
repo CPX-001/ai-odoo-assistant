@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 from installer.bootstrap import cli
@@ -44,6 +45,13 @@ def test_parser_exposes_customer_deployment_overrides() -> None:
             "/srv/acme/systemd",
             "--service-executable",
             "/srv/acme/runtime/bin/assistant",
+            "--restart-service",
+            "--assistant-backup-dir",
+            "/srv/acme/backups/assistant",
+            "--runtime-source",
+            "/srv/acme/release-src",
+            "--runtime-python",
+            "/usr/local/bin/python3.12",
         ]
     )
 
@@ -64,6 +72,10 @@ def test_parser_exposes_customer_deployment_overrides() -> None:
     assert options.assistant_unit_name == "acme-assistant.service"
     assert options.systemd_unit_dir == Path("/srv/acme/systemd")
     assert options.service_executable == Path("/srv/acme/runtime/bin/assistant")
+    assert options.restart_service
+    assert options.assistant_backup_dir == Path("/srv/acme/backups/assistant")
+    assert options.runtime_source == Path("/srv/acme/release-src")
+    assert options.runtime_python == Path("/usr/local/bin/python3.12")
 
 
 def test_preflight_can_use_explicit_user_without_config_or_systemd(monkeypatch, capsys) -> None:
@@ -89,3 +101,38 @@ def test_preflight_can_use_explicit_user_without_config_or_systemd(monkeypatch, 
     assert payload["odoo_service"] is None
     assert payload["odoo_user"] == "customer-odoo"
     assert payload["addons_paths"] == ["/srv/customer/addons"]
+
+
+def test_runtime_rollback_requires_acknowledgement_and_restarts(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.setattr(cli.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(
+        cli.RuntimeInstaller,
+        "activate_previous",
+        lambda self, *, schema_compatible: (
+            "/srv/releases/previous" if schema_compatible else ""
+        ),
+    )
+    restarted: list[list[str]] = []
+
+    def fake_run(arguments, **kwargs):
+        restarted.append(arguments)
+        return subprocess.CompletedProcess(arguments, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    result = cli.main(
+        [
+            "--rollback-runtime",
+            "--acknowledge-schema-compatibility",
+            "--install-dir",
+            "/srv/assistant",
+            "--assistant-unit-name",
+            "acme-assistant.service",
+        ]
+    )
+
+    assert result == 0
+    assert restarted == [["/usr/bin/systemctl", "restart", "acme-assistant.service"]]
+    assert json.loads(capsys.readouterr().out)["database_changed"] is False

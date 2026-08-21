@@ -84,19 +84,22 @@ def test_systemd_first_second_run_and_changed_restart(tmp_path: Path) -> None:
 
     first = installer.ensure()
     second = installer.ensure()
+    config_changed = installer.ensure(config_changed=True)
     settings.template_path.write_text(settings.template_path.read_text() + "\n")
     third = installer.ensure()
 
     assert first.unit_changed and first.unit_enabled and not first.service_restarted
     assert not second.unit_changed and not second.service_restarted
+    assert config_changed.service_restarted
     assert third.unit_changed and third.service_restarted
     actions = [command[1] for command in runner.commands if command[0].endswith("systemctl")]
     assert actions.count("daemon-reload") == 2
     assert actions.count("enable") == 1
     assert actions.count("start") == 1
-    assert actions.count("restart") == 1
+    assert actions.count("restart") == 2
     unit = (settings.unit_dir / settings.unit_name).read_text()
-    assert "WorkingDirectory=" in unit and "\\x20" in unit
+    assert "WorkingDirectory=" in unit and "runtime with spaces" in unit
+    assert 'ExecStart="' in unit
     assert "EnvironmentFile=" in unit
     assert "not-in-unit" not in unit
     assert "User=assistant-user" in unit

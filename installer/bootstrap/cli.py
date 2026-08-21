@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -23,6 +24,7 @@ from installer.bootstrap.discovery import (
     select_odoo_service,
 )
 from installer.bootstrap.postgres import PostgresBootstrapper, PostgresSettings
+from installer.bootstrap.runtime import RuntimeInstaller, RuntimeInstallSettings
 from installer.bootstrap.systemd import SystemdInstaller, SystemdSettings
 
 
@@ -52,6 +54,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config-dir", type=Path, default=Path("/etc/odoo-ai-assistant"))
     parser.add_argument("--state-dir", type=Path, default=Path("/var/lib/odoo-ai-assistant"))
     parser.add_argument("--runtime-dir", type=Path, default=Path("/run/odoo-ai-assistant"))
+    parser.add_argument("--runtime-source", type=Path)
+    parser.add_argument("--runtime-python", type=Path, default=Path(sys.executable))
+    parser.add_argument("--rollback-runtime", action="store_true")
+    parser.add_argument("--acknowledge-schema-compatibility", action="store_true")
     parser.add_argument("--assistant-host", default="127.0.0.1")
     parser.add_argument("--assistant-port", type=int, default=8000)
     parser.add_argument("--assistant-db-name", default="odoo_ai")
@@ -67,10 +73,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--assistant-database-url-file", type=Path)
     parser.add_argument("--psql-path", type=Path, default=Path("/usr/bin/psql"))
     parser.add_argument("--postgres-os-user", default="postgres")
+    parser.add_argument("--assistant-backup-dir", type=Path)
+    parser.add_argument("--pg-dump-path", type=Path, default=Path("/usr/bin/pg_dump"))
     parser.add_argument("--assistant-unit-name", default="odoo-ai-assistant.service")
     parser.add_argument("--systemd-unit-dir", type=Path, default=Path("/etc/systemd/system"))
     parser.add_argument("--systemd-template", type=Path)
     parser.add_argument("--service-executable", type=Path)
+    parser.add_argument(
+        "--restart-service",
+        action="store_true",
+        help="Restart an already-active Assistant service after a coordinated code upgrade",
+    )
     parser.add_argument("--alembic-config", type=Path)
     parser.add_argument(
         "--preflight-only",
@@ -84,6 +97,38 @@ def main(arguments: list[str] | None = None) -> int:
     parser = build_parser()
     options = parser.parse_args(arguments)
     try:
+        if options.rollback_runtime:
+            if os.geteuid() != 0:
+                raise BootstrapError("Runtime rollback requires privileged execution as root")
+            runtime_source = options.runtime_source or Path(__file__).resolve().parents[2]
+            activated = RuntimeInstaller(
+                settings=RuntimeInstallSettings(
+                    source_root=runtime_source,
+                    install_dir=options.install_dir,
+                    python_executable=options.runtime_python,
+                )
+            ).activate_previous(
+                schema_compatible=options.acknowledge_schema_compatibility
+            )
+            restarted = subprocess.run(
+                ["/usr/bin/systemctl", "restart", options.assistant_unit_name],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if restarted.returncode != 0:
+                raise BootstrapError("Runtime rollback activated but service restart failed")
+            print(
+                json.dumps(
+                    {
+                        "runtime_release": activated,
+                        "service_restarted": True,
+                        "database_changed": False,
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
         host = discover_linux_host()
         config_path = select_odoo_config(options.odoo_conf)
         deployment = resolve_odoo_deployment(
@@ -132,7 +177,9 @@ def main(arguments: list[str] | None = None) -> int:
             state_dir=options.state_dir,
             runtime_dir=options.runtime_dir,
         )
-        alembic_config = options.alembic_config or paths.install_dir / "alembic.ini"
+        runtime_source = options.runtime_source or Path(__file__).resolve().parents[2]
+        runtime_current = paths.install_dir / "current"
+        alembic_config = options.alembic_config or runtime_current / "alembic.ini"
         postgres_settings = PostgresSettings(
             mode=options.postgres_mode,
             database_name=options.assistant_db_name,
@@ -146,6 +193,8 @@ def main(arguments: list[str] | None = None) -> int:
             external_url_file=options.assistant_database_url_file,
             psql_path=options.psql_path,
             postgres_os_user=options.postgres_os_user,
+            backup_dir=options.assistant_backup_dir,
+            pg_dump_path=options.pg_dump_path,
         )
         database_manager = None
         database_manager_factory = None
@@ -161,7 +210,7 @@ def main(arguments: list[str] | None = None) -> int:
             Path(__file__).resolve().parents[1] / "systemd" / "odoo-ai-assistant.service.in"
         )
         service_executable = options.service_executable or (
-            paths.install_dir / "venv" / "bin" / "odoo-ai-service"
+            runtime_current / ".venv" / "bin" / "odoo-ai-service"
         )
         systemd_manager = SystemdInstaller(
             settings=SystemdSettings(
@@ -170,12 +219,13 @@ def main(arguments: list[str] | None = None) -> int:
                 template_path=systemd_template,
                 service_user=options.service_user,
                 service_group=options.service_group,
-                working_directory=paths.install_dir,
+                working_directory=runtime_current,
                 environment_file=paths.service_config,
                 shared_secret_file=paths.shared_secret,
                 executable=service_executable,
                 host=options.assistant_host,
                 port=options.assistant_port,
+                force_restart=options.restart_service,
             )
         )
 
@@ -193,6 +243,13 @@ def main(arguments: list[str] | None = None) -> int:
             database_manager=database_manager,
             database_manager_factory=database_manager_factory,
             systemd_manager=systemd_manager,
+            runtime_manager=RuntimeInstaller(
+                settings=RuntimeInstallSettings(
+                    source_root=runtime_source,
+                    install_dir=paths.install_dir,
+                    python_executable=options.runtime_python,
+                )
+            ),
         ).run(host=host, deployment=deployment, odoo_service=odoo_service)
         print(json.dumps(asdict(result), sort_keys=True))
         return 0

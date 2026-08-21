@@ -70,6 +70,10 @@ class DatabaseManager(Protocol):
 
 
 class SystemdManager(Protocol):
+    def ensure(self, *, config_changed: bool = False) -> object: ...
+
+
+class RuntimeManager(Protocol):
     def ensure(self) -> object: ...
 
 
@@ -165,6 +169,7 @@ class BootstrapResult:
     postgres_hba_changed: bool
     postgres_isolation_verified: bool
     migrations_applied: bool
+    database_backup: str | None
     systemd_unit: str | None
     systemd_unit_changed: bool
     systemd_unit_enabled: bool
@@ -173,6 +178,11 @@ class BootstrapResult:
     loopback_verified: bool
     health_verified: bool
     admin_status_verified: bool
+    runtime_version: str | None
+    runtime_build_id: str | None
+    runtime_release_created: bool
+    runtime_current_changed: bool
+    previous_runtime_release: str | None
 
 
 def _generate_secret() -> str:
@@ -202,6 +212,7 @@ class Bootstrapper:
         database_manager: DatabaseManager | None = None,
         database_manager_factory: Callable[[str], DatabaseManager] | None = None,
         systemd_manager: SystemdManager | None = None,
+        runtime_manager: RuntimeManager | None = None,
     ) -> None:
         self._paths = paths
         self._account_manager = account_manager
@@ -213,6 +224,7 @@ class Bootstrapper:
         self._database_manager = database_manager
         self._database_manager_factory = database_manager_factory
         self._systemd_manager = systemd_manager
+        self._runtime_manager = runtime_manager
 
     def run(
         self, *, host: LinuxHost, deployment: OdooDeployment, odoo_service: OdooService
@@ -236,6 +248,7 @@ class Bootstrapper:
                 created.append(str(path))
 
         secret_created = self._ensure_secret(accounts)
+        runtime_result = self._runtime_manager.ensure() if self._runtime_manager else None
         database_password_created = False
         postgres_result = None
         database_manager = self._database_manager
@@ -252,7 +265,16 @@ class Bootstrapper:
                 alembic_config=self._service_settings.alembic_config,
             )
         config_changed = self._ensure_config(accounts)
-        systemd_result = self._systemd_manager.ensure() if self._systemd_manager else None
+        systemd_result = (
+            self._systemd_manager.ensure(
+                config_changed=(
+                    config_changed
+                    or bool(runtime_result and runtime_result.current_changed)
+                )
+            )
+            if self._systemd_manager
+            else None
+        )
         return BootstrapResult(
             host=f"{host.distribution_id}:{host.version_id}",
             odoo_config=str(deployment.config_path) if deployment.config_path else None,
@@ -276,6 +298,7 @@ class Bootstrapper:
                 postgres_result.isolation_verified if postgres_result else False
             ),
             migrations_applied=postgres_result.migrations_applied if postgres_result else False,
+            database_backup=postgres_result.backup_path if postgres_result else None,
             systemd_unit=systemd_result.unit_name if systemd_result else None,
             systemd_unit_changed=systemd_result.unit_changed if systemd_result else False,
             systemd_unit_enabled=systemd_result.unit_enabled if systemd_result else False,
@@ -285,6 +308,17 @@ class Bootstrapper:
             health_verified=systemd_result.health_verified if systemd_result else False,
             admin_status_verified=(
                 systemd_result.admin_status_verified if systemd_result else False
+            ),
+            runtime_version=runtime_result.version if runtime_result else None,
+            runtime_build_id=runtime_result.build_id if runtime_result else None,
+            runtime_release_created=(
+                runtime_result.release_created if runtime_result else False
+            ),
+            runtime_current_changed=(
+                runtime_result.current_changed if runtime_result else False
+            ),
+            previous_runtime_release=(
+                runtime_result.previous_release if runtime_result else None
             ),
         )
 

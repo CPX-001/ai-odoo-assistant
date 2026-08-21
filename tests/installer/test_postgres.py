@@ -19,6 +19,9 @@ class ExternalExistingProbe(PostgresBootstrapper):
         assert self.connected
         self.migrated = True
 
+    def _backup_before_pending_upgrade(self, runtime_url: str) -> str | None:
+        return None
+
 
 def test_external_existing_uses_protected_runtime_url_without_admin(tmp_path: Path) -> None:
     url_file = tmp_path / "database-url"

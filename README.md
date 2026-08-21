@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-M0 está completado y M1 está en curso. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, un runtime HTTP mínimo y la base del bootstrap de host.
+M0 está completado y M1 está en gate. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico y el bootstrap instalable de host.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 
@@ -51,7 +51,7 @@ La configuración y los logs no deben contener credenciales reales. La creación
 
 ## Estado administrativo
 
-`GET /v1/admin/status` comprueba el proceso, la conexión a la Assistant DB y la revisión de Alembic. También resume el perfil/snapshot más reciente cuando existe. En M1 el resultado correcto sigue siendo `DEGRADED`, porque source, logs y reasoning engine todavía no están implementados.
+`GET /v1/admin/status` comprueba el proceso, la conexión a la Assistant DB y la revisión de Alembic. Requiere el shared secret server-side y también resume el perfil/snapshot más reciente cuando existe. En M1 el resultado correcto sigue siendo `DEGRADED`, porque source, logs y reasoning engine todavía no están implementados.
 
 ## Bootstrap del host
 
@@ -89,4 +89,6 @@ sudo python3 -m installer.bootstrap \
   --assistant-db-name odoo_ai
 ```
 
-El bind del Assistant Service permanece limitado a loopback en el MVP por seguridad. El bootstrap actual todavía no configura PostgreSQL ni instala una unit systemd; esas partes pertenecen a las siguientes tasks de M1. Repetirlo valida recursos y corrige únicamente drift seguro.
+El bind del Assistant Service permanece limitado a loopback en el MVP por seguridad. El bootstrap instala un release versionado, prepara el role/DB aislados, aplica Alembic e instala/verifica la unit systemd. Repetirlo valida recursos y corrige únicamente drift seguro.
+
+El procedimiento de instalación, upgrade, backup, rollback y los smokes reproducibles están en [`docs/OPERATIONS_M1.md`](docs/OPERATIONS_M1.md).

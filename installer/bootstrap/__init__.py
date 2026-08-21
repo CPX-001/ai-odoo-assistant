@@ -25,6 +25,11 @@ from installer.bootstrap.postgres import (
     PostgresBootstrapResult,
     PostgresSettings,
 )
+from installer.bootstrap.runtime import (
+    RuntimeInstaller,
+    RuntimeInstallResult,
+    RuntimeInstallSettings,
+)
 from installer.bootstrap.systemd import (
     SystemdBootstrapResult,
     SystemdInstaller,
@@ -45,6 +50,9 @@ __all__ = [
     "SystemdBootstrapResult",
     "SystemdInstaller",
     "SystemdSettings",
+    "RuntimeInstaller",
+    "RuntimeInstallResult",
+    "RuntimeInstallSettings",
     "PostgresBootstrapResult",
     "PostgresBootstrapper",
     "PostgresSettings",

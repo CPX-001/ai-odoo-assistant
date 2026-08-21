@@ -84,6 +84,22 @@ env.cr.commit()
     return json.loads(match.group(1))
 
 
+def _uninstall_addon(*, repo_root: Path, database: str) -> None:
+    completed = _run_odoo(
+        repo_root=repo_root,
+        database=database,
+        arguments=["shell"],
+        input_text="""
+module = env['ir.module.module'].search([('name', '=', 'odoo_ai_assistant')], limit=1)
+module.button_immediate_uninstall()
+env.cr.commit()
+print('M1_09_UNINSTALL=done')
+""",
+    )
+    assert completed.returncode == 0, "Odoo addon uninstall failed"
+    assert "M1_09_UNINSTALL=done" in completed.stdout
+
+
 @pytest.mark.skipif(
     os.environ.get("ODOO_AI_RUN_ODOO_PLACEHOLDER_TEST") != "1" or os.geteuid() != 0,
     reason="set ODOO_AI_RUN_ODOO_PLACEHOLDER_TEST=1 and run as root",
@@ -174,6 +190,49 @@ def test_odoo18_addon_install_upgrade_and_health_error_states() -> None:
             arguments=["--update=odoo_ai_assistant", "--stop-after-init"],
         )
         assert upgrade.returncode == 0, "Odoo addon upgrade failed"
+
+        assistant_database = f"assistant_uninstall_{suffix}"
+        subprocess.run(
+            ["runuser", "--user", "postgres", "--", "createdb", assistant_database],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        try:
+            _uninstall_addon(repo_root=repo_root, database=database)
+            database_exists = subprocess.run(
+                [
+                    "runuser",
+                    "--user",
+                    "postgres",
+                    "--",
+                    "psql",
+                    "--dbname=postgres",
+                    "--tuples-only",
+                    "--no-align",
+                    "--command",
+                    f"SELECT 1 FROM pg_database WHERE datname = '{assistant_database}'",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            assert database_exists.stdout.strip() == "1"
+        finally:
+            subprocess.run(
+                [
+                    "runuser",
+                    "--user",
+                    "postgres",
+                    "--",
+                    "dropdb",
+                    "--if-exists",
+                    assistant_database,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
     finally:
         subprocess.run(
             ["systemctl", "disable", "--now", unit_name],
