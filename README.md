@@ -52,3 +52,19 @@ La configuración y los logs no deben contener credenciales reales. La creación
 ## Estado administrativo
 
 `GET /v1/admin/status` comprueba el proceso, la conexión a la Assistant DB y la revisión de Alembic. También resume el perfil/snapshot más reciente cuando existe. En M1 el resultado correcto sigue siendo `DEGRADED`, porque source, logs y reasoning engine todavía no están implementados.
+
+## Bootstrap del host
+
+El preflight es seguro y no modifica el host:
+
+```bash
+python3 -m installer.bootstrap --preflight-only --odoo-conf /etc/odoo-server.conf
+```
+
+La preparación real requiere una única ejecución privilegiada. Crea/reutiliza el usuario y grupo `odoo-ai`, directorios bajo `/opt`, `/etc`, `/var/lib` y `/run`, config no secreta y un shared secret con permisos `0640`:
+
+```bash
+python3 -m installer.bootstrap --odoo-conf /etc/odoo-server.conf
+```
+
+El comando no modifica `odoo.conf`, no configura PostgreSQL ni instala una unit systemd. Repetirlo valida los recursos y corrige únicamente drift seguro.

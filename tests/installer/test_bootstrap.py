@@ -1,0 +1,115 @@
+import os
+import stat
+from pathlib import Path
+
+from installer.bootstrap.bootstrap import (
+    AccountState,
+    BootstrapPaths,
+    Bootstrapper,
+)
+from installer.bootstrap.discovery import LinuxHost, OdooDeployment, OdooService
+
+
+class FakeAccountManager:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def ensure(self, *, user: str, group: str, home: Path, shared_reader_user: str) -> AccountState:
+        self.calls += 1
+        assert (user, group, shared_reader_user) == ("odoo-ai", "odoo-ai", "odoo")
+        return AccountState(
+            uid=os.getuid(),
+            gid=os.getgid(),
+            user_created=self.calls == 1,
+            group_created=self.calls == 1,
+            reader_added=self.calls == 1,
+        )
+
+
+def _mode(path: Path) -> int:
+    return stat.S_IMODE(path.stat().st_mode)
+
+
+def test_bootstrap_first_run_and_second_run_are_idempotent(tmp_path: Path) -> None:
+    paths = BootstrapPaths(
+        install_dir=tmp_path / "opt" / "odoo-ai-assistant",
+        config_dir=tmp_path / "etc" / "odoo-ai-assistant",
+        state_dir=tmp_path / "var" / "lib" / "odoo-ai-assistant",
+        runtime_dir=tmp_path / "run" / "odoo-ai-assistant",
+    )
+    deployment = OdooDeployment(
+        config_path=Path("/etc/odoo-server.conf"),
+        addons_paths=(Path("/odoo/custom/addons"),),
+        database_host=None,
+        database_port=None,
+        database_user="odoo",
+    )
+    accounts = FakeAccountManager()
+    bootstrapper = Bootstrapper(
+        paths=paths,
+        account_manager=accounts,
+        privileged_uid=os.getuid(),
+        secret_factory=lambda: "s" * 64,
+    )
+    arguments = {
+        "host": LinuxHost(distribution_id="ubuntu", version_id="24.04"),
+        "deployment": deployment,
+        "odoo_service": OdooService(unit="odoo-server.service", user="odoo"),
+    }
+
+    first = bootstrapper.run(**arguments)
+    secret_before = paths.shared_secret.read_text(encoding="utf-8")
+    second = bootstrapper.run(**arguments)
+
+    assert first.user_created and first.group_created and first.secret_created
+    assert not second.user_created and not second.group_created and not second.secret_created
+    assert second.directories_created == ()
+    assert not second.config_changed
+    assert paths.shared_secret.read_text(encoding="utf-8") == secret_before
+    assert _mode(paths.config_dir) == 0o750
+    assert _mode(paths.state_dir) == 0o750
+    assert _mode(paths.service_config) == 0o640
+    assert _mode(paths.shared_secret) == 0o640
+    config = paths.service_config.read_text(encoding="utf-8")
+    assert "ODOO_AI_HOST=127.0.0.1" in config
+    assert "ODOO_AI_DATABASE_NAME=odoo_ai" in config
+    assert secret_before.strip() not in config
+
+
+def test_bootstrap_repairs_safe_file_mode_drift_without_rotating_secret(
+    tmp_path: Path,
+) -> None:
+    paths = BootstrapPaths(
+        install_dir=tmp_path / "install",
+        config_dir=tmp_path / "config",
+        state_dir=tmp_path / "state",
+        runtime_dir=tmp_path / "runtime",
+    )
+    accounts = FakeAccountManager()
+    bootstrapper = Bootstrapper(
+        paths=paths,
+        account_manager=accounts,
+        privileged_uid=os.getuid(),
+        secret_factory=lambda: "x" * 64,
+    )
+    deployment = OdooDeployment(
+        config_path=Path("/etc/odoo.conf"),
+        addons_paths=(Path("/odoo/addons"),),
+        database_host=None,
+        database_port=None,
+        database_user=None,
+    )
+    arguments = {
+        "host": LinuxHost(distribution_id="ubuntu", version_id="24.04"),
+        "deployment": deployment,
+        "odoo_service": OdooService(unit=None, user="odoo"),
+    }
+    bootstrapper.run(**arguments)
+    secret_before = paths.shared_secret.read_bytes()
+    paths.shared_secret.chmod(0o666)
+
+    result = bootstrapper.run(**arguments)
+
+    assert not result.secret_created
+    assert paths.shared_secret.read_bytes() == secret_before
+    assert _mode(paths.shared_secret) == 0o640
