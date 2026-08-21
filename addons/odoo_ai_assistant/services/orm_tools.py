@@ -10,8 +10,9 @@ from datetime import UTC, date, datetime
 from typing import Final, Protocol
 from uuid import UUID
 
-from odoo import api, registry
+from odoo import api
 from odoo.exceptions import AccessError, MissingError, ValidationError
+from odoo.modules.registry import Registry
 
 from ..security import DelegationCodec, DelegationPayload, DelegationTokenError
 
@@ -77,6 +78,10 @@ class EnvironmentProvider(Protocol):
     ) -> AbstractContextManager[object]: ...
 
 
+class ReplayGuard(Protocol):
+    def __call__(self, claims: DelegationPayload, scope: str) -> None: ...
+
+
 class DelegatedOrmToolExecutor:
     """Validate delegation and execute only the two M2 read capabilities."""
 
@@ -85,10 +90,12 @@ class DelegatedOrmToolExecutor:
         *,
         codec: DelegationCodec,
         environment_provider: EnvironmentProvider | None = None,
+        replay_guard: ReplayGuard | None = None,
         observed_at: Callable[[], datetime] | None = None,
     ) -> None:
         self._codec = codec
         self._environment_provider = environment_provider or _runtime_environment
+        self._replay_guard = replay_guard or _runtime_replay_guard
         self._observed_at = observed_at or _utc_now
 
     def get_model_metadata(
@@ -106,6 +113,7 @@ class DelegatedOrmToolExecutor:
             scope="fields_get",
             model=parsed_model,
         )
+        self._replay_guard(claims, "fields_get")
         try:
             with self._environment_provider(claims) as env:
                 model_set = env[parsed_model]
@@ -158,6 +166,7 @@ class DelegatedOrmToolExecutor:
             raise OrmToolError("scope_denied", 403)
         if len(parsed_fields) > claims.max_fields:
             raise OrmToolError("limit_exceeded", 413)
+        self._replay_guard(claims, "read_records")
 
         try:
             with self._environment_provider(claims) as env:
@@ -240,7 +249,7 @@ def _runtime_environment(claims: DelegationPayload) -> Iterator[object]:
     if claims.lang is not None:
         context["lang"] = claims.lang
     try:
-        database_registry = registry(claims.database)
+        database_registry = Registry(claims.database)
         with database_registry.cursor() as cursor:
             env = api.Environment(cursor, claims.uid, context, su=False)
             if env.su or env.cr.dbname != claims.database:
@@ -256,8 +265,28 @@ def _runtime_environment(claims: DelegationPayload) -> Iterator[object]:
         raise
     except (AccessError, MissingError, ValidationError):
         raise OrmToolError("delegation_rejected", 403) from None
-    except Exception:
+    except Exception:  # noqa: BLE001 - sanitize the Odoo registry boundary
         raise OrmToolError("service_unavailable", 503) from None
+
+
+def _runtime_replay_guard(claims: DelegationPayload, scope: str) -> None:
+    """Consume one scope in Odoo before any delegated business-data access."""
+
+    try:
+        with _runtime_environment(claims) as env:
+            consumed = env["odoo.ai.delegation.use"]._consume(
+                jti=claims.jti,
+                scope=scope,
+                expires_at=claims.expires_at,
+            )
+    except OrmToolError:
+        raise
+    except (AccessError, MissingError, ValidationError):
+        raise OrmToolError("delegation_rejected", 403) from None
+    except Exception:  # noqa: BLE001 - sanitize the technical ledger boundary
+        raise OrmToolError("service_unavailable", 503) from None
+    if consumed is not True:
+        raise OrmToolError("delegation_replayed", 403)
 
 
 def _turn_id(value: object) -> UUID:

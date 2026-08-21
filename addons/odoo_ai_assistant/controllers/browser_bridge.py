@@ -1,0 +1,25 @@
+"""Authenticated, narrow browser ingress for one contextual read turn."""
+
+from typing import Final
+
+from odoo import http
+from odoo.http import request
+
+BROWSER_CONTEXT_READ_ROUTE: Final = "/odoo_ai/v1/context-read"
+
+
+class BrowserAssistantController(http.Controller):
+    """Accept navigation hints while deriving all authority from the session."""
+
+    @http.route(
+        BROWSER_CONTEXT_READ_ROUTE,
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def context_read(self, message=None, screen=None, **unexpected):
+        if unexpected:
+            return {"error": {"code": "invalid_context"}, "ok": False}
+        return request.env["odoo.ai.assistant.bridge"].submit_context_read(
+            message, screen
+        )

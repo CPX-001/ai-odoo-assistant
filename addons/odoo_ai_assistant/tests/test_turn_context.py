@@ -89,8 +89,18 @@ class TestContextTurnPreparation(TransactionCase):
         self.assertEqual(claims.expires_at - claims.issued_at, 60)
 
     def test_browser_identity_is_rejected_before_signing(self):
-        with self.assertRaises(ScreenContextValidationError):
-            self._prepare(self._user_env(), self._screen(uid=self.env.uid))
+        for injected in (
+            {"uid": self.env.uid},
+            {"company_id": self.company_b.id},
+            {"allowed_company_ids": [self.company_a.id, self.company_b.id]},
+            {"groups": ["base.group_system"]},
+            {"display_name": "Trusted from browser"},
+        ):
+            with (
+                self.subTest(injected=injected),
+                self.assertRaises(ScreenContextValidationError),
+            ):
+                self._prepare(self._user_env(), self._screen(**injected))
 
         clean = self._prepare(self._user_env())
         self.assertEqual(self._codec().decode(clean.delegation_token).uid, self.user.id)

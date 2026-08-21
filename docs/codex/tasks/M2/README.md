@@ -1,6 +1,6 @@
 # M2 — UI / context / delegation
 
-Estado: en curso. M2-01 a M2-06 implementados y verificados; M2-07 es el siguiente task packet.
+Estado: en curso. M2-01 a M2-08 implementados y verificados; M2-09 es el siguiente task packet.
 
 M2 empieza únicamente después del **M1 GATE: PASS**. Su objetivo es demostrar el primer flujo contextual real del producto sin introducir todavía Codex ni un agent loop: desde un registro abierto en Odoo, el usuario puede abrir el asistente, enviar una pregunta y el sistema vuelve a leer ese registro por ORM bajo la identidad efectiva del mismo usuario mediante una delegación firmada y acotada.
 
@@ -61,9 +61,9 @@ Ejecutar una sola task cada vez. Cada task debe inspeccionar el estado real deja
 
 ## Política de replay en M2
 
-M2 sólo autoriza lecturas idempotentes y estrechamente scoped. La implementación debe cumplir la política exacta del Source of Truth. Si éste no exige consumo one-shot para lecturas, se acepta que un token válido pueda repetirse **sólo dentro de su TTL y exactamente con el mismo scope**, siempre que expiración, firma, turn, DB/instancia, usuario, compañías, modelo/IDs y tool queden ligados y cualquier intento de ampliar el scope falle. Los writes de M6 sí requerirán semántica consumible/approval ligada al payload.
+El Source of Truth exige que una delegación expirada o reproducida sea rechazada. Como el vertical slice M2 necesita una llamada de metadata y otra de lectura, el consumo es one-shot por `(jti, scope)`: un token puede usar una vez `fields_get` y una vez `read_records`, siempre dentro de su TTL y sin cambiar turn, DB, usuario, compañías, modelo, IDs ni límites. Repetir cualquiera de esos scopes se rechaza.
 
-Esta decisión debe quedar cubierta por tests y documentada; no inventar un ledger complejo sólo para M2 salvo que el Source of Truth lo exija.
+El addon conserva únicamente el `jti`, scope y expiración en un ledger técnico ORM con restricción única; nunca persiste el token firmado. Esta semántica no anticipa approvals ni writes de M6.
 
 ## Gate de M2
 

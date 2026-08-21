@@ -7,7 +7,6 @@ from types import ModuleType
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.contracts import DelegationClaims as TransportDelegationClaims
 
 
@@ -74,6 +73,16 @@ def _resign_payload(token: str, payload: dict[str, object]) -> str:
     return f"{prefix}.{encoded}.{encoded_signature}"
 
 
+def _sign_raw_payload(payload_bytes: bytes) -> str:
+    encoded = base64.urlsafe_b64encode(payload_bytes).rstrip(b"=").decode("ascii")
+    signed = f"v1.{encoded}".encode("ascii")
+    signature = __import__("hmac").digest(
+        _codec()._signing_key, signed, __import__("hashlib").sha256
+    )
+    encoded_signature = base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii")
+    return f"v1.{encoded}.{encoded_signature}"
+
+
 def test_delegation_token_round_trip_is_deterministic() -> None:
     codec = _codec()
     token = codec.encode(_payload())
@@ -134,6 +143,38 @@ def test_signed_unknown_claim_is_rejected_even_with_a_valid_signature() -> None:
 
     with pytest.raises(DelegationTokenError, match="invalid_claims"):
         codec.decode(token)
+
+
+def test_signed_wrong_version_and_duplicate_json_claim_are_rejected() -> None:
+    codec = _codec()
+    wrong_version = _payload().to_mapping()
+    wrong_version["format_version"] = 2
+    with pytest.raises(DelegationTokenError, match="unknown_version"):
+        codec.decode(_resign_payload(codec.encode(_payload()), wrong_version))
+
+    canonical = json.dumps(
+        _payload().to_mapping(),
+        allow_nan=False,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    duplicate_uid = canonical.replace('"uid":17}', '"uid":17,"uid":18}')
+    with pytest.raises(DelegationTokenError, match="noncanonical_payload"):
+        codec.decode(_sign_raw_payload(duplicate_uid.encode("ascii")))
+
+
+@pytest.mark.parametrize(
+    ("claim", "value"),
+    [
+        ("allowed_company_ids", (3, 3)),
+        ("record_ids", (4832, 4832)),
+        ("scopes", ("read_records", "read_records")),
+    ],
+)
+def test_duplicate_authority_claims_are_rejected(claim: str, value: object) -> None:
+    with pytest.raises(DelegationTokenError, match="invalid_claims"):
+        _payload(**{claim: value})
 
 
 def test_errors_and_codec_repr_do_not_contain_token_or_secret() -> None:

@@ -1,6 +1,7 @@
 /** @odoo-module **/
 
 import { registry } from "@web/core/registry";
+import { rpc } from "@web/core/network/rpc";
 import { reactive } from "@odoo/owl";
 
 const KNOWN_ERROR_CODES = new Set([
@@ -12,8 +13,8 @@ const KNOWN_ERROR_CODES = new Set([
 ]);
 
 export const assistantPanelService = {
-    dependencies: ["odoo_ai_screen_context", "orm"],
-    start(env, { odoo_ai_screen_context: screenContext, orm }) {
+    dependencies: ["odoo_ai_screen_context"],
+    start(env, { odoo_ai_screen_context: screenContext }) {
         const state = reactive({
             isOpen: false,
             loading: false,
@@ -52,11 +53,10 @@ export const assistantPanelService = {
                 }
                 state.loading = true;
                 try {
-                    const response = await orm.call(
-                        "odoo.ai.assistant.bridge",
-                        "submit_context_read",
-                        [message, state.context]
-                    );
+                    const response = await rpc("/odoo_ai/v1/context-read", {
+                        message,
+                        screen: state.context,
+                    });
                     if (response?.ok === true) {
                         state.result = response;
                         state.errorCode = null;
