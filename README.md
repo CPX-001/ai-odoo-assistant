@@ -36,3 +36,15 @@ curl http://127.0.0.1:8000/health
 ```
 
 Este endpoint no comprueba DB, migraciones ni readiness; esas capacidades se incorporan en tasks posteriores de M1.
+
+## Migraciones de la Assistant DB
+
+La conexión se configura externamente mediante `ODOO_AI_DATABASE_URL`. El nombre de DB debe coincidir con `ODOO_AI_DATABASE_NAME`, cuyo valor por defecto es `odoo_ai`; una URL dirigida a otra DB se rechaza antes de crear el engine.
+
+Con ambas variables disponibles, aplica las migraciones desde la raíz del repositorio:
+
+```bash
+.venv/bin/alembic -c alembic.ini upgrade head
+```
+
+La configuración y los logs no deben contener credenciales reales. La creación aislada del role y de la DB de producción pertenece a M1-06.
