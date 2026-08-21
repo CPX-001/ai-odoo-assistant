@@ -21,6 +21,22 @@ def test_database_settings_accept_expected_postgresql_database() -> None:
     assert "secret" not in repr(settings)
 
 
+def test_database_settings_accept_customer_database_endpoint_and_name() -> None:
+    settings = DatabaseSettings.from_env(
+        {
+            DATABASE_URL_ENV: (
+                "postgresql+psycopg://assistant:secret@db.internal:5544/customer_assistant"
+            ),
+            DATABASE_NAME_ENV: "customer_assistant",
+        }
+    )
+
+    assert settings.database_name == "customer_assistant"
+    assert settings.url.host == "db.internal"
+    assert settings.url.port == 5544
+    assert "secret" not in repr(settings)
+
+
 @pytest.mark.parametrize(
     ("environ", "message"),
     [
