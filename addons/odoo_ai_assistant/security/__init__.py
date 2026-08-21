@@ -5,5 +5,19 @@ from .delegation import (
     DelegationPayload,
     DelegationTokenError,
 )
+from .machine_auth import (
+    SHARED_SECRET_FILE_ENV,
+    SHARED_SECRET_HEADER,
+    MachineAuthenticationError,
+    require_machine_secret,
+)
 
-__all__ = ["DelegationCodec", "DelegationPayload", "DelegationTokenError"]
+__all__ = [
+    "SHARED_SECRET_FILE_ENV",
+    "SHARED_SECRET_HEADER",
+    "DelegationCodec",
+    "DelegationPayload",
+    "DelegationTokenError",
+    "MachineAuthenticationError",
+    "require_machine_secret",
+]

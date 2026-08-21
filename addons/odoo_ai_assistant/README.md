@@ -24,4 +24,10 @@ able to mint authority for another Odoo user.
 
 The current M2 foundation validates `ScreenContext`, derives identity from the
 authenticated Odoo environment, and prepares a server-only delegation. It does
-not yet expose ORM tools, browser assets, source/log access, Codex, or writes.
+not expose browser assets, source/log access, Codex, or writes.
+
+The Assistant Service can call only the internal POST routes
+`/odoo_ai/internal/v1/model-metadata` and
+`/odoo_ai/internal/v1/read-records`. Both require the M1 machine-auth header and
+an addon-signed delegation header. The Odoo process resolves both secret files
+from server environment; no endpoint, token, or secret is sent to the browser.
