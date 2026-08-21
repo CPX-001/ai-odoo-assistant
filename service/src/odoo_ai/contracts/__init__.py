@@ -16,6 +16,13 @@ from odoo_ai.contracts.context import (
     UserRequest,
     Workflow,
 )
+from odoo_ai.contracts.delegation import (
+    DELEGATION_FORMAT_VERSION,
+    ContextReadTurnRequest,
+    DelegationClaims,
+    DelegationScope,
+    OdooGatewayReference,
+)
 from odoo_ai.contracts.evidence import (
     Evidence,
     EvidenceKind,
@@ -37,6 +44,10 @@ __all__ = [
     "AnswerEnvelope",
     "ContextPack",
     "ConversationState",
+    "ContextReadTurnRequest",
+    "DELEGATION_FORMAT_VERSION",
+    "DelegationClaims",
+    "DelegationScope",
     "Evidence",
     "EvidenceKind",
     "EvidenceSensitivity",
@@ -45,6 +56,7 @@ __all__ = [
     "LogCorrelation",
     "LogEvidence",
     "LogSearchRequest",
+    "OdooGatewayReference",
     "ProposedAction",
     "PUBLIC_CONTRACT_MODELS",
     "RecordRef",

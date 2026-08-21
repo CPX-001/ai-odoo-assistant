@@ -13,6 +13,11 @@ from odoo_ai.contracts.context import (
     UserExecutionContext,
     UserRequest,
 )
+from odoo_ai.contracts.delegation import (
+    ContextReadTurnRequest,
+    DelegationClaims,
+    OdooGatewayReference,
+)
 from odoo_ai.contracts.evidence import Evidence
 from odoo_ai.contracts.logs import LogEvidence, LogSearchRequest, TimestampRange
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
@@ -23,11 +28,14 @@ type JsonSchema = dict[str, JsonValue]
 PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     AnswerEnvelope,
     ContextPack,
+    ContextReadTurnRequest,
     ConversationState,
     Evidence,
+    DelegationClaims,
     InstanceProfileSummary,
     LogEvidence,
     LogSearchRequest,
+    OdooGatewayReference,
     ProposedAction,
     RecordRef,
     RecordSnapshot,

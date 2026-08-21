@@ -1,0 +1,162 @@
+import base64
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from types import ModuleType
+from uuid import UUID
+
+import pytest
+
+from odoo_ai.contracts import DelegationClaims as TransportDelegationClaims
+
+
+def _load_delegation_module() -> ModuleType:
+    path = (
+        Path(__file__).parents[2]
+        / "addons/odoo_ai_assistant/security/delegation.py"
+    )
+    spec = importlib.util.spec_from_file_location("odoo_ai_test_delegation", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+delegation = _load_delegation_module()
+DelegationCodec = delegation.DelegationCodec
+DelegationPayload = delegation.DelegationPayload
+DelegationTokenError = delegation.DelegationTokenError
+
+NOW = 1_787_337_600
+SECRET = b"addon-only-delegation-secret-" + b"s" * 48
+OTHER_SECRET = b"different-addon-delegation-secret-" + b"x" * 48
+
+
+def _payload(**overrides: object):
+    values = {
+        "format_version": 1,
+        "jti": "jti_0123456789abcdefghij",
+        "turn_id": UUID("12345678-1234-5678-1234-567812345678"),
+        "database": "customer-db",
+        "uid": 17,
+        "company_id": 3,
+        "allowed_company_ids": (3, 5),
+        "lang": "es_ES",
+        "model": "sale.order",
+        "record_ids": (4832,),
+        "scopes": ("fields_get", "read_records"),
+        "issued_at": NOW,
+        "expires_at": NOW + 60,
+        "max_records": 1,
+        "max_fields": 32,
+    }
+    values.update(overrides)
+    return DelegationPayload(**values)
+
+
+def _codec(secret: bytes = SECRET, *, now: int = NOW):
+    return DelegationCodec(secret, clock=lambda: now)
+
+
+def _resign_payload(token: str, payload: dict[str, object]) -> str:
+    prefix, _, _ = token.split(".")
+    payload_bytes = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("ascii")
+    encoded = base64.urlsafe_b64encode(payload_bytes).rstrip(b"=").decode("ascii")
+    signed = f"{prefix}.{encoded}".encode("ascii")
+    signature = __import__("hmac").digest(
+        _codec()._signing_key, signed, __import__("hashlib").sha256
+    )
+    encoded_signature = base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii")
+    return f"{prefix}.{encoded}.{encoded_signature}"
+
+
+def test_delegation_token_round_trip_is_deterministic() -> None:
+    codec = _codec()
+    token = codec.encode(_payload())
+
+    assert codec.decode(token) == _payload()
+    assert codec.encode(codec.decode(token)) == token
+
+
+def test_addon_payload_matches_the_public_transport_contract() -> None:
+    serialized = json.dumps(_payload().to_mapping(), sort_keys=True)
+    claims = TransportDelegationClaims.model_validate_json(serialized)
+
+    assert claims.turn_id == _payload().turn_id
+    assert claims.scopes == ["fields_get", "read_records"]
+
+
+def test_modified_token_and_wrong_signing_key_are_rejected() -> None:
+    token = _codec().encode(_payload())
+    replacement = "A" if token[-1] != "A" else "B"
+
+    with pytest.raises(DelegationTokenError, match="invalid_signature"):
+        _codec().decode(token[:-1] + replacement)
+    with pytest.raises(DelegationTokenError, match="invalid_signature"):
+        _codec(OTHER_SECRET).decode(token)
+
+
+def test_expired_future_and_unknown_version_tokens_are_rejected() -> None:
+    token = _codec().encode(_payload())
+
+    with pytest.raises(DelegationTokenError, match="expired"):
+        _codec(now=NOW + 60).decode(token)
+    with pytest.raises(DelegationTokenError, match="not_yet_valid"):
+        _codec(now=NOW - 6).decode(token)
+    with pytest.raises(DelegationTokenError, match="unknown_version"):
+        _codec().decode("v2.a.b")
+
+
+@pytest.mark.parametrize(
+    ("claim", "value"),
+    [
+        ("allowed_company_ids", tuple(range(1, 18))),
+        ("record_ids", tuple(range(1, 10))),
+        ("scopes", ("fields_get", "read_records", "search")),
+        ("expires_at", NOW + 121),
+        ("max_fields", 65),
+    ],
+)
+def test_claim_limits_are_enforced(claim: str, value: object) -> None:
+    with pytest.raises(DelegationTokenError, match="invalid_claims"):
+        _payload(**{claim: value})
+
+
+def test_signed_unknown_claim_is_rejected_even_with_a_valid_signature() -> None:
+    codec = _codec()
+    payload = _payload().to_mapping()
+    payload["admin"] = 1
+    token = _resign_payload(codec.encode(_payload()), payload)
+
+    with pytest.raises(DelegationTokenError, match="invalid_claims"):
+        codec.decode(token)
+
+
+def test_errors_and_codec_repr_do_not_contain_token_or_secret() -> None:
+    codec = _codec()
+    token = codec.encode(_payload())
+
+    with pytest.raises(DelegationTokenError) as failure:
+        _codec(OTHER_SECRET).decode(token)
+
+    visible = f"{failure.value!r} {failure.value} {codec!r}"
+    assert token not in visible
+    assert SECRET.decode("ascii") not in visible
+
+
+def test_secret_file_policy_matches_the_local_secret_boundary(tmp_path: Path) -> None:
+    secret_file = tmp_path / "delegation-secret"
+    secret_file.write_bytes(SECRET + b"\n")
+    secret_file.chmod(0o640)
+
+    assert DelegationCodec.from_secret_file(
+        secret_file, clock=lambda: NOW
+    ).decode(_codec().encode(_payload())) == _payload()
+
+    secret_file.chmod(0o644)
+    with pytest.raises(DelegationTokenError, match="signing_key_unavailable"):
+        DelegationCodec.from_secret_file(secret_file)
