@@ -1,5 +1,9 @@
 # Reglas del Assistant Service
 
+## Flujo Git
+
+- Trabajar siempre directamente sobre `main`; no crear ramas ni pull requests salvo orden explícita del usuario.
+
 - Python 3.12+.
 - Arquitectura basada en contracts, ports y adapters.
 - `application` no depende de detalles de versión de Odoo.

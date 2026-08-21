@@ -1,5 +1,9 @@
 # Reglas de tests
 
+## Flujo Git
+
+- Trabajar siempre directamente sobre `main`; no crear ramas ni pull requests salvo orden explícita del usuario.
+
 Priorizar:
 
 - unit tests;

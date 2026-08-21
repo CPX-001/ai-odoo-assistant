@@ -1,5 +1,9 @@
 # Reglas del instalador
 
+## Flujo Git
+
+- Trabajar siempre directamente sobre `main`; no crear ramas ni pull requests salvo orden explícita del usuario.
+
 - Un único bootstrap privilegiado.
 - Nunca dar root permanente al proceso Odoo.
 - Instalación idempotente.

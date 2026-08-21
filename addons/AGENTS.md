@@ -1,5 +1,9 @@
 # Reglas del addon Odoo
 
+## Flujo Git
+
+- Trabajar siempre directamente sobre `main`; no crear ramas ni pull requests salvo orden explícita del usuario.
+
 - Odoo 18 Community es el baseline.
 - Mantener una UX Odoo-native.
 - Durante el MVP, el browser habla con Odoo, no directamente con el Assistant Service.
