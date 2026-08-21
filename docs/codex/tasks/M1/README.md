@@ -2,9 +2,11 @@
 
 M1 empieza sólo después de que `M0-06-gate.md` haya dado PASS. Su objetivo es convertir el esqueleto del Assistant Service en un runtime local instalable y observable, sin implementar todavía lectura contextual Odoo, scanner/source, logs, Codex ni agent loop.
 
-Fuente de verdad: `docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf`, especialmente §§8, 9, 23, 28, 29, 30 y 34.4.
+Fuente de verdad: `docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf`, especialmente §§8, 9, 23, 28, 29, 30 y 34.4. Para discovery/overrides de deployment, leer también `docs/DEPLOYMENT_CONFIG.md`.
 
-Resultado observable del milestone: un host Ubuntu/Linux de test puede ejecutar un único bootstrap, crear/actualizar el runtime y la DB propia del Assistant, arrancar el service y mostrar su health desde Odoo. Una segunda ejecución es idempotente y el role del Assistant no puede conectar a la DB Odoo.
+Resultado observable del milestone: un host Ubuntu/Linux de test puede ejecutar un único bootstrap, crear/actualizar el runtime y la DB propia del Assistant, arrancar el service y mostrar su health desde Odoo. Una segunda ejecución es idempotente y el Assistant no obtiene acceso SQL a la DB Odoo.
+
+El host de test es un perfil de referencia, no una plantilla rígida para clientes: config path, service/user, addons/data/log paths, directorios del Assistant y endpoint PostgreSQL deben ser hechos detectados/configurables, no constantes del entorno DEV.
 
 ## Orden de ejecución
 
@@ -25,10 +27,13 @@ Ejecutar una sola task cada vez. Cada task debe partir del estado real dejado po
 
 - Assistant DB PostgreSQL separada de la DB Odoo.
 - El Assistant Service no recibe credenciales SQL que le permitan acceder a datos vivos de Odoo.
-- `odoo_ai_service`: `CONNECT odoo_ai = YES`; `CONNECT <odoo_database> = NO`.
-- Runtime local en loopback para el MVP.
+- En el perfil same-cluster automatizado: `odoo_ai_service` conecta a la Assistant DB y no a `<odoo_database>`.
+- Runtime local en loopback para el MVP; host/puerto se resuelven desde configuración central y el bind público no se habilita como shortcut.
 - Un único bootstrap privilegiado; Odoo no obtiene root permanente.
 - Secretos fuera del repo, prompts y logs.
+- Los defaults de paths/nombres son hints con override, no contratos.
+- Odoo puede usar un unit systemd con nombre arbitrario o no usar systemd; eso no invalida por sí solo el deployment.
+- PostgreSQL del Assistant puede configurarse fuera de `localhost`; el mismo cluster es el default recomendado, no una dependencia de storage/application.
 - El addon de M1 es sólo el mínimo necesario para detectar/configurar health; M2 implementará contexto, delegación y ORM tools.
 - No scanner, LogProvider real, Codex, agent loop, RAG ni writes.
 
@@ -40,8 +45,9 @@ M1 sólo se considera terminado cuando:
 - segunda ejecución del bootstrap no rompe ni duplica recursos;
 - migraciones están al día;
 - health/readiness es visible desde Odoo;
-- el role del Assistant no puede `CONNECT` a la DB Odoo;
+- el Assistant no puede acceder por SQL a la DB Odoo en el escenario de aislamiento probado;
 - el runtime escucha sólo en la interfaz prevista;
+- al menos un layout Odoo no convencional funciona mediante configuración/overrides sin cambios de código;
 - upgrade y rollback operativo están documentados;
 - tests, lint y type-check siguen verdes.
 
