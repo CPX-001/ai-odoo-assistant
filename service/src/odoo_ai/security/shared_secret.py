@@ -3,6 +3,7 @@
 import hmac
 import os
 import stat
+from collections.abc import Mapping
 from pathlib import Path
 
 from fastapi import Header, HTTPException, status
@@ -11,13 +12,21 @@ SHARED_SECRET_FILE_ENV = "ODOO_AI_SHARED_SECRET_FILE"
 SHARED_SECRET_HEADER = "X-Odoo-AI-Shared-Secret"
 
 
-def _load_shared_secret() -> str:
-    raw_path = os.environ.get(SHARED_SECRET_FILE_ENV, "").strip()
+class SharedSecretError(RuntimeError):
+    """Sanitized failure raised by the transport-neutral secret loader."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def load_shared_secret(environ: Mapping[str, str] | None = None) -> str:
+    """Load the M1 peer secret for HTTP clients and FastAPI dependencies."""
+
+    source = os.environ if environ is None else environ
+    raw_path = source.get(SHARED_SECRET_FILE_ENV, "").strip()
     if not raw_path:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="admin authentication is not configured",
-        )
+        raise SharedSecretError("shared_secret_unconfigured")
     path = Path(raw_path)
     try:
         metadata = path.stat()
@@ -28,16 +37,10 @@ def _load_shared_secret() -> str:
         ):
             raise OSError
         secret = path.read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeError) as error:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="admin authentication is unavailable",
-        ) from error
+    except (OSError, UnicodeError):
+        raise SharedSecretError("shared_secret_unavailable") from None
     if len(secret) < 43:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="admin authentication is unavailable",
-        )
+        raise SharedSecretError("shared_secret_unavailable")
     return secret
 
 
@@ -46,7 +49,18 @@ def require_shared_secret(
 ) -> None:
     """Authenticate a privileged request without logging or returning the secret."""
 
-    expected = _load_shared_secret()
+    try:
+        expected = load_shared_secret()
+    except SharedSecretError as error:
+        detail = (
+            "admin authentication is not configured"
+            if error.code == "shared_secret_unconfigured"
+            else "admin authentication is unavailable"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=detail,
+        ) from None
     if supplied is None or not hmac.compare_digest(supplied, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

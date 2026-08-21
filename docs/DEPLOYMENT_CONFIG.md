@@ -80,3 +80,13 @@ Lo importante es que esas decisiones estén detrás de boundaries claros y no co
 El bootstrap expone overrides para config Odoo, service/user, addons roots, `data_dir`, log file, directorios propios, puerto local, nombre de Assistant DB y ruta de Alembic. Las rutas comunes y nombres `odoo*.service` se usan sólo para autodetección; un unit explícito puede tener cualquier nombre.
 
 Los futuros M1/M3/M7 deben mantener esta política al añadir PostgreSQL bootstrap, systemd, Settings, source y logs.
+
+## Estado actual de M2
+
+El Assistant Service resuelve la URL base para sus callbacks acotados hacia
+Odoo mediante el override explícito `ODOO_AI_ODOO_BASE_URL`. No existe un
+default de host o puerto. El adapter valida `http`/`https`, host y puerto, y
+rechaza credentials, path, query y fragmento para que las únicas rutas posibles
+sean los dos handlers internos fijos. La futura superficie de Settings podrá
+administrar este dato server-side sin cambiar el port ni aceptar valores desde
+JS o prompts.

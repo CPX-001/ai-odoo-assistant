@@ -31,3 +31,6 @@ The Assistant Service can call only the internal POST routes
 `/odoo_ai/internal/v1/read-records`. Both require the M1 machine-auth header and
 an addon-signed delegation header. The Odoo process resolves both secret files
 from server environment; no endpoint, token, or secret is sent to the browser.
+The service-side gateway base URL is supplied separately through
+`ODOO_AI_ODOO_BASE_URL`; it is not a browser setting and has no hardcoded host
+or port default.

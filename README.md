@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-M0 y M1 están completados; M1 gate es PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico y el bootstrap instalable de host. M2 está activo: M2-01 y M2-02 están implementados y el siguiente task packet es M2-03.
+M0 y M1 están completados; M1 gate es PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico y el bootstrap instalable de host. M2 está activo: M2-01 a M2-04 están implementados y el siguiente task packet es M2-05.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 
@@ -36,6 +36,16 @@ curl http://127.0.0.1:8000/health
 ```
 
 Este endpoint no comprueba DB, migraciones ni readiness; el estado administrativo se consulta mediante `/v1/admin/status`.
+
+## Gateway interno hacia Odoo
+
+El adapter HTTP de M2 resuelve la URL base de Odoo exclusivamente desde
+`ODOO_AI_ODOO_BASE_URL`. No existe un host o puerto de cliente hardcodeado; por
+ejemplo, un deployment puede configurar `http://odoo.internal:18069`. La URL
+debe ser `http` o `https`, sin credentials, path, query ni fragmento. El
+shared secret continúa leyéndose desde `ODOO_AI_SHARED_SECRET_FILE`; el token
+de delegación y el `turn_id` se ligan a una instancia del gateway por turn y no
+forman parte del port público.
 
 ## Migraciones de la Assistant DB
 
