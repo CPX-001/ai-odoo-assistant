@@ -23,6 +23,7 @@ from installer.bootstrap.discovery import (
     select_odoo_service,
 )
 from installer.bootstrap.postgres import PostgresBootstrapper, PostgresSettings
+from installer.bootstrap.systemd import SystemdInstaller, SystemdSettings
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -66,6 +67,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--assistant-database-url-file", type=Path)
     parser.add_argument("--psql-path", type=Path, default=Path("/usr/bin/psql"))
     parser.add_argument("--postgres-os-user", default="postgres")
+    parser.add_argument("--assistant-unit-name", default="odoo-ai-assistant.service")
+    parser.add_argument("--systemd-unit-dir", type=Path, default=Path("/etc/systemd/system"))
+    parser.add_argument("--systemd-template", type=Path)
+    parser.add_argument("--service-executable", type=Path)
     parser.add_argument("--alembic-config", type=Path)
     parser.add_argument(
         "--preflight-only",
@@ -112,6 +117,7 @@ def main(arguments: list[str] | None = None) -> int:
                         "odoo_user": odoo_service.user,
                         "odoo_database_names": list(deployment.database_names),
                         "postgres_mode": options.postgres_mode,
+                        "assistant_unit_name": options.assistant_unit_name,
                     },
                     sort_keys=True,
                 )
@@ -151,6 +157,27 @@ def main(arguments: list[str] | None = None) -> int:
 
             database_manager_factory = create_database_manager
 
+        systemd_template = options.systemd_template or (
+            Path(__file__).resolve().parents[1] / "systemd" / "odoo-ai-assistant.service.in"
+        )
+        service_executable = options.service_executable or (
+            paths.install_dir / "venv" / "bin" / "odoo-ai-service"
+        )
+        systemd_manager = SystemdInstaller(
+            settings=SystemdSettings(
+                unit_name=options.assistant_unit_name,
+                unit_dir=options.systemd_unit_dir,
+                template_path=systemd_template,
+                service_user=options.service_user,
+                service_group=options.service_group,
+                working_directory=paths.install_dir,
+                environment_file=paths.service_config,
+                executable=service_executable,
+                host=options.assistant_host,
+                port=options.assistant_port,
+            )
+        )
+
         result = Bootstrapper(
             paths=paths,
             account_manager=SystemAccountManager(),
@@ -164,6 +191,7 @@ def main(arguments: list[str] | None = None) -> int:
             ),
             database_manager=database_manager,
             database_manager_factory=database_manager_factory,
+            systemd_manager=systemd_manager,
         ).run(host=host, deployment=deployment, odoo_service=odoo_service)
         print(json.dumps(asdict(result), sort_keys=True))
         return 0

@@ -10,6 +10,7 @@ from installer.bootstrap.bootstrap import (
 )
 from installer.bootstrap.discovery import LinuxHost, OdooDeployment, OdooService
 from installer.bootstrap.postgres import PostgresBootstrapResult
+from installer.bootstrap.systemd import SystemdBootstrapResult
 
 
 class FakeAccountManager:
@@ -44,6 +45,24 @@ class FakeDatabaseManager:
                 "postgresql+psycopg://odoo_ai_service:"
                 f"{self.password}@db.internal:5544/customer_ai"
             ),
+        )
+
+
+class FakeSystemdManager:
+    def __init__(self, service_config: Path) -> None:
+        self.service_config = service_config
+
+    def ensure(self) -> SystemdBootstrapResult:
+        assert self.service_config.is_file()
+        return SystemdBootstrapResult(
+            unit_name="customer-assistant.service",
+            unit_changed=True,
+            unit_enabled=True,
+            service_restarted=False,
+            service_active=True,
+            loopback_verified=True,
+            health_verified=True,
+            admin_status_verified=True,
         )
 
 
@@ -194,6 +213,7 @@ def test_bootstrap_persists_database_password_and_sanitized_result(tmp_path: Pat
         privileged_uid=os.getuid(),
         secret_factory=lambda: "p" * 64,
         database_manager_factory=manager_factory,
+        systemd_manager=FakeSystemdManager(paths.service_config),
     )
     arguments = {
         "host": LinuxHost(distribution_id="ubuntu", version_id="24.04"),
@@ -211,6 +231,8 @@ def test_bootstrap_persists_database_password_and_sanitized_result(tmp_path: Pat
     assert observed_passwords == ["p" * 64, "p" * 64]
     assert _mode(paths.database_password) == 0o640
     assert first.postgres_isolation_verified and first.migrations_applied
+    assert first.service_active and first.loopback_verified
+    assert first.health_verified and first.admin_status_verified
     assert "runtime_url" not in repr(first)
     service_config = paths.service_config.read_text(encoding="utf-8")
     assert 'ODOO_AI_DATABASE_URL="postgresql+psycopg://odoo_ai_service:' in service_config

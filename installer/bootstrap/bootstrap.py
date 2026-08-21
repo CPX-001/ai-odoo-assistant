@@ -69,6 +69,10 @@ class DatabaseManager(Protocol):
     def ensure(self) -> object: ...
 
 
+class SystemdManager(Protocol):
+    def ensure(self) -> object: ...
+
+
 class SystemAccountManager:
     """Create a locked service account and scoped shared-reader membership."""
 
@@ -161,6 +165,14 @@ class BootstrapResult:
     postgres_hba_changed: bool
     postgres_isolation_verified: bool
     migrations_applied: bool
+    systemd_unit: str | None
+    systemd_unit_changed: bool
+    systemd_unit_enabled: bool
+    service_restarted: bool
+    service_active: bool
+    loopback_verified: bool
+    health_verified: bool
+    admin_status_verified: bool
 
 
 def _generate_secret() -> str:
@@ -189,6 +201,7 @@ class Bootstrapper:
         secret_factory: Callable[[], str] = _generate_secret,
         database_manager: DatabaseManager | None = None,
         database_manager_factory: Callable[[str], DatabaseManager] | None = None,
+        systemd_manager: SystemdManager | None = None,
     ) -> None:
         self._paths = paths
         self._account_manager = account_manager
@@ -199,6 +212,7 @@ class Bootstrapper:
         self._secret_factory = secret_factory
         self._database_manager = database_manager
         self._database_manager_factory = database_manager_factory
+        self._systemd_manager = systemd_manager
 
     def run(
         self, *, host: LinuxHost, deployment: OdooDeployment, odoo_service: OdooService
@@ -238,6 +252,7 @@ class Bootstrapper:
                 alembic_config=self._service_settings.alembic_config,
             )
         config_changed = self._ensure_config(accounts)
+        systemd_result = self._systemd_manager.ensure() if self._systemd_manager else None
         return BootstrapResult(
             host=f"{host.distribution_id}:{host.version_id}",
             odoo_config=str(deployment.config_path) if deployment.config_path else None,
@@ -261,6 +276,16 @@ class Bootstrapper:
                 postgres_result.isolation_verified if postgres_result else False
             ),
             migrations_applied=postgres_result.migrations_applied if postgres_result else False,
+            systemd_unit=systemd_result.unit_name if systemd_result else None,
+            systemd_unit_changed=systemd_result.unit_changed if systemd_result else False,
+            systemd_unit_enabled=systemd_result.unit_enabled if systemd_result else False,
+            service_restarted=systemd_result.service_restarted if systemd_result else False,
+            service_active=systemd_result.service_active if systemd_result else False,
+            loopback_verified=systemd_result.loopback_verified if systemd_result else False,
+            health_verified=systemd_result.health_verified if systemd_result else False,
+            admin_status_verified=(
+                systemd_result.admin_status_verified if systemd_result else False
+            ),
         )
 
     @staticmethod

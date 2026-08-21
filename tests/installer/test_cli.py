@@ -38,6 +38,12 @@ def test_parser_exposes_customer_deployment_overrides() -> None:
             "/run/secrets/acme-ai-db",
             "--odoo-db-name",
             "acme_odoo",
+            "--assistant-unit-name",
+            "acme-assistant.service",
+            "--systemd-unit-dir",
+            "/srv/acme/systemd",
+            "--service-executable",
+            "/srv/acme/runtime/bin/assistant",
         ]
     )
 
@@ -55,6 +61,9 @@ def test_parser_exposes_customer_deployment_overrides() -> None:
     assert options.postgres_mode == "external-existing"
     assert options.assistant_database_url_file == Path("/run/secrets/acme-ai-db")
     assert options.odoo_db_name == ["acme_odoo"]
+    assert options.assistant_unit_name == "acme-assistant.service"
+    assert options.systemd_unit_dir == Path("/srv/acme/systemd")
+    assert options.service_executable == Path("/srv/acme/runtime/bin/assistant")
 
 
 def test_preflight_can_use_explicit_user_without_config_or_systemd(monkeypatch, capsys) -> None:

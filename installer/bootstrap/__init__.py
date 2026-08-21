@@ -25,6 +25,11 @@ from installer.bootstrap.postgres import (
     PostgresBootstrapResult,
     PostgresSettings,
 )
+from installer.bootstrap.systemd import (
+    SystemdBootstrapResult,
+    SystemdInstaller,
+    SystemdSettings,
+)
 
 __all__ = [
     "BootstrapError",
@@ -37,6 +42,9 @@ __all__ = [
     "OdooService",
     "ServiceSettings",
     "SystemAccountManager",
+    "SystemdBootstrapResult",
+    "SystemdInstaller",
+    "SystemdSettings",
     "PostgresBootstrapResult",
     "PostgresBootstrapper",
     "PostgresSettings",

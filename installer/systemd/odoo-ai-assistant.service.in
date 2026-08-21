@@ -1,0 +1,20 @@
+[Unit]
+Description=Odoo AI Assistant Service
+After=network.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_GROUP@
+WorkingDirectory=@WORKING_DIRECTORY@
+EnvironmentFile=@ENVIRONMENT_FILE@
+ExecStart=@SERVICE_EXECUTABLE@
+Restart=on-failure
+RestartSec=5s
+UMask=0027
+NoNewPrivileges=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
