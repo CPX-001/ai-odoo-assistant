@@ -122,7 +122,6 @@ cat >"${ODOO_CONFIG}" <<EOF
 [options]
 admin_passwd = ${ODOO_ADMIN_PASSWORD}
 db_host = False
-db_port = False
 db_user = ${ODOO_USER}
 db_password = False
 addons_path = ${ODOO_SOURCE}/odoo/addons,${ODOO_SOURCE}/addons,${CUSTOM_ADDONS},${ASSISTANT_TARGET}/addons
