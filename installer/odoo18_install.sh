@@ -113,7 +113,15 @@ npm install --global rtlcss
 log "Installing ai-odoo-assistant under custom addons"
 if [[ "$(readlink -f "${ASSISTANT_SOURCE_DIR}")" != "$(readlink -m "${ASSISTANT_TARGET}")" ]]; then
     install -d -o "${ODOO_USER}" -g "${ODOO_USER}" -m 0755 "${ASSISTANT_TARGET}"
-    rsync -a "${ASSISTANT_SOURCE_DIR}/" "${ASSISTANT_TARGET}/"
+    if git -C "${ASSISTANT_SOURCE_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git -C "${ASSISTANT_SOURCE_DIR}" archive --format=tar HEAD | tar -xf - -C "${ASSISTANT_TARGET}"
+        if [[ -d "${ASSISTANT_SOURCE_DIR}/.git" ]]; then
+            install -d -o "${ODOO_USER}" -g "${ODOO_USER}" -m 0755 "${ASSISTANT_TARGET}/.git"
+            rsync -a "${ASSISTANT_SOURCE_DIR}/.git/" "${ASSISTANT_TARGET}/.git/"
+        fi
+    else
+        rsync -a "${ASSISTANT_SOURCE_DIR}/" "${ASSISTANT_TARGET}/"
+    fi
 fi
 chown -R "${ODOO_USER}:${ODOO_USER}" "${ASSISTANT_TARGET}"
 
