@@ -1,0 +1,238 @@
+import importlib.util
+import json
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+from types import ModuleType
+from uuid import UUID
+
+import pytest
+
+from odoo_ai.contracts import ContextReadTurnRequest
+
+NOW = 1_787_337_600
+NOW_DATETIME = datetime.fromtimestamp(NOW, UTC)
+SECRET = b"addon-only-delegation-secret-" + b"s" * 48
+TURN_ID = UUID("12345678-1234-5678-1234-567812345678")
+
+
+def _load_module(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_addon_services() -> tuple[ModuleType, ModuleType, ModuleType]:
+    addon = Path(__file__).parents[2] / "addons/odoo_ai_assistant"
+    root_name = "odoo_ai_test_addon"
+    for package_name, package_path in (
+        (root_name, addon),
+        (f"{root_name}.security", addon / "security"),
+        (f"{root_name}.services", addon / "services"),
+    ):
+        package = ModuleType(package_name)
+        package.__path__ = [str(package_path)]
+        sys.modules[package_name] = package
+    delegation = _load_module(
+        f"{root_name}.security.delegation", addon / "security/delegation.py"
+    )
+    security_package = sys.modules[f"{root_name}.security"]
+    security_package.DelegationCodec = delegation.DelegationCodec
+    security_package.DelegationPayload = delegation.DelegationPayload
+    security_package.DelegationTokenError = delegation.DelegationTokenError
+    screen = _load_module(
+        f"{root_name}.services.screen_context", addon / "services/screen_context.py"
+    )
+    turn = _load_module(
+        f"{root_name}.services.turn_context", addon / "services/turn_context.py"
+    )
+    return delegation, screen, turn
+
+
+delegation, screen_context, turn_context = _load_addon_services()
+
+
+class FakeRecord:
+    def __init__(self, record_id: int) -> None:
+        self.id = record_id
+
+
+class FakeRecords:
+    def __init__(self, record_ids: list[int]) -> None:
+        self.ids = record_ids
+
+
+class FakeCursor:
+    dbname = "customer-db"
+
+
+class FakeEnv:
+    uid = 17
+    su = False
+    company = FakeRecord(3)
+    companies = FakeRecords([3, 5])
+    lang = "es_ES"
+    cr = FakeCursor()
+
+    def __contains__(self, model: object) -> bool:
+        return model == "sale.order"
+
+
+def _screen(**overrides: object) -> dict[str, object]:
+    values: dict[str, object] = {
+        "action_id": 42,
+        "menu_id": 7,
+        "view_type": "form",
+        "model": "sale.order",
+        "res_id": 4832,
+        "selected_ids": [4832, 4833],
+        "allowed_context_subset": {
+            "active_id": 4832,
+            "active_ids": [4832, 4833],
+            "active_model": "sale.order",
+        },
+        "captured_at": NOW_DATETIME.isoformat(),
+    }
+    values.update(overrides)
+    return values
+
+
+def _codec():
+    return delegation.DelegationCodec(SECRET, clock=lambda: NOW)
+
+
+def _preparer():
+    return turn_context.TurnContextPreparer(
+        codec=_codec(),
+        clock=lambda: NOW,
+        turn_id_factory=lambda: TURN_ID,
+        nonce_factory=lambda: "jti_0123456789abcdefghij",
+    )
+
+
+def test_server_env_identity_and_current_record_are_signed() -> None:
+    prepared = _preparer().prepare(
+        env=FakeEnv(), screen_payload=_screen(), message="¿Qué estado tiene?"
+    )
+    claims = _codec().decode(prepared.delegation_token)
+
+    assert claims.uid == FakeEnv.uid
+    assert claims.company_id == 3
+    assert claims.allowed_company_ids == (3, 5)
+    assert claims.lang == "es_ES"
+    assert claims.turn_id == TURN_ID
+    assert claims.database == "customer-db"
+    assert claims.model == "sale.order"
+    assert claims.record_ids == (4832,)
+    assert claims.scopes == ("fields_get", "read_records")
+    assert claims.expires_at - claims.issued_at == 60
+    assert prepared.screen.selected_ids == (4832, 4833)
+
+    transport = ContextReadTurnRequest.model_validate_json(
+        json.dumps(prepared.to_assistant_payload())
+    )
+    assert transport.turn_id == TURN_ID
+    assert transport.user.uid == 17
+    assert transport.delegation_token.get_secret_value() == prepared.delegation_token
+
+
+def test_browser_identity_is_rejected_and_never_changes_the_delegation() -> None:
+    for key, value in (
+        ("uid", 1),
+        ("company_id", 99),
+        ("allowed_company_ids", [99]),
+        ("lang", "xx_XX"),
+    ):
+        with pytest.raises(
+            screen_context.ScreenContextValidationError,
+            match="identity_not_allowed",
+        ):
+            _preparer().prepare(
+                env=FakeEnv(),
+                screen_payload=_screen(**{key: value}),
+                message="question",
+            )
+
+    clean = _preparer().prepare(
+        env=FakeEnv(), screen_payload=_screen(), message="question"
+    )
+    assert _codec().decode(clean.delegation_token).uid == 17
+
+
+class UnauthorizedCompanyEnv(FakeEnv):
+    @property
+    def companies(self):
+        raise RuntimeError("browser requested company 99")
+
+
+def test_unauthorized_company_context_is_sanitized() -> None:
+    with pytest.raises(turn_context.TurnContextError) as failure:
+        _preparer().prepare(
+            env=UnauthorizedCompanyEnv(),
+            screen_payload=_screen(),
+            message="question",
+        )
+
+    assert failure.value.code == "identity_unavailable"
+    assert "99" not in str(failure.value)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "code"),
+    [
+        ({"model": "bad model"}, "invalid_model"),
+        ({"res_id": 0}, "invalid_record_id"),
+        ({"res_id": 2_147_483_648}, "invalid_record_id"),
+        ({"selected_ids": list(range(1, 10))}, "invalid_selected_ids"),
+        ({"allowed_context_subset": {"uid": 1}}, "context_key_not_allowed"),
+        (
+            {"captured_at": datetime.fromtimestamp(NOW - 301, UTC).isoformat()},
+            "screen_expired",
+        ),
+    ],
+)
+def test_screen_context_limits_are_enforced(
+    overrides: dict[str, object], code: str
+) -> None:
+    with pytest.raises(screen_context.ScreenContextValidationError) as failure:
+        _preparer().prepare(
+            env=FakeEnv(),
+            screen_payload=_screen(**overrides),
+            message="question",
+        )
+
+    assert failure.value.code == code
+
+
+def test_token_is_server_only_and_redacted_from_repr_and_browser_payload() -> None:
+    prepared = _preparer().prepare(
+        env=FakeEnv(), screen_payload=_screen(), message="question"
+    )
+    token = prepared.delegation_token
+
+    assert token in prepared.to_assistant_payload().values()
+    assert prepared.to_browser_payload() == {"turn_id": str(TURN_ID)}
+    assert token not in repr(prepared)
+    assert token not in repr(prepared.to_browser_payload())
+    assert "gateway" not in prepared.to_browser_payload()
+
+
+def test_configured_entrypoint_loads_only_the_addon_secret_file(
+    tmp_path: Path,
+) -> None:
+    secret_file = tmp_path / "delegation-secret"
+    secret_file.write_bytes(SECRET + b"\n")
+    secret_file.chmod(0o640)
+
+    prepared = turn_context.prepare_context_turn(
+        env=FakeEnv(),
+        screen_payload=_screen(),
+        message="question",
+        secret_file=str(secret_file),
+        clock=lambda: NOW,
+    )
+
+    assert _codec().decode(prepared.delegation_token).uid == 17

@@ -16,5 +16,12 @@ protected file created by the host bootstrap; the secret content is read only
 server-side and is never stored in a field or sent to the browser. Missing
 deployment facts remain `Unknown` rather than being inferred from the DEV host.
 
-M1 deliberately does not add chat, browser assets, ScreenContext, delegation,
-ORM tools, source/log access, Codex, or writes.
+Contextual delegation uses a separate `ODOO_AI_DELEGATION_SECRET_FILE` setting
+on the Odoo server process. The file contains the addon-only signing root, has
+no default path, and must not be readable by the Assistant Service account.
+This separation lets the service transport a short-lived token without being
+able to mint authority for another Odoo user.
+
+The current M2 foundation validates `ScreenContext`, derives identity from the
+authenticated Odoo environment, and prepares a server-only delegation. It does
+not yet expose ORM tools, browser assets, source/log access, Codex, or writes.
