@@ -72,6 +72,7 @@ def test_client_uses_non_default_local_port_and_server_side_secret(
 ) -> None:
     secret_file = tmp_path / "shared-secret"
     secret_file.write_text(f"{AssistantHandler.secret}\n", encoding="utf-8")
+    secret_file.chmod(0o640)
     client = AssistantServiceClient(
         base_url=f"http://127.0.0.1:{local_service.server_port}",
         shared_secret_file=str(secret_file),
@@ -92,6 +93,7 @@ def test_client_rejects_non_loopback_and_sanitizes_auth_failure(
 
     secret_file = tmp_path / "shared-secret"
     secret_file.write_text("wrong-" + "x" * 48, encoding="utf-8")
+    secret_file.chmod(0o640)
     client = AssistantServiceClient(
         base_url=f"http://127.0.0.1:{local_service.server_port}",
         shared_secret_file=str(secret_file),
@@ -100,3 +102,17 @@ def test_client_rejects_non_loopback_and_sanitizes_auth_failure(
         client.admin_status()
     assert rejected.value.code == "authentication_rejected"
     assert "wrong" not in str(rejected.value)
+
+
+def test_client_rejects_other_readable_secret(tmp_path: Path) -> None:
+    secret_file = tmp_path / "public-secret"
+    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
+    secret_file.chmod(0o644)
+    client = AssistantServiceClient(
+        base_url="http://127.0.0.1:8000",
+        shared_secret_file=str(secret_file),
+    )
+
+    with pytest.raises(AssistantServiceError) as unavailable:
+        client.admin_status()
+    assert unavailable.value.code == "authentication_unavailable"

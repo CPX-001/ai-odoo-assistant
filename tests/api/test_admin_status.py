@@ -138,3 +138,17 @@ def test_admin_status_requires_the_local_shared_secret() -> None:
     assert wrong.status_code == 401
     assert ADMIN_SECRET not in missing.text
     assert ADMIN_SECRET not in wrong.text
+
+
+def test_admin_status_rejects_other_readable_secret(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    public_secret = tmp_path / "public-secret"
+    public_secret.write_text(ADMIN_SECRET, encoding="utf-8")
+    public_secret.chmod(0o644)
+    monkeypatch.setenv("ODOO_AI_SHARED_SECRET_FILE", str(public_secret))
+
+    response = asyncio.run(_get_status())
+
+    assert response.status_code == 503
+    assert ADMIN_SECRET not in response.text

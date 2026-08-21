@@ -74,7 +74,11 @@ class AssistantServiceClient:
         path = Path(self._shared_secret_file)
         try:
             metadata = path.stat()
-            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 4096:
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_size > 4096
+                or metadata.st_mode & 0o007
+            ):
                 raise OSError
             secret = path.read_text(encoding="utf-8").strip()
         except (OSError, UnicodeError) as error:

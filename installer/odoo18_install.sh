@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Odoo 18 Community installer for Ubuntu 24.04/WSL2.
+# DEV fixture: Odoo 18 Community installer for Ubuntu 24.04/WSL2.
+# This prepares the repository's disposable Odoo test host. It is not the
+# Assistant product bootstrap and its defaults must never be used as production
+# deployment contracts. See installer/bootstrap and docs/OPERATIONS_M1.md.
 # Based on the installation flow popularized by Yenthe Van Ginneken, updated
 # for systemd, Python virtual environments, idempotent reruns, and this repo.
 

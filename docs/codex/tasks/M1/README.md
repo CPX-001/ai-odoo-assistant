@@ -1,5 +1,8 @@
 # M1 — Runtime / install
 
+Estado: completado. `M1-10` dio **PASS** el 2026-08-21; ver
+[`../../../M1_GATE_REPORT.md`](../../../M1_GATE_REPORT.md).
+
 M1 empieza sólo después de que `M0-06-gate.md` haya dado PASS. Su objetivo es convertir el esqueleto del Assistant Service en un runtime local instalable y observable, sin implementar todavía lectura contextual Odoo, scanner/source, logs, Codex ni agent loop.
 
 Fuente de verdad: `docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf`, especialmente §§8, 9, 23, 28, 29, 30 y 34.4. Para discovery/overrides de deployment, leer también `docs/DEPLOYMENT_CONFIG.md`.
