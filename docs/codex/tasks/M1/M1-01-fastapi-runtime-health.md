@@ -29,6 +29,7 @@ Arrancar localmente el Assistant Service como una aplicación FastAPI mínima y 
 - app factory o estructura equivalente testeable;
 - `GET /health` con respuesta estructurada, estable y sin secretos;
 - comando documentado para arrancar el service en DEV sobre loopback;
+- bind host/port resuelto desde configuración externa con defaults locales, sin obligar a editar el entrypoint para cambiar de puerto;
 - unit/API tests del endpoint.
 
 `/health` sólo debe demostrar que el proceso HTTP está vivo. La comprobación de DB/migraciones/readiness completo pertenece a tareas posteriores.
@@ -49,7 +50,8 @@ Arrancar localmente el Assistant Service como una aplicación FastAPI mínima y 
 - `contracts` no puede importar FastAPI;
 - `application` no debe acoplarse al framework HTTP;
 - no secretos ni configuración sensible en respuestas/logs;
-- bind DEV explícito a `127.0.0.1`, no `0.0.0.0` por defecto.
+- bind limitado a loopback en el perfil MVP; `127.0.0.1` es el default, no una constante que impida `::1`/`localhost` o un puerto distinto;
+- no habilitar `0.0.0.0` como solución rápida de conectividad.
 
 ## Tests obligatorios
 
@@ -57,6 +59,8 @@ Ejecuta los comandos reales definidos por el repo para:
 
 - tests de M0 completos;
 - tests API de `/health`;
+- host/port default y puerto loopback no-default;
+- rechazo de bind público;
 - lint;
 - type-check.
 
@@ -65,6 +69,7 @@ Ejecuta los comandos reales definidos por el repo para:
 - el service arranca desde el package instalado/editable;
 - `GET /health` devuelve 200 y payload estable;
 - el endpoint no depende de una DB ni de Odoo para responder;
+- host/port se pueden configurar sin modificar Python, manteniendo loopback;
 - ningún contrato de M0 se acopla a FastAPI;
 - tests/lint/type-check verdes.
 
