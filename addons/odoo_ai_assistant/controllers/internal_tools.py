@@ -14,6 +14,7 @@ from ..security import (
     MachineAuthenticationError,
     require_machine_secret,
 )
+from ..services import InstanceInventoryError, collect_instance_inventory
 from ..services.orm_tools import DelegatedOrmToolExecutor, OrmToolError
 from ..services.turn_context import DELEGATION_SECRET_FILE_ENV
 
@@ -21,6 +22,7 @@ DELEGATION_HEADER: Final = "X-Odoo-AI-Delegation"
 MAX_REQUEST_BYTES: Final = 32 * 1024
 METADATA_ROUTE: Final = "/odoo_ai/internal/v1/model-metadata"
 READ_ROUTE: Final = "/odoo_ai/internal/v1/read-records"
+INVENTORY_ROUTE: Final = "/odoo_ai/internal/v1/instance-inventory"
 
 
 class InternalOdooToolsController(http.Controller):
@@ -46,15 +48,30 @@ class InternalOdooToolsController(http.Controller):
     def read_records(self):
         return self._dispatch("read")
 
+    @http.route(
+        INVENTORY_ROUTE,
+        type="http",
+        auth="none",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    def instance_inventory(self):
+        return self._dispatch("inventory")
+
     def _dispatch(self, operation: str):
         try:
             require_machine_secret(
                 request.httprequest.headers.get(SHARED_SECRET_HEADER)
             )
+            payload = _request_payload()
+            if operation == "inventory":
+                _require_keys(payload, set())
+                result = collect_instance_inventory(request.env)
+                return request.make_json_response(result, status=200)
             token = request.httprequest.headers.get(DELEGATION_HEADER)
             if not token or len(token) > 4096:
                 raise OrmToolError("delegation_rejected", 403)
-            payload = _request_payload()
             codec = _delegation_codec()
             executor = DelegatedOrmToolExecutor(codec=codec)
             if operation == "metadata":
@@ -79,6 +96,8 @@ class InternalOdooToolsController(http.Controller):
         except MachineAuthenticationError as error:
             return _error_response(error.code, error.status)
         except OrmToolError as error:
+            return _error_response(error.code, error.status)
+        except InstanceInventoryError as error:
             return _error_response(error.code, error.status)
         except DelegationTokenError:
             return _error_response("delegation_unavailable", 503)

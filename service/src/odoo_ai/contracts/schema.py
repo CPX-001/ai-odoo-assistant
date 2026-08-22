@@ -23,7 +23,14 @@ from odoo_ai.contracts.evidence import Evidence
 from odoo_ai.contracts.logs import LogEvidence, LogSearchRequest, TimestampRange
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.screen_context import ScreenContext
-from odoo_ai.contracts.source import ScanRun, SourceFile, SourceRef, SourceSymbol, XmlRecord
+from odoo_ai.contracts.source import (
+    InstanceInventory,
+    ScanRun,
+    SourceFile,
+    SourceRef,
+    SourceSymbol,
+    XmlRecord,
+)
 
 type JsonSchema = dict[str, JsonValue]
 
@@ -35,6 +42,7 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     ConversationState,
     Evidence,
     DelegationClaims,
+    InstanceInventory,
     InstanceProfileSummary,
     LogEvidence,
     LogSearchRequest,

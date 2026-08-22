@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from odoo_ai.contracts import (
+    InstanceInventory,
     ScanRun,
     ScanStatus,
     SourceFile,
@@ -117,4 +118,31 @@ def test_source_file_rejects_physical_or_escaping_paths(logical_path: str) -> No
 def test_source_contracts_are_in_public_json_schema_export() -> None:
     schemas = export_public_json_schemas()
 
-    assert {"ScanRun", "SourceFile", "SourceRef", "SourceSymbol", "XmlRecord"} <= schemas.keys()
+    assert {
+        "InstanceInventory",
+        "ScanRun",
+        "SourceFile",
+        "SourceRef",
+        "SourceSymbol",
+        "XmlRecord",
+    } <= schemas.keys()
+
+
+def test_instance_inventory_is_bounded_and_deduplicated() -> None:
+    inventory = InstanceInventory(
+        database="customer_odoo",
+        server_version="18.0",
+        installed_modules=("base", "sale"),
+        addons_roots=("/srv/customer/addons",),
+        captured_at=NOW,
+    )
+
+    assert inventory.installed_modules == ("base", "sale")
+    with pytest.raises(ValidationError):
+        InstanceInventory(
+            database="customer_odoo",
+            server_version="18.0",
+            installed_modules=("base", "base"),
+            addons_roots=("/srv/customer/addons",),
+            captured_at=NOW,
+        )

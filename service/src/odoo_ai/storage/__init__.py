@@ -21,6 +21,7 @@ from odoo_ai.storage.runtime_repository import (
     get_latest_capability_snapshot,
     get_latest_instance_profile,
     list_trace_events,
+    record_source_capability,
 )
 from odoo_ai.storage.source_repository import (
     SourceFileUpsert,
@@ -64,6 +65,7 @@ __all__ = [
     "get_latest_capability_snapshot",
     "get_latest_instance_profile",
     "list_trace_events",
+    "record_source_capability",
     "mark_stale_source_files",
     "open_scan",
     "replace_file_derivatives",

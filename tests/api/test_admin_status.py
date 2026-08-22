@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import Engine, text
 
 from odoo_ai.api import create_app
+from odoo_ai.runtime.status import AdminStatusService, ComponentState, InstanceStatus
 from odoo_ai.storage import (
     DatabaseSettings,
     create_capability_snapshot,
@@ -152,3 +153,27 @@ def test_admin_status_rejects_other_readable_secret(
 
     assert response.status_code == 503
     assert ADMIN_SECRET not in response.text
+
+
+@pytest.mark.parametrize(
+    ("source_state", "component_state", "detail"),
+    [
+        ("DETECTED", ComponentState.OK, "operational"),
+        ("NOT_FOUND", ComponentState.PENDING, "not_found"),
+        ("NO_PERMISSION", ComponentState.ERROR, "no_permission"),
+        ("ERROR", ComponentState.ERROR, "error"),
+    ],
+)
+def test_source_capability_states_remain_distinct(
+    source_state: str, component_state: ComponentState, detail: str
+) -> None:
+    instance = InstanceStatus(
+        instance_id="customer",
+        fingerprint="sha256:instance",
+        capabilities={"source": source_state},
+    )
+
+    status = AdminStatusService._source_status(instance)
+
+    assert status.state is component_state
+    assert status.detail == detail

@@ -1,5 +1,6 @@
 """Stable contracts for bounded, incremental source indexing."""
 
+import re
 from datetime import datetime
 from enum import StrEnum
 from pathlib import PurePosixPath
@@ -27,6 +28,50 @@ class SourceFileKind(StrEnum):
     XML = "xml"
     CSV = "csv"
     OTHER = "other"
+
+
+class SourceCapabilityState(StrEnum):
+    """Operational state of the bounded source subsystem."""
+
+    DETECTED = "DETECTED"
+    NOT_FOUND = "NOT_FOUND"
+    NO_PERMISSION = "NO_PERMISSION"
+    ERROR = "ERROR"
+
+
+class InstanceInventory(BaseModel):
+    """Narrow machine-authenticated runtime metadata returned by Odoo."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    database: str = Field(min_length=1, max_length=128)
+    server_version: str = Field(min_length=1, max_length=64)
+    installed_modules: tuple[str, ...] = Field(max_length=4096)
+    addons_roots: tuple[str, ...] = Field(max_length=128)
+    captured_at: datetime
+
+    @field_validator("installed_modules")
+    @classmethod
+    def validate_installed_modules(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(
+            not module
+            or len(module) > 255
+            or re.fullmatch(MODULE_PATTERN, module) is None
+            for module in value
+        ):
+            raise ValueError("installed module names must be bounded")
+        if len(value) != len(set(value)):
+            raise ValueError("installed modules must be unique")
+        return value
+
+    @field_validator("addons_roots")
+    @classmethod
+    def validate_addons_roots(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not root or len(root) > 4096 or root != root.strip() for root in value):
+            raise ValueError("addons roots must be bounded non-empty paths")
+        if len(value) != len(set(value)):
+            raise ValueError("addons roots must be unique")
+        return value
 
 
 class ScanRun(BaseModel):

@@ -114,6 +114,7 @@ def test_bootstrap_first_run_and_second_run_are_idempotent(tmp_path: Path) -> No
     config = paths.service_config.read_text(encoding="utf-8")
     assert 'ODOO_AI_HOST="127.0.0.1"' in config
     assert 'ODOO_AI_DATABASE_NAME="odoo_ai"' in config
+    assert 'ODOO_AI_SOURCE_ROOTS="[\\"/odoo/custom/addons\\"]"' in config
     assert secret_before.strip() not in config
 
 

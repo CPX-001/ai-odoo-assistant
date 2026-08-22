@@ -61,7 +61,7 @@ class CapabilitySnapshot(Base):
         nullable=False,
     )
     readiness: Mapped[str] = mapped_column(String(32), nullable=False)
-    capabilities: Mapped[dict[str, bool]] = mapped_column(JSONB, nullable=False)
+    capabilities: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp()
     )

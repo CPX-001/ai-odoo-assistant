@@ -29,6 +29,7 @@ from odoo_ai.contracts import (
     EvidenceKind,
     EvidenceSensitivity,
     EvidenceStatus,
+    InstanceInventory,
     RecordRef,
     RecordSnapshot,
 )
@@ -38,6 +39,7 @@ ODOO_BASE_URL_ENV: Final = "ODOO_AI_ODOO_BASE_URL"
 DELEGATION_HEADER: Final = "X-Odoo-AI-Delegation"
 METADATA_ROUTE: Final = "/odoo_ai/internal/v1/model-metadata"
 READ_ROUTE: Final = "/odoo_ai/internal/v1/read-records"
+INVENTORY_ROUTE: Final = "/odoo_ai/internal/v1/instance-inventory"
 DEFAULT_TIMEOUT_SECONDS: Final = 2.0
 MAX_REQUEST_BYTES: Final = 32 * 1024
 MAX_RESPONSE_BYTES: Final = 128 * 1024
@@ -145,6 +147,94 @@ class OdooGatewayFactory:
             delegation_token=token,
             machine_secret=machine_secret,
         )
+
+    def for_instance(self) -> HttpOdooInstanceGateway:
+        """Bind only the machine credential for technical instance inventory."""
+
+        try:
+            machine_secret = self._secret_loader()
+        except SharedSecretError:
+            raise OdooGatewayError("machine_auth_unavailable") from None
+        _validate_header_secret(machine_secret, maximum=4096)
+        return HttpOdooInstanceGateway(
+            settings=self._settings,
+            machine_secret=machine_secret,
+        )
+
+
+class HttpOdooInstanceGateway:
+    """Read bounded deployment metadata without user or business-record authority."""
+
+    __slots__ = ("_machine_secret", "_settings")
+
+    def __init__(self, *, settings: OdooGatewaySettings, machine_secret: str) -> None:
+        if not isinstance(settings, OdooGatewaySettings):
+            raise OdooGatewayError("invalid_configuration")
+        _validate_header_secret(machine_secret, maximum=4096)
+        self._settings = settings
+        self._machine_secret = machine_secret
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}(base_url={self._settings.base_url!r}, "
+            "credentials=<redacted>)"
+        )
+
+    async def get_instance_inventory(self) -> InstanceInventory:
+        raw = await asyncio.to_thread(self._post_json)
+        try:
+            response = _InventoryResponse.model_validate_json(raw)
+        except ValidationError:
+            raise OdooGatewayError("malformed_response") from None
+        return InstanceInventory(
+            database=response.database,
+            server_version=response.server_version,
+            installed_modules=tuple(response.installed_modules),
+            addons_roots=tuple(response.addons_roots),
+            captured_at=response.captured_at,
+        )
+
+    def _post_json(self) -> bytes:
+        body = b"{}"
+        connection_type = (
+            HTTPSConnection if self._settings._scheme == "https" else HTTPConnection
+        )
+        connection = connection_type(
+            self._settings._host,
+            self._settings._port,
+            timeout=float(self._settings.timeout_seconds),
+        )
+        try:
+            connection.request(
+                "POST",
+                INVENTORY_ROUTE,
+                body=body,
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    SHARED_SECRET_HEADER: self._machine_secret,
+                },
+            )
+            response = connection.getresponse()
+            if response.status != 200:
+                raise OdooGatewayError(_status_error(response.status))
+            content_type = response.getheader("Content-Type", "").partition(";")[0].strip()
+            if content_type != "application/json":
+                raise OdooGatewayError("malformed_response")
+            result = response.read(self._settings.max_response_bytes + 1)
+            if len(result) > self._settings.max_response_bytes:
+                raise OdooGatewayError("response_too_large")
+            if not result:
+                raise OdooGatewayError("malformed_response")
+            return result
+        except OdooGatewayError:
+            raise
+        except TimeoutError:
+            raise OdooGatewayError("upstream_timeout") from None
+        except (HTTPException, OSError):
+            raise OdooGatewayError("upstream_unavailable") from None
+        finally:
+            connection.close()
 
 
 class HttpOdooGateway:
@@ -321,6 +411,26 @@ class _MetadataResponse(BaseModel):
             if not _FIELD_PATTERN.fullmatch(name):
                 raise ValueError("invalid metadata field")
             _validate_metadata_description(description)
+        return value
+
+
+class _InventoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    addons_roots: list[str] = Field(max_length=128)
+    captured_at: AwareDatetime
+    database: str = Field(min_length=1, max_length=128)
+    installed_modules: list[str] = Field(max_length=4096)
+    ok: Literal[True]
+    server_version: str = Field(min_length=1, max_length=64)
+
+    @field_validator("addons_roots", "installed_modules")
+    @classmethod
+    def validate_unique_text(cls, value: list[str]) -> list[str]:
+        if any(not item or item != item.strip() or len(item) > 4096 for item in value):
+            raise ValueError("invalid instance inventory")
+        if len(value) != len(set(value)):
+            raise ValueError("invalid instance inventory")
         return value
 
 

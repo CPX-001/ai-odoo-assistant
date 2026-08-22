@@ -1,6 +1,7 @@
 """Idempotent privileged preparation of Assistant host resources."""
 
 import grp
+import json
 import os
 import pwd
 import secrets
@@ -264,7 +265,9 @@ class Bootstrapper:
                 database_url=postgres_result.runtime_url,
                 alembic_config=self._service_settings.alembic_config,
             )
-        config_changed = self._ensure_config(accounts)
+        config_changed = self._ensure_config(
+            accounts, source_roots=deployment.addons_paths
+        )
         systemd_result = (
             self._systemd_manager.ensure(
                 config_changed=(
@@ -346,7 +349,7 @@ class Bootstrapper:
         os.chown(path, uid, gid)
         return created
 
-    def _service_config_content(self) -> str:
+    def _service_config_content(self, *, source_roots: tuple[Path, ...] = ()) -> str:
         settings = self._service_settings
         if settings.host not in {"127.0.0.1", "::1", "localhost"}:
             raise BootstrapError("MVP Assistant Service host must remain loopback")
@@ -364,14 +367,19 @@ class Bootstrapper:
             "ODOO_AI_DATABASE_NAME": settings.database_name,
             "ODOO_AI_ALEMBIC_CONFIG": str(alembic_config),
             "ODOO_AI_SHARED_SECRET_FILE": str(self._paths.shared_secret),
+            "ODOO_AI_SOURCE_ROOTS": json.dumps(
+                [str(path) for path in source_roots], separators=(",", ":")
+            ),
         }
         if settings.database_url is not None:
             values["ODOO_AI_DATABASE_URL"] = settings.database_url
         return "".join(f"{key}={_quote_env_value(value)}\n" for key, value in values.items())
 
-    def _ensure_config(self, accounts: AccountState) -> bool:
+    def _ensure_config(
+        self, accounts: AccountState, *, source_roots: tuple[Path, ...] = ()
+    ) -> bool:
         path = self._paths.service_config
-        content = self._service_config_content()
+        content = self._service_config_content(source_roots=source_roots)
         existing = self._validate_regular_file(path)
         if existing is not None and path.read_text(encoding="utf-8") == content:
             os.chmod(path, 0o640)

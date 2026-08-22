@@ -10,7 +10,7 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from alembic.util.exc import CommandError
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, JsonValue
 from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -48,7 +48,7 @@ class InstanceStatus(BaseModel):
     instance_id: str
     fingerprint: str
     reported_readiness: str | None = None
-    capabilities: dict[str, bool]
+    capabilities: dict[str, JsonValue]
 
 
 class RuntimeComponents(BaseModel):
@@ -57,6 +57,7 @@ class RuntimeComponents(BaseModel):
     runtime: ComponentStatus
     assistant_database: ComponentStatus
     migrations: MigrationStatus
+    source: ComponentStatus
 
 
 class AdminStatus(BaseModel):
@@ -113,6 +114,12 @@ class AdminStatusService:
         has_error = (
             database.state is ComponentState.ERROR or migrations.state is ComponentState.ERROR
         )
+        source = self._source_status(instance)
+        pending_capabilities = tuple(
+            capability
+            for capability in self._PENDING_CAPABILITIES
+            if capability != "source" or source.state is not ComponentState.OK
+        )
         return AdminStatus(
             readiness="ERROR" if has_error else "DEGRADED",
             checked_at=datetime.now(UTC),
@@ -120,8 +127,9 @@ class AdminStatusService:
                 runtime=ComponentStatus(state=ComponentState.OK, detail="running"),
                 assistant_database=database,
                 migrations=migrations,
+                source=source,
             ),
-            pending_capabilities=self._PENDING_CAPABILITIES,
+            pending_capabilities=pending_capabilities,
             instance=instance,
         )
 
@@ -151,6 +159,21 @@ class AdminStatusService:
                 capabilities=snapshot.capabilities if snapshot else {},
             )
 
+    @staticmethod
+    def _source_status(instance: InstanceStatus | None) -> ComponentStatus:
+        if instance is None:
+            return ComponentStatus(state=ComponentState.PENDING, detail="unknown")
+        state = instance.capabilities.get("source")
+        if state == "DETECTED":
+            return ComponentStatus(state=ComponentState.OK, detail="operational")
+        if state == "NOT_FOUND":
+            return ComponentStatus(state=ComponentState.PENDING, detail="not_found")
+        if state == "NO_PERMISSION":
+            return ComponentStatus(state=ComponentState.ERROR, detail="no_permission")
+        if state == "ERROR":
+            return ComponentStatus(state=ComponentState.ERROR, detail="error")
+        return ComponentStatus(state=ComponentState.PENDING, detail="unknown")
+
 
 def unavailable_admin_status() -> AdminStatus:
     """Return a sanitized status when external configuration cannot be loaded."""
@@ -164,6 +187,7 @@ def unavailable_admin_status() -> AdminStatus:
                 state=ComponentState.ERROR, detail="configuration_invalid"
             ),
             migrations=MigrationStatus(state=ComponentState.ERROR, detail="unavailable"),
+            source=ComponentStatus(state=ComponentState.PENDING, detail="unknown"),
         ),
         pending_capabilities=AdminStatusService._PENDING_CAPABILITIES,
     )

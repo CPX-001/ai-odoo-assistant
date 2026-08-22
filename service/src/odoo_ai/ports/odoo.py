@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from odoo_ai.contracts import Evidence, RecordRef, RecordSnapshot
+from odoo_ai.contracts import Evidence, InstanceInventory, RecordRef, RecordSnapshot
 
 
 class OdooGateway(Protocol):
@@ -15,3 +15,9 @@ class OdooGateway(Protocol):
     ) -> list[RecordSnapshot]: ...
 
     async def get_model_metadata(self, model: str) -> Evidence: ...
+
+
+class OdooInstanceGateway(Protocol):
+    """Expose only non-business runtime metadata under machine authentication."""
+
+    async def get_instance_inventory(self) -> InstanceInventory: ...

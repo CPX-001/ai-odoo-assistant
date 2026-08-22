@@ -14,12 +14,14 @@ import pytest
 
 from odoo_ai.adapters import (
     HttpOdooGateway,
+    HttpOdooInstanceGateway,
     OdooGatewayError,
     OdooGatewayFactory,
     OdooGatewaySettings,
 )
 from odoo_ai.adapters.odoo_http import (
     DELEGATION_HEADER,
+    INVENTORY_ROUTE,
     MAX_RESPONSE_BYTES,
     METADATA_ROUTE,
     ODOO_BASE_URL_ENV,
@@ -155,6 +157,32 @@ def test_nondefault_url_metadata_maps_to_checked_evidence() -> None:
             "type": "char",
         }
     }
+
+
+def test_machine_only_instance_inventory_is_bounded_and_validated() -> None:
+    def responder(request: CapturedRequest) -> ResponseSpec:
+        assert request.path == INVENTORY_ROUTE
+        assert DELEGATION_HEADER not in request.headers
+        assert request.headers[SHARED_SECRET_HEADER] == MACHINE_SECRET
+        return _json_response(
+            {
+                "addons_roots": ["/srv/customer/addons"],
+                "captured_at": "2026-08-22T10:30:00Z",
+                "database": "customer_odoo",
+                "installed_modules": ["base", "sale"],
+                "ok": True,
+                "server_version": "18.0",
+            }
+        )
+
+    with fake_odoo_server(responder) as server:
+        gateway = _factory(f"http://127.0.0.1:{server.server_port}").for_instance()
+        inventory = asyncio.run(gateway.get_instance_inventory())
+
+    assert inventory.database == "customer_odoo"
+    assert inventory.installed_modules == ("base", "sale")
+    assert inventory.addons_roots == ("/srv/customer/addons",)
+    assert MACHINE_SECRET not in repr(gateway)
 
 
 def test_valid_read_maps_exact_records_and_sends_both_server_credentials() -> None:
@@ -326,3 +354,4 @@ def test_adapter_exposes_no_generic_odoo_method() -> None:
     assert not hasattr(HttpOdooGateway, "execute_kw")
     assert not hasattr(HttpOdooGateway, "execute_method")
     assert not hasattr(HttpOdooGateway, "search")
+    assert not hasattr(HttpOdooInstanceGateway, "execute_method")

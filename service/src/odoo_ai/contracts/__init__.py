@@ -40,8 +40,10 @@ from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.schema import PUBLIC_CONTRACT_MODELS, export_public_json_schemas
 from odoo_ai.contracts.screen_context import ScreenContext
 from odoo_ai.contracts.source import (
+    InstanceInventory,
     ScanRun,
     ScanStatus,
+    SourceCapabilityState,
     SourceFile,
     SourceFileKind,
     SourceRef,
@@ -63,6 +65,7 @@ __all__ = [
     "EvidenceKind",
     "EvidenceSensitivity",
     "EvidenceStatus",
+    "InstanceInventory",
     "InstanceProfileSummary",
     "LogCorrelation",
     "LogEvidence",
@@ -75,6 +78,7 @@ __all__ = [
     "ScanRun",
     "ScanStatus",
     "ScreenContext",
+    "SourceCapabilityState",
     "SourceFile",
     "SourceFileKind",
     "SourceRef",

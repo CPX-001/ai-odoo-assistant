@@ -9,6 +9,7 @@ from pydantic import JsonValue
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from odoo_ai.contracts import SourceCapabilityState
 from odoo_ai.storage.models import CapabilitySnapshot, InstanceProfile, TraceEvent
 
 type Readiness = Literal["FULLY_READY", "DEGRADED", "ERROR"]
@@ -69,7 +70,7 @@ def create_capability_snapshot(
     *,
     instance_profile_id: UUID,
     readiness: Readiness,
-    capabilities: Mapping[str, bool],
+    capabilities: Mapping[str, JsonValue],
 ) -> CapabilitySnapshot:
     snapshot = CapabilitySnapshot(
         instance_profile_id=instance_profile_id,
@@ -79,6 +80,28 @@ def create_capability_snapshot(
     session.add(snapshot)
     session.flush()
     return snapshot
+
+
+def record_source_capability(
+    session: Session,
+    *,
+    instance_profile_id: UUID,
+    state: SourceCapabilityState,
+) -> CapabilitySnapshot:
+    """Append a source state while preserving other known instance capabilities."""
+
+    latest = get_latest_capability_snapshot(
+        session, instance_profile_id=instance_profile_id
+    )
+    capabilities = dict(latest.capabilities) if latest is not None else {}
+    capabilities["source"] = state.value
+    capabilities["source_operational"] = state is SourceCapabilityState.DETECTED
+    return create_capability_snapshot(
+        session,
+        instance_profile_id=instance_profile_id,
+        readiness="DEGRADED",
+        capabilities=capabilities,
+    )
 
 
 def get_latest_instance_profile(session: Session) -> InstanceProfile | None:
