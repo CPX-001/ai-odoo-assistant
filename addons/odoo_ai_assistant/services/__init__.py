@@ -11,10 +11,13 @@ from .screen_context import (
 from .turn_context import (
     EffectiveUserContext,
     PreparedContextTurn,
+    PreparedQueryTurn,
+    QueryTurnContextPreparer,
     TurnContextError,
     TurnContextPreparer,
     derive_user_execution_context,
     prepare_context_turn,
+    prepare_query_turn,
 )
 
 __all__ = [
@@ -23,6 +26,8 @@ __all__ = [
     "EffectiveUserContext",
     "InstanceInventoryError",
     "PreparedContextTurn",
+    "PreparedQueryTurn",
+    "QueryTurnContextPreparer",
     "ScreenContextValidationError",
     "TurnContextError",
     "TurnContextPreparer",
@@ -30,5 +35,6 @@ __all__ = [
     "collect_instance_inventory",
     "derive_user_execution_context",
     "prepare_context_turn",
+    "prepare_query_turn",
     "validate_context_read_screen",
 ]

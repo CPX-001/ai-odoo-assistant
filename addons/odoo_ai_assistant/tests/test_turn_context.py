@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from odoo import Command
 from odoo.tests import TransactionCase, tagged
 
-from ..security import DelegationCodec
+from ..security import DelegationCodec, DelegationTokenError, QueryDelegationCodec
 from ..services import (
     ScreenContextValidationError,
     TurnContextError,
@@ -63,6 +63,9 @@ class TestContextTurnPreparation(TransactionCase):
     def _codec(self):
         return DelegationCodec(SECRET, clock=lambda: NOW)
 
+    def _query_codec(self):
+        return QueryDelegationCodec(SECRET, clock=lambda: NOW)
+
     def _prepare(self, env, screen=None):
         return TurnContextPreparer(codec=self._codec(), clock=lambda: NOW).prepare(
             env=env,
@@ -71,9 +74,7 @@ class TestContextTurnPreparation(TransactionCase):
         )
 
     def test_effective_user_and_active_companies_are_signed_from_env(self):
-        prepared = self._prepare(
-            self._user_env([self.company_a.id, self.company_b.id])
-        )
+        prepared = self._prepare(self._user_env([self.company_a.id, self.company_b.id]))
         claims = self._codec().decode(prepared.delegation_token)
 
         self.assertEqual(claims.uid, self.user.id)
@@ -107,9 +108,7 @@ class TestContextTurnPreparation(TransactionCase):
 
     def test_unauthorized_company_does_not_expand_active_context(self):
         with self.assertRaises(TurnContextError) as failure:
-            self._prepare(
-                self._user_env([self.company_a.id, self.outside_company.id])
-            )
+            self._prepare(self._user_env([self.company_a.id, self.outside_company.id]))
 
         self.assertEqual(failure.exception.code, "identity_unavailable")
 
@@ -124,3 +123,27 @@ class TestContextTurnPreparation(TransactionCase):
         self.assertEqual(
             prepared.to_browser_payload(), {"turn_id": str(prepared.turn_id)}
         )
+
+    def test_query_turn_uses_visible_runtime_fields_and_separate_token_family(self):
+        from ..services import QueryTurnContextPreparer
+
+        prepared = QueryTurnContextPreparer(
+            codec=self._query_codec(), clock=lambda: NOW
+        ).prepare(
+            env=self._user_env(),
+            screen_payload=self._screen(),
+            message="Count visible contacts",
+        )
+        claims = self._query_codec().decode(prepared.delegation_token)
+
+        self.assertEqual(claims.uid, self.user.id)
+        self.assertEqual(claims.model, "res.partner")
+        self.assertIn("id", claims.allowed_fields)
+        self.assertIn("display_name", claims.allowed_fields)
+        self.assertNotIn("message_ids", claims.allowed_fields)
+        self.assertEqual(
+            claims.scopes,
+            ("query_schema", "query_records", "aggregate_records"),
+        )
+        with self.assertRaises(DelegationTokenError):
+            self._codec().decode(prepared.delegation_token)

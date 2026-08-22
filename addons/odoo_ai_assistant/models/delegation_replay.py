@@ -9,7 +9,14 @@ from psycopg2 import IntegrityError
 
 _INTERNAL_CREATE_MARKER: Final = object()
 _INTERNAL_CREATE_CONTEXT: Final = "_odoo_ai_delegation_use_create"
-_SCOPES: Final = (("fields_get", "Fields metadata"), ("read_records", "Read records"))
+_SCOPES: Final = (
+    ("aggregate_records", "Aggregate records"),
+    ("fields_get", "Fields metadata"),
+    ("navigation", "Navigation metadata"),
+    ("query_records", "Query records"),
+    ("query_schema", "Query schema"),
+    ("read_records", "Read records"),
+)
 
 
 class DelegationUse(models.Model):
@@ -35,7 +42,10 @@ class DelegationUse(models.Model):
     def create(self, vals_list):
         """Prevent normal ORM/RPC callers from writing the internal ledger."""
 
-        if self.env.context.get(_INTERNAL_CREATE_CONTEXT) is not _INTERNAL_CREATE_MARKER:
+        if (
+            self.env.context.get(_INTERNAL_CREATE_CONTEXT)
+            is not _INTERNAL_CREATE_MARKER
+        ):
             raise AccessError("Delegation ledger writes are internal only.")
         return super().create(vals_list)
 

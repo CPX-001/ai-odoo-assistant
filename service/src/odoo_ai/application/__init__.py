@@ -18,6 +18,12 @@ from odoo_ai.application.navigation import (
     NavigationService,
     NavigationServiceError,
 )
+from odoo_ai.application.query_primitives import (
+    AggregateRecordsExecution,
+    QueryPrimitiveError,
+    QueryPrimitiveService,
+    QueryRecordsExecution,
+)
 
 __all__ = [
     "ContextReadError",
@@ -33,5 +39,9 @@ __all__ = [
     "NavigationResult",
     "NavigationService",
     "NavigationServiceError",
+    "AggregateRecordsExecution",
+    "QueryPrimitiveError",
+    "QueryPrimitiveService",
+    "QueryRecordsExecution",
     "TraceEventData",
 ]

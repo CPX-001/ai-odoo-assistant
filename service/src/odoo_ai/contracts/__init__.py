@@ -23,6 +23,8 @@ from odoo_ai.contracts.delegation import (
     DelegationClaims,
     DelegationScope,
     OdooGatewayReference,
+    QueryDelegationClaims,
+    QueryDelegationScope,
 )
 from odoo_ai.contracts.diagnostics import (
     EmptyDiagnosticsRequest,
@@ -67,6 +69,23 @@ from odoo_ai.contracts.navigation import (
     NavigationSnapshot,
     NavigationViewMode,
 )
+from odoo_ai.contracts.query import (
+    AggregateGroup,
+    AggregateRecordsRequest,
+    AggregateRecordsResult,
+    AggregateValue,
+    QueryAggregateOperation,
+    QueryCondition,
+    QueryFilter,
+    QueryMatch,
+    QueryMetric,
+    QueryOperator,
+    QueryRecord,
+    QueryRecordsRequest,
+    QueryRecordsResult,
+    QuerySort,
+    QuerySortDirection,
+)
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.schema import PUBLIC_CONTRACT_MODELS, export_public_json_schemas
 from odoo_ai.contracts.screen_context import ScreenContext
@@ -99,6 +118,10 @@ from odoo_ai.contracts.tool_execution import ToolExecutionEvent, ToolExecutionRe
 __all__ = [
     "AnswerConfidence",
     "AnswerEnvelope",
+    "AggregateGroup",
+    "AggregateRecordsRequest",
+    "AggregateRecordsResult",
+    "AggregateValue",
     "ContextPack",
     "ConversationState",
     "ContextReadTurnRequest",
@@ -140,6 +163,19 @@ __all__ = [
     "NavigationViewMode",
     "OdooGatewayReference",
     "ProposedAction",
+    "QueryAggregateOperation",
+    "QueryCondition",
+    "QueryDelegationClaims",
+    "QueryDelegationScope",
+    "QueryFilter",
+    "QueryMatch",
+    "QueryMetric",
+    "QueryOperator",
+    "QueryRecord",
+    "QueryRecordsRequest",
+    "QueryRecordsResult",
+    "QuerySort",
+    "QuerySortDirection",
     "PUBLIC_CONTRACT_MODELS",
     "RecordRef",
     "RecordCitation",

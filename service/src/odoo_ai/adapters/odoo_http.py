@@ -25,12 +25,18 @@ from pydantic import (
 )
 
 from odoo_ai.contracts import (
+    AggregateGroup,
+    AggregateRecordsRequest,
+    AggregateRecordsResult,
     Evidence,
     EvidenceKind,
     EvidenceSensitivity,
     EvidenceStatus,
     InstanceInventory,
     NavigationSnapshot,
+    QueryRecord,
+    QueryRecordsRequest,
+    QueryRecordsResult,
     RecordRef,
     RecordSnapshot,
 )
@@ -42,11 +48,15 @@ METADATA_ROUTE: Final = "/odoo_ai/internal/v1/model-metadata"
 READ_ROUTE: Final = "/odoo_ai/internal/v1/read-records"
 INVENTORY_ROUTE: Final = "/odoo_ai/internal/v1/instance-inventory"
 NAVIGATION_ROUTE: Final = "/odoo_ai/internal/v1/navigation"
+QUERY_SCHEMA_ROUTE: Final = "/odoo_ai/internal/v1/query-schema"
+QUERY_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/query-records"
+AGGREGATE_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/aggregate-records"
 DEFAULT_TIMEOUT_SECONDS: Final = 2.0
 MAX_REQUEST_BYTES: Final = 32 * 1024
 MAX_RESPONSE_BYTES: Final = 128 * 1024
 MAX_RECORDS: Final = 8
 MAX_FIELDS: Final = 64
+MAX_QUERY_RECORDS: Final = 50
 
 _MODEL_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
 _FIELD_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
@@ -110,9 +120,7 @@ class OdooGatewaySettings:
         object.__setattr__(self, "_port", port)
 
     @classmethod
-    def from_env(
-        cls, environ: Mapping[str, str] | None = None
-    ) -> OdooGatewaySettings:
+    def from_env(cls, environ: Mapping[str, str] | None = None) -> OdooGatewaySettings:
         source = os.environ if environ is None else environ
         raw_url = source.get(ODOO_BASE_URL_ENV, "")
         if not raw_url:
@@ -147,7 +155,7 @@ class OdooGatewayFactory:
             if isinstance(delegation_token, SecretStr)
             else delegation_token
         )
-        _validate_header_secret(token, maximum=4096)
+        _validate_header_secret(token, maximum=8192)
         try:
             machine_secret = self._secret_loader()
         except SharedSecretError:
@@ -188,8 +196,7 @@ class HttpOdooInstanceGateway:
 
     def __repr__(self) -> str:
         return (
-            f"{type(self).__name__}(base_url={self._settings.base_url!r}, "
-            "credentials=<redacted>)"
+            f"{type(self).__name__}(base_url={self._settings.base_url!r}, credentials=<redacted>)"
         )
 
     async def get_instance_inventory(self) -> InstanceInventory:
@@ -208,9 +215,7 @@ class HttpOdooInstanceGateway:
 
     def _post_json(self) -> bytes:
         body = b"{}"
-        connection_type = (
-            HTTPSConnection if self._settings._scheme == "https" else HTTPConnection
-        )
+        connection_type = HTTPSConnection if self._settings._scheme == "https" else HTTPConnection
         connection = connection_type(
             self._settings._host,
             self._settings._port,
@@ -264,7 +269,7 @@ class HttpOdooGateway:
     ) -> None:
         if not isinstance(settings, OdooGatewaySettings) or not isinstance(turn_id, UUID):
             raise OdooGatewayError("invalid_turn_authority")
-        _validate_header_secret(delegation_token, maximum=4096)
+        _validate_header_secret(delegation_token, maximum=8192)
         _validate_header_secret(machine_secret, maximum=4096)
         self._settings = settings
         self._turn_id = turn_id
@@ -331,8 +336,10 @@ class HttpOdooGateway:
         if response.model != model:
             raise OdooGatewayError("malformed_response")
         rows = {row.id: row for row in response.records}
-        if len(rows) != len(response.records) or set(rows) != set(record_ids) or any(
-            set(row.fields) != set(parsed_fields) for row in response.records
+        if (
+            len(rows) != len(response.records)
+            or set(rows) != set(record_ids)
+            or any(set(row.fields) != set(parsed_fields) for row in response.records)
         ):
             raise OdooGatewayError("malformed_response")
         return [
@@ -368,6 +375,86 @@ class HttpOdooGateway:
             content_trust=response.content_trust,
         )
 
+    async def get_query_model_metadata(self, model: str) -> Evidence:
+        parsed_model = _model_name(model)
+        raw = await asyncio.to_thread(
+            self._post_json,
+            QUERY_SCHEMA_ROUTE,
+            {"model": parsed_model, "turn_id": str(self._turn_id)},
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            response = _MetadataResponse.model_validate_json(raw)
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+        if response.model != parsed_model:
+            raise OdooGatewayError("malformed_response")
+        return Evidence(
+            evidence_id=uuid4(),
+            kind=EvidenceKind.METADATA,
+            status=EvidenceStatus.CHECKED,
+            title=f"Odoo QUERY model metadata: {parsed_model}",
+            summary="QUERY metadata read under the separately delegated Odoo user.",
+            payload={
+                "fields": cast(JsonValue, response.fields),
+                "label": response.label,
+                "model": response.model,
+            },
+            pointer={"model": parsed_model, "provider": "odoo_query_http"},
+            observed_at=response.captured_at,
+            sensitivity=EvidenceSensitivity.TECHNICAL,
+        )
+
+    async def query_records(self, request: QueryRecordsRequest) -> QueryRecordsResult:
+        raw = await asyncio.to_thread(
+            self._post_json,
+            QUERY_RECORDS_ROUTE,
+            {
+                "query": request.model_dump(mode="json", exclude={"schema_id"}),
+                "turn_id": str(self._turn_id),
+            },
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            response = _QueryRecordsResponse.model_validate_json(raw)
+            return QueryRecordsResult(
+                model=response.model,
+                schema_id=request.schema_id,
+                query=request,
+                records=response.records,
+                returned_count=response.returned_count,
+                limit=response.limit,
+                truncated=response.truncated,
+                captured_at=response.captured_at,
+            )
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+
+    async def aggregate_records(self, request: AggregateRecordsRequest) -> AggregateRecordsResult:
+        raw = await asyncio.to_thread(
+            self._post_json,
+            AGGREGATE_RECORDS_ROUTE,
+            {
+                "query": request.model_dump(mode="json", exclude={"schema_id"}),
+                "turn_id": str(self._turn_id),
+            },
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            response = _AggregateRecordsResponse.model_validate_json(raw)
+            return AggregateRecordsResult(
+                model=response.model,
+                schema_id=request.schema_id,
+                query=request,
+                groups=response.groups,
+                returned_group_count=response.returned_group_count,
+                group_limit=response.group_limit,
+                truncated=response.truncated,
+                captured_at=response.captured_at,
+            )
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+
     def _post_json(self, route: str, payload: dict[str, object]) -> bytes:
         try:
             body = json.dumps(
@@ -382,9 +469,7 @@ class HttpOdooGateway:
         if len(body) > self._settings.max_request_bytes:
             raise OdooGatewayError("request_too_large")
 
-        connection_type = (
-            HTTPSConnection if self._settings._scheme == "https" else HTTPConnection
-        )
+        connection_type = HTTPSConnection if self._settings._scheme == "https" else HTTPConnection
         connection = connection_type(
             self._settings._host,
             self._settings._port,
@@ -496,6 +581,30 @@ class _NavigationResponse(NavigationSnapshot):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     ok: Literal[True]
+
+
+class _QueryRecordsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+    model: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
+    records: tuple[QueryRecord, ...] = Field(max_length=MAX_QUERY_RECORDS)
+    returned_count: int = Field(strict=True, ge=0, le=MAX_QUERY_RECORDS)
+    limit: int = Field(strict=True, ge=1, le=MAX_QUERY_RECORDS)
+    truncated: bool
+    captured_at: AwareDatetime
+
+
+class _AggregateRecordsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+    model: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
+    groups: tuple[AggregateGroup, ...] = Field(max_length=50)
+    returned_group_count: int = Field(strict=True, ge=0, le=50)
+    group_limit: int = Field(strict=True, ge=1, le=50)
+    truncated: bool
+    captured_at: AwareDatetime
 
 
 def _validate_base_url(value: object) -> tuple[str, str, int, str]:

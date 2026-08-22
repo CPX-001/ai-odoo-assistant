@@ -83,9 +83,7 @@ class OrmToolError(RuntimeError):
 
 
 class EnvironmentProvider(Protocol):
-    def __call__(
-        self, claims: DelegationPayload
-    ) -> AbstractContextManager[object]: ...
+    def __call__(self, claims: DelegationPayload) -> AbstractContextManager[object]: ...
 
 
 class ReplayGuard(Protocol):
@@ -158,37 +156,16 @@ class DelegatedOrmToolExecutor:
         self._replay_guard(claims, "fields_get")
         try:
             with self._environment_provider(claims) as env:
-                model_set = env[parsed_model]
-                model_set.browse().check_access("read")
-                descriptions = model_set.fields_get(
-                    attributes=list(METADATA_ATTRIBUTES)
+                return collect_model_metadata(
+                    env,
+                    model=parsed_model,
+                    max_fields=min(claims.max_fields, MAX_METADATA_FIELDS),
+                    observed_at=self._observed_at(),
                 )
         except (AccessError, MissingError, ValidationError):
             raise OrmToolError("access_denied", 403) from None
         except KeyError:
             raise OrmToolError("access_denied", 403) from None
-
-        field_limit = min(claims.max_fields, MAX_METADATA_FIELDS)
-        names = [
-            name
-            for name in _prioritized_field_names(descriptions)
-            if descriptions[name].get("type") in ALLOWED_READ_FIELD_TYPES
-        ][:field_limit]
-        fields_payload = {
-            name: _normalize_field_definition(descriptions[name]) for name in names
-        }
-        label = getattr(model_set, "_description", None)
-        if not isinstance(label, str) or not 1 <= len(label) <= 256:
-            label = None
-        result: dict[str, JsonValue] = {
-            "captured_at": _iso_datetime(self._observed_at()),
-            "fields": fields_payload,
-            "label": label,
-            "model": parsed_model,
-            "ok": True,
-        }
-        _check_response_size(result)
-        return result
 
     def read_records(
         self,
@@ -209,9 +186,8 @@ class DelegatedOrmToolExecutor:
             scope="read_records",
             model=parsed_model,
         )
-        if (
-            len(parsed_ids) > claims.max_records
-            or not set(parsed_ids).issubset(claims.record_ids)
+        if len(parsed_ids) > claims.max_records or not set(parsed_ids).issubset(
+            claims.record_ids
         ):
             raise OrmToolError("scope_denied", 403)
         if len(parsed_fields) > claims.max_fields:
@@ -251,7 +227,7 @@ class DelegatedOrmToolExecutor:
         for record_id in parsed_ids:
             row = rows_by_id[record_id]
             normalized_fields = {
-                name: _normalize_value(row.get(name)) for name in parsed_fields
+                name: normalize_orm_value(row.get(name)) for name in parsed_fields
             }
             display_name = normalized_fields.get("display_name")
             records_payload.append(
@@ -264,12 +240,12 @@ class DelegatedOrmToolExecutor:
                 }
             )
         result = {
-            "captured_at": _iso_datetime(self._observed_at()),
+            "captured_at": iso_datetime(self._observed_at()),
             "model": parsed_model,
             "ok": True,
             "records": records_payload,
         }
-        _check_response_size(result)
+        check_response_size(result)
         return result
 
     def _authorize(
@@ -373,12 +349,55 @@ def _record_ids(value: object) -> tuple[int, ...]:
 def _field_names(value: object) -> tuple[str, ...]:
     if not isinstance(value, list) or not 1 <= len(value) <= MAX_REQUEST_FIELDS:
         raise OrmToolError("limit_exceeded", 413)
-    if any(not isinstance(item, str) or not _FIELD_PATTERN.fullmatch(item) for item in value):
+    if any(
+        not isinstance(item, str) or not _FIELD_PATTERN.fullmatch(item)
+        for item in value
+    ):
         raise OrmToolError("invalid_request", 400)
     parsed = tuple(value)
     if len(parsed) != len(set(parsed)):
         raise OrmToolError("invalid_request", 400)
     return parsed
+
+
+def collect_model_metadata(
+    env: object,
+    *,
+    model: str,
+    max_fields: int,
+    observed_at: datetime,
+    allowed_fields: frozenset[str] | None = None,
+) -> dict[str, JsonValue]:
+    """Collect the shared bounded metadata shape under an already delegated env."""
+
+    if not 1 <= max_fields <= MAX_METADATA_FIELDS:
+        raise OrmToolError("limit_exceeded", 413)
+    model_set = env[model]
+    model_set.browse().check_access("read")
+    descriptions = model_set.fields_get(attributes=list(METADATA_ATTRIBUTES))
+    names = [
+        name
+        for name in _prioritized_field_names(descriptions)
+        if descriptions[name].get("type") in ALLOWED_READ_FIELD_TYPES
+        and (allowed_fields is None or name in allowed_fields)
+    ][:max_fields]
+    if not names:
+        raise OrmToolError("access_denied", 403)
+    fields_payload = {
+        name: _normalize_field_definition(descriptions[name]) for name in names
+    }
+    label = getattr(model_set, "_description", None)
+    if not isinstance(label, str) or not 1 <= len(label) <= 256:
+        label = None
+    result: dict[str, JsonValue] = {
+        "captured_at": iso_datetime(observed_at),
+        "fields": fields_payload,
+        "label": label,
+        "model": model,
+        "ok": True,
+    }
+    check_response_size(result)
+    return result
 
 
 def _prioritized_field_names(descriptions: object) -> list[str]:
@@ -428,7 +447,9 @@ def _normalize_field_definition(value: object) -> JsonValue:
                 if (
                     not isinstance(option, (list, tuple))
                     or len(option) != 2
-                    or not all(isinstance(part, str) and len(part) <= 256 for part in option)
+                    or not all(
+                        isinstance(part, str) and len(part) <= 256 for part in option
+                    )
                 ):
                     raise OrmToolError("invalid_metadata", 500)
                 selection.append([option[0], option[1]])
@@ -436,7 +457,7 @@ def _normalize_field_definition(value: object) -> JsonValue:
     return normalized
 
 
-def _normalize_value(value: object) -> JsonValue:
+def normalize_orm_value(value: object) -> JsonValue:
     if value is None or isinstance(value, (bool, int, float)):
         return value
     if isinstance(value, str):
@@ -448,17 +469,17 @@ def _normalize_value(value: object) -> JsonValue:
     if isinstance(value, (list, tuple)):
         if len(value) > MAX_VALUE_COLLECTION_ITEMS:
             raise OrmToolError("response_too_large", 413)
-        return [_normalize_value(item) for item in value]
+        return [normalize_orm_value(item) for item in value]
     if isinstance(value, dict):
         if len(value) > MAX_VALUE_COLLECTION_ITEMS or not all(
             isinstance(key, str) for key in value
         ):
             raise OrmToolError("response_too_large", 413)
-        return {key: _normalize_value(item) for key, item in value.items()}
+        return {key: normalize_orm_value(item) for key, item in value.items()}
     raise OrmToolError("unsupported_value", 400)
 
 
-def _check_response_size(payload: dict[str, JsonValue]) -> None:
+def check_response_size(payload: dict[str, JsonValue]) -> None:
     try:
         serialized = json.dumps(
             payload,
@@ -473,7 +494,7 @@ def _check_response_size(payload: dict[str, JsonValue]) -> None:
         raise OrmToolError("response_too_large", 413)
 
 
-def _iso_datetime(value: datetime) -> str:
+def iso_datetime(value: datetime) -> str:
     if value.tzinfo is None:
         raise OrmToolError("clock_unavailable", 500)
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")

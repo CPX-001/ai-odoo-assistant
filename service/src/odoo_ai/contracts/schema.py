@@ -18,6 +18,7 @@ from odoo_ai.contracts.delegation import (
     ContextReadTurnResponse,
     DelegationClaims,
     OdooGatewayReference,
+    QueryDelegationClaims,
 )
 from odoo_ai.contracts.effective_schema import (
     EffectiveFieldSchema,
@@ -32,6 +33,19 @@ from odoo_ai.contracts.navigation import (
     NavigationLimits,
     NavigationNode,
     NavigationSnapshot,
+)
+from odoo_ai.contracts.query import (
+    AggregateGroup,
+    AggregateRecordsRequest,
+    AggregateRecordsResult,
+    AggregateValue,
+    QueryCondition,
+    QueryFilter,
+    QueryMetric,
+    QueryRecord,
+    QueryRecordsRequest,
+    QueryRecordsResult,
+    QuerySort,
 )
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.screen_context import ScreenContext
@@ -69,8 +83,20 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     NavigationLimits,
     NavigationNode,
     NavigationSnapshot,
+    AggregateGroup,
+    AggregateRecordsRequest,
+    AggregateRecordsResult,
+    AggregateValue,
     OdooGatewayReference,
     ProposedAction,
+    QueryDelegationClaims,
+    QueryCondition,
+    QueryFilter,
+    QueryMetric,
+    QueryRecord,
+    QueryRecordsRequest,
+    QueryRecordsResult,
+    QuerySort,
     RecordRef,
     RecordSnapshot,
     ScreenContext,

@@ -4,6 +4,8 @@ from .delegation import (
     DelegationCodec,
     DelegationPayload,
     DelegationTokenError,
+    QueryDelegationCodec,
+    QueryDelegationPayload,
 )
 from .machine_auth import (
     SHARED_SECRET_FILE_ENV,
@@ -19,5 +21,7 @@ __all__ = [
     "DelegationPayload",
     "DelegationTokenError",
     "MachineAuthenticationError",
+    "QueryDelegationCodec",
+    "QueryDelegationPayload",
     "require_machine_secret",
 ]

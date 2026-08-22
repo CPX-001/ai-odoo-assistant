@@ -12,10 +12,12 @@ from ..security import (
     DelegationCodec,
     DelegationTokenError,
     MachineAuthenticationError,
+    QueryDelegationCodec,
     require_machine_secret,
 )
 from ..services import InstanceInventoryError, collect_instance_inventory
 from ..services.orm_tools import DelegatedOrmToolExecutor, OrmToolError
+from ..services.query_tools import DelegatedQueryToolExecutor
 from ..services.turn_context import DELEGATION_SECRET_FILE_ENV
 
 DELEGATION_HEADER: Final = "X-Odoo-AI-Delegation"
@@ -24,6 +26,9 @@ METADATA_ROUTE: Final = "/odoo_ai/internal/v1/model-metadata"
 READ_ROUTE: Final = "/odoo_ai/internal/v1/read-records"
 INVENTORY_ROUTE: Final = "/odoo_ai/internal/v1/instance-inventory"
 NAVIGATION_ROUTE: Final = "/odoo_ai/internal/v1/navigation"
+QUERY_SCHEMA_ROUTE: Final = "/odoo_ai/internal/v1/query-schema"
+QUERY_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/query-records"
+AGGREGATE_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/aggregate-records"
 
 
 class InternalOdooToolsController(http.Controller):
@@ -61,6 +66,39 @@ class InternalOdooToolsController(http.Controller):
         return self._dispatch("navigation")
 
     @http.route(
+        QUERY_SCHEMA_ROUTE,
+        type="http",
+        auth="none",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    def query_schema(self):
+        return self._dispatch("query_schema")
+
+    @http.route(
+        QUERY_RECORDS_ROUTE,
+        type="http",
+        auth="none",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    def query_records(self):
+        return self._dispatch("query_records")
+
+    @http.route(
+        AGGREGATE_RECORDS_ROUTE,
+        type="http",
+        auth="none",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    def aggregate_records(self):
+        return self._dispatch("aggregate_records")
+
+    @http.route(
         INVENTORY_ROUTE,
         type="http",
         auth="none",
@@ -82,8 +120,34 @@ class InternalOdooToolsController(http.Controller):
                 result = collect_instance_inventory(request.env)
                 return request.make_json_response(result, status=200)
             token = request.httprequest.headers.get(DELEGATION_HEADER)
-            if not token or len(token) > 4096:
+            if not token or len(token) > 8192:
                 raise OrmToolError("delegation_rejected", 403)
+            if operation in {"aggregate_records", "query_records", "query_schema"}:
+                query_executor = DelegatedQueryToolExecutor(
+                    codec=_query_delegation_codec()
+                )
+                if operation == "query_schema":
+                    _require_keys(payload, {"model", "turn_id"})
+                    result = query_executor.get_model_metadata(
+                        delegation_token=token,
+                        turn_id=payload["turn_id"],
+                        model=payload["model"],
+                    )
+                else:
+                    _require_keys(payload, {"query", "turn_id"})
+                    if operation == "query_records":
+                        result = query_executor.query_records(
+                            delegation_token=token,
+                            turn_id=payload["turn_id"],
+                            payload=payload["query"],
+                        )
+                    else:
+                        result = query_executor.aggregate_records(
+                            delegation_token=token,
+                            turn_id=payload["turn_id"],
+                            payload=payload["query"],
+                        )
+                return request.make_json_response(result, status=200)
             codec = _delegation_codec()
             executor = DelegatedOrmToolExecutor(codec=codec)
             if operation == "metadata":
@@ -133,6 +197,16 @@ def _delegation_codec() -> DelegationCodec:
         raise OrmToolError("delegation_unavailable", 503) from None
 
 
+def _query_delegation_codec() -> QueryDelegationCodec:
+    path = os.environ.get(DELEGATION_SECRET_FILE_ENV, "").strip()
+    if not path:
+        raise OrmToolError("delegation_unconfigured", 503)
+    try:
+        return QueryDelegationCodec.from_secret_file(path)
+    except DelegationTokenError:
+        raise OrmToolError("delegation_unavailable", 503) from None
+
+
 def _request_payload() -> dict[str, object]:
     if request.httprequest.mimetype != "application/json":
         raise OrmToolError("invalid_request", 400)
@@ -148,14 +222,23 @@ def _request_payload() -> dict[str, object]:
     if not body or len(body) > MAX_REQUEST_BYTES:
         raise OrmToolError("request_too_large", 413)
     try:
-        payload = json.loads(body)
-    except (UnicodeError, json.JSONDecodeError):
+        payload = json.loads(body, object_pairs_hook=_unique_object)
+    except (UnicodeError, ValueError):
         raise OrmToolError("invalid_request", 400) from None
     if not isinstance(payload, dict) or not all(
         isinstance(key, str) for key in payload
     ):
         raise OrmToolError("invalid_request", 400)
     return payload
+
+
+def _unique_object(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate key")
+        value[key] = item
+    return value
 
 
 def _require_keys(payload: dict[str, object], expected: set[str]) -> None:

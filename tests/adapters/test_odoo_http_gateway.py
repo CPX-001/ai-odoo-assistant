@@ -11,7 +11,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters import (
     HttpOdooGateway,
     HttpOdooInstanceGateway,
@@ -20,15 +19,31 @@ from odoo_ai.adapters import (
     OdooGatewaySettings,
 )
 from odoo_ai.adapters.odoo_http import (
+    AGGREGATE_RECORDS_ROUTE,
     DELEGATION_HEADER,
     INVENTORY_ROUTE,
     MAX_RESPONSE_BYTES,
     METADATA_ROUTE,
     NAVIGATION_ROUTE,
     ODOO_BASE_URL_ENV,
+    QUERY_RECORDS_ROUTE,
+    QUERY_SCHEMA_ROUTE,
     READ_ROUTE,
 )
-from odoo_ai.contracts import EvidenceKind, EvidenceStatus, RecordRef
+from odoo_ai.contracts import (
+    AggregateRecordsRequest,
+    EvidenceKind,
+    EvidenceStatus,
+    QueryAggregateOperation,
+    QueryCondition,
+    QueryFilter,
+    QueryMetric,
+    QueryOperator,
+    QueryRecordsRequest,
+    QuerySort,
+    QuerySortDirection,
+    RecordRef,
+)
 from odoo_ai.security import SHARED_SECRET_HEADER
 
 TURN_ID = UUID("12345678-1234-5678-1234-567812345678")
@@ -243,6 +258,134 @@ def test_navigation_maps_only_bounded_visible_metadata() -> None:
     assert navigation.nodes[0].action is not None
     assert navigation.nodes[0].action.target_model == "sale.order"
     assert navigation.content_trust == "untrusted"
+
+
+def test_query_schema_uses_the_separate_narrow_route() -> None:
+    def responder(request: CapturedRequest) -> ResponseSpec:
+        assert request.path == QUERY_SCHEMA_ROUTE
+        assert json.loads(request.body) == {
+            "model": "sale.order",
+            "turn_id": str(TURN_ID),
+        }
+        return _json_response(
+            {
+                "captured_at": "2026-08-22T10:30:00Z",
+                "fields": {
+                    "id": {
+                        "groupable": True,
+                        "readonly": True,
+                        "required": False,
+                        "searchable": True,
+                        "sortable": True,
+                        "type": "integer",
+                    }
+                },
+                "label": "Sales Order",
+                "model": "sale.order",
+                "ok": True,
+            }
+        )
+
+    with fake_odoo_server(responder) as server:
+        evidence = asyncio.run(
+            _gateway(f"http://127.0.0.1:{server.server_port}").get_query_model_metadata(
+                "sale.order"
+            )
+        )
+
+    assert evidence.status is EvidenceStatus.CHECKED
+    assert evidence.pointer == {
+        "model": "sale.order",
+        "provider": "odoo_query_http",
+    }
+
+
+def test_query_records_sends_only_structured_ast_and_validates_response() -> None:
+    query = QueryRecordsRequest(
+        model="sale.order",
+        schema_id="sha256:" + "a" * 64,
+        fields=("name",),
+        filter=QueryFilter(
+            conditions=(
+                QueryCondition(
+                    field="name",
+                    operator=QueryOperator.CONTAINS,
+                    value="SO",
+                ),
+            )
+        ),
+        order=(QuerySort(field="name", direction=QuerySortDirection.ASC),),
+        limit=10,
+    )
+
+    def responder(request: CapturedRequest) -> ResponseSpec:
+        assert request.path == QUERY_RECORDS_ROUTE
+        payload = json.loads(request.body)
+        assert payload["turn_id"] == str(TURN_ID)
+        assert "schema_id" not in payload["query"]
+        assert payload["query"]["filter"]["conditions"][0] == {
+            "field": "name",
+            "operator": "contains",
+            "value": "SO",
+        }
+        return _json_response(
+            {
+                "captured_at": "2026-08-22T10:31:00Z",
+                "limit": 10,
+                "model": "sale.order",
+                "ok": True,
+                "records": [{"fields": {"name": "SO001"}, "id": 7}],
+                "returned_count": 1,
+                "truncated": False,
+            }
+        )
+
+    with fake_odoo_server(responder) as server:
+        result = asyncio.run(
+            _gateway(f"http://127.0.0.1:{server.server_port}").query_records(query)
+        )
+
+    assert result.records[0].fields == {"name": "SO001"}
+    assert result.query == query
+    assert result.content_trust == "untrusted"
+
+
+def test_aggregate_records_maps_count_and_empty_result_without_raw_domain() -> None:
+    query = AggregateRecordsRequest(
+        model="sale.order",
+        schema_id="sha256:" + "a" * 64,
+        metrics=(QueryMetric(operation=QueryAggregateOperation.COUNT),),
+        group_limit=10,
+    )
+
+    def responder(request: CapturedRequest) -> ResponseSpec:
+        assert request.path == AGGREGATE_RECORDS_ROUTE
+        payload = json.loads(request.body)
+        assert "domain" not in json.dumps(payload)
+        return _json_response(
+            {
+                "captured_at": "2026-08-22T10:31:00Z",
+                "group_limit": 10,
+                "groups": [
+                    {
+                        "group": {},
+                        "metrics": [{"field": None, "operation": "count", "value": 0}],
+                    }
+                ],
+                "model": "sale.order",
+                "ok": True,
+                "returned_group_count": 1,
+                "truncated": False,
+            }
+        )
+
+    with fake_odoo_server(responder) as server:
+        result = asyncio.run(
+            _gateway(f"http://127.0.0.1:{server.server_port}").aggregate_records(query)
+        )
+
+    assert result.groups[0].metrics[0].value == 0
+    assert result.query == query
 
 
 def test_valid_read_maps_exact_records_and_sends_both_server_credentials() -> None:

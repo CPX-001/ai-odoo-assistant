@@ -26,7 +26,9 @@ def test_browser_assets_use_only_the_authenticated_odoo_bridge() -> None:
     assert "/v1/admin/source" not in static_text
     assert "/v1/admin/logs" not in static_text
 
-    browser_controller = (ADDON_ROOT / "controllers/browser_bridge.py").read_text(encoding="utf-8")
+    browser_controller = (ADDON_ROOT / "controllers/browser_bridge.py").read_text(
+        encoding="utf-8"
+    )
     assert 'auth="user"' in browser_controller
     assert 'request.env["odoo.ai.assistant.bridge"]' in browser_controller
     assert "/odoo_ai/v1/context-read" in browser_controller
@@ -35,23 +37,30 @@ def test_browser_assets_use_only_the_authenticated_odoo_bridge() -> None:
 
 
 def test_internal_tool_routes_have_double_auth_and_no_generic_execution() -> None:
-    controller = (ADDON_ROOT / "controllers/internal_tools.py").read_text(encoding="utf-8")
+    controller = (ADDON_ROOT / "controllers/internal_tools.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "/odoo_ai/internal/v1/model-metadata" in controller
     assert "/odoo_ai/internal/v1/read-records" in controller
     assert "/odoo_ai/internal/v1/instance-inventory" in controller
     assert "/odoo_ai/internal/v1/navigation" in controller
+    assert "/odoo_ai/internal/v1/query-schema" in controller
+    assert "/odoo_ai/internal/v1/query-records" in controller
+    assert "/odoo_ai/internal/v1/aggregate-records" in controller
     assert 'auth="none"' in controller
     assert "require_machine_secret(" in controller
     assert "DELEGATION_HEADER" in controller
     assert "DelegatedOrmToolExecutor" in controller
+    assert "DelegatedQueryToolExecutor" in controller
     assert "execute_kw" not in controller
     assert "execute_method" not in controller
 
 
 def test_internal_endpoint_and_secret_are_not_duplicated_in_views() -> None:
     view_text = "\n".join(
-        path.read_text(encoding="utf-8") for path in (ADDON_ROOT / "views").glob("*.xml")
+        path.read_text(encoding="utf-8")
+        for path in (ADDON_ROOT / "views").glob("*.xml")
     )
 
     assert "127.0.0.1" not in view_text
@@ -83,7 +92,9 @@ def test_m2_paths_have_no_privilege_or_generic_execution_escape_hatches() -> Non
         ADDON_ROOT / "services",
     ]
     source = "\n".join(
-        path.read_text(encoding="utf-8") for root in roots for path in root.rglob("*.py")
+        path.read_text(encoding="utf-8")
+        for root in roots
+        for path in root.rglob("*.py")
     )
 
     assert ".sudo(" not in source

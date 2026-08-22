@@ -7,7 +7,6 @@ from types import ModuleType
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.contracts import ContextReadTurnRequest
 
 NOW = 1_787_337_600
@@ -43,6 +42,8 @@ def _load_addon_services() -> tuple[ModuleType, ModuleType, ModuleType]:
     security_package.DelegationCodec = delegation.DelegationCodec
     security_package.DelegationPayload = delegation.DelegationPayload
     security_package.DelegationTokenError = delegation.DelegationTokenError
+    security_package.QueryDelegationCodec = delegation.QueryDelegationCodec
+    security_package.QueryDelegationPayload = delegation.QueryDelegationPayload
     screen = _load_module(
         f"{root_name}.services.screen_context", addon / "services/screen_context.py"
     )
@@ -81,6 +82,29 @@ class FakeEnv:
         return model == "sale.order"
 
 
+class FakeModel:
+    def browse(self):
+        return self
+
+    def check_access(self, operation: str) -> None:
+        assert operation == "read"
+
+    def fields_get(self, *, attributes: list[str]) -> dict[str, dict[str, str]]:
+        assert attributes == ["type"]
+        return {
+            "amount_total": {"type": "monetary"},
+            "display_name": {"type": "char"},
+            "id": {"type": "integer"},
+            "message_ids": {"type": "one2many"},
+        }
+
+
+class QueryFakeEnv(FakeEnv):
+    def __getitem__(self, model: str) -> FakeModel:
+        assert model == "sale.order"
+        return FakeModel()
+
+
 def _screen(**overrides: object) -> dict[str, object]:
     values: dict[str, object] = {
         "action_id": 42,
@@ -113,6 +137,19 @@ def _preparer():
     )
 
 
+def _query_codec():
+    return delegation.QueryDelegationCodec(SECRET, clock=lambda: NOW)
+
+
+def _query_preparer():
+    return turn_context.QueryTurnContextPreparer(
+        codec=_query_codec(),
+        clock=lambda: NOW,
+        turn_id_factory=lambda: TURN_ID,
+        nonce_factory=lambda: "jti_0123456789abcdefghij",
+    )
+
+
 def test_server_env_identity_and_current_record_are_signed() -> None:
     prepared = _preparer().prepare(
         env=FakeEnv(), screen_payload=_screen(), message="¿Qué estado tiene?"
@@ -137,6 +174,27 @@ def test_server_env_identity_and_current_record_are_signed() -> None:
     assert transport.turn_id == TURN_ID
     assert transport.user.uid == 17
     assert transport.delegation_token.get_secret_value() == prepared.delegation_token
+
+
+def test_query_authority_is_runtime_field_bounded_and_separate_from_m2() -> None:
+    prepared = _query_preparer().prepare(
+        env=QueryFakeEnv(), screen_payload=_screen(), message="Total por cliente"
+    )
+    claims = _query_codec().decode(prepared.delegation_token)
+
+    assert claims.uid == 17
+    assert claims.model == "sale.order"
+    assert claims.allowed_fields == ("id", "amount_total", "display_name")
+    assert claims.scopes == (
+        "query_schema",
+        "query_records",
+        "aggregate_records",
+    )
+    assert claims.policy_revision == "m5-query-read-v1"
+    assert claims.max_records == 50
+    assert claims.max_fields == 3
+    with pytest.raises(delegation.DelegationTokenError):
+        _codec().decode(prepared.delegation_token)
 
 
 def test_browser_identity_is_rejected_and_never_changes_the_delegation() -> None:

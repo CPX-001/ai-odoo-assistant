@@ -7,15 +7,16 @@ from types import ModuleType
 from uuid import UUID
 
 import pytest
-
-from odoo_ai.contracts import DelegationClaims as TransportDelegationClaims
+from odoo_ai.contracts import (
+    DelegationClaims as TransportDelegationClaims,
+)
+from odoo_ai.contracts import (
+    QueryDelegationClaims as TransportQueryDelegationClaims,
+)
 
 
 def _load_delegation_module() -> ModuleType:
-    path = (
-        Path(__file__).parents[2]
-        / "addons/odoo_ai_assistant/security/delegation.py"
-    )
+    path = Path(__file__).parents[2] / "addons/odoo_ai_assistant/security/delegation.py"
     spec = importlib.util.spec_from_file_location("odoo_ai_test_delegation", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -28,6 +29,8 @@ delegation = _load_delegation_module()
 DelegationCodec = delegation.DelegationCodec
 DelegationPayload = delegation.DelegationPayload
 DelegationTokenError = delegation.DelegationTokenError
+QueryDelegationCodec = delegation.QueryDelegationCodec
+QueryDelegationPayload = delegation.QueryDelegationPayload
 
 NOW = 1_787_337_600
 SECRET = b"addon-only-delegation-secret-" + b"s" * 48
@@ -58,6 +61,36 @@ def _payload(**overrides: object):
 
 def _codec(secret: bytes = SECRET, *, now: int = NOW):
     return DelegationCodec(secret, clock=lambda: now)
+
+
+def _query_payload(**overrides: object):
+    values = {
+        "format_version": 1,
+        "jti": "query_0123456789abcdefgh",
+        "turn_id": UUID("12345678-1234-5678-1234-567812345678"),
+        "database": "customer-db",
+        "uid": 17,
+        "company_id": 3,
+        "allowed_company_ids": (3, 5),
+        "lang": "es_ES",
+        "model": "sale.order",
+        "allowed_fields": ("id", "amount_total", "name", "partner_id"),
+        "scopes": ("query_schema", "query_records", "aggregate_records"),
+        "issued_at": NOW,
+        "expires_at": NOW + 60,
+        "max_records": 50,
+        "max_fields": 4,
+        "max_conditions": 8,
+        "max_groups": 50,
+        "max_aggregates": 8,
+        "policy_revision": "m5-query-read-v1",
+    }
+    values.update(overrides)
+    return QueryDelegationPayload(**values)
+
+
+def _query_codec(secret: bytes = SECRET, *, now: int = NOW):
+    return QueryDelegationCodec(secret, clock=lambda: now)
 
 
 def _resign_payload(token: str, payload: dict[str, object]) -> str:
@@ -108,6 +141,41 @@ def test_navigation_scope_is_explicit_and_transport_compatible() -> None:
     )
 
     assert claims.scopes == ["navigation"]
+
+
+def test_query_authority_is_a_separate_transport_compatible_token_family() -> None:
+    payload = _query_payload()
+    token = _query_codec().encode(payload)
+    claims = TransportQueryDelegationClaims.model_validate_json(
+        json.dumps(_query_codec().decode(token).to_mapping(), sort_keys=True)
+    )
+
+    assert token.startswith("q1.")
+    assert claims.model == "sale.order"
+    assert claims.allowed_fields == ["id", "amount_total", "name", "partner_id"]
+    assert claims.scopes == ["query_schema", "query_records", "aggregate_records"]
+    with pytest.raises(DelegationTokenError, match="unknown_version"):
+        _codec().decode(token)
+    with pytest.raises(DelegationTokenError, match="unknown_version"):
+        _query_codec().decode(_codec().encode(_payload()))
+
+
+@pytest.mark.parametrize(
+    ("claim", "value"),
+    [
+        ("allowed_fields", ("name", "id")),
+        ("allowed_fields", ("id", "name", "name")),
+        ("scopes", ("query_records", "read_records")),
+        ("max_records", 51),
+        ("max_fields", 5),
+        ("max_conditions", 9),
+        ("max_groups", 51),
+        ("max_aggregates", 9),
+    ],
+)
+def test_query_authority_limits_fail_closed(claim: str, value: object) -> None:
+    with pytest.raises(DelegationTokenError, match="invalid_query_claims"):
+        _query_payload(**{claim: value})
 
 
 def test_modified_token_and_wrong_signing_key_are_rejected() -> None:
@@ -205,9 +273,12 @@ def test_secret_file_policy_matches_the_local_secret_boundary(tmp_path: Path) ->
     secret_file.write_bytes(SECRET + b"\n")
     secret_file.chmod(0o640)
 
-    assert DelegationCodec.from_secret_file(
-        secret_file, clock=lambda: NOW
-    ).decode(_codec().encode(_payload())) == _payload()
+    assert (
+        DelegationCodec.from_secret_file(secret_file, clock=lambda: NOW).decode(
+            _codec().encode(_payload())
+        )
+        == _payload()
+    )
 
     secret_file.chmod(0o644)
     with pytest.raises(DelegationTokenError, match="signing_key_unavailable"):

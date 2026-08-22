@@ -19,7 +19,7 @@ from odoo_ai.contracts import (
     EvidenceSensitivity,
     EvidenceStatus,
 )
-from odoo_ai.ports.odoo import OdooGateway
+from odoo_ai.ports.odoo import ModelMetadataGateway
 
 type JsonValue = str | int | float | bool | list[JsonValue] | dict[str, JsonValue] | None
 
@@ -140,7 +140,7 @@ class EffectiveSchemaService:
 
     def __init__(
         self,
-        gateway: OdooGateway,
+        gateway: ModelMetadataGateway,
         *,
         policy: EffectiveSchemaPolicy | None = None,
     ) -> None:

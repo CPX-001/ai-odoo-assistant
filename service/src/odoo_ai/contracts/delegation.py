@@ -1,5 +1,6 @@
 """Versioned delegation claims and the M2 contextual-turn ingress contract."""
 
+import re
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Final, Literal, Self
@@ -20,12 +21,19 @@ from odoo_ai.contracts.records import RecordSnapshot
 from odoo_ai.contracts.screen_context import ScreenContext
 
 DELEGATION_FORMAT_VERSION: Final = 1
+QUERY_DELEGATION_FORMAT_VERSION: Final = 1
 MAX_ALLOWED_COMPANY_IDS: Final = 16
 MAX_DELEGATED_RECORD_IDS: Final = 8
 MAX_DELEGATION_SCOPES: Final = 2
 MAX_DELEGATION_TTL_SECONDS: Final = 120
 MAX_CONTEXT_MESSAGE_LENGTH: Final = 4_000
 MAX_DELEGATED_FIELDS: Final = 64
+MAX_QUERY_CONDITIONS: Final = 8
+MAX_QUERY_GROUPS: Final = 50
+MAX_QUERY_AGGREGATES: Final = 8
+MAX_QUERY_RECORDS: Final = 50
+MAX_QUERY_RESULT_FIELDS: Final = 16
+QUERY_FIELD_PATTERN: Final = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 
 PositiveId = Annotated[int, Field(strict=True, gt=0)]
 
@@ -36,6 +44,14 @@ class DelegationScope(StrEnum):
     FIELDS_GET = "fields_get"
     NAVIGATION = "navigation"
     READ_RECORDS = "read_records"
+
+
+class QueryDelegationScope(StrEnum):
+    """Authority carried only by the separate q1 QUERY token family."""
+
+    SCHEMA = "query_schema"
+    RECORDS = "query_records"
+    AGGREGATE = "aggregate_records"
 
 
 class DelegationClaims(BaseModel):
@@ -49,21 +65,15 @@ class DelegationClaims(BaseModel):
     database: str = Field(min_length=1, max_length=128)
     uid: PositiveId
     company_id: PositiveId
-    allowed_company_ids: list[PositiveId] = Field(
-        min_length=1, max_length=MAX_ALLOWED_COMPANY_IDS
-    )
+    allowed_company_ids: list[PositiveId] = Field(min_length=1, max_length=MAX_ALLOWED_COMPANY_IDS)
     lang: str | None = Field(default=None, min_length=2, max_length=35)
     model: str = Field(
         min_length=1,
         max_length=128,
         pattern=r"^[A-Za-z_][A-Za-z0-9_.]*$",
     )
-    record_ids: list[PositiveId] = Field(
-        min_length=1, max_length=MAX_DELEGATED_RECORD_IDS
-    )
-    scopes: list[DelegationScope] = Field(
-        min_length=1, max_length=MAX_DELEGATION_SCOPES
-    )
+    record_ids: list[PositiveId] = Field(min_length=1, max_length=MAX_DELEGATED_RECORD_IDS)
+    scopes: list[DelegationScope] = Field(min_length=1, max_length=MAX_DELEGATION_SCOPES)
     issued_at: int = Field(strict=True, ge=0)
     expires_at: int = Field(strict=True, ge=0)
     max_records: int = Field(strict=True, ge=1, le=MAX_DELEGATED_RECORD_IDS)
@@ -94,6 +104,75 @@ class DelegationClaims(BaseModel):
             raise ValueError("delegation TTL is invalid")
         if self.max_records > len(self.record_ids):
             raise ValueError("record limit exceeds delegated records")
+        return self
+
+
+class QueryDelegationClaims(BaseModel):
+    """Strict transport mirror of Odoo's separately signed q1 authority."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    format_version: Literal[1] = QUERY_DELEGATION_FORMAT_VERSION
+    jti: str = Field(min_length=22, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    turn_id: UUID
+    database: str = Field(min_length=1, max_length=128)
+    uid: PositiveId
+    company_id: PositiveId
+    allowed_company_ids: list[PositiveId] = Field(min_length=1, max_length=MAX_ALLOWED_COMPANY_IDS)
+    lang: str | None = Field(default=None, min_length=2, max_length=35)
+    model: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_.]*$",
+    )
+    allowed_fields: list[str] = Field(min_length=1, max_length=MAX_DELEGATED_FIELDS)
+    scopes: list[QueryDelegationScope] = Field(min_length=1, max_length=3)
+    issued_at: int = Field(strict=True, ge=0)
+    expires_at: int = Field(strict=True, ge=0)
+    max_records: int = Field(strict=True, ge=1, le=MAX_QUERY_RECORDS)
+    max_fields: int = Field(strict=True, ge=1, le=MAX_QUERY_RESULT_FIELDS)
+    max_conditions: int = Field(strict=True, ge=0, le=MAX_QUERY_CONDITIONS)
+    max_groups: int = Field(strict=True, ge=1, le=MAX_QUERY_GROUPS)
+    max_aggregates: int = Field(strict=True, ge=1, le=MAX_QUERY_AGGREGATES)
+    policy_revision: str = Field(min_length=1, max_length=128)
+
+    @field_validator("database")
+    @classmethod
+    def validate_query_database_binding(cls, value: str) -> str:
+        if value != value.strip() or any(ord(character) < 32 for character in value):
+            raise ValueError("database binding is invalid")
+        return value
+
+    @field_validator("allowed_fields")
+    @classmethod
+    def validate_query_fields(cls, value: list[str]) -> list[str]:
+        if (
+            len(value) != len(set(value))
+            or tuple(value) != tuple(sorted(value, key=lambda item: (item != "id", item)))
+            or any(
+                not item or len(item) > 128 or QUERY_FIELD_PATTERN.fullmatch(item) is None
+                for item in value
+            )
+        ):
+            raise ValueError("query field authority is invalid")
+        return value
+
+    @field_validator("allowed_company_ids", "scopes")
+    @classmethod
+    def validate_query_unique_list(cls, value: list[object]) -> list[object]:
+        if len(value) != len(set(value)):
+            raise ValueError("delegation list values must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_query_authority_shape(self) -> Self:
+        if self.company_id not in self.allowed_company_ids:
+            raise ValueError("effective company must be allowed")
+        ttl = self.expires_at - self.issued_at
+        if not 0 < ttl <= MAX_DELEGATION_TTL_SECONDS:
+            raise ValueError("delegation TTL is invalid")
+        if self.max_fields > len(self.allowed_fields):
+            raise ValueError("query field limit exceeds delegated fields")
         return self
 
 
