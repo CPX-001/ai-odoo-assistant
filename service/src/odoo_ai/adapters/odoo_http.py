@@ -49,7 +49,17 @@ MAX_FIELDS: Final = 64
 _MODEL_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
 _FIELD_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _METADATA_ATTRIBUTES = frozenset(
-    {"type", "string", "required", "readonly", "relation", "selection"}
+    {
+        "groupable",
+        "readonly",
+        "relation",
+        "required",
+        "searchable",
+        "selection",
+        "sortable",
+        "string",
+        "type",
+    }
 )
 
 PositiveId = Annotated[int, Field(strict=True, gt=0)]
@@ -273,8 +283,9 @@ class HttpOdooGateway:
             {"model": parsed_model, "turn_id": str(self._turn_id)},
         )
         try:
+            _json_object_without_duplicates(raw)
             response = _MetadataResponse.model_validate_json(raw)
-        except ValidationError:
+        except (ValidationError, ValueError):
             raise OdooGatewayError("malformed_response") from None
         if response.model != parsed_model:
             raise OdooGatewayError("malformed_response")
@@ -286,6 +297,7 @@ class HttpOdooGateway:
             summary="Metadata read under the delegated Odoo user.",
             payload={
                 "fields": cast(JsonValue, response.fields),
+                "label": response.label,
                 "model": response.model,
             },
             pointer={"model": parsed_model, "provider": "odoo_http"},
@@ -399,6 +411,7 @@ class _MetadataResponse(BaseModel):
 
     captured_at: AwareDatetime
     fields: dict[str, dict[str, JsonValue]] = Field(max_length=MAX_FIELDS)
+    label: str | None = Field(default=None, min_length=1, max_length=256)
     model: str = Field(min_length=1, max_length=128)
     ok: Literal[True]
 
@@ -543,7 +556,13 @@ def _validate_metadata_description(value: dict[str, JsonValue]) -> None:
         if key in {"type", "string", "relation"}:
             if item is not None and (not isinstance(item, str) or len(item) > 256):
                 raise ValueError("invalid metadata description")
-        elif key in {"required", "readonly"}:
+        elif key in {
+            "required",
+            "readonly",
+            "searchable",
+            "sortable",
+            "groupable",
+        }:
             if not isinstance(item, bool):
                 raise ValueError("invalid metadata description")
         elif key == "selection":
@@ -556,6 +575,24 @@ def _validate_metadata_description(value: dict[str, JsonValue]) -> None:
                     or not all(isinstance(part, str) and len(part) <= 256 for part in option)
                 ):
                     raise ValueError("invalid metadata description")
+
+
+def _json_object_without_duplicates(raw: bytes) -> dict[str, object]:
+    def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+
+    try:
+        value = json.loads(raw, object_pairs_hook=unique_object)
+    except (UnicodeError, json.JSONDecodeError):
+        raise ValueError("invalid JSON") from None
+    if not isinstance(value, dict):
+        raise ValueError("invalid JSON object")
+    return value
 
 
 def _status_error(status: int) -> str:

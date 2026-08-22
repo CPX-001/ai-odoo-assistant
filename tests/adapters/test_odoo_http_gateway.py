@@ -159,6 +159,25 @@ def test_nondefault_url_metadata_maps_to_checked_evidence() -> None:
     }
 
 
+def test_metadata_rejects_duplicate_json_keys() -> None:
+    def responder(request: CapturedRequest) -> ResponseSpec:
+        assert request.path == METADATA_ROUTE
+        return ResponseSpec(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body=(
+                b'{"captured_at":"2026-08-21T10:30:00Z","fields":'
+                b'{"name":{"type":"char"},"name":{"type":"text"}},'
+                b'"model":"sale.order","ok":true}'
+            ),
+        )
+
+    with fake_odoo_server(responder) as server:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        with pytest.raises(OdooGatewayError, match="malformed_response"):
+            asyncio.run(_gateway(base_url).get_model_metadata("sale.order"))
+
+
 def test_machine_only_instance_inventory_is_bounded_and_validated() -> None:
     def responder(request: CapturedRequest) -> ResponseSpec:
         assert request.path == INVENTORY_ROUTE

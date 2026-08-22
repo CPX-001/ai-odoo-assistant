@@ -33,6 +33,11 @@ from odoo_ai.contracts.diagnostics import (
     SourceTestDiagnostics,
     TracebackRequest,
 )
+from odoo_ai.contracts.effective_schema import (
+    EffectiveFieldSchema,
+    EffectiveModelSchema,
+    EffectiveSelectionOption,
+)
 from odoo_ai.contracts.evidence import (
     Evidence,
     EvidenceKind,
@@ -97,6 +102,9 @@ __all__ = [
     "EvidenceKind",
     "EvidenceSensitivity",
     "EvidenceStatus",
+    "EffectiveFieldSchema",
+    "EffectiveModelSchema",
+    "EffectiveSelectionOption",
     "ExplainCitation",
     "ExplainTurnRequest",
     "ExplainTurnResponse",

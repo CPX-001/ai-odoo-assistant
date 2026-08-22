@@ -19,6 +19,11 @@ from odoo_ai.contracts.delegation import (
     DelegationClaims,
     OdooGatewayReference,
 )
+from odoo_ai.contracts.effective_schema import (
+    EffectiveFieldSchema,
+    EffectiveModelSchema,
+    EffectiveSelectionOption,
+)
 from odoo_ai.contracts.evidence import Evidence
 from odoo_ai.contracts.explain import ExplainTurnRequest, ExplainTurnResponse
 from odoo_ai.contracts.logs import LogEvidence, LogSearchRequest, TimestampRange
@@ -43,6 +48,9 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     ContextReadTurnResponse,
     ConversationState,
     Evidence,
+    EffectiveFieldSchema,
+    EffectiveModelSchema,
+    EffectiveSelectionOption,
     ExplainTurnRequest,
     ExplainTurnResponse,
     DelegationClaims,

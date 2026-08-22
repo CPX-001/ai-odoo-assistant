@@ -328,6 +328,10 @@ class TestDelegatedOrmTools(TransactionCase):
         self.assertLessEqual(len(result["fields"]), 32)
         self.assertNotIn("request", result["fields"])
         self.assertIn("display_name", result["fields"])
+        self.assertIsInstance(result["label"], str)
+        self.assertIsInstance(result["fields"]["display_name"]["searchable"], bool)
+        self.assertIsInstance(result["fields"]["display_name"]["sortable"], bool)
+        self.assertIsInstance(result["fields"]["display_name"]["groupable"], bool)
 
         read_token = self._token(
             model="res.users",

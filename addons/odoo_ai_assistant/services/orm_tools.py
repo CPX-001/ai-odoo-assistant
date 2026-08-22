@@ -29,6 +29,9 @@ METADATA_ATTRIBUTES: Final = (
     "readonly",
     "relation",
     "selection",
+    "searchable",
+    "sortable",
+    "groupable",
 )
 METADATA_FIELD_PRIORITY: Final = (
     "id",
@@ -127,13 +130,21 @@ class DelegatedOrmToolExecutor:
             raise OrmToolError("access_denied", 403) from None
 
         field_limit = min(claims.max_fields, MAX_METADATA_FIELDS)
-        names = _prioritized_field_names(descriptions)[:field_limit]
+        names = [
+            name
+            for name in _prioritized_field_names(descriptions)
+            if descriptions[name].get("type") in ALLOWED_READ_FIELD_TYPES
+        ][:field_limit]
         fields_payload = {
             name: _normalize_field_definition(descriptions[name]) for name in names
         }
+        label = getattr(model_set, "_description", None)
+        if not isinstance(label, str) or not 1 <= len(label) <= 256:
+            label = None
         result: dict[str, JsonValue] = {
             "captured_at": _iso_datetime(self._observed_at()),
             "fields": fields_payload,
+            "label": label,
             "model": parsed_model,
             "ok": True,
         }
@@ -352,7 +363,13 @@ def _normalize_field_definition(value: object) -> JsonValue:
                 normalized[attribute] = item
             else:
                 raise OrmToolError("invalid_metadata", 500)
-        elif attribute in {"required", "readonly"}:
+        elif attribute in {
+            "required",
+            "readonly",
+            "searchable",
+            "sortable",
+            "groupable",
+        }:
             if not isinstance(item, bool):
                 raise OrmToolError("invalid_metadata", 500)
             normalized[attribute] = item
