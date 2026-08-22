@@ -8,6 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
 
+from odoo_ai.contracts.evidence import Evidence
+
 FINGERPRINT_PATTERN = r"^sha256:[0-9a-f]{64}$"
 MODULE_PATTERN = r"^[A-Za-z0-9_]+$"
 
@@ -233,3 +235,139 @@ class XmlRecord(BaseModel):
         if self.ref.fingerprint != self.fingerprint:
             raise ValueError("source ref fingerprint must match XML record fingerprint")
         return self
+
+
+class SourceMatchReason(StrEnum):
+    EXACT = "exact"
+    NORMALIZED = "normalized"
+
+
+class FindSymbolRequest(BaseModel):
+    """Bounded structural lookup with no filesystem path input."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    query: str = Field(min_length=1, max_length=255)
+    model: str | None = Field(default=None, min_length=1, max_length=255)
+    module: str | None = Field(default=None, pattern=MODULE_PATTERN, max_length=255)
+    max_results: int = Field(default=10, gt=0, le=20)
+
+    @field_validator("query", "model")
+    @classmethod
+    def reject_surrounding_whitespace(cls, value: str | None) -> str | None:
+        if value is not None and value != value.strip():
+            raise ValueError("source query values must be normalized")
+        return value
+
+
+class SourceCandidate(BaseModel):
+    """One current structural match emitted by the source index."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol_id: UUID
+    module: str = Field(pattern=MODULE_PATTERN, max_length=255)
+    kind: str = Field(min_length=1, max_length=64)
+    model: str | None = Field(default=None, min_length=1, max_length=255)
+    name: str = Field(min_length=1, max_length=255)
+    logical_path: str = Field(min_length=1, max_length=1024)
+    start_line: int = Field(gt=0)
+    end_line: int = Field(gt=0)
+    fingerprint: str = Field(pattern=FINGERPRINT_PATTERN)
+    provenance: SourceProvenance
+    ref: SourceRef
+    score: int = Field(ge=0, le=100)
+    match_reason: SourceMatchReason
+    observed_at: datetime
+    details: dict[str, JsonValue] | None = None
+
+    @model_validator(mode="after")
+    def validate_candidate(self) -> "SourceCandidate":
+        SourceFile.validate_logical_path(self.logical_path)
+        if self.end_line < self.start_line:
+            raise ValueError("end_line must not precede start_line")
+        if self.ref.fingerprint != self.fingerprint:
+            raise ValueError("candidate ref fingerprint must match")
+        if (self.ref.start_line, self.ref.end_line) != (
+            self.start_line,
+            self.end_line,
+        ):
+            raise ValueError("candidate ref lines must match")
+        return self
+
+
+class FindSymbolResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    candidates: tuple[SourceCandidate, ...] = Field(max_length=20)
+
+
+class FindModelExtensionsRequest(BaseModel):
+    """Find declared Python model relationships without claiming runtime order."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model: str = Field(min_length=1, max_length=255)
+    module: str | None = Field(default=None, pattern=MODULE_PATTERN, max_length=255)
+    max_results: int = Field(default=30, gt=0, le=50)
+
+    @field_validator("model")
+    @classmethod
+    def validate_model(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("model must be normalized")
+        return value
+
+
+class ModelExtensionGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    module: str = Field(pattern=MODULE_PATTERN, max_length=255)
+    logical_path: str = Field(min_length=1, max_length=1024)
+    provenance: SourceProvenance
+    relationships: tuple[SourceCandidate, ...] = Field(min_length=1, max_length=50)
+    runtime_order_checked: bool = False
+
+
+class FindModelExtensionsResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model: str = Field(min_length=1, max_length=255)
+    groups: tuple[ModelExtensionGroup, ...] = Field(max_length=50)
+
+
+class ReadExcerptRequest(BaseModel):
+    """Read around an exact indexed ref; a client path is never accepted."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ref: SourceRef
+    context_before: int = Field(default=2, ge=0, le=20)
+    context_after: int = Field(default=2, ge=0, le=20)
+    max_lines: int = Field(default=40, gt=0, le=80)
+    max_bytes: int = Field(default=16_384, gt=0, le=32_768)
+
+    @model_validator(mode="after")
+    def require_symbol_lines(self) -> "ReadExcerptRequest":
+        if self.ref.start_line is None or self.ref.end_line is None:
+            raise ValueError("excerpt ref requires indexed lines")
+        return self
+
+
+class SourceExcerptLine(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    number: int = Field(gt=0)
+    text: str = Field(max_length=32_768)
+
+
+class SourceExcerpt(BaseModel):
+    """Bounded current source fragment and its checked evidence wrapper."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ref: SourceRef
+    module: str = Field(pattern=MODULE_PATTERN, max_length=255)
+    logical_path: str = Field(min_length=1, max_length=1024)
+    lines: tuple[SourceExcerptLine, ...] = Field(min_length=1, max_length=80)
+    evidence: Evidence

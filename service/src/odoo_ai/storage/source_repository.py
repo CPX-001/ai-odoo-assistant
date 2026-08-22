@@ -7,7 +7,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import JsonValue
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from odoo_ai.storage.models import ScanRun, SourceFile, SourceSymbol, XmlRecord
@@ -44,6 +44,35 @@ class SourceFileUpsert:
 
     file: SourceFile
     fingerprint_changed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class IndexedSourceSymbol:
+    symbol_id: UUID
+    source_file_id: UUID
+    module: str
+    kind: str
+    model: str | None
+    name: str
+    logical_path: str
+    start_line: int
+    end_line: int
+    fingerprint: str
+    provenance: str
+    observed_at: datetime
+    details: dict[str, JsonValue] | None
+
+
+@dataclass(frozen=True, slots=True)
+class IndexedSourcePointer:
+    source_file_id: UUID
+    module: str
+    logical_path: str
+    kind: str
+    fingerprint: str
+    size_bytes: int
+    provenance: str
+    observed_at: datetime
 
 
 def open_scan(session: Session, *, instance_profile_id: UUID) -> ScanRun:
@@ -290,3 +319,168 @@ def find_xml_records(
     if model is not None:
         statement = statement.where(XmlRecord.model == model)
     return list(session.scalars(statement.order_by(XmlRecord.id).limit(limit)))
+
+
+def search_indexed_source_symbols(
+    session: Session,
+    *,
+    instance_profile_id: UUID,
+    query: str,
+    normalized_query: str,
+    model: str | None = None,
+    module: str | None = None,
+    limit: int = 200,
+) -> list[IndexedSourceSymbol]:
+    if not query or not normalized_query:
+        raise ValueError("bounded source query is required")
+    if not 1 <= limit <= 200:
+        raise ValueError("source candidate pool must be between 1 and 200")
+    normalized_name = func.regexp_replace(
+        func.lower(SourceSymbol.name), "[^a-z0-9]+", "", "g"
+    )
+    statement = (
+        select(SourceSymbol, SourceFile.provenance, ScanRun.completed_at)
+        .join(SourceFile, SourceFile.id == SourceSymbol.source_file_id)
+        .join(ScanRun, ScanRun.id == SourceFile.scan_run_id)
+        .where(
+            SourceFile.instance_profile_id == instance_profile_id,
+            SourceFile.is_stale.is_(False),
+            SourceSymbol.fingerprint == SourceFile.fingerprint,
+            ScanRun.status == "succeeded",
+            or_(
+                SourceSymbol.name == query,
+                func.lower(SourceSymbol.name) == query.casefold(),
+                normalized_name == normalized_query,
+                normalized_name.endswith(normalized_query),
+            ),
+        )
+    )
+    if model is not None:
+        statement = statement.where(SourceSymbol.model == model)
+    if module is not None:
+        statement = statement.where(SourceSymbol.module == module)
+    rows = session.execute(statement.order_by(SourceSymbol.id).limit(limit))
+    return [
+        _indexed_symbol(symbol, provenance, completed_at)
+        for symbol, provenance, completed_at in rows
+        if completed_at is not None
+    ]
+
+
+def find_indexed_model_extensions(
+    session: Session,
+    *,
+    instance_profile_id: UUID,
+    model: str,
+    module: str | None = None,
+    limit: int = 50,
+) -> list[IndexedSourceSymbol]:
+    if not model:
+        raise ValueError("model is required")
+    if not 1 <= limit <= 50:
+        raise ValueError("model extension limit must be between 1 and 50")
+    statement = (
+        select(SourceSymbol, SourceFile.provenance, ScanRun.completed_at)
+        .join(SourceFile, SourceFile.id == SourceSymbol.source_file_id)
+        .join(ScanRun, ScanRun.id == SourceFile.scan_run_id)
+        .where(
+            SourceFile.instance_profile_id == instance_profile_id,
+            SourceFile.is_stale.is_(False),
+            SourceSymbol.fingerprint == SourceFile.fingerprint,
+            SourceSymbol.kind.in_(("model", "inherit")),
+            SourceSymbol.model == model,
+            ScanRun.status == "succeeded",
+        )
+    )
+    if module is not None:
+        statement = statement.where(SourceSymbol.module == module)
+    rows = session.execute(
+        statement.order_by(SourceSymbol.module, SourceSymbol.logical_path, SourceSymbol.id).limit(
+            limit
+        )
+    )
+    return [
+        _indexed_symbol(symbol, provenance, completed_at)
+        for symbol, provenance, completed_at in rows
+        if completed_at is not None
+    ]
+
+
+def get_indexed_source_pointer(
+    session: Session,
+    *,
+    instance_profile_id: UUID,
+    source_file_id: UUID,
+    fingerprint: str,
+    start_line: int,
+    end_line: int,
+) -> IndexedSourcePointer | None:
+    row = session.execute(
+        select(SourceFile, ScanRun.completed_at)
+        .join(ScanRun, ScanRun.id == SourceFile.scan_run_id)
+        .where(
+            SourceFile.id == source_file_id,
+            SourceFile.instance_profile_id == instance_profile_id,
+            SourceFile.fingerprint == fingerprint,
+            SourceFile.is_stale.is_(False),
+            ScanRun.status == "succeeded",
+        )
+    ).one_or_none()
+    if row is None:
+        return None
+    source_file, completed_at = row
+    if completed_at is None:
+        return None
+    symbol_id = session.scalar(
+        select(SourceSymbol.id)
+        .where(
+            SourceSymbol.source_file_id == source_file_id,
+            SourceSymbol.fingerprint == fingerprint,
+            SourceSymbol.start_line == start_line,
+            SourceSymbol.end_line == end_line,
+        )
+        .limit(1)
+    )
+    if symbol_id is None:
+        xml_record_id = session.scalar(
+            select(XmlRecord.id)
+            .where(
+                XmlRecord.source_file_id == source_file_id,
+                XmlRecord.fingerprint == fingerprint,
+                XmlRecord.start_line == start_line,
+                XmlRecord.end_line == end_line,
+            )
+            .limit(1)
+        )
+        if xml_record_id is None:
+            return None
+    return IndexedSourcePointer(
+        source_file_id=source_file.id,
+        module=source_file.module,
+        logical_path=source_file.logical_path,
+        kind=source_file.kind,
+        fingerprint=source_file.fingerprint,
+        size_bytes=source_file.size_bytes,
+        provenance=source_file.provenance,
+        observed_at=completed_at,
+    )
+
+
+def _indexed_symbol(
+    symbol: SourceSymbol, provenance: str, observed_at: datetime
+) -> IndexedSourceSymbol:
+    return IndexedSourceSymbol(
+        symbol_id=symbol.id,
+        source_file_id=symbol.source_file_id,
+        module=symbol.module,
+        kind=symbol.kind,
+        model=symbol.model,
+        name=symbol.name,
+        logical_path=symbol.logical_path,
+        start_line=symbol.start_line,
+        end_line=symbol.end_line,
+        fingerprint=symbol.fingerprint,
+        provenance=provenance,
+        observed_at=observed_at,
+        details=symbol.details,
+    )

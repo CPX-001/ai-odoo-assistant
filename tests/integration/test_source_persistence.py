@@ -5,14 +5,25 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from pydantic import ValidationError
 from sqlalchemy import Engine, inspect
 from sqlalchemy.orm import Session
 
+from odoo_ai.contracts import (
+    EvidenceStatus,
+    FindModelExtensionsRequest,
+    FindSymbolRequest,
+    ReadExcerptRequest,
+    SourceRef,
+)
 from odoo_ai.source import (
     RootSelection,
+    SourceEvidenceService,
+    SourceQueryError,
     SourceScanner,
     SqlAlchemySourceScanStore,
     m3_source_extractors,
+    resolve_source_roots,
 )
 from odoo_ai.storage import (
     DatabaseSettings,
@@ -388,3 +399,152 @@ def test_real_scanner_indexes_and_replaces_action_confirm(
         instance_profile_id=profile.id,
         xml_id="sale_fixture.view_order_form",
     ) == []
+
+
+def test_source_queries_and_checked_excerpt_are_bounded_and_current(
+    session: Session, tmp_path: Path
+) -> None:
+    root = tmp_path / "customer" / "extensions"
+    module = root / "sale_fixture"
+    (module / "models").mkdir(parents=True)
+    (module / "views").mkdir()
+    (module / "__manifest__.py").write_text("{'name': 'Fixture'}\n", encoding="utf-8")
+    source = module / "models" / "sale_order.py"
+    original = (
+        "from odoo import models\n"
+        "class SaleOrder(models.Model):\n"
+        "    _inherit = 'sale.order'\n"
+        "    def action_confirm(self):\n"
+        "        return super().action_confirm()\n"
+    )
+    source.write_text(original, encoding="utf-8")
+    (module / "models" / "sale_order_extra.py").write_text(
+        original.replace("SaleOrder", "SaleOrderExtra"), encoding="utf-8"
+    )
+    (module / "views" / "sale_order.xml").write_text(
+        "<odoo>\n"
+        "  <record id='view_order_form' model='ir.ui.view'>\n"
+        "    <field name='model'>sale.order</field>\n"
+        "  </record>\n"
+        "</odoo>\n",
+        encoding="utf-8",
+    )
+    profile = _profile(session)
+    selection = RootSelection(override=(root,))
+    scanner = SourceScanner(
+        store=SqlAlchemySourceScanStore(session), extractors=m3_source_extractors()
+    )
+    result = scanner.run(
+        instance_profile_id=profile.id,
+        roots=selection,
+        installed_modules=("sale_fixture",),
+    )
+    assert result.capability.value == "DETECTED"
+    resolved_roots = resolve_source_roots(selection).roots
+    service = SourceEvidenceService(session=session, roots=resolved_roots)
+
+    exact = service.find_symbol(
+        instance_profile_id=profile.id,
+        request=FindSymbolRequest(
+            query="action_confirm", model="sale.order", max_results=1
+        ),
+    )
+    normalized = service.find_symbol(
+        instance_profile_id=profile.id,
+        request=FindSymbolRequest(query="action-confirm", model="sale.order"),
+    )
+    xml = service.find_symbol(
+        instance_profile_id=profile.id,
+        request=FindSymbolRequest(query="sale_fixture.view_order_form"),
+    )
+    unknown = service.find_symbol(
+        instance_profile_id=profile.id,
+        request=FindSymbolRequest(query="does_not_exist"),
+    )
+
+    assert len(exact.candidates) == 1
+    candidate = exact.candidates[0]
+    assert (candidate.kind, candidate.start_line, candidate.end_line) == (
+        "method",
+        4,
+        5,
+    )
+    assert candidate.match_reason.value == "exact"
+    assert len(normalized.candidates) == 2
+    assert normalized.candidates[0].match_reason.value == "normalized"
+    assert xml.candidates[0].kind == "xml_id"
+    assert unknown.candidates == ()
+
+    extensions = service.find_model_extensions(
+        instance_profile_id=profile.id,
+        request=FindModelExtensionsRequest(model="sale.order"),
+    )
+    assert len(extensions.groups) == 2
+    assert all(group.runtime_order_checked is False for group in extensions.groups)
+    assert {
+        item.kind for group in extensions.groups for item in group.relationships
+    } == {"inherit"}
+
+    excerpt = service.read_excerpt(
+        instance_profile_id=profile.id,
+        request=ReadExcerptRequest(
+            ref=candidate.ref,
+            context_before=1,
+            context_after=0,
+            max_lines=3,
+            max_bytes=512,
+        ),
+    )
+    assert [(line.number, line.text) for line in excerpt.lines] == [
+        (3, "    _inherit = 'sale.order'"),
+        (4, "    def action_confirm(self):"),
+        (5, "        return super().action_confirm()"),
+    ]
+    assert excerpt.evidence.status is EvidenceStatus.CHECKED
+    assert excerpt.evidence.fingerprint == candidate.fingerprint
+    assert excerpt.evidence.payload["trust"] == "untrusted_source"
+    assert len(excerpt.model_dump_json().encode()) <= 2048
+
+    with pytest.raises(ValidationError):
+        ReadExcerptRequest.model_validate(
+            {"ref": candidate.ref.model_dump(mode="json"), "path": "/etc/passwd"}
+        )
+    with pytest.raises(SourceQueryError, match="source_ref_invalid"):
+        service.read_excerpt(
+            instance_profile_id=profile.id,
+            request=ReadExcerptRequest(
+                ref=SourceRef(
+                    source_file_id=uuid4(),
+                    fingerprint=candidate.fingerprint,
+                    start_line=4,
+                    end_line=5,
+                )
+            ),
+        )
+    with pytest.raises(SourceQueryError, match="source_ref_invalid"):
+        service.read_excerpt(
+            instance_profile_id=profile.id,
+            request=ReadExcerptRequest(
+                ref=candidate.ref.model_copy(
+                    update={"start_line": 3, "end_line": 5}
+                )
+            ),
+        )
+
+    source.write_text(original.replace("return super()", "return False or super()"))
+    with pytest.raises(SourceQueryError, match="stale_source"):
+        service.read_excerpt(
+            instance_profile_id=profile.id,
+            request=ReadExcerptRequest(ref=candidate.ref),
+        )
+
+    source.write_text(original, encoding="utf-8")
+    outside = tmp_path / "outside.py"
+    outside.write_text(original, encoding="utf-8")
+    source.unlink()
+    source.symlink_to(outside)
+    with pytest.raises(SourceQueryError, match="source_path_escape"):
+        service.read_excerpt(
+            instance_profile_id=profile.id,
+            request=ReadExcerptRequest(ref=candidate.ref),
+        )

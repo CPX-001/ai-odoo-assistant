@@ -10,6 +10,7 @@ from odoo_ai.source.extractors import (
     classify_module_provenance,
     m3_source_extractors,
 )
+from odoo_ai.source.query import SourceEvidenceService, SourceQueryError
 from odoo_ai.source.scanner import (
     ExtractedSymbol,
     ExtractedXmlRecord,
@@ -56,6 +57,8 @@ __all__ = [
     "SourceScanResult",
     "SourceScanner",
     "SourceExtractionError",
+    "SourceEvidenceService",
+    "SourceQueryError",
     "SqlAlchemySourceScanStore",
     "StoredSourceFile",
     "XmlExtractor",
