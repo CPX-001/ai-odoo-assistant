@@ -31,8 +31,10 @@ from odoo_ai.contracts.evidence import (
     EvidenceStatus,
 )
 from odoo_ai.contracts.logs import (
+    LogCapabilityState,
     LogCorrelation,
     LogEvidence,
+    LogPointer,
     LogSearchRequest,
     TimestampRange,
 )
@@ -85,8 +87,10 @@ __all__ = [
     "InstanceInventory",
     "InstanceProfileSummary",
     "LogCorrelation",
+    "LogCapabilityState",
     "LogEvidence",
     "LogSearchRequest",
+    "LogPointer",
     "ManifestMetadata",
     "ManifestStatus",
     "ModelExtensionGroup",

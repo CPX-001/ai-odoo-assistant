@@ -266,7 +266,9 @@ class Bootstrapper:
                 alembic_config=self._service_settings.alembic_config,
             )
         config_changed = self._ensure_config(
-            accounts, source_roots=deployment.addons_paths
+            accounts,
+            source_roots=deployment.addons_paths,
+            log_file=deployment.log_file,
         )
         systemd_result = (
             self._systemd_manager.ensure(
@@ -349,7 +351,12 @@ class Bootstrapper:
         os.chown(path, uid, gid)
         return created
 
-    def _service_config_content(self, *, source_roots: tuple[Path, ...] = ()) -> str:
+    def _service_config_content(
+        self,
+        *,
+        source_roots: tuple[Path, ...] = (),
+        log_file: Path | None = None,
+    ) -> str:
         settings = self._service_settings
         if settings.host not in {"127.0.0.1", "::1", "localhost"}:
             raise BootstrapError("MVP Assistant Service host must remain loopback")
@@ -373,13 +380,21 @@ class Bootstrapper:
         }
         if settings.database_url is not None:
             values["ODOO_AI_DATABASE_URL"] = settings.database_url
+        if log_file is not None:
+            values["ODOO_AI_LOG_FILE"] = str(log_file)
         return "".join(f"{key}={_quote_env_value(value)}\n" for key, value in values.items())
 
     def _ensure_config(
-        self, accounts: AccountState, *, source_roots: tuple[Path, ...] = ()
+        self,
+        accounts: AccountState,
+        *,
+        source_roots: tuple[Path, ...] = (),
+        log_file: Path | None = None,
     ) -> bool:
         path = self._paths.service_config
-        content = self._service_config_content(source_roots=source_roots)
+        content = self._service_config_content(
+            source_roots=source_roots, log_file=log_file
+        )
         existing = self._validate_regular_file(path)
         if existing is not None and path.read_text(encoding="utf-8") == content:
             os.chmod(path, 0o640)

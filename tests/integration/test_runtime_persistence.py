@@ -10,6 +10,7 @@ from sqlalchemy import Engine, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from odoo_ai.contracts import LogCapabilityState, SourceCapabilityState
 from odoo_ai.storage import (
     DatabaseSettings,
     UnsafeTraceAttributesError,
@@ -20,6 +21,8 @@ from odoo_ai.storage import (
     get_instance_profile,
     get_latest_capability_snapshot,
     list_trace_events,
+    record_log_capability,
+    record_source_capability,
 )
 from odoo_ai.storage.config import DATABASE_NAME_ENV, DATABASE_URL_ENV
 
@@ -134,3 +137,28 @@ def test_trace_events_are_ordered_and_reject_sensitive_attributes(session: Sessi
             event_name="tool.duplicate",
             status="error",
         )
+
+
+def test_log_capability_preserves_source_and_distinguishes_readiness_states(
+    session: Session,
+) -> None:
+    profile = create_instance_profile(
+        session,
+        instance_id=f"logs-{uuid4()}",
+        fingerprint="sha256:logs",
+    )
+    record_source_capability(
+        session,
+        instance_profile_id=profile.id,
+        state=SourceCapabilityState.DETECTED,
+    )
+    snapshot = record_log_capability(
+        session,
+        instance_profile_id=profile.id,
+        state=LogCapabilityState.NO_PERMISSION,
+    )
+
+    assert snapshot.readiness == "DEGRADED"
+    assert snapshot.capabilities["source"] == "DETECTED"
+    assert snapshot.capabilities["logs"] == "NO_PERMISSION"
+    assert snapshot.capabilities["logs_operational"] is False

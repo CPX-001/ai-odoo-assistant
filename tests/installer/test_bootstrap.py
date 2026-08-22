@@ -157,6 +157,7 @@ def test_bootstrap_customer_runtime_settings_and_paths_are_not_code_constants(tm
     assert 'ODOO_AI_HOST="::1"' in config
     assert 'ODOO_AI_PORT="8123"' in config
     assert 'ODOO_AI_DATABASE_NAME="customer_ai"' in config
+    assert 'ODOO_AI_LOG_FILE="/srv/customer/logs/odoo prod.log"' in config
     assert "migration config" in config
 
 

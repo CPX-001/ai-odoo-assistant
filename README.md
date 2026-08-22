@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-M0, M1 y M2 están completados; sus gates son PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico, el bootstrap instalable de host y el vertical slice contextual de lectura bajo el usuario real. M3 — Source + logs está activo: M3-01 a M3-06 están implementados; M3-07 es el siguiente task packet.
+M0, M1 y M2 están completados; sus gates son PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico, el bootstrap instalable de host y el vertical slice contextual de lectura bajo el usuario real. M3 — Source + logs está activo: M3-01 a M3-07 están implementados; M3-08 es el siguiente task packet.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 

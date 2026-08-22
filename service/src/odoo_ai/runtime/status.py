@@ -58,6 +58,7 @@ class RuntimeComponents(BaseModel):
     assistant_database: ComponentStatus
     migrations: MigrationStatus
     source: ComponentStatus
+    logs: ComponentStatus
 
 
 class AdminStatus(BaseModel):
@@ -115,10 +116,12 @@ class AdminStatusService:
             database.state is ComponentState.ERROR or migrations.state is ComponentState.ERROR
         )
         source = self._source_status(instance)
+        logs = self._log_status(instance)
         pending_capabilities = tuple(
             capability
             for capability in self._PENDING_CAPABILITIES
-            if capability != "source" or source.state is not ComponentState.OK
+            if (capability != "source" or source.state is not ComponentState.OK)
+            and (capability != "logs" or logs.state is not ComponentState.OK)
         )
         return AdminStatus(
             readiness="ERROR" if has_error else "DEGRADED",
@@ -128,6 +131,7 @@ class AdminStatusService:
                 assistant_database=database,
                 migrations=migrations,
                 source=source,
+                logs=logs,
             ),
             pending_capabilities=pending_capabilities,
             instance=instance,
@@ -174,6 +178,21 @@ class AdminStatusService:
             return ComponentStatus(state=ComponentState.ERROR, detail="error")
         return ComponentStatus(state=ComponentState.PENDING, detail="unknown")
 
+    @staticmethod
+    def _log_status(instance: InstanceStatus | None) -> ComponentStatus:
+        if instance is None:
+            return ComponentStatus(state=ComponentState.PENDING, detail="unknown")
+        state = instance.capabilities.get("logs")
+        if state == "OPERATIONAL":
+            return ComponentStatus(state=ComponentState.OK, detail="operational")
+        if state == "NOT_FOUND":
+            return ComponentStatus(state=ComponentState.PENDING, detail="not_found")
+        if state == "NO_PERMISSION":
+            return ComponentStatus(state=ComponentState.ERROR, detail="no_permission")
+        if state == "ERROR":
+            return ComponentStatus(state=ComponentState.ERROR, detail="error")
+        return ComponentStatus(state=ComponentState.PENDING, detail="unknown")
+
 
 def unavailable_admin_status() -> AdminStatus:
     """Return a sanitized status when external configuration cannot be loaded."""
@@ -188,6 +207,7 @@ def unavailable_admin_status() -> AdminStatus:
             ),
             migrations=MigrationStatus(state=ComponentState.ERROR, detail="unavailable"),
             source=ComponentStatus(state=ComponentState.PENDING, detail="unknown"),
+            logs=ComponentStatus(state=ComponentState.PENDING, detail="unknown"),
         ),
         pending_capabilities=AdminStatusService._PENDING_CAPABILITIES,
     )

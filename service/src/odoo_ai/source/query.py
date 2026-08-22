@@ -85,6 +85,7 @@ class SourceEvidenceService:
             (_matched_candidate(row, request.query) for row in rows),
             key=lambda item: (
                 -item.score,
+                _kind_priority(item.kind),
                 item.module,
                 item.logical_path,
                 item.start_line,
@@ -242,6 +243,17 @@ def _candidate(
 
 def _normalize_symbol(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.casefold())
+
+
+def _kind_priority(kind: str) -> int:
+    return {
+        "method": 0,
+        "xml_id": 0,
+        "model": 1,
+        "inherit": 1,
+        "field": 2,
+        "class": 3,
+    }.get(kind, 10)
 
 
 def _resolve_indexed_path(
