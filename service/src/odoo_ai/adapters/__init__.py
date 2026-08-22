@@ -5,6 +5,8 @@ from odoo_ai.adapters.codex_engine import (
     CodexEngineError,
     CodexEngineLimits,
     CodexEngineMetadata,
+    codex_dynamic_tool_name,
+    codex_dynamic_tools,
     serialize_codex_context,
 )
 from odoo_ai.adapters.codex_runtime import (
@@ -32,6 +34,17 @@ from odoo_ai.adapters.odoo_http import (
     OdooGatewayFactory,
     OdooGatewaySettings,
 )
+from odoo_ai.adapters.source_tools import (
+    SOURCE_FIND_MODEL_EXTENSIONS,
+    SOURCE_FIND_SYMBOL,
+    SOURCE_READ_EXCERPT,
+    ReadExcerptToolData,
+    RuntimeSourceToolBackend,
+    SourceToolBackend,
+    SourceToolExecutorFactory,
+    build_source_tool_registry,
+    source_tool_specs,
+)
 
 __all__ = [
     "APP_SERVER_PROTOCOL",
@@ -57,8 +70,19 @@ __all__ = [
     "OdooGatewayFactory",
     "OdooGatewaySettings",
     "RuntimeDiagnosticsService",
+    "RuntimeSourceToolBackend",
+    "SOURCE_FIND_MODEL_EXTENSIONS",
+    "SOURCE_FIND_SYMBOL",
+    "SOURCE_READ_EXCERPT",
+    "ReadExcerptToolData",
+    "SourceToolBackend",
+    "SourceToolExecutorFactory",
+    "build_source_tool_registry",
+    "codex_dynamic_tool_name",
+    "codex_dynamic_tools",
     "load_instance_summary",
     "persist_trace_events",
     "probe_codex_runtime",
     "serialize_codex_context",
+    "source_tool_specs",
 ]

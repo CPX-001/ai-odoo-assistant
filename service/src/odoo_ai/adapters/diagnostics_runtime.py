@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 import os
 from collections.abc import Callable
 from typing import Literal, cast
 
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
 
 from odoo_ai.adapters.odoo_http import (
     OdooGatewayError,
     OdooGatewayFactory,
     OdooGatewaySettings,
+)
+from odoo_ai.adapters.source_tools import (
+    ensure_source_instance_profile,
+    source_root_selection,
 )
 from odoo_ai.application import DiagnosticsError
 from odoo_ai.contracts import (
@@ -48,23 +49,18 @@ from odoo_ai.logs import (
 from odoo_ai.ports import LogProvider, OdooInstanceGateway
 from odoo_ai.security import SharedSecretError, load_shared_secret
 from odoo_ai.source import (
-    RootSelection,
     SourceEvidenceService,
     SourceQueryError,
     SourceScanner,
     SqlAlchemySourceScanStore,
     m3_source_extractors,
     resolve_source_roots,
-    source_root_overrides_from_env,
 )
 from odoo_ai.storage import (
     DatabaseConfigurationError,
     DatabaseSettings,
-    InstanceProfile,
     create_database_engine,
-    create_instance_profile,
     create_session_factory,
-    get_instance_profile,
     get_latest_capability_snapshot,
     get_latest_instance_profile,
     get_latest_scan_run,
@@ -199,8 +195,8 @@ class RuntimeDiagnosticsService:
             engine = create_database_engine(self._database_settings)
             session_factory = create_session_factory(engine)
             with session_scope(session_factory) as session:
-                profile = _instance_profile(session, inventory)
-                roots = _root_selection(inventory)
+                profile = ensure_source_instance_profile(session, inventory)
+                roots = source_root_selection(inventory)
                 scanner = SourceScanner(
                     store=SqlAlchemySourceScanStore(session),
                     extractors=m3_source_extractors(),
@@ -231,13 +227,13 @@ class RuntimeDiagnosticsService:
     def _test_source_sync(self, inventory: InstanceInventory) -> SourceTestDiagnostics:
         engine = None
         try:
-            roots = resolve_source_roots(_root_selection(inventory)).roots
+            roots = resolve_source_roots(source_root_selection(inventory)).roots
             if not roots:
                 raise DiagnosticsError("source_roots_unavailable", 409)
             engine = create_database_engine(self._database_settings)
             session_factory = create_session_factory(engine)
             with session_scope(session_factory) as session:
-                profile = _instance_profile(session, inventory)
+                profile = ensure_source_instance_profile(session, inventory)
                 service = SourceEvidenceService(session=session, roots=roots)
                 result = service.find_symbol(
                     instance_profile_id=profile.id,
@@ -282,7 +278,7 @@ class RuntimeDiagnosticsService:
             engine = create_database_engine(self._database_settings)
             session_factory = create_session_factory(engine)
             with session_scope(session_factory) as session:
-                profile = _instance_profile(session, inventory)
+                profile = ensure_source_instance_profile(session, inventory)
                 record_log_capability(
                     session,
                     instance_profile_id=profile.id,
@@ -294,38 +290,6 @@ class RuntimeDiagnosticsService:
         finally:
             if engine is not None:
                 engine.dispose()
-
-
-def _instance_profile(session: Session, inventory: InstanceInventory) -> InstanceProfile:
-    instance_id = f"odoo:{inventory.database}"
-    fingerprint = (
-        "sha256:"
-        + hashlib.sha256(
-            json.dumps(
-                {
-                    "database": inventory.database,
-                    "installed_modules": inventory.installed_modules,
-                    "server_version": inventory.server_version,
-                },
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode()
-        ).hexdigest()
-    )
-    profile = get_instance_profile(session, instance_id=instance_id)
-    if profile is None:
-        return create_instance_profile(session, instance_id=instance_id, fingerprint=fingerprint)
-    profile.fingerprint = fingerprint
-    session.flush()
-    return profile
-
-
-def _root_selection(inventory: InstanceInventory) -> RootSelection:
-    override = source_root_overrides_from_env()
-    return RootSelection(
-        override=override,
-        runtime=() if override else inventory.addons_roots,
-    )
 
 
 def _log_provider_from_env() -> tuple[LogProvider | None, str | None, LogCapabilityState]:

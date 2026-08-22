@@ -297,7 +297,7 @@ def test_proposed_action_is_rejected(tmp_path: Path) -> None:
         _run(executable)
 
 
-def test_nonempty_tools_are_rejected_before_process_spawn(tmp_path: Path) -> None:
+def test_nonempty_tools_require_executor_before_process_spawn(tmp_path: Path) -> None:
     marker = tmp_path / "spawned"
     executable = _fake_codex(
         tmp_path,
@@ -314,7 +314,7 @@ def test_nonempty_tools_are_rejected_before_process_spawn(tmp_path: Path) -> Non
         executor_id="source.read.v1",
     )
 
-    with pytest.raises(CodexEngineError, match="codex_tools_not_supported"):
+    with pytest.raises(CodexEngineError, match="codex_tool_executor_unavailable"):
         asyncio.run(
             engine.run_turn(_context(), [tool], AnswerEnvelope.model_json_schema())
         )

@@ -148,3 +148,34 @@ El smoke opt-in `tests/integration/test_codex_engine_smoke.py` pasó contra
 sintética y sin dynamic tools. La auth siguió gestionada por Codex; el test no
 copió ni leyó el contenido del token. El model/provider sólo se conservan como
 metadata técnica acotada cuando la response de `thread/start` los declara.
+
+## M4-04: server requests de dynamic tools
+
+Con `experimentalApi=true`, `thread/start.dynamicTools` registra funciones con
+`type`, `name`, `description` e `inputSchema`. Codex 0.149 aplica al nombre la
+regex Responses-compatible `^[a-zA-Z0-9_-]+$`; por ello el detalle de transporte
+usa aliases sin puntos y el contrato lógico `source.*` no cambia fuera del
+adapter.
+
+Durante el turn, App Server envía un JSON-RPC server request
+`item/tool/call`. El cliente lo conserva en la misma cola bounded de eventos y
+el engine correlaciona request id, thread id, turn id y call id antes de delegar
+al `ToolExecutor`. La response exacta probada es:
+
+```json
+{
+  "id": 100,
+  "result": {
+    "success": true,
+    "contentItems": [
+      {"type": "inputText", "text": "{...JSON canónico bounded...}"}
+    ]
+  }
+}
+```
+
+Requests desconocidos, duplicados o malformados se responden de forma segura y
+el turn falla cerrado. Errores source recuperables como un fingerprint stale se
+devuelven con `success=false`, sin Evidence checked, para que el modelo pueda
+explicar la limitación. El smoke dinámico real reproducible está en
+`tests/integration/test_codex_dynamic_tools_smoke.py`.

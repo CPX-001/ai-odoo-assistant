@@ -213,7 +213,7 @@ class CodexAppServerClient:
         self._stderr_tail = bytearray()
         self._stderr_bytes = 0
         self._request_lock = asyncio.Lock()
-        self._notifications: deque[dict[str, object]] = deque()
+        self._events: deque[dict[str, object]] = deque()
         self._stderr_task = asyncio.create_task(self._capture_stderr())
         self._closed = False
         self.server_info: CodexServerInfo | None = None
@@ -298,6 +298,9 @@ class CodexAppServerClient:
             )
             while True:
                 message = await self._read(timeout=timeout)
+                if isinstance(message.get("method"), str):
+                    self._events.append(message)
+                    continue
                 if "id" in message:
                     if message.get("id") != request_id:
                         raise CodexProtocolError("codex_response_id_mismatch")
@@ -306,9 +309,6 @@ class CodexAppServerClient:
                     if "result" not in message:
                         raise CodexProtocolError("codex_response_malformed")
                     return message["result"]
-                if isinstance(message.get("method"), str):
-                    self._notifications.append(message)
-                    continue
                 raise CodexProtocolError("codex_message_malformed")
 
     async def notify(self, method: str, params: Mapping[str, object] | None = None) -> None:
@@ -317,15 +317,34 @@ class CodexAppServerClient:
             message["params"] = dict(params)
         await self._send(message, timeout=self._settings.startup_timeout_seconds)
 
-    async def next_notification(self, *, timeout_seconds: float | None = None) -> dict[str, object]:
-        if self._notifications:
-            return self._notifications.popleft()
+    async def respond(self, request_id: object, result: Mapping[str, object]) -> None:
+        if (
+            isinstance(request_id, bool)
+            or not isinstance(request_id, (int, str))
+            or isinstance(request_id, str)
+            and (not request_id or len(request_id) > 256)
+        ):
+            raise CodexProtocolError("codex_server_request_id_invalid")
+        await self._send(
+            {"id": request_id, "result": dict(result)},
+            timeout=self._settings.turn_timeout_seconds,
+        )
+
+    async def next_event(self, *, timeout_seconds: float | None = None) -> dict[str, object]:
+        if self._events:
+            return self._events.popleft()
         timeout = timeout_seconds or self._settings.turn_timeout_seconds
         message = await self._read(timeout=timeout)
-        if "id" in message:
-            raise CodexProtocolError("codex_unexpected_response")
         if not isinstance(message.get("method"), str):
+            if "id" in message:
+                raise CodexProtocolError("codex_unexpected_response")
             raise CodexProtocolError("codex_message_malformed")
+        return message
+
+    async def next_notification(self, *, timeout_seconds: float | None = None) -> dict[str, object]:
+        message = await self.next_event(timeout_seconds=timeout_seconds)
+        if "id" in message:
+            raise CodexProtocolError("codex_unexpected_server_request")
         return message
 
     async def close(self) -> None:

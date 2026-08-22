@@ -71,3 +71,50 @@ modificarlo, por lo que una inserción múltiple es atómica.
 La resolución final de `AnswerEnvelope.evidence_refs` consulta este índice. Un
 UUID inventado produce `evidence_ref_unknown`; el texto del modelo nunca crea
 Evidence.
+
+## M4-04: catálogo source
+
+El contrato estable conserva tres nombres lógicos, todos construidos desde los
+schemas Pydantic reales de M3:
+
+| Nombre lógico | Input | Output validado |
+|---|---|---|
+| `source.find_symbol` | `FindSymbolRequest` | `FindSymbolResult` |
+| `source.find_model_extensions` | `FindModelExtensionsRequest` | `FindModelExtensionsResult` |
+| `source.read_excerpt` | `ReadExcerptRequest` | `ReadExcerptToolData` + `Evidence(source)` |
+
+No se publican tools de rescan, roots, glob, grep, lectura de fichero, listado,
+shell ni diagnostics. Los inputs tienen `extra=forbid`; `read_excerpt` sólo
+acepta una `SourceRef` indexada y vuelve a comprobar root y fingerprint. Un ref
+manipulado o stale devuelve un error explícito y no entra como Evidence checked.
+
+El wiring por turn obtiene el inventory actual, aplica la selección de roots de
+M3 (override explícito antes que roots confirmados), abre una única sesión del
+Assistant DB en un worker dedicado y la cierra junto con su engine. Ni
+`application` ni el modelo reciben SQLAlchemy, roots físicos o paths libres.
+
+## Bridge dinámico Codex 0.149
+
+La Responses API usada por App Server exige nombres con
+`^[a-zA-Z0-9_-]+$`. El adapter traduce exclusivamente en el transporte:
+
+| Contrato lógico | Alias App Server |
+|---|---|
+| `source.find_symbol` | `source_find_symbol` |
+| `source.find_model_extensions` | `source_find_model_extensions` |
+| `source.read_excerpt` | `source_read_excerpt` |
+
+La traducción inversa ocurre antes de crear el `ToolCall`; collisions, nombres
+desconocidos y specs alteradas fallan cerrados. El request experimental probado
+es `item/tool/call` con `threadId`, `turnId`, `callId`, `tool` y `arguments`. La
+respuesta correlacionada tiene `success` y un único `contentItems` de tipo
+`inputText` cuyo texto es JSON canónico y acotado. Toda ejecución sigue pasando
+por `ToolExecutor`; el adapter no llama handlers directamente.
+
+El fake App Server cubre la secuencia
+`find_model_extensions -> find_symbol -> read_excerpt`, cita la Evidence
+comprobada y verifica que no sale el root físico. El smoke opt-in
+`tests/integration/test_codex_dynamic_tools_smoke.py` pasó el 2026-08-22 con
+`@openai/codex 0.149.0` y `gpt-5.6-sol`: el modelo solicitó exactamente una tool
+registrada y el resultado volvió al mismo turn. La autenticación permaneció
+gestionada por Codex; el test no leyó ni copió tokens.
