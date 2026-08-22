@@ -2,7 +2,7 @@
 
 Este roadmap resume el Source of Truth. No autoriza por sí mismo la implementación de ningún milestone.
 
-Estado actual: M0 y M1 completados; M1 gate PASS. M2 es el milestone activo; M2-01 y M2-02 están implementados y M2-03 es el siguiente task packet.
+Estado actual: M0, M1 y M2 completados; gates de M1 y M2 PASS. M3 — Source + logs es el siguiente milestone y no se ha iniciado.
 
 | Milestone | Objetivo observable |
 | --- | --- |

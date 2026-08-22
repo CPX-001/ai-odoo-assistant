@@ -236,11 +236,7 @@ class SystemdInstaller:
             if len(fields) < 4:
                 continue
             address = fields[3]
-            if not (
-                address.startswith("127.")
-                or address.startswith("[::1]:")
-                or address.startswith("::1:")
-            ):
+            if not address.startswith(("127.", "[::1]:", "::1:")):
                 raise BootstrapError("Assistant service is listening outside loopback")
 
     def _verify_http_endpoints(self) -> tuple[bool, bool]:

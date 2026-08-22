@@ -82,7 +82,7 @@ class InternalOdooToolsController(http.Controller):
             return _error_response(error.code, error.status)
         except DelegationTokenError:
             return _error_response("delegation_unavailable", 503)
-        except Exception:
+        except Exception:  # noqa: BLE001 - sanitize the internal HTTP boundary
             return _error_response("internal_error", 500)
 
 

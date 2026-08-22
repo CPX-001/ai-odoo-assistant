@@ -9,6 +9,7 @@ from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient, Response
+
 from odoo_ai.adapters import OdooGatewayError, OdooGatewayFactory, OdooGatewaySettings
 from odoo_ai.api import create_app
 from odoo_ai.application import TraceEventData

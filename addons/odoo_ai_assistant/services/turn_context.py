@@ -215,7 +215,7 @@ def derive_user_execution_context(env: OdooEnvironment) -> EffectiveUserContext:
         lang = env.lang
     except TurnContextError:
         raise
-    except Exception:
+    except Exception:  # noqa: BLE001 - sanitize the Odoo environment boundary
         raise TurnContextError("identity_unavailable") from None
     if (
         not 1 <= len(allowed_company_ids) <= MAX_ACTIVE_COMPANIES
@@ -246,7 +246,7 @@ def _message(value: object) -> str:
 def _database_binding(env: OdooEnvironment) -> str:
     try:
         value = env.cr.dbname
-    except Exception:
+    except Exception:  # noqa: BLE001 - sanitize the Odoo cursor boundary
         raise TurnContextError("database_unavailable") from None
     if (
         not isinstance(value, str)

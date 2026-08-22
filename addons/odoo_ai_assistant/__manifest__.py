@@ -1,3 +1,4 @@
+# ruff: noqa: B018 - Odoo manifests are a top-level dictionary expression.
 {
     "name": "Odoo AI Assistant",
     "summary": "Context-aware local AI assistant for Odoo",

@@ -339,10 +339,14 @@ class PostgresBootstrapper:
     @staticmethod
     def _verify_runtime_connection(runtime_url: str) -> None:
         try:
-            with psycopg.connect(_psycopg_url(runtime_url), connect_timeout=5) as connection:
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT current_database(), current_user")
-                    cursor.fetchone()
+            with (
+                psycopg.connect(
+                    _psycopg_url(runtime_url), connect_timeout=5
+                ) as connection,
+                connection.cursor() as cursor,
+            ):
+                cursor.execute("SELECT current_database(), current_user")
+                cursor.fetchone()
         except psycopg.Error as error:
             raise BootstrapError("Assistant role cannot connect to the Assistant database") from error
 
@@ -421,14 +425,18 @@ class PostgresBootstrapper:
 
     def _backup_before_pending_upgrade(self, runtime_url: str) -> str | None:
         try:
-            with psycopg.connect(_psycopg_url(runtime_url), connect_timeout=5) as connection:
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT to_regclass('public.alembic_version')")
-                    if cursor.fetchone()[0] is None:
-                        return None
-                    cursor.execute("SELECT version_num FROM alembic_version")
-                    row = cursor.fetchone()
-                    current = str(row[0]) if row else None
+            with (
+                psycopg.connect(
+                    _psycopg_url(runtime_url), connect_timeout=5
+                ) as connection,
+                connection.cursor() as cursor,
+            ):
+                cursor.execute("SELECT to_regclass('public.alembic_version')")
+                if cursor.fetchone()[0] is None:
+                    return None
+                cursor.execute("SELECT version_num FROM alembic_version")
+                row = cursor.fetchone()
+                current = str(row[0]) if row else None
         except psycopg.Error as error:
             raise BootstrapError("Cannot inspect Assistant migration revision") from error
 

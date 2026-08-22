@@ -1,6 +1,6 @@
 # M2 — UI / context / delegation
 
-Estado: en curso. M2-01 a M2-08 implementados y verificados; M2-09 es el siguiente task packet.
+Estado: completado. M2-01 a M2-09 implementados y verificados; **M2 GATE: PASS**. El siguiente milestone es M3 — Source + logs y no se ha iniciado.
 
 M2 empieza únicamente después del **M1 GATE: PASS**. Su objetivo es demostrar el primer flujo contextual real del producto sin introducir todavía Codex ni un agent loop: desde un registro abierto en Odoo, el usuario puede abrir el asistente, enviar una pregunta y el sistema vuelve a leer ese registro por ORM bajo la identidad efectiva del mismo usuario mediante una delegación firmada y acotada.
 
@@ -79,3 +79,6 @@ M2 sólo se considera terminado cuando:
 - el browser nunca ve el shared secret, token de delegación ni endpoint interno sensible;
 - el vertical slice funciona con service real y Odoo real, no sólo con mocks;
 - tests, lint y type-check siguen verdes y M1 no retrocede.
+
+La evidencia ejecutable y el veredicto final están en
+[`docs/M2_GATE_REPORT.md`](../../../M2_GATE_REPORT.md).

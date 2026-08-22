@@ -35,7 +35,7 @@ def test_screen_context_constructs_and_serializes_to_json() -> None:
 
 
 def test_screen_context_defaults_are_not_shared() -> None:
-    captured_at = datetime(2026, 8, 21, 10, 30)
+    captured_at = datetime(2026, 8, 21, 10, 30)  # noqa: DTZ001 - test fixture
     first = ScreenContext(captured_at=captured_at)
     second = ScreenContext(captured_at=captured_at)
 
@@ -47,7 +47,7 @@ def test_screen_context_defaults_are_not_shared() -> None:
 
 
 def test_screen_context_rejects_browser_identity_and_non_json_context() -> None:
-    captured_at = datetime(2026, 8, 21, 10, 30)
+    captured_at = datetime(2026, 8, 21, 10, 30)  # noqa: DTZ001 - test fixture
 
     with pytest.raises(ValidationError):
         ScreenContext.model_validate({"captured_at": captured_at, "user_id": 7})
@@ -62,7 +62,7 @@ def test_screen_context_rejects_browser_identity_and_non_json_context() -> None:
 @pytest.mark.parametrize(
     "captured_at",
     [
-        datetime(2026, 8, 21, 10, 30),
+        datetime(2026, 8, 21, 10, 30),  # noqa: DTZ001 - supported input
         datetime(2026, 8, 21, 10, 30, tzinfo=UTC),
     ],
 )
