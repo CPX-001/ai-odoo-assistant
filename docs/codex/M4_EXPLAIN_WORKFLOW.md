@@ -80,11 +80,12 @@ Los fallos browser-facing conservan sólo `{"ok": false, "error": {"code":
 "..."}}`, con códigos acotados para access denied, contexto, autenticación,
 engine, evidencia, timeout y response inválida.
 
-## Evidencia de verificación
+## Evidencia de cierre
 
-- Quality completa: 265 passed, 24 skipped; Ruff y mypy estricto verdes.
+- Quality completa de M4: 308 passed, 8 skipped con DB real; Ruff y mypy
+  estricto verdes.
 - Addon Odoo 18 sobre PostgreSQL 16 desechable: install y update, cada uno con
-  24 tests y 0 fallos/errores.
+  25 tests y 0 fallos/errores.
 - Runner Chromium de Odoo 18 `WebSuite.test_unit_desktop` filtrado al addon: 1
   suite y 0 fallos/errores.
 - `assistant_panel_service.test.js` comprueba que `<script>`, HTML arbitrario y
@@ -93,5 +94,6 @@ engine, evidencia, timeout y response inválida.
 - El template no usa `t-raw` ni `innerHTML`; respuesta, limitaciones, paths y
   fingerprints se renderizan con `t-esc`.
 
-M4-07..M4-10 siguen pendientes; este documento no declara el gate completo de
-M4 ni sustituye el E2E real Codex + fixture de M4-09.
+El E2E real y el gate integral están registrados en
+[`M4_E2E_REPORT.md`](M4_E2E_REPORT.md) y
+[`M4_GATE_REPORT.md`](../M4_GATE_REPORT.md).

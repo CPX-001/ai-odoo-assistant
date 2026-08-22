@@ -88,7 +88,13 @@ def test_handshake_argv_environment_cwd_policy_and_shutdown(
     asyncio.run(run())
     captured = json.loads(observed.read_text(encoding="utf-8"))
     assert captured == {
-        "argv": ["app-server", "--stdio", "--strict-config"],
+        "argv": [
+            "app-server",
+            "--stdio",
+            "--strict-config",
+            "--config",
+            "mcp_servers={}",
+        ],
         "cwd": str(isolated.resolve()),
         "initialized": {"method": "initialized"},
         "secret_visible": False,

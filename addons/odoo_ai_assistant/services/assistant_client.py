@@ -52,6 +52,12 @@ class AssistantServiceClient:
             raise AssistantServiceError("configuration_invalid") from error
         if not loopback or not 1 <= port <= 65535:
             raise AssistantServiceError("configuration_invalid")
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not 0 < timeout <= 300
+        ):
+            raise AssistantServiceError("configuration_invalid")
         self._host = parsed.hostname
         self._port = port
         self._shared_secret_file = shared_secret_file

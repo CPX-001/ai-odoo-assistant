@@ -22,8 +22,11 @@ from ..services import (
 
 SERVICE_URL_PARAM: Final = "odoo_ai_assistant.service_url"
 SECRET_FILE_PARAM: Final = "odoo_ai_assistant.shared_secret_file"
+TURN_TIMEOUT_PARAM: Final = "odoo_ai_assistant.turn_timeout_seconds"
 SERVICE_URL_ENV: Final = "ODOO_AI_SERVICE_URL"
 SECRET_FILE_ENV: Final = "ODOO_AI_SHARED_SECRET_FILE"
+TURN_TIMEOUT_ENV: Final = "ODOO_AI_TURN_TIMEOUT_SECONDS"
+DEFAULT_TURN_TIMEOUT_SECONDS: Final = 150.0
 EXPECTED_RESPONSE_KEYS: Final = frozenset(
     {
         "completed_at",
@@ -119,11 +122,16 @@ class AssistantBridge(models.AbstractModel):
         secret_file = parameters._get_param(SECRET_FILE_PARAM) or os.environ.get(
             SECRET_FILE_ENV
         )
+        timeout = _turn_timeout(
+            parameters._get_param(TURN_TIMEOUT_PARAM)
+            or os.environ.get(TURN_TIMEOUT_ENV)
+        )
         if not service_url:
             raise AssistantServiceError("configuration_missing")
         return AssistantServiceClient(
             base_url=service_url,
             shared_secret_file=secret_file,
+            timeout=timeout,
         )
 
 
@@ -355,3 +363,17 @@ def _client_error_code(code: str) -> str:
 
 def _error(code: str) -> dict[str, object]:
     return {"error": {"code": code}, "ok": False}
+
+
+def _turn_timeout(value: object) -> float:
+    if value in (None, ""):
+        return DEFAULT_TURN_TIMEOUT_SECONDS
+    if isinstance(value, bool):
+        raise AssistantServiceError("configuration_invalid")
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError):
+        raise AssistantServiceError("configuration_invalid") from None
+    if not 1 <= timeout <= 300:
+        raise AssistantServiceError("configuration_invalid")
+    return timeout

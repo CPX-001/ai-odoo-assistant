@@ -10,7 +10,8 @@ Fecha de verificación: 2026-08-22.
   temporalmente fuera del repositorio; el probe devolvió
   `compatible/app-server-jsonl-v2/0.149.0`.
 - Transporte elegido para el producto Linux: `codex app-server --stdio
-  --strict-config`.
+  --strict-config --config mcp_servers={}`. El último override impide que MCPs
+  del perfil personal del usuario entren en un product turn.
 - El comando `codex app-server generate-json-schema --experimental` confirmó
   el protocolo JSONL actual y sus schemas v2.
 - Secuencia mínima probada: request `initialize`, response con el mismo `id` y
@@ -52,8 +53,8 @@ spawn argv fijo, shell=False
     -> initialize (id correlacionado)
     -> validate bounded response
     -> initialized
-    -> future ephemeral thread: approval=never, sandbox=read-only,
-       runtimeWorkspaceRoots=[], environments=[], dynamicTools=[]
+    -> ephemeral thread: approval=never, sandbox=read-only,
+       runtimeWorkspaceRoots=[], environments=[], dynamicTools allowlisted
     -> close stdin
     -> graceful wait
     -> TERM/KILL bounded fallback
@@ -82,8 +83,10 @@ initialize response
   -> JSON decode + AnswerEnvelope.model_validate
 ```
 
-Los demás eventos se cuentan dentro del budget pero no se persisten ni se
-devuelven. Un item de tool, un server request, IDs distintos, estado failed,
+El adapter acepta sólo notifications inspeccionadas y acotadas, incluidas
+`configWarning`, `warning`, `thread/started`, token usage, rate limits y estados
+de runtime/MCP; las descarta sin exponer detalles. Cualquier evento desconocido
+falla cerrado. Un item de tool, un server request, IDs distintos, estado failed,
 texto extra, evidencia desconocida, workflow distinto o `proposed_action`
 producen un error tipado sanitizado.
 
@@ -174,8 +177,24 @@ al `ToolExecutor`. La response exacta probada es:
 }
 ```
 
-Requests desconocidos, duplicados o malformados se responden de forma segura y
-el turn falla cerrado. Errores source recuperables como un fingerprint stale se
-devuelven con `success=false`, sin Evidence checked, para que el modelo pueda
-explicar la limitación. El smoke dinámico real reproducible está en
+Requests desconocidos, IDs duplicados y presupuestos agotados fallan cerrado.
+Un input que no satisface el schema y errores source recuperables como un
+fingerprint stale se devuelven con `success=false`, sin ejecutar el backend ni
+crear Evidence checked, para permitir un reintento o una limitación acotada. El
+presupuesto agregado de tools es 120 s y cada handler mantiene un timeout de 5
+s. El smoke dinámico real reproducible está en
 `tests/integration/test_codex_dynamic_tools_smoke.py`.
+
+## M4-09/M4-10: vertical real y gate
+
+El runner desechable ejecutó Chromium, Odoo 18, Assistant Service y Codex
+0.149.0 autenticado. El turno usó las tres source tools reales, citó el pedido
+y `odoo_ai_m3_sale_project/models/sale_order.py`, y comprobó la creación exacta
+de una `project.task`. También verificó source stale, runtime ausente,
+`FULLY_READY`/`DEGRADED`, aislamiento de DB y limpieza de procesos. Véanse
+[`M4_E2E_REPORT.md`](M4_E2E_REPORT.md) y
+[`M4_GATE_REPORT.md`](M4_GATE_REPORT.md).
+
+El baseline coincide con la documentación oficial del
+[Codex App Server](https://learn.chatgpt.com/docs/app-server); los detalles
+experimentales siguen confinados al adapter.

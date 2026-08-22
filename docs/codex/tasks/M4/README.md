@@ -1,6 +1,9 @@
 # M4 — Codex vertical slice
 
-Estado: M4-01..M4-08 implementadas y verificadas; M4-09 es la siguiente task.
+Estado: **M4-01..M4-10 implementadas y verificadas. M4 GATE: PASS.**
+
+Evidencia de cierre: [`M4_E2E_REPORT.md`](../../M4_E2E_REPORT.md) y
+[`M4_GATE_REPORT.md`](../../../M4_GATE_REPORT.md).
 
 M4 empieza únicamente después de **M3 GATE: PASS**. Su objetivo es conectar el `ReasoningEngine` real con Codex App Server y cerrar un primer turno agéntico de sólo lectura: desde un `sale.order` abierto, responder por qué al confirmarlo se crea una tarea, apoyándose en el registro releído bajo el usuario efectivo y en source indexado/fingerprint-checked.
 
@@ -47,7 +50,7 @@ M4 no convierte Codex en una autoridad. Cada product turn usa un contexto y tool
 9. [`M4-09-sale-order-codex-e2e.md`](M4-09-sale-order-codex-e2e.md) — E2E real browser → Odoo → Assistant → Codex → source → respuesta citada.
 10. [`M4-10-gate.md`](M4-10-gate.md) — gate integral y cierre de M4.
 
-Ejecutar una sola task cada vez. Cada packet debe partir del estado real dejado por el anterior, ejecutar sus verificaciones y detenerse. No avanzar automáticamente.
+Los packets se ejecutaron en orden y M4 quedó cerrado sin avanzar a M5.
 
 ## Invariantes de M4
 

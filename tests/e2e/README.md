@@ -40,3 +40,38 @@ The real Odoo 18 gate adds both `addons/` and `tests/fixtures/odoo18/` to the
 runtime `addons_path`, installs `odoo_ai_assistant,odoo_ai_m3_sale_project` with
 their post-install tests, then updates both modules. No database, port, source
 root, log file, or service name is encoded in product code.
+
+## M4 real Codex sale.order acceptance
+
+`run_m4_sale_order_codex.py` owns a disposable vertical slice: it creates
+separate Odoo/Assistant roles and databases, installs the addon and causal
+fixture, starts Odoo and the Assistant Service on free loopback ports, runs a
+real authenticated Codex turn through Chromium, checks the business effect and
+negative cases, then stops processes and removes its exact roles/databases.
+
+Required variables point only to runtime dependencies; credentials remain in
+the external Codex profile and are never supplied to the runner:
+
+```text
+M4_ODOO_PYTHON M4_ODOO_BIN M4_ODOO_CORE_ADDONS
+M4_CODEX_EXECUTABLE M4_PLAYWRIGHT_ROOT M4_NODE
+M4_POSTGRES_ADMIN_DSN
+```
+
+Example from the repository root, using placeholders for deployment-specific
+paths and a disposable PostgreSQL cluster:
+
+```text
+M4_ODOO_PYTHON=/path/to/odoo-python \
+M4_ODOO_BIN=/path/to/odoo-bin \
+M4_ODOO_CORE_ADDONS=/path/to/odoo/addons \
+M4_CODEX_EXECUTABLE=/path/to/codex \
+M4_PLAYWRIGHT_ROOT=/tmp/playwright-runtime \
+M4_NODE=/usr/bin/node \
+M4_POSTGRES_ADMIN_DSN=postgresql://gate-admin@127.0.0.1:5432/postgres \
+.venv/bin/python tests/e2e/run_m4_sale_order_codex.py
+```
+
+The PostgreSQL identity must be allowed to create/drop the runner's randomized
+databases and roles. Use only a disposable cluster. The runner never deletes a
+pre-existing database or role name.

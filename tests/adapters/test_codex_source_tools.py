@@ -393,11 +393,12 @@ def test_fake_codex_completes_three_source_tool_roundtrips(tmp_path: Path) -> No
 
 
 @pytest.mark.parametrize(
-    ("tool_request", "error_code"),
+    ("tool_request", "error_code", "recoverable"),
     [
         (
             {"callId": "call-unknown", "tool": "source.read_file", "arguments": {}},
             "tool_not_registered",
+            False,
         ),
         (
             {
@@ -406,6 +407,7 @@ def test_fake_codex_completes_three_source_tool_roundtrips(tmp_path: Path) -> No
                 "arguments": {"path": "/srv/private/addons/secret.py"},
             },
             "tool_input_invalid",
+            True,
         ),
     ],
 )
@@ -413,16 +415,26 @@ def test_invented_tool_or_free_path_input_fails_closed(
     tmp_path: Path,
     tool_request: dict[str, object],
     error_code: str,
+    recoverable: bool,
 ) -> None:
     backend = FakeSourceBackend()
     observed = tmp_path / f"{error_code}.json"
     executable = _fake_codex(
         tmp_path,
-        _server_body([tool_request], answer=None, observed=observed, expect_abort=True),
+        _server_body(
+            [tool_request],
+            answer=None,
+            observed=observed,
+            expect_abort=not recoverable,
+        ),
     )
 
-    with pytest.raises(CodexEngineError, match=error_code):
-        _run(executable, backend)
+    if recoverable:
+        answer = _run(executable, backend)
+        assert answer.confidence.value == "low"
+    else:
+        with pytest.raises(CodexEngineError, match=error_code):
+            _run(executable, backend)
 
     captured = json.loads(observed.read_text(encoding="utf-8"))
     response = captured["tool_responses"][0]["result"]

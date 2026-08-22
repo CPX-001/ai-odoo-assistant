@@ -135,6 +135,15 @@ def test_client_rejects_non_loopback_and_sanitizes_auth_failure(
     assert "wrong" not in str(rejected.value)
 
 
+def test_client_rejects_unbounded_turn_timeout() -> None:
+    with pytest.raises(AssistantServiceError, match="configuration_invalid"):
+        AssistantServiceClient(
+            base_url="http://127.0.0.1:8000",
+            shared_secret_file=None,
+            timeout=301,
+        )
+
+
 def test_client_rejects_other_readable_secret(tmp_path: Path) -> None:
     secret_file = tmp_path / "public-secret"
     secret_file.write_text(AssistantHandler.secret, encoding="utf-8")

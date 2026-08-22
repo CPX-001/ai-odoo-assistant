@@ -227,7 +227,7 @@ class ToolExecutionLimits:
     max_evidence_items: int = 24
     max_evidence_bytes: int = 192 * 1024
     max_input_nesting: int = 8
-    deadline_seconds: float = 30.0
+    deadline_seconds: float = 120.0
     per_tool_timeout_seconds: float = 5.0
 
     def __post_init__(self) -> None:

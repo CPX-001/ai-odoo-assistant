@@ -334,7 +334,7 @@ def _fake_codex(tmp_path: Path, event_lines: str, *, response_lines: str) -> Pat
     return executable
 
 
-def _run_engine(executable: Path, *, max_events: int = 8) -> None:
+def _run_engine(executable: Path, *, max_events: int = 8) -> AnswerEnvelope:
     engine = CodexAppServerEngine(
         CodexRuntimeSettings(
             executable=executable,
@@ -344,7 +344,7 @@ def _run_engine(executable: Path, *, max_events: int = 8) -> None:
         ),
         limits=CodexEngineLimits(max_events=max_events),
     )
-    asyncio.run(
+    return asyncio.run(
         engine.run_turn(_context(), [], AnswerEnvelope.model_json_schema())
     )
 
@@ -440,3 +440,61 @@ def test_event_flood_is_bounded_and_interrupts(tmp_path: Path) -> None:
 
     with pytest.raises(CodexEngineError, match="codex_event_budget_exceeded"):
         _run_engine(executable, max_events=3)
+
+
+def test_documented_nonfatal_warning_is_accepted_without_exposing_details(
+    tmp_path: Path,
+) -> None:
+    warning = {
+        "method": "configWarning",
+        "params": {
+            "summary": "A recoverable runtime prerequisite is unavailable.",
+            "details": "private path that must never enter the product response",
+            "path": "/private/runtime/config.toml",
+        },
+    }
+    completed_item = {
+        "method": "item/completed",
+        "params": {
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "item": {
+                "id": "message-1",
+                "type": "agentMessage",
+                "text": json.dumps(
+                    {
+                        "answer_markdown": "Respuesta comprobada.",
+                        "workflow": "EXPLAIN",
+                        "confidence": "low",
+                        "evidence_refs": [],
+                        "limitations": ["Sin evidencia suficiente."],
+                        "proposed_action": None,
+                    }
+                ),
+            },
+        },
+    }
+    completed_turn = {
+        "method": "turn/completed",
+        "params": {
+            "threadId": "thread-1",
+            "turn": {
+                "id": "turn-1",
+                "status": "completed",
+                "error": None,
+                "items": [completed_item["params"]["item"]],
+            },
+        },
+    }
+    executable = _fake_codex(
+        tmp_path,
+        "\n".join(
+            f"print(json.dumps({event!r}), flush=True)"
+            for event in (warning, completed_item, completed_turn)
+        ),
+        response_lines="",
+    )
+
+    answer = _run_engine(executable)
+
+    assert "private path" not in answer.model_dump_json()

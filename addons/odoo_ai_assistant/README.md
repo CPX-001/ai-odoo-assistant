@@ -13,6 +13,10 @@ The server resolves its local Assistant Service configuration in this order:
 2. process environment variables ``ODOO_AI_SERVICE_URL`` and
    ``ODOO_AI_SHARED_SECRET_FILE``.
 
+Contextual turns use a bounded 150-second server-side timeout by default. It
+can be overridden without code through ``odoo_ai_assistant.turn_timeout_seconds``
+or ``ODOO_AI_TURN_TIMEOUT_SECONDS`` (1..300 seconds).
+
 ``service_url`` must be an HTTP loopback URL. ``shared_secret_file`` points to
 the protected file created by the host bootstrap; the secret content is read
 only server-side and is never stored in a field or sent to the browser. Missing

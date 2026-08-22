@@ -236,6 +236,8 @@ class CodexAppServerClient:
             "app-server",
             "--stdio",
             "--strict-config",
+            "--config",
+            "mcp_servers={}",
         )
         try:
             process = await asyncio.create_subprocess_exec(
