@@ -11,6 +11,7 @@ from odoo_ai.adapters import (
     CodexAppServerClient,
     CodexProbeState,
     CodexProtocolError,
+    CodexRuntimeConfigurationError,
     CodexRuntimeProcessError,
     CodexRuntimeSettings,
     CodexRuntimeTimeoutError,
@@ -159,7 +160,9 @@ def test_cumulative_stdout_budget_is_rejected(tmp_path: Path) -> None:
             )
         )
         try:
-            with pytest.raises(CodexProtocolError, match="codex_stdout_budget_exceeded"):
+            with pytest.raises(
+                CodexProtocolError, match="codex_stdout_budget_exceeded"
+            ):
                 await client.request("test", {})
         finally:
             await client.close()
@@ -239,6 +242,17 @@ def test_probe_reports_protocol_without_claiming_auth_or_model(tmp_path: Path) -
         assert result.model_state == "unknown"
 
     asyncio.run(run())
+
+
+def test_experimental_api_flag_is_explicit_and_strict() -> None:
+    assert CodexRuntimeSettings.from_env(
+        {"ODOO_AI_CODEX_EXPERIMENTAL_API": "true"}
+    ).experimental_api
+    assert not CodexRuntimeSettings.from_env({}).experimental_api
+    with pytest.raises(
+        CodexRuntimeConfigurationError, match="codex_boolean_setting_invalid"
+    ):
+        CodexRuntimeSettings.from_env({"ODOO_AI_CODEX_EXPERIMENTAL_API": "perhaps"})
 
 
 def test_shutdown_kills_process_that_ignores_eof_and_term(tmp_path: Path) -> None:

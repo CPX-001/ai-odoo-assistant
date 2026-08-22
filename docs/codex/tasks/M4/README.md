@@ -1,6 +1,6 @@
 # M4 — Codex vertical slice
 
-Estado: task packets preparados; implementación todavía no iniciada.
+Estado: M4-01 y M4-02 implementadas y verificadas; M4-03 es la siguiente task.
 
 M4 empieza únicamente después de **M3 GATE: PASS**. Su objetivo es conectar el `ReasoningEngine` real con Codex App Server y cerrar un primer turno agéntico de sólo lectura: desde un `sale.order` abierto, responder por qué al confirmarlo se crea una tarea, apoyándose en el registro releído bajo el usuario efectivo y en source indexado/fingerprint-checked.
 

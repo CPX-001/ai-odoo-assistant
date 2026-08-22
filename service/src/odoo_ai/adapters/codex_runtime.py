@@ -22,6 +22,7 @@ CODEX_MODEL_ENV = "ODOO_AI_CODEX_MODEL"
 CODEX_ISOLATED_CWD_ENV = "ODOO_AI_CODEX_ISOLATED_CWD"
 CODEX_STARTUP_TIMEOUT_ENV = "ODOO_AI_CODEX_STARTUP_TIMEOUT_SECONDS"
 CODEX_TURN_TIMEOUT_ENV = "ODOO_AI_CODEX_TURN_TIMEOUT_SECONDS"
+CODEX_EXPERIMENTAL_API_ENV = "ODOO_AI_CODEX_EXPERIMENTAL_API"
 
 APP_SERVER_PROTOCOL = "app-server-jsonl-v2"
 DEFAULT_STARTUP_TIMEOUT_SECONDS = 5.0
@@ -137,6 +138,7 @@ class CodexRuntimeSettings:
                 CODEX_TURN_TIMEOUT_ENV,
                 DEFAULT_TURN_TIMEOUT_SECONDS,
             ),
+            experimental_api=_bool_setting(source, CODEX_EXPERIMENTAL_API_ENV, False),
         )
 
 
@@ -405,13 +407,16 @@ class CodexAppServerClient:
         if stdin is None or self._process.returncode is not None:
             raise CodexRuntimeProcessError("codex_process_not_running")
         try:
-            payload = json.dumps(
-                dict(message),
-                allow_nan=False,
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("utf-8") + b"\n"
+            payload = (
+                json.dumps(
+                    dict(message),
+                    allow_nan=False,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+                + b"\n"
+            )
         except (TypeError, ValueError):
             raise CodexProtocolError("codex_request_not_serializable") from None
         if len(payload) > self._settings.max_frame_bytes:
@@ -540,3 +545,15 @@ def _float_setting(source: Mapping[str, str], name: str, default: float) -> floa
     except ValueError:
         raise CodexRuntimeConfigurationError("codex_timeout_invalid") from None
     return value
+
+
+def _bool_setting(source: Mapping[str, str], name: str, default: bool) -> bool:
+    raw = source.get(name)
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes"}:
+        return True
+    if normalized in {"0", "false", "no"}:
+        return False
+    raise CodexRuntimeConfigurationError("codex_boolean_setting_invalid")

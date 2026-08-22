@@ -37,6 +37,9 @@ de ellos.
   temporal por proceso.
 - `ODOO_AI_CODEX_STARTUP_TIMEOUT_SECONDS` y
   `ODOO_AI_CODEX_TURN_TIMEOUT_SECONDS`: límites externos validados.
+- `ODOO_AI_CODEX_EXPERIMENTAL_API`: opt-in booleano explícito. La versión
+  0.149.0 lo requiere para negociar `dynamicTools`, `environments` y
+  `runtimeWorkspaceRoots`; M4-02 falla cerrado si no está activo.
 
 El child recibe un allowlist mínimo de variables de proceso, no el DSN,
 shared secret, delegation secret ni configuración Odoo. El adapter nunca copia
@@ -63,3 +66,85 @@ El smoke se puede repetir pasando el path absoluto del binario a
 `ODOO_AI_CODEX_EXECUTABLE`, activando `ODOO_AI_RUN_CODEX_RUNTIME_SMOKE=1` y
 ejecutando `tests/integration/test_codex_runtime_smoke.py`. No necesita login ni
 consume un product turn.
+
+## M4-02: turn estructurado sin tools
+
+`CodexAppServerEngine` crea un proceso y un thread nuevo por cada llamada al
+port. Consume únicamente esta secuencia relevante:
+
+```text
+initialize response
+  -> thread/start response (thread.id + ephemeral=true)
+  -> turn/start response (turn.id)
+  -> item/completed notifications bounded (validación de tipo)
+  -> turn/completed del mismo thread/turn
+  -> último agentMessage.text
+  -> JSON decode + AnswerEnvelope.model_validate
+```
+
+Los demás eventos se cuentan dentro del budget pero no se persisten ni se
+devuelven. Un item de tool, un server request, IDs distintos, estado failed,
+texto extra, evidencia desconocida, workflow distinto o `proposed_action`
+producen un error tipado sanitizado.
+
+Pydantic genera `AnswerEnvelope.model_json_schema()` con un `JsonValue` abierto
+y campos con default. El structured output estricto real de Codex 0.149.0 no
+acepta ese shape literalmente. El adapter usa esa schema como fuente, verifica
+sus seis propiedades y crea una copia provider-compatible: todos los campos son
+required, `proposed_action` queda restringido a `null` en M4 y se eliminan las
+defs abiertas que ya no son alcanzables. La respuesta sigue validándose con el
+modelo Pydantic original; la normalización no relaja el contrato.
+
+Ejemplo del payload compacto enviado como único input de texto:
+
+```json
+{
+  "host_contract": {
+    "data_trust": "untrusted",
+    "max_evidence_refs": 1,
+    "tools_available": false
+  },
+  "untrusted_data": {
+    "conversation": {
+      "last_user_intent": null,
+      "mentioned_records": [],
+      "short_summary": ""
+    },
+    "evidence": [{
+      "evidence_id": "12345678-1234-5678-1234-567812345678",
+      "kind": "record",
+      "payload": {"state": "sale"},
+      "status": "checked",
+      "summary": "The synthetic quotation is in the sale state.",
+      "title": "Synthetic quotation"
+    }],
+    "instance_capabilities": [],
+    "screen": {"model": "sale.order", "res_id": 56},
+    "user_request": "Explain the state using only the supplied evidence.",
+    "workflow_hint": "EXPLAIN"
+  }
+}
+```
+
+Campos opcionales nulos y metadata no sensible pueden aparecer en la forma
+canónica completa. No aparecen user identity, `instance_id`, context dict del
+browser, tokens, secrets, DSN ni paths físicos.
+
+Ejemplo de respuesta aceptada por el host:
+
+```json
+{
+  "answer_markdown": "The checked record is in the sale state.",
+  "workflow": "EXPLAIN",
+  "confidence": "high",
+  "evidence_refs": ["12345678-1234-5678-1234-567812345678"],
+  "limitations": [],
+  "proposed_action": null
+}
+```
+
+El smoke opt-in `tests/integration/test_codex_engine_smoke.py` pasó contra
+`codex-cli 0.149.0` y una sesión existente del usuario del host, con evidencia
+sintética y sin dynamic tools. La auth siguió gestionada por Codex; el test no
+copió ni leyó el contenido del token. El model/provider sólo se conservan como
+metadata técnica acotada cuando la response de `thread/start` los declara.
