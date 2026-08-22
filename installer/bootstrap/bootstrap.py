@@ -269,6 +269,7 @@ class Bootstrapper:
             accounts,
             source_roots=deployment.addons_paths,
             log_file=deployment.log_file,
+            journal_unit=odoo_service.unit,
         )
         systemd_result = (
             self._systemd_manager.ensure(
@@ -356,6 +357,7 @@ class Bootstrapper:
         *,
         source_roots: tuple[Path, ...] = (),
         log_file: Path | None = None,
+        journal_unit: str | None = None,
     ) -> str:
         settings = self._service_settings
         if settings.host not in {"127.0.0.1", "::1", "localhost"}:
@@ -382,6 +384,10 @@ class Bootstrapper:
             values["ODOO_AI_DATABASE_URL"] = settings.database_url
         if log_file is not None:
             values["ODOO_AI_LOG_FILE"] = str(log_file)
+        if journal_unit is not None:
+            if any(character in journal_unit for character in "\r\n="):
+                raise BootstrapError("Odoo journal unit is invalid")
+            values["ODOO_AI_JOURNAL_UNIT"] = journal_unit
         return "".join(f"{key}={_quote_env_value(value)}\n" for key, value in values.items())
 
     def _ensure_config(
@@ -390,10 +396,13 @@ class Bootstrapper:
         *,
         source_roots: tuple[Path, ...] = (),
         log_file: Path | None = None,
+        journal_unit: str | None = None,
     ) -> bool:
         path = self._paths.service_config
         content = self._service_config_content(
-            source_roots=source_roots, log_file=log_file
+            source_roots=source_roots,
+            log_file=log_file,
+            journal_unit=journal_unit,
         )
         existing = self._validate_regular_file(path)
         if existing is not None and path.read_text(encoding="utf-8") == content:

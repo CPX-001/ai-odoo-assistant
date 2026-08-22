@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
-import re
 import stat
 import time
 from collections.abc import Callable
@@ -25,22 +24,15 @@ from odoo_ai.contracts import (
     LogSearchRequest,
     TimestampRange,
 )
-from odoo_ai.logs.common import LogRedactor
-from odoo_ai.logs.resolution import ResolvedLogFile
-
-_TIMESTAMP = re.compile(
-    r"^(?P<value>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?"
-    r"(?:Z|[+-]\d{2}:?\d{2})?)"
+from odoo_ai.logs.common import (
+    LogProviderError,
+    LogRedactor,
+    context_indexes,
+    line_in_window,
+    parse_log_lines,
 )
-_DATE_LIKE = re.compile(r"^\d{4}-\d{2}-\d{2}")
-
-
-class LogProviderError(RuntimeError):
-    """Sanitized provider failure that never includes a log path."""
-
-    def __init__(self, code: str) -> None:
-        super().__init__(code)
-        self.code = code
+from odoo_ai.logs.resolution import ResolvedLogFile
+from odoo_ai.logs.tracebacks import TracebackRegistry
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,13 +54,6 @@ class FileLogLimits:
             or not 0 <= self.context_lines <= 20
         ):
             raise ValueError("file log limits are invalid")
-
-
-@dataclass(frozen=True, slots=True)
-class _LogLine:
-    text: str
-    timestamp: datetime | None
-    timestamp_invalid: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,15 +80,13 @@ class FileLogProvider:
         self._redactor = redactor or LogRedactor()
         self._default_timezone = default_timezone
         self._clock = clock
+        self._tracebacks = TracebackRegistry(provider="file", redactor=self._redactor)
 
     async def search(self, request: LogSearchRequest) -> list[LogEvidence]:
         return await asyncio.to_thread(self._search_sync, request)
 
-    async def read_traceback(
-        self, fingerprint: str, *, max_bytes: int
-    ) -> LogEvidence | None:
-        del fingerprint, max_bytes
-        return None
+    async def read_traceback(self, fingerprint: str, *, max_bytes: int) -> LogEvidence | None:
+        return self._tracebacks.read(fingerprint, max_bytes=max_bytes)
 
     def _search_sync(self, request: LogSearchRequest) -> list[LogEvidence]:
         if request.max_bytes > self._limits.max_output_bytes:
@@ -113,7 +96,7 @@ class FileLogProvider:
         started = self._clock()
         tail = self._read_tail()
         raw_lines = tail.content.decode("utf-8", errors="replace").splitlines()
-        lines = _parse_lines(raw_lines, self._default_timezone)
+        lines = parse_log_lines(raw_lines, self._default_timezone)
         terms = tuple(term.casefold() for term in request.terms)
         matches: list[int] = []
         timed_out = False
@@ -121,16 +104,14 @@ class FileLogProvider:
             if index % 256 == 0 and self._clock() - started > self._limits.max_seconds:
                 timed_out = True
                 break
-            if not _in_window(line.timestamp, request):
+            if not line_in_window(line.timestamp, request):
                 continue
             if terms and not any(term in line.text.casefold() for term in terms):
                 continue
             matches.append(index)
         if not matches:
             return []
-        selected = _context_indexes(
-            matches, len(lines), context=self._limits.context_lines
-        )
+        selected = context_indexes(matches, len(lines), context=self._limits.context_lines)
         reasons: list[str] = []
         if tail.file_truncated:
             reasons.append("scan_byte_cap")
@@ -157,18 +138,19 @@ class FileLogProvider:
             for index, _ in rendered
             if lines[index].timestamp is not None
         ]
-        parse_complete = not any(
-            lines[index].timestamp_invalid for index, _ in rendered
-        )
+        parse_complete = not any(lines[index].timestamp_invalid for index, _ in rendered)
         matched_terms = tuple(
             request.terms[position]
             for position, term in enumerate(terms)
             if any(term in lines[index].text.casefold() for index in matches)
         )
         excerpt_fingerprint = "sha256:" + hashlib.sha256(excerpt.encode()).hexdigest()
-        reference = "sha256:" + hashlib.sha256(
-            f"{tail.identity}:{rendered[0][0]}:{rendered[-1][0]}".encode()
-        ).hexdigest()
+        reference = (
+            "sha256:"
+            + hashlib.sha256(
+                f"{tail.identity}:{rendered[0][0]}:{rendered[-1][0]}".encode()
+            ).hexdigest()
+        )
         pointer = LogPointer(provider="file", reference=reference)
         timestamp_range = TimestampRange(
             from_ts=min(timestamps) if timestamps else None,
@@ -195,15 +177,13 @@ class FileLogProvider:
             sensitivity=EvidenceSensitivity.TECHNICAL,
             fingerprint=excerpt_fingerprint,
         )
-        return [
+        return self._tracebacks.index(
             LogEvidence(
                 provider="file",
                 timestamp_range=timestamp_range,
                 excerpt=excerpt,
                 correlation=(
-                    LogCorrelation.DIRECT
-                    if request.terms
-                    else LogCorrelation.TEMPORAL_INFERENCE
+                    LogCorrelation.DIRECT if request.terms else LogCorrelation.TEMPORAL_INFERENCE
                 ),
                 pointer=pointer,
                 truncated=bool(reasons),
@@ -214,7 +194,7 @@ class FileLogProvider:
                 byte_count=len(excerpt.encode()),
                 evidence=evidence,
             )
-        ]
+        )
 
     def _read_tail(self) -> _TailRead:
         flags = os.O_RDONLY
@@ -246,56 +226,6 @@ class FileLogProvider:
             raise LogProviderError("log_read_error") from None
         finally:
             os.close(descriptor)
-
-
-def _parse_lines(raw_lines: list[str], default_timezone: tzinfo) -> list[_LogLine]:
-    result: list[_LogLine] = []
-    current: datetime | None = None
-    for text in raw_lines:
-        parsed, invalid = _parse_timestamp(text, default_timezone)
-        if parsed is not None:
-            current = parsed
-        result.append(_LogLine(text=text, timestamp=parsed or current, timestamp_invalid=invalid))
-    return result
-
-
-def _parse_timestamp(text: str, default_timezone: tzinfo) -> tuple[datetime | None, bool]:
-    match = _TIMESTAMP.match(text)
-    if match is None:
-        return None, bool(_DATE_LIKE.match(text))
-    value = match.group("value").replace(",", ".")
-    if value.endswith("Z"):
-        value = value[:-1] + "+00:00"
-    if re.search(r"[+-]\d{4}$", value):
-        value = value[:-5] + value[-5:-2] + ":" + value[-2:]
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return None, True
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=default_timezone)
-    return parsed.astimezone(UTC), False
-
-
-def _in_window(timestamp: datetime | None, request: LogSearchRequest) -> bool:
-    if request.from_ts is None and request.to_ts is None:
-        return True
-    if timestamp is None:
-        return False
-    if request.from_ts is not None and timestamp < request.from_ts.astimezone(UTC):
-        return False
-    return not (
-        request.to_ts is not None and timestamp > request.to_ts.astimezone(UTC)
-    )
-
-
-def _context_indexes(matches: list[int], line_count: int, *, context: int) -> list[int]:
-    selected: set[int] = set()
-    for index in matches:
-        selected.update(
-            range(max(0, index - context), min(line_count, index + context + 1))
-        )
-    return sorted(selected)
 
 
 def _evidence_uuid(reference: str) -> UUID:

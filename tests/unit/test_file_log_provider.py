@@ -197,3 +197,20 @@ def test_shared_secret_and_url_credentials_are_redacted(file_log: Path) -> None:
     assert "password123" not in result.excerpt
     assert "shared-secret-fixture-123" not in result.excerpt
     assert "<redacted>" in result.excerpt
+
+
+def test_file_traceback_fingerprint_can_be_read_only_after_search(file_log: Path) -> None:
+    provider = _provider(file_log)
+    result = _search(
+        provider,
+        LogSearchRequest(terms=["action_confirm"], max_lines=10, max_bytes=2048),
+    )[0]
+
+    assert result.traceback_fingerprint is not None
+    reread = asyncio.run(
+        provider.read_traceback(result.traceback_fingerprint, max_bytes=2048)
+    )
+    assert reread is not None
+    assert "super-secret-value" not in reread.excerpt
+    with pytest.raises(LogProviderError, match="traceback_reference_invalid"):
+        asyncio.run(provider.read_traceback("not-a-fingerprint", max_bytes=2048))
