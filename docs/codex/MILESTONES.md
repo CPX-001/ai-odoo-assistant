@@ -2,7 +2,7 @@
 
 Este roadmap resume el Source of Truth. No autoriza por sí mismo la implementación de ningún milestone.
 
-Estado actual: **M0, M1, M2, M3 y M4 completados; gates PASS.** Los task packets de M5 — QUERY + HOW_TO + RAG están preparados y M5 es el siguiente milestone; su implementación todavía no se ha iniciado.
+Estado actual: **M0, M1, M2, M3 y M4 completados; gates PASS. M5 en curso: M5-01 y M5-02 verificadas; M5-03 es la siguiente task.**
 
 | Milestone | Objetivo observable |
 | --- | --- |

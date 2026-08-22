@@ -100,6 +100,16 @@ def test_addon_payload_matches_the_public_transport_contract() -> None:
     assert claims.scopes == ["fields_get", "read_records"]
 
 
+def test_navigation_scope_is_explicit_and_transport_compatible() -> None:
+    payload = _payload(scopes=("navigation",))
+    token = _codec().encode(payload)
+    claims = TransportDelegationClaims.model_validate_json(
+        json.dumps(_codec().decode(token).to_mapping(), sort_keys=True)
+    )
+
+    assert claims.scopes == ["navigation"]
+
+
 def test_modified_token_and_wrong_signing_key_are_rejected() -> None:
     token = _codec().encode(_payload())
     replacement = "A" if token[-1] != "A" else "B"

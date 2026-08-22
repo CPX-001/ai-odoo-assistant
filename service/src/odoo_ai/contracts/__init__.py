@@ -59,6 +59,14 @@ from odoo_ai.contracts.logs import (
     LogSearchRequest,
     TimestampRange,
 )
+from odoo_ai.contracts.navigation import (
+    NavigationActionSummary,
+    NavigationActionType,
+    NavigationLimits,
+    NavigationNode,
+    NavigationSnapshot,
+    NavigationViewMode,
+)
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.schema import PUBLIC_CONTRACT_MODELS, export_public_json_schemas
 from odoo_ai.contracts.screen_context import ScreenContext
@@ -124,6 +132,12 @@ __all__ = [
     "ManifestMetadata",
     "ManifestStatus",
     "ModelExtensionGroup",
+    "NavigationActionSummary",
+    "NavigationActionType",
+    "NavigationLimits",
+    "NavigationNode",
+    "NavigationSnapshot",
+    "NavigationViewMode",
     "OdooGatewayReference",
     "ProposedAction",
     "PUBLIC_CONTRACT_MODELS",

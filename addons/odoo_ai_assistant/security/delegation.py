@@ -32,9 +32,9 @@ MAX_DELEGATED_FIELDS: Final = 64
 MAX_TOKEN_BYTES: Final = 4096
 MAX_CLOCK_SKEW_SECONDS: Final = 5
 MIN_SECRET_BYTES: Final = 43
-ALLOWED_SCOPES: Final = frozenset({"fields_get", "read_records"})
+ALLOWED_SCOPES: Final = frozenset({"fields_get", "navigation", "read_records"})
 
-DelegationScope = Literal["fields_get", "read_records"]
+DelegationScope = Literal["fields_get", "navigation", "read_records"]
 JsonValue = str | int | list["JsonValue"] | dict[str, "JsonValue"] | None
 
 _JTI_PATTERN = re.compile(r"^[A-Za-z0-9_-]{22,64}$")

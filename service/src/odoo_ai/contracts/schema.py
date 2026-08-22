@@ -27,6 +27,12 @@ from odoo_ai.contracts.effective_schema import (
 from odoo_ai.contracts.evidence import Evidence
 from odoo_ai.contracts.explain import ExplainTurnRequest, ExplainTurnResponse
 from odoo_ai.contracts.logs import LogEvidence, LogSearchRequest, TimestampRange
+from odoo_ai.contracts.navigation import (
+    NavigationActionSummary,
+    NavigationLimits,
+    NavigationNode,
+    NavigationSnapshot,
+)
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.screen_context import ScreenContext
 from odoo_ai.contracts.source import (
@@ -59,6 +65,10 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     LogEvidence,
     LogSearchRequest,
     ManifestMetadata,
+    NavigationActionSummary,
+    NavigationLimits,
+    NavigationNode,
+    NavigationSnapshot,
     OdooGatewayReference,
     ProposedAction,
     RecordRef,

@@ -2,7 +2,13 @@
 
 from typing import Protocol
 
-from odoo_ai.contracts import Evidence, InstanceInventory, RecordRef, RecordSnapshot
+from odoo_ai.contracts import (
+    Evidence,
+    InstanceInventory,
+    NavigationSnapshot,
+    RecordRef,
+    RecordSnapshot,
+)
 
 
 class OdooGateway(Protocol):
@@ -15,6 +21,8 @@ class OdooGateway(Protocol):
     ) -> list[RecordSnapshot]: ...
 
     async def get_model_metadata(self, model: str) -> Evidence: ...
+
+    async def get_navigation(self) -> NavigationSnapshot: ...
 
 
 class OdooInstanceGateway(Protocol):

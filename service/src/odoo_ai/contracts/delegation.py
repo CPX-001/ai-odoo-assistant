@@ -31,9 +31,10 @@ PositiveId = Annotated[int, Field(strict=True, gt=0)]
 
 
 class DelegationScope(StrEnum):
-    """The complete read-only tool authority available during M2."""
+    """Explicit read-only tool authority that may be signed for one turn."""
 
     FIELDS_GET = "fields_get"
+    NAVIGATION = "navigation"
     READ_RECORDS = "read_records"
 
 

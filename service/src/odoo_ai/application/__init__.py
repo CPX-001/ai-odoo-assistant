@@ -13,6 +13,11 @@ from odoo_ai.application.effective_schema import (
     EffectiveSchemaService,
 )
 from odoo_ai.application.explain import ExplainService, ExplainTurnError
+from odoo_ai.application.navigation import (
+    NavigationResult,
+    NavigationService,
+    NavigationServiceError,
+)
 
 __all__ = [
     "ContextReadError",
@@ -25,5 +30,8 @@ __all__ = [
     "EffectiveSchemaService",
     "ExplainService",
     "ExplainTurnError",
+    "NavigationResult",
+    "NavigationService",
+    "NavigationServiceError",
     "TraceEventData",
 ]

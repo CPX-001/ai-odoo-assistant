@@ -30,6 +30,7 @@ from odoo_ai.contracts import (
     EvidenceSensitivity,
     EvidenceStatus,
     InstanceInventory,
+    NavigationSnapshot,
     RecordRef,
     RecordSnapshot,
 )
@@ -40,6 +41,7 @@ DELEGATION_HEADER: Final = "X-Odoo-AI-Delegation"
 METADATA_ROUTE: Final = "/odoo_ai/internal/v1/model-metadata"
 READ_ROUTE: Final = "/odoo_ai/internal/v1/read-records"
 INVENTORY_ROUTE: Final = "/odoo_ai/internal/v1/instance-inventory"
+NAVIGATION_ROUTE: Final = "/odoo_ai/internal/v1/navigation"
 DEFAULT_TIMEOUT_SECONDS: Final = 2.0
 MAX_REQUEST_BYTES: Final = 32 * 1024
 MAX_RESPONSE_BYTES: Final = 128 * 1024
@@ -347,6 +349,25 @@ class HttpOdooGateway:
             for record_id in record_ids
         ]
 
+    async def get_navigation(self) -> NavigationSnapshot:
+        raw = await asyncio.to_thread(
+            self._post_json,
+            NAVIGATION_ROUTE,
+            {"turn_id": str(self._turn_id)},
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            response = _NavigationResponse.model_validate_json(raw)
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+        return NavigationSnapshot(
+            captured_at=response.captured_at,
+            nodes=response.nodes,
+            limits=response.limits,
+            truncated=response.truncated,
+            content_trust=response.content_trust,
+        )
+
     def _post_json(self, route: str, payload: dict[str, object]) -> bytes:
         try:
             body = json.dumps(
@@ -469,6 +490,12 @@ class _ReadResponse(BaseModel):
     model: str = Field(min_length=1, max_length=128)
     ok: Literal[True]
     records: list[_RecordResponse] = Field(min_length=1, max_length=MAX_RECORDS)
+
+
+class _NavigationResponse(NavigationSnapshot):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
 
 
 def _validate_base_url(value: object) -> tuple[str, str, int, str]:

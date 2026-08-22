@@ -24,6 +24,7 @@ from odoo_ai.adapters.odoo_http import (
     INVENTORY_ROUTE,
     MAX_RESPONSE_BYTES,
     METADATA_ROUTE,
+    NAVIGATION_ROUTE,
     ODOO_BASE_URL_ENV,
     READ_ROUTE,
 )
@@ -202,6 +203,46 @@ def test_machine_only_instance_inventory_is_bounded_and_validated() -> None:
     assert inventory.installed_modules == ("base", "sale")
     assert inventory.addons_roots == ("/srv/customer/addons",)
     assert MACHINE_SECRET not in repr(gateway)
+
+
+def test_navigation_maps_only_bounded_visible_metadata() -> None:
+    def responder(request: CapturedRequest) -> ResponseSpec:
+        assert request.path == NAVIGATION_ROUTE
+        assert json.loads(request.body) == {"turn_id": str(TURN_ID)}
+        assert request.headers[DELEGATION_HEADER] == DELEGATION_TOKEN
+        assert request.headers[SHARED_SECRET_HEADER] == MACHINE_SECRET
+        return _json_response(
+            {
+                "captured_at": "2026-08-22T10:30:00Z",
+                "content_trust": "untrusted",
+                "limits": {"max_bytes": 131072, "max_depth": 8, "max_nodes": 256},
+                "nodes": [
+                    {
+                        "action": {
+                            "action_type": "ir.actions.act_window",
+                            "target_model": "sale.order",
+                            "view_modes": ["list", "form"],
+                        },
+                        "label": "Orders",
+                        "menu_id": 42,
+                        "parent_id": None,
+                        "path": ["Orders"],
+                        "sequence": 10,
+                    }
+                ],
+                "ok": True,
+                "truncated": False,
+            }
+        )
+
+    with fake_odoo_server(responder) as server:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        navigation = asyncio.run(_gateway(base_url).get_navigation())
+
+    assert navigation.nodes[0].menu_id == 42
+    assert navigation.nodes[0].action is not None
+    assert navigation.nodes[0].action.target_model == "sale.order"
+    assert navigation.content_trust == "untrusted"
 
 
 def test_valid_read_maps_exact_records_and_sends_both_server_credentials() -> None:

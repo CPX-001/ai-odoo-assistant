@@ -15,6 +15,13 @@ from odoo.exceptions import AccessError, MissingError, ValidationError
 from odoo.modules.registry import Registry
 
 from ..security import DelegationCodec, DelegationPayload, DelegationTokenError
+from .navigation import (
+    MAX_NAVIGATION_BYTES,
+    MAX_NAVIGATION_DEPTH,
+    MAX_NAVIGATION_NODES,
+    NavigationMetadataError,
+    collect_visible_navigation,
+)
 
 MAX_REQUEST_RECORDS: Final = 8
 MAX_REQUEST_FIELDS: Final = 64
@@ -86,7 +93,7 @@ class ReplayGuard(Protocol):
 
 
 class DelegatedOrmToolExecutor:
-    """Validate delegation and execute only the two M2 read capabilities."""
+    """Validate delegation and execute only explicit bounded Odoo read capabilities."""
 
     def __init__(
         self,
@@ -95,11 +102,43 @@ class DelegatedOrmToolExecutor:
         environment_provider: EnvironmentProvider | None = None,
         replay_guard: ReplayGuard | None = None,
         observed_at: Callable[[], datetime] | None = None,
+        navigation_max_depth: int = MAX_NAVIGATION_DEPTH,
+        navigation_max_nodes: int = MAX_NAVIGATION_NODES,
+        navigation_max_bytes: int = MAX_NAVIGATION_BYTES,
     ) -> None:
         self._codec = codec
         self._environment_provider = environment_provider or _runtime_environment
         self._replay_guard = replay_guard or _runtime_replay_guard
         self._observed_at = observed_at or _utc_now
+        self._navigation_max_depth = navigation_max_depth
+        self._navigation_max_nodes = navigation_max_nodes
+        self._navigation_max_bytes = navigation_max_bytes
+
+    def get_navigation(
+        self,
+        *,
+        delegation_token: str,
+        turn_id: object,
+    ) -> dict[str, JsonValue]:
+        parsed_turn = _turn_id(turn_id)
+        claims = self._authorize(
+            delegation_token,
+            turn_id=parsed_turn,
+            scope="navigation",
+            model=None,
+        )
+        self._replay_guard(claims, "navigation")
+        try:
+            with self._environment_provider(claims) as env:
+                return collect_visible_navigation(
+                    env,
+                    captured_at=self._observed_at(),
+                    max_depth=self._navigation_max_depth,
+                    max_nodes=self._navigation_max_nodes,
+                    max_bytes=self._navigation_max_bytes,
+                )
+        except NavigationMetadataError as error:
+            raise OrmToolError(error.code, error.status) from None
 
     def get_model_metadata(
         self,
@@ -239,13 +278,17 @@ class DelegatedOrmToolExecutor:
         *,
         turn_id: UUID,
         scope: str,
-        model: str,
+        model: str | None,
     ) -> DelegationPayload:
         try:
             claims = self._codec.decode(token)
         except DelegationTokenError:
             raise OrmToolError("delegation_rejected", 403) from None
-        if claims.turn_id != turn_id or model != claims.model or scope not in claims.scopes:
+        if (
+            claims.turn_id != turn_id
+            or (model is not None and model != claims.model)
+            or scope not in claims.scopes
+        ):
             raise OrmToolError("scope_denied", 403)
         return claims
 

@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-**M0, M1, M2, M3 y M4 están completados; sus gates son PASS.** El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon Odoo, el bootstrap instalable de host, delegación/lecturas ORM bajo el usuario real, source/log evidence, Codex App Server como `ReasoningEngine`, `ToolExecutor` y el vertical slice real `EXPLAIN` con citas. Los task packets de M5 — QUERY + HOW_TO + RAG están preparados; su implementación todavía no se ha iniciado.
+**M0, M1, M2, M3 y M4 están completados; sus gates son PASS. M5 está en curso: M5-01 y M5-02 están implementadas y verificadas; M5-03 es la siguiente task.** El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon Odoo, el bootstrap instalable de host, delegación/lecturas ORM bajo el usuario real, source/log evidence, Codex App Server como `ReasoningEngine`, `ToolExecutor`, el vertical slice real `EXPLAIN` con citas, schemas efectivos runtime y metadata de navegación visible.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 
@@ -116,7 +116,7 @@ La configuración y los logs no deben contener credenciales reales. La creación
 
 ## Estado administrativo
 
-`GET /v1/admin/status` comprueba el runtime y las capabilities del Assistant mediante el shared secret server-side. Tras M4, con DB/migraciones, source, logs y reasoning realmente operativos, el estado puede llegar a `FULLY_READY`; si Codex no está disponible, el servicio degrada a `DEGRADED` sin detener Odoo y expone únicamente un error sanitizado. Las capabilities nuevas de M5 todavía no están implementadas.
+`GET /v1/admin/status` comprueba el runtime y las capabilities del Assistant mediante el shared secret server-side. Tras M4, con DB/migraciones, source, logs y reasoning realmente operativos, el estado puede llegar a `FULLY_READY`; si Codex no está disponible, el servicio degrada a `DEGRADED` sin detener Odoo y expone únicamente un error sanitizado. M5 ya dispone de schema efectivo runtime y navegación visible acotada; QUERY, RAG y HOW_TO siguen pendientes de los siguientes task packets.
 
 ## Bootstrap del host
 

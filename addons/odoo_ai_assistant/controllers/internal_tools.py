@@ -23,6 +23,7 @@ MAX_REQUEST_BYTES: Final = 32 * 1024
 METADATA_ROUTE: Final = "/odoo_ai/internal/v1/model-metadata"
 READ_ROUTE: Final = "/odoo_ai/internal/v1/read-records"
 INVENTORY_ROUTE: Final = "/odoo_ai/internal/v1/instance-inventory"
+NAVIGATION_ROUTE: Final = "/odoo_ai/internal/v1/navigation"
 
 
 class InternalOdooToolsController(http.Controller):
@@ -47,6 +48,17 @@ class InternalOdooToolsController(http.Controller):
     )
     def read_records(self):
         return self._dispatch("read")
+
+    @http.route(
+        NAVIGATION_ROUTE,
+        type="http",
+        auth="none",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    def navigation(self):
+        return self._dispatch("navigation")
 
     @http.route(
         INVENTORY_ROUTE,
@@ -80,6 +92,12 @@ class InternalOdooToolsController(http.Controller):
                     delegation_token=token,
                     turn_id=payload["turn_id"],
                     model=payload["model"],
+                )
+            elif operation == "navigation":
+                _require_keys(payload, {"turn_id"})
+                result = executor.get_navigation(
+                    delegation_token=token,
+                    turn_id=payload["turn_id"],
                 )
             elif operation == "read":
                 _require_keys(payload, {"fields", "ids", "model", "turn_id"})
