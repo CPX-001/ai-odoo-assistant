@@ -193,8 +193,24 @@ def test_query_authority_is_runtime_field_bounded_and_separate_from_m2() -> None
     assert claims.policy_revision == "m5-query-read-v1"
     assert claims.max_records == 50
     assert claims.max_fields == 3
+    assert claims.expires_at - claims.issued_at == 120
     with pytest.raises(delegation.DelegationTokenError):
         _codec().decode(prepared.delegation_token)
+
+
+def test_query_turn_accepts_model_only_list_context() -> None:
+    prepared = _query_preparer().prepare(
+        env=QueryFakeEnv(),
+        screen_payload=_screen(
+            res_id=None,
+            selected_ids=[],
+            allowed_context_subset={"active_model": "sale.order"},
+        ),
+        message="Count orders",
+    )
+
+    assert prepared.screen.model == "sale.order"
+    assert prepared.screen.res_id is None
 
 
 def test_browser_identity_is_rejected_and_never_changes_the_delegation() -> None:

@@ -7,7 +7,7 @@ from unittest.mock import patch
 from odoo import Command
 from odoo.tests import TransactionCase, tagged
 
-from ..security import DelegationCodec
+from ..security import DelegationCodec, QueryDelegationCodec
 from ..services import AssistantServiceError, prepare_context_turn
 
 SECRET = b"m2-bridge-delegation-secret-" + b"s" * 48
@@ -77,6 +77,32 @@ class FakeContextReadClient:
             "status": "ok",
             "turn_id": payload["turn_id"],
             "workflow": "EXPLAIN",
+        }
+
+    def query(self, payload):
+        self.payload = payload
+        screen = payload["screen"]
+        return {
+            "answer_markdown": "Hay dos registros visibles.",
+            "citations": [
+                {
+                    "captured_at": datetime.now(UTC).isoformat(),
+                    "empty": False,
+                    "evidence_id": "33333333-3333-4333-8333-333333333333",
+                    "kind": "query",
+                    "limit": 20,
+                    "model": screen["model"],
+                    "operation": "query_records",
+                    "returned_count": 2,
+                    "truncated": False,
+                }
+            ],
+            "completed_at": datetime.now(UTC).isoformat(),
+            "confidence": "high",
+            "limitations": [],
+            "status": "ok",
+            "turn_id": payload["turn_id"],
+            "workflow": "QUERY",
         }
 
 
@@ -234,3 +260,33 @@ class TestAssistantBridge(TransactionCase):
             result,
             {"error": {"code": "invalid_response"}, "ok": False},
         )
+
+    def test_query_uses_q1_and_returns_no_rows_or_authority(self):
+        client = FakeContextReadClient()
+        user_env = self.env(
+            user=self.user.id,
+            su=False,
+            context={
+                **self.env.context,
+                "allowed_company_ids": [self.env.company.id],
+                "lang": "en_US",
+            },
+        )
+        bridge = user_env["odoo.ai.assistant.bridge"]
+        with (
+            patch.dict(
+                os.environ,
+                {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
+            ),
+            patch.object(type(bridge), "_client", return_value=client),
+        ):
+            result = bridge.submit_query("¿Cuántos?", self._screen())
+
+        claims = QueryDelegationCodec(SECRET).decode(client.payload["delegation_token"])
+        self.assertEqual(claims.uid, self.user.id)
+        self.assertEqual(claims.model, "res.partner")
+        self.assertTrue(result.get("ok"), result)
+        self.assertEqual(result["citations"][0]["kind"], "query")
+        self.assertNotIn("records", result)
+        self.assertNotIn("groups", result)
+        self.assertNotIn(client.payload["delegation_token"], repr(result))

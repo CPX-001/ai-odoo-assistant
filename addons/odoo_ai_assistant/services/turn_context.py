@@ -22,10 +22,12 @@ from .screen_context import (
     MAX_ODOO_ID,
     ValidatedScreenContext,
     validate_context_read_screen,
+    validate_query_screen,
 )
 
 DELEGATION_SECRET_FILE_ENV: Final = "ODOO_AI_DELEGATION_SECRET_FILE"
 DELEGATION_TTL_SECONDS: Final = 60
+QUERY_DELEGATION_TTL_SECONDS: Final = 120
 MAX_ACTIVE_COMPANIES: Final = 16
 MAX_MESSAGE_LENGTH: Final = 4_000
 DELEGATED_MAX_FIELDS: Final = 32
@@ -254,7 +256,7 @@ class QueryTurnContextPreparer:
         now = self._clock()
         if type(now) is not int:
             raise TurnContextError("clock_unavailable")
-        screen = validate_context_read_screen(
+        screen = validate_query_screen(
             screen_payload,
             clock=lambda: datetime.fromtimestamp(now, UTC),
         )
@@ -281,7 +283,7 @@ class QueryTurnContextPreparer:
                 allowed_fields=allowed_fields,
                 scopes=("query_schema", "query_records", "aggregate_records"),
                 issued_at=now,
-                expires_at=now + DELEGATION_TTL_SECONDS,
+                expires_at=now + QUERY_DELEGATION_TTL_SECONDS,
                 max_records=QUERY_MAX_RECORDS,
                 max_fields=min(QUERY_MAX_FIELDS, len(allowed_fields)),
                 max_conditions=QUERY_MAX_CONDITIONS,

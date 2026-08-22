@@ -131,7 +131,11 @@ class TestContextTurnPreparation(TransactionCase):
             codec=self._query_codec(), clock=lambda: NOW
         ).prepare(
             env=self._user_env(),
-            screen_payload=self._screen(),
+            screen_payload=self._screen(
+                res_id=None,
+                selected_ids=[],
+                allowed_context_subset={"active_model": "res.partner"},
+            ),
             message="Count visible contacts",
         )
         claims = self._query_codec().decode(prepared.delegation_token)
@@ -145,5 +149,6 @@ class TestContextTurnPreparation(TransactionCase):
             claims.scopes,
             ("query_schema", "query_records", "aggregate_records"),
         )
+        self.assertEqual(claims.expires_at - claims.issued_at, 120)
         with self.assertRaises(DelegationTokenError):
             self._codec().decode(prepared.delegation_token)

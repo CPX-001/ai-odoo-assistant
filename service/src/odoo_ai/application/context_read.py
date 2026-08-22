@@ -307,12 +307,29 @@ class ContextReadService:
 def validate_context_turn_request(request: ContextReadTurnRequest, *, now: datetime) -> None:
     """Apply the single M2/M4 screen and effective-user validation policy."""
 
+    _validate_turn_request(request, now=now, require_record=True)
+
+
+def validate_query_turn_request(request: ContextReadTurnRequest, *, now: datetime) -> None:
+    """Apply the shared screen/user policy while allowing model-only list context."""
+
+    _validate_turn_request(request, now=now, require_record=False)
+
+
+def _validate_turn_request(
+    request: ContextReadTurnRequest,
+    *,
+    now: datetime,
+    require_record: bool,
+) -> None:
     screen = request.screen
-    if not screen.model or screen.res_id is None:
+    if not screen.model or (require_record and screen.res_id is None):
         raise ContextReadError("record_context_required", 422)
     if not _valid_model(screen.model):
         raise ContextReadError("invalid_screen", 422)
-    if type(screen.res_id) is not int or not 1 <= screen.res_id <= MAX_ODOO_ID:
+    if screen.res_id is not None and (
+        type(screen.res_id) is not int or not 1 <= screen.res_id <= MAX_ODOO_ID
+    ):
         raise ContextReadError("invalid_screen", 422)
     for value in (screen.action_id, screen.menu_id):
         if value is not None and (

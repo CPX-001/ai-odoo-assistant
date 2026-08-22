@@ -62,7 +62,7 @@ class ValidatedScreenContext:
     menu_id: int | None
     view_type: str | None
     model: str
-    res_id: int
+    res_id: int | None
     selected_ids: tuple[int, ...]
     allowed_context_subset: dict[str, ContextHint]
     captured_at: datetime
@@ -87,6 +87,25 @@ def validate_context_read_screen(
 ) -> ValidatedScreenContext:
     """Validate the single-current-record ScreenContext supported in M2."""
 
+    return _validate_screen(payload, clock=clock, require_record=True)
+
+
+def validate_query_screen(
+    payload: Mapping[str, object],
+    *,
+    clock: Callable[[], datetime] | None = None,
+) -> ValidatedScreenContext:
+    """Validate model-scoped QUERY context; a current record is optional."""
+
+    return _validate_screen(payload, clock=clock, require_record=False)
+
+
+def _validate_screen(
+    payload: Mapping[str, object],
+    *,
+    clock: Callable[[], datetime] | None,
+    require_record: bool,
+) -> ValidatedScreenContext:
     if not isinstance(payload, Mapping):
         raise ScreenContextValidationError("invalid_screen")
     unexpected = set(payload) - SCREEN_KEYS
@@ -95,7 +114,11 @@ def validate_context_read_screen(
         raise ScreenContextValidationError(code)
 
     model = _model_name(payload.get("model"))
-    res_id = _positive_id(payload.get("res_id"))
+    res_id = (
+        _positive_id(payload.get("res_id"))
+        if require_record
+        else _optional_positive_id(payload.get("res_id"))
+    )
     selected_ids = _positive_id_list(
         payload.get("selected_ids", []), maximum=MAX_SELECTED_IDS
     )
@@ -179,7 +202,7 @@ def _captured_at(value: object) -> datetime:
 
 
 def _context_subset(
-    value: object, *, model: str, res_id: int
+    value: object, *, model: str, res_id: int | None
 ) -> dict[str, ContextHint]:
     if not isinstance(value, Mapping) or not all(
         isinstance(key, str) for key in value
@@ -197,7 +220,7 @@ def _context_subset(
         result["active_model"] = model
     if "active_id" in value:
         active_id = _positive_id(value["active_id"])
-        if active_id != res_id:
+        if res_id is None or active_id != res_id:
             raise ScreenContextValidationError("inconsistent_context_hint")
         result["active_id"] = active_id
     if "active_ids" in value:

@@ -18,10 +18,12 @@ from odoo_ai.adapters import (
     OdooGatewayError,
     OdooGatewayFactory,
     OdooGatewaySettings,
+    QueryToolExecutorFactory,
     RuntimeDiagnosticsService,
     SourceToolExecutorFactory,
     load_instance_summary,
     persist_trace_events,
+    query_tool_specs,
     source_tool_specs,
 )
 from odoo_ai.application import (
@@ -31,6 +33,8 @@ from odoo_ai.application import (
     DiagnosticsService,
     ExplainService,
     ExplainTurnError,
+    QueryService,
+    QueryTurnError,
     TraceEventData,
 )
 from odoo_ai.contracts import (
@@ -43,6 +47,8 @@ from odoo_ai.contracts import (
     LogEvidence,
     LogSearchRequest,
     LogTestDiagnostics,
+    QueryTurnRequest,
+    QueryTurnResponse,
     SourceScanDiagnostics,
     SourceStatusDiagnostics,
     SourceTestDiagnostics,
@@ -61,6 +67,7 @@ _BOUNDED_POST_PATHS: Final = frozenset(
     {
         "/v1/turns/context-read",
         "/v1/turns/explain",
+        "/v1/turns/query",
         "/v1/admin/source/rescan",
         "/v1/admin/source/test",
         "/v1/admin/logs/test",
@@ -133,6 +140,7 @@ def create_app(
     trace_writer: Callable[[UUID, tuple[TraceEventData, ...]], None] | None = None,
     diagnostics_service: DiagnosticsService | None = None,
     explain_service: ExplainService | None = None,
+    query_service: QueryService | None = None,
 ) -> FastAPI:
     """Build an isolated application instance for runtime and API tests."""
 
@@ -147,7 +155,9 @@ def create_app(
     def get_explain_service() -> ExplainService:
         if explain_service is not None:
             return explain_service
-        effective_factory = gateway_factory or OdooGatewayFactory(OdooGatewaySettings.from_env())
+        effective_factory = gateway_factory or OdooGatewayFactory(
+            OdooGatewaySettings.from_env()
+        )
         source_factory = SourceToolExecutorFactory.from_env()
         engine = CodexAppServerEngine(
             CodexRuntimeSettings.from_env(),
@@ -159,7 +169,9 @@ def create_app(
             source_tools=source_tool_specs(),
             report_loader=source_factory.take_report,
             instance_loader=instance_loader,
-            trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
+            trace_writer=(
+                persist_trace_events if trace_writer is None else trace_writer
+            ),
         )
 
     def get_diagnostics() -> DiagnosticsService:
@@ -170,6 +182,31 @@ def create_app(
             except (OSError, ValueError):
                 raise DiagnosticsError("diagnostics_unconfigured", 503) from None
         return diagnostics
+
+    def get_query_service(payload: QueryTurnRequest) -> QueryService:
+        if query_service is not None:
+            return query_service
+        effective_factory = gateway_factory or OdooGatewayFactory(OdooGatewaySettings.from_env())
+        gateway = effective_factory.for_turn(
+            turn_id=payload.turn_id,
+            delegation_token=payload.delegation_token,
+        )
+        query_factory = QueryToolExecutorFactory(
+            gateway=gateway,
+            user_id=payload.user.uid,
+            model=payload.screen.model or "",
+        )
+        engine = CodexAppServerEngine(
+            CodexRuntimeSettings.from_env(),
+            tool_executor_factory=query_factory,
+        )
+        return QueryService(
+            reasoning_engine=engine,
+            query_tools=query_tool_specs(),
+            report_loader=query_factory.take_report,
+            instance_loader=instance_loader,
+            trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
+        )
 
     @application.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:
@@ -302,6 +339,21 @@ def create_app(
         # This is an authenticated infrastructure boundary; never expose
         # configuration/provider exception details to Odoo.
         except Exception:  # noqa: BLE001
+            return _error_response("engine_unavailable", 503)
+
+    @application.post(
+        "/v1/turns/query",
+        response_model=QueryTurnResponse,
+        dependencies=[Depends(require_shared_secret)],
+    )
+    async def query_turn(
+        payload: QueryTurnRequest,
+    ) -> QueryTurnResponse | JSONResponse:
+        try:
+            return await get_query_service(payload).run(payload)
+        except QueryTurnError as error:
+            return _error_response(error.code, error.status_code)
+        except Exception:  # noqa: BLE001 - sanitize infrastructure details
             return _error_response("engine_unavailable", 503)
 
     return application

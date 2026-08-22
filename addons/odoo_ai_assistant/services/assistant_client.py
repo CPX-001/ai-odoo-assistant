@@ -103,10 +103,19 @@ class AssistantServiceClient:
 
         return self._turn_post("/v1/turns/explain", payload)
 
+    def query(self, payload: dict[str, object]) -> dict[str, Any]:
+        """Submit one bounded server-to-server M5 QUERY turn."""
+
+        return self._turn_post("/v1/turns/query", payload)
+
     def _turn_post(
         self, path: str, payload: dict[str, object]
     ) -> dict[str, Any]:
-        if path not in {"/v1/turns/context-read", "/v1/turns/explain"}:
+        if path not in {
+            "/v1/turns/context-read",
+            "/v1/turns/explain",
+            "/v1/turns/query",
+        }:
             raise AssistantServiceError("invalid_request")
 
         secret = self._read_shared_secret()
@@ -223,6 +232,7 @@ class AssistantServiceClient:
                 "engine_timeout",
                 "engine_unavailable",
                 "evidence_unavailable",
+                "query_budget_exceeded",
             }:
                 raise AssistantServiceError(error_code)
             raise AssistantServiceError("service_unavailable")

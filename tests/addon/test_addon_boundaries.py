@@ -33,6 +33,7 @@ def test_browser_assets_use_only_the_authenticated_odoo_bridge() -> None:
     assert 'request.env["odoo.ai.assistant.bridge"]' in browser_controller
     assert "/odoo_ai/v1/context-read" in browser_controller
     assert "/odoo_ai/v1/explain" in browser_controller
+    assert "/odoo_ai/v1/query" in browser_controller
     assert '"uid"' not in browser_controller
 
 
@@ -75,6 +76,7 @@ def test_browser_bridge_derives_server_context_and_returns_a_sanitized_shape() -
     bridge = (ADDON_ROOT / "models/assistant_bridge.py").read_text(encoding="utf-8")
 
     assert "prepare_context_turn(" in bridge
+    assert "prepare_query_turn(" in bridge
     assert "env=self.env" in bridge
     assert "prepared.to_assistant_payload()" in bridge
     assert "prepared.delegation_token" in bridge

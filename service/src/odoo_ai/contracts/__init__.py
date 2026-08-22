@@ -86,6 +86,11 @@ from odoo_ai.contracts.query import (
     QuerySort,
     QuerySortDirection,
 )
+from odoo_ai.contracts.query_turn import (
+    QueryCitation,
+    QueryTurnRequest,
+    QueryTurnResponse,
+)
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.schema import PUBLIC_CONTRACT_MODELS, export_public_json_schemas
 from odoo_ai.contracts.screen_context import ScreenContext
@@ -164,6 +169,7 @@ __all__ = [
     "OdooGatewayReference",
     "ProposedAction",
     "QueryAggregateOperation",
+    "QueryCitation",
     "QueryCondition",
     "QueryDelegationClaims",
     "QueryDelegationScope",
@@ -176,6 +182,8 @@ __all__ = [
     "QueryRecordsResult",
     "QuerySort",
     "QuerySortDirection",
+    "QueryTurnRequest",
+    "QueryTurnResponse",
     "PUBLIC_CONTRACT_MODELS",
     "RecordRef",
     "RecordCitation",

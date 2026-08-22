@@ -78,3 +78,68 @@ purpose criptográfico distinto y ligada a:
 Cada scope se consume una vez mediante el ledger de replay. Un token `v1` no se
 puede decodificar como `q1`, ni al contrario; por tanto M5 no amplía
 implícitamente ninguna autoridad emitida para M2.
+
+## Dynamic tools y workflow (M5-04)
+
+El registry QUERY por turno contiene exactamente:
+
+- `odoo.get_effective_schema` (`GetEffectiveSchemaRequest`): recibe sólo el
+  modelo actual y devuelve `effective_schema`, `evidence_id` y estado.
+- `odoo.query_records` (`QueryRecordsRequest`): recibe la AST de búsqueda
+  documentada arriba y devuelve el resultado normalizado más su Evidence.
+- `odoo.aggregate_records` (`AggregateRecordsRequest`): recibe la AST de
+  agregación y devuelve grupos/métricas normalizados más su Evidence.
+
+Los tres schemas Pydantic usan `extra="forbid"`. El host compara cada `ToolSpec`
+con el catálogo canónico, vincula el backend a `uid` y modelo del turno, y aplica
+los budgets agregados de `ToolExecutor`. QUERY no registra source tools, shell,
+filesystem, red, apps ni tools genéricas.
+
+Ejemplo abreviado de Evidence de records:
+
+```json
+{
+  "kind": "record",
+  "status": "checked",
+  "pointer": {
+    "provider": "odoo_query",
+    "operation": "query_records",
+    "model": "sale.order",
+    "schema_id": "sha256:..."
+  },
+  "payload": {
+    "returned_count": 2,
+    "limit": 20,
+    "truncated": false,
+    "records": ["...bounded normalized rows..."]
+  }
+}
+```
+
+Ejemplo abreviado de aggregate vacío comprobado:
+
+```json
+{
+  "kind": "record",
+  "status": "checked",
+  "pointer": {
+    "provider": "odoo_query",
+    "operation": "aggregate_records",
+    "model": "sale.order",
+    "schema_id": "sha256:..."
+  },
+  "payload": {
+    "groups": [{"group": {}, "metrics": [{"operation": "count", "value": 0}]}],
+    "returned_group_count": 1,
+    "group_limit": 20,
+    "truncated": false
+  }
+}
+```
+
+`QueryService` exige workflow `QUERY`, ausencia de `proposed_action`, Evidence
+`checked` perteneciente al ledger y una cita QUERY renderizable. Si el resultado
+está truncado, el `AnswerEnvelope` debe declarar esa limitación. Odoo devuelve al
+browser sólo respuesta, confianza, limitaciones y pointers de cita; nunca filas,
+tokens ni transcripts de tools. La ruta de producto es browser → Odoo
+`/odoo_ai/v1/query` → Assistant `/v1/turns/query` → endpoints ORM internos.

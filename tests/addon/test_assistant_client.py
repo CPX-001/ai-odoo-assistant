@@ -10,7 +10,10 @@ import pytest
 
 
 def _load_client_module() -> ModuleType:
-    path = Path(__file__).parents[2] / "addons/odoo_ai_assistant/services/assistant_client.py"
+    path = (
+        Path(__file__).parents[2]
+        / "addons/odoo_ai_assistant/services/assistant_client.py"
+    )
     spec = importlib.util.spec_from_file_location("odoo_ai_test_assistant_client", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -65,6 +68,8 @@ class AssistantHandler(BaseHTTPRequestHandler):
             self._json(200, b'{"ok":true,"turn_id":"example"}')
         elif self.path == "/v1/turns/explain":
             self._json(200, b'{"ok":true,"turn_id":"explain-example"}')
+        elif self.path == "/v1/turns/query":
+            self._json(200, b'{"ok":true,"turn_id":"query-example"}')
         elif self.path == "/v1/admin/source/rescan":
             self._json(200, b'{"state":"DETECTED","metrics":{}}')
         elif self.path == "/v1/admin/source/test":
@@ -119,7 +124,9 @@ def test_client_rejects_non_loopback_and_sanitizes_auth_failure(
     tmp_path: Path, local_service: ThreadingHTTPServer
 ) -> None:
     with pytest.raises(AssistantServiceError) as public:
-        AssistantServiceClient(base_url="http://example.com:8000", shared_secret_file=None)
+        AssistantServiceClient(
+            base_url="http://example.com:8000", shared_secret_file=None
+        )
     assert public.value.code == "configuration_invalid"
 
     secret_file = tmp_path / "shared-secret"
@@ -211,6 +218,30 @@ def test_explain_posts_only_to_its_narrow_authenticated_route(
     assert headers["X-Odoo-AI-Shared-Secret"] == AssistantHandler.secret
 
 
+def test_query_posts_only_to_its_narrow_authenticated_route(
+    tmp_path: Path, local_service: ThreadingHTTPServer
+) -> None:
+    secret_file = tmp_path / "shared-secret"
+    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
+    secret_file.chmod(0o640)
+    client = AssistantServiceClient(
+        base_url=f"http://127.0.0.1:{local_service.server_port}",
+        shared_secret_file=str(secret_file),
+    )
+    payload = {
+        "turn_id": "12345678-1234-5678-1234-567812345678",
+        "message": "query",
+        "screen": {"model": "sale.order", "res_id": 42},
+    }
+
+    response = client.query(payload)
+
+    assert response == {"ok": True, "turn_id": "query-example"}
+    assert AssistantHandler.last_post is not None
+    assert AssistantHandler.last_post["path"] == "/v1/turns/query"
+    assert AssistantHandler.last_post["payload"] == payload
+
+
 def test_m3_admin_client_uses_only_fixed_server_side_routes(
     tmp_path: Path, local_service: ThreadingHTTPServer
 ) -> None:
@@ -229,7 +260,9 @@ def test_m3_admin_client_uses_only_fixed_server_side_routes(
     assert AssistantHandler.last_post["payload"] == {}
     assert client.source_test()["candidate"] == {}
     assert (
-        client.logs_test({"terms": ["Traceback"], "max_lines": 20, "max_bytes": 4096})["provider"]
+        client.logs_test({"terms": ["Traceback"], "max_lines": 20, "max_bytes": 4096})[
+            "provider"
+        ]
         == "file"
     )
     assert client.logs_traceback("sha256:" + "a" * 64, max_bytes=1024) == {

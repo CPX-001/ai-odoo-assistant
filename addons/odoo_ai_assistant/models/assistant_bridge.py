@@ -18,6 +18,7 @@ from ..services import (
     ScreenContextValidationError,
     TurnContextError,
     prepare_context_turn,
+    prepare_query_turn,
 )
 
 SERVICE_URL_PARAM: Final = "odoo_ai_assistant.service_url"
@@ -56,6 +57,7 @@ EXPECTED_EXPLAIN_RESPONSE_KEYS: Final = frozenset(
     }
 )
 ALLOWED_CONFIDENCE: Final = frozenset({"high", "medium", "low"})
+EXPECTED_QUERY_RESPONSE_KEYS: Final = EXPECTED_EXPLAIN_RESPONSE_KEYS
 
 
 class AssistantBridge(models.AbstractModel):
@@ -104,6 +106,31 @@ class AssistantBridge(models.AbstractModel):
             )
             response = self._client().explain(prepared.to_assistant_payload())
             return _browser_explain_response(response, prepared)
+        except ScreenContextValidationError:
+            return _error("invalid_context")
+        except TurnContextError as error:
+            return _error(_turn_error_code(error.code))
+        except AssistantServiceError as error:
+            return _error(_client_error_code(error.code))
+        except Exception:  # noqa: BLE001 - sanitize the browser RPC boundary
+            return _error("service_unavailable")
+
+    @api.model
+    def submit_query(self, message, screen):
+        """Run M5 QUERY with q1 authority retained entirely server-side."""
+
+        if not self.env.user._is_internal():
+            return _error("access_denied")
+        if not isinstance(screen, Mapping):
+            return _error("invalid_context")
+        try:
+            prepared = prepare_query_turn(
+                env=self.env,
+                screen_payload=screen,
+                message=message,
+            )
+            response = self._client().query(prepared.to_assistant_payload())
+            return _browser_query_response(response, prepared)
         except ScreenContextValidationError:
             return _error("invalid_context")
         except TurnContextError as error:
@@ -246,6 +273,85 @@ def _browser_explain_response(response, prepared):
     return result
 
 
+def _browser_query_response(response, prepared):
+    if not isinstance(response, dict) or set(response) != EXPECTED_QUERY_RESPONSE_KEYS:
+        raise AssistantServiceError("invalid_response")
+    answer = response.get("answer_markdown")
+    limitations = response.get("limitations")
+    citations = response.get("citations")
+    if (
+        response.get("status") != "ok"
+        or response.get("workflow") != "QUERY"
+        or response.get("turn_id") != str(prepared.turn_id)
+        or response.get("confidence") not in ALLOWED_CONFIDENCE
+        or not isinstance(answer, str)
+        or not 1 <= len(answer) <= 16_384
+        or not isinstance(response.get("completed_at"), str)
+        or not isinstance(limitations, list)
+        or len(limitations) > 8
+        or any(
+            not isinstance(value, str) or not 1 <= len(value) <= 1_024
+            for value in limitations
+        )
+        or not isinstance(citations, list)
+        or not 1 <= len(citations) <= 8
+    ):
+        raise AssistantServiceError("invalid_response")
+    sanitized = [_browser_query_citation(value, prepared) for value in citations]
+    evidence_ids = [value["evidence_id"] for value in sanitized]
+    if len(evidence_ids) != len(set(evidence_ids)):
+        raise AssistantServiceError("invalid_response")
+    result = {
+        "ok": True,
+        "turn_id": str(prepared.turn_id),
+        "answer": answer,
+        "confidence": response["confidence"],
+        "limitations": limitations,
+        "citations": sanitized,
+    }
+    serialized = json.dumps(
+        result,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    if prepared.delegation_token in serialized:
+        raise AssistantServiceError("invalid_response")
+    return result
+
+
+def _browser_query_citation(citation, prepared):
+    expected = {
+        "captured_at",
+        "empty",
+        "evidence_id",
+        "kind",
+        "limit",
+        "model",
+        "operation",
+        "returned_count",
+        "truncated",
+    }
+    if (
+        not isinstance(citation, dict)
+        or set(citation) != expected
+        or citation.get("kind") != "query"
+        or citation.get("model") != prepared.screen.model
+        or citation.get("operation") not in {"query_records", "aggregate_records"}
+        or not _uuid(citation.get("evidence_id"))
+        or not isinstance(citation.get("captured_at"), str)
+        or type(citation.get("returned_count")) is not int
+        or not 0 <= citation["returned_count"] <= 50
+        or type(citation.get("limit")) is not int
+        or not 1 <= citation["limit"] <= 50
+        or not isinstance(citation.get("truncated"), bool)
+        or not isinstance(citation.get("empty"), bool)
+    ):
+        raise AssistantServiceError("invalid_response")
+    return dict(citation)
+
+
 def _browser_citation(citation, prepared):
     if not isinstance(citation, dict):
         raise AssistantServiceError("invalid_response")
@@ -356,7 +462,12 @@ def _client_error_code(code: str) -> str:
         return "invalid_context"
     if code == "invalid_response":
         return "invalid_response"
-    if code in {"engine_timeout", "engine_unavailable", "evidence_unavailable"}:
+    if code in {
+        "engine_timeout",
+        "engine_unavailable",
+        "evidence_unavailable",
+        "query_budget_exceeded",
+    }:
         return code
     return "service_unavailable"
 

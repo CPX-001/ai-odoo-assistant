@@ -24,6 +24,7 @@ from odoo_ai.application.query_primitives import (
     QueryPrimitiveService,
     QueryRecordsExecution,
 )
+from odoo_ai.application.query_workflow import QueryService, QueryTurnError
 
 __all__ = [
     "ContextReadError",
@@ -43,5 +44,7 @@ __all__ = [
     "QueryPrimitiveError",
     "QueryPrimitiveService",
     "QueryRecordsExecution",
+    "QueryService",
+    "QueryTurnError",
     "TraceEventData",
 ]

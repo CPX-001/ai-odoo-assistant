@@ -47,6 +47,11 @@ from odoo_ai.contracts.query import (
     QueryRecordsResult,
     QuerySort,
 )
+from odoo_ai.contracts.query_turn import (
+    QueryCitation,
+    QueryTurnRequest,
+    QueryTurnResponse,
+)
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.screen_context import ScreenContext
 from odoo_ai.contracts.source import (
@@ -91,12 +96,15 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     ProposedAction,
     QueryDelegationClaims,
     QueryCondition,
+    QueryCitation,
     QueryFilter,
     QueryMetric,
     QueryRecord,
     QueryRecordsRequest,
     QueryRecordsResult,
     QuerySort,
+    QueryTurnRequest,
+    QueryTurnResponse,
     RecordRef,
     RecordSnapshot,
     ScreenContext,
