@@ -10,7 +10,7 @@ from typing import Any, cast
 from uuid import UUID
 
 from odoo_ai.contracts import Evidence, LogEvidence, LogPointer
-from odoo_ai.logs.common import LogProviderError, LogRedactor
+from odoo_ai.logs.common import LogProviderError, LogRedactor, strip_log_prefix
 
 _START = "Traceback (most recent call last):"
 _FRAME = re.compile(r'^\s*File "(?P<path>[^"]+)", line \d+, in (?P<function>.+)$')
@@ -50,7 +50,7 @@ def extract_tracebacks(excerpt: str) -> tuple[TracebackBlock, ...]:
         while index < len(lines):
             if index > start + 1 and _START in lines[index]:
                 break
-            candidate = _strip_log_prefix(lines[index])
+            candidate = strip_log_prefix(lines[index])
             if _EXCEPTION.match(candidate):
                 exception_index = index
                 index += 1
@@ -71,7 +71,7 @@ def traceback_fingerprint(lines: list[str]) -> str:
     exception_type = "unknown"
     message = ""
     for line in lines:
-        normalized = _strip_log_prefix(line)
+        normalized = strip_log_prefix(line)
         frame = _FRAME.match(normalized)
         if frame:
             frames.append(f"{PurePath(frame.group('path')).name}:{frame.group('function').strip()}")
@@ -152,13 +152,6 @@ class TracebackRegistry:
                 "evidence": evidence,
             }
         )
-
-
-def _strip_log_prefix(line: str) -> str:
-    marker = line.find(_START)
-    if marker >= 0:
-        return line[marker:]
-    return line.strip()
 
 
 def _normalize_message(message: str) -> str:

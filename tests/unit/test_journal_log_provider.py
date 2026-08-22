@@ -142,12 +142,18 @@ def test_subprocess_timeout_is_sanitized(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_repeated_tracebacks_are_grouped_redacted_and_read_by_fingerprint() -> None:
     output = (
         b"2026-08-22T10:00:00.000000+0000 host odoo[1]: ERROR record 42 failed\n"
+        b"2026-08-22T10:00:00.000001+0000 host odoo[1]: "
         b"Traceback (most recent call last):\n"
-        b'  File "/srv/odoo/sale.py", line 42, in action_confirm\n'
+        b'2026-08-22T10:00:00.000002+0000 host odoo[1]:   File "/srv/odoo/sale.py", '
+        b"line 42, in action_confirm\n"
+        b"2026-08-22T10:00:00.000003+0000 host odoo[1]: "
         b"ValueError: record 42 token=top-secret-token-value\n"
         b"2026-08-22T10:00:01.000000+0000 host odoo[1]: ERROR record 84 failed\n"
+        b"2026-08-22T10:00:01.000001+0000 host odoo[1]: "
         b"Traceback (most recent call last):\n"
-        b'  File "/opt/customer/sale.py", line 99, in action_confirm\n'
+        b'2026-08-22T10:00:01.000002+0000 host odoo[1]:   File "/opt/customer/sale.py", '
+        b"line 99, in action_confirm\n"
+        b"2026-08-22T10:00:01.000003+0000 host odoo[1]: "
         b"ValueError: record 84 token=another-secret-token\n"
     )
     provider = _provider(FakeRunner(JournalCommandResult(0, output, b"")))

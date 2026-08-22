@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-M0, M1 y M2 están completados; sus gates son PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico, el bootstrap instalable de host y el vertical slice contextual de lectura bajo el usuario real. M3 — Source + logs está activo: M3-01 a M3-09 están implementados; M3-10 es el siguiente task packet.
+M0, M1, M2 y M3 están completados; sus gates son PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico, el bootstrap instalable de host, el vertical slice contextual de lectura bajo el usuario real y evidencia acotada de source/logs. M4 — Codex vertical slice es el siguiente milestone y todavía no se ha iniciado.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 
@@ -116,7 +116,7 @@ La configuración y los logs no deben contener credenciales reales. La creación
 
 ## Estado administrativo
 
-`GET /v1/admin/status` comprueba el proceso, la conexión a la Assistant DB y la revisión de Alembic. Requiere el shared secret server-side y también resume el perfil/snapshot más reciente cuando existe. En M1 el resultado correcto sigue siendo `DEGRADED`, porque source, logs y reasoning engine todavía no están implementados.
+`GET /v1/admin/status` comprueba el proceso, la conexión a la Assistant DB y la revisión de Alembic. Requiere el shared secret server-side y también resume el perfil/snapshot más reciente cuando existe. Después de M3 el resultado correcto sigue siendo `DEGRADED`: source y logs pueden estar en `OK`, pero `reasoning_engine` pertenece a M4 y continúa pendiente.
 
 ## Bootstrap del host
 

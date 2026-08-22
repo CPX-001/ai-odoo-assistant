@@ -22,6 +22,10 @@ _TIMESTAMP = re.compile(
     r"(?:Z|[+-]\d{2}:?\d{2})?)"
 )
 _DATE_LIKE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+_JOURNAL_PREFIX = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?"
+    r"(?:Z|[+-]\d{2}:?\d{2})\s+\S+\s+\S+(?:\[\d+\])?:\s?"
+)
 _TRACEBACK_START = "Traceback (most recent call last):"
 _TRACEBACK_END = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception|Warning|Interrupt)(?::|$)")
 
@@ -109,6 +113,19 @@ def parse_log_timestamp(text: str, default_timezone: tzinfo) -> tuple[datetime |
     return parsed.astimezone(UTC), False
 
 
+def strip_log_prefix(text: str) -> str:
+    """Remove the fixed journal prefix while preserving ordinary file log lines."""
+
+    marker = text.find(_TRACEBACK_START)
+    if marker >= 0:
+        return text[marker:]
+    stripped = text.strip()
+    prefix = _JOURNAL_PREFIX.match(stripped)
+    if prefix is not None:
+        return stripped[prefix.end() :].strip()
+    return stripped
+
+
 def line_in_window(timestamp: datetime | None, request: LogSearchRequest) -> bool:
     if request.from_ts is None and request.to_ts is None:
         return True
@@ -139,6 +156,7 @@ def expand_traceback_indexes(
             continue
         for index in range(start, min(len(raw_lines), start + max_traceback_lines)):
             expanded.add(index)
-            if index > start and _TRACEBACK_END.match(raw_lines[index].strip()):
+            candidate = strip_log_prefix(raw_lines[index])
+            if index > start and _TRACEBACK_END.match(candidate):
                 break
     return sorted(expanded)

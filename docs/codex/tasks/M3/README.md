@@ -1,6 +1,6 @@
 # M3 — Source + logs
 
-Estado: en curso. M0, M1 y M2 están completados; **M2 GATE: PASS**. M3-01 a M3-09 están implementados y verificados; M3-10 es el siguiente task packet.
+Estado: completado. M0, M1, M2 y M3 están completados; **M3 GATE: PASS**. El siguiente milestone es M4, todavía no iniciado y con su primer task packet pendiente de definición.
 
 M3 convierte source y logs en evidencia determinista, acotada y consultable desde Diagnostics, sin introducir todavía Codex ni el agent loop. El objetivo observable del milestone es encontrar `sale.order.action_confirm` con módulo/fichero/líneas correctas y recuperar un traceback por ventana/términos desde Diagnostics.
 
