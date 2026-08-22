@@ -70,7 +70,7 @@ def test_upgrade_from_previous_revision_creates_source_index(
     assert {"scan_run", "source_file", "source_symbol", "xml_record"} <= tables
 
 
-def test_fresh_database_upgrade_reaches_source_index_head(
+def test_fresh_database_upgrade_reaches_current_head(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings = _configure_test_database(monkeypatch)
@@ -85,4 +85,4 @@ def test_fresh_database_upgrade_reaches_source_index_head(
     finally:
         engine.dispose()
 
-    assert revision == "0003_m3_02_source_index"
+    assert revision == ScriptDirectory.from_config(config).get_current_head()

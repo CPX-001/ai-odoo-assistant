@@ -1,10 +1,12 @@
 """Small SQLAlchemy repository surface for the incremental source index."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
+from pydantic import JsonValue
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
@@ -81,6 +83,7 @@ def upsert_source_file(
     kind: str,
     fingerprint: str,
     size_bytes: int,
+    provenance: str = "unknown",
 ) -> SourceFileUpsert:
     scan = session.get(ScanRun, scan_run_id)
     if scan is None or scan.status != "running":
@@ -102,6 +105,7 @@ def upsert_source_file(
             kind=kind,
             fingerprint=fingerprint,
             size_bytes=size_bytes,
+            provenance=provenance,
             is_stale=False,
         )
         session.add(source_file)
@@ -112,7 +116,10 @@ def upsert_source_file(
         source_file.kind = kind
         source_file.fingerprint = fingerprint
         source_file.size_bytes = size_bytes
+        source_file.provenance = provenance
         source_file.is_stale = False
+        if changed:
+            source_file.extracted_metadata = None
     session.flush()
     return SourceFileUpsert(file=source_file, fingerprint_changed=changed)
 
@@ -123,6 +130,7 @@ def replace_file_derivatives(
     source_file_id: UUID,
     symbols: list[SourceSymbolValues],
     xml_records: list[XmlRecordValues],
+    extracted_metadata: Mapping[str, JsonValue] | None = None,
 ) -> tuple[list[SourceSymbol], list[XmlRecord]]:
     source_file = session.get(SourceFile, source_file_id)
     if source_file is None or source_file.is_stale:
@@ -130,6 +138,9 @@ def replace_file_derivatives(
 
     session.execute(delete(SourceSymbol).where(SourceSymbol.source_file_id == source_file.id))
     session.execute(delete(XmlRecord).where(XmlRecord.source_file_id == source_file.id))
+    source_file.extracted_metadata = (
+        dict(extracted_metadata) if extracted_metadata is not None else None
+    )
 
     created_symbols = [
         SourceSymbol(

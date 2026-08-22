@@ -1,5 +1,13 @@
 """Bounded source discovery, scanning, and static extraction adapters."""
 
+from odoo_ai.source.extractors import (
+    ManifestExtractor,
+    ParserLimits,
+    ProvenanceEvidence,
+    PythonAstExtractor,
+    classify_module_provenance,
+    m3_source_extractors,
+)
 from odoo_ai.source.scanner import (
     ExtractedSymbol,
     ExtractedXmlRecord,
@@ -13,6 +21,7 @@ from odoo_ai.source.scanner import (
     RootSelection,
     ScanError,
     ScanLimits,
+    SourceExtractionError,
     SourceScanMetrics,
     SourceScanner,
     SourceScanResult,
@@ -29,7 +38,11 @@ __all__ = [
     "FileExtraction",
     "FileScanContext",
     "ModuleSource",
+    "ManifestExtractor",
     "NoopExtractor",
+    "ParserLimits",
+    "ProvenanceEvidence",
+    "PythonAstExtractor",
     "ResolvedSourceRoot",
     "RootIssue",
     "RootOrigin",
@@ -39,9 +52,12 @@ __all__ = [
     "SourceScanMetrics",
     "SourceScanResult",
     "SourceScanner",
+    "SourceExtractionError",
     "SqlAlchemySourceScanStore",
     "StoredSourceFile",
+    "classify_module_provenance",
     "locate_installed_modules",
+    "m3_source_extractors",
     "resolve_source_roots",
     "source_root_overrides_from_env",
 ]

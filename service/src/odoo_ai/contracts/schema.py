@@ -25,6 +25,7 @@ from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.screen_context import ScreenContext
 from odoo_ai.contracts.source import (
     InstanceInventory,
+    ManifestMetadata,
     ScanRun,
     SourceFile,
     SourceRef,
@@ -46,6 +47,7 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     InstanceProfileSummary,
     LogEvidence,
     LogSearchRequest,
+    ManifestMetadata,
     OdooGatewayReference,
     ProposedAction,
     RecordRef,

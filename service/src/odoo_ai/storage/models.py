@@ -150,6 +150,11 @@ class SourceFile(Base):
             "fingerprint ~ '^sha256:[0-9a-f]{64}$'",
             name="ck_source_file_fingerprint",
         ),
+        CheckConstraint(
+            "provenance IN ('official', 'oca', 'remote_known', 'manual', "
+            "'third_party_or_custom', 'unknown')",
+            name="ck_source_file_provenance",
+        ),
         UniqueConstraint(
             "instance_profile_id",
             "module",
@@ -176,6 +181,10 @@ class SourceFile(Base):
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     fingerprint: Mapped[str] = mapped_column(String(71), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    provenance: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="unknown", server_default="unknown"
+    )
+    extracted_metadata: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB)
     is_stale: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
@@ -204,6 +213,7 @@ class SourceSymbol(Base):
         UniqueConstraint(
             "source_file_id",
             "kind",
+            "model",
             "name",
             "start_line",
             "end_line",

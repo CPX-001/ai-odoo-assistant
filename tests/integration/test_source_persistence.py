@@ -8,6 +8,12 @@ from alembic.config import Config
 from sqlalchemy import Engine, inspect
 from sqlalchemy.orm import Session
 
+from odoo_ai.source import (
+    RootSelection,
+    SourceScanner,
+    SqlAlchemySourceScanStore,
+    m3_source_extractors,
+)
 from odoo_ai.storage import (
     DatabaseSettings,
     SourceSymbolValues,
@@ -90,6 +96,10 @@ def test_source_tables_constraints_and_indexes_exist(migrated_engine: Engine) ->
         "ix_source_file_fingerprint",
         "ix_source_file_instance_module",
     }
+    assert {column["name"] for column in inspector.get_columns("source_file")} >= {
+        "provenance",
+        "extracted_metadata",
+    }
     assert {
         constraint["name"]
         for constraint in inspector.get_unique_constraints("source_file")
@@ -98,6 +108,12 @@ def test_source_tables_constraints_and_indexes_exist(migrated_engine: Engine) ->
         constraint["name"]
         for constraint in inspector.get_unique_constraints("source_symbol")
     } >= {"uq_source_symbol_file_identity"}
+    symbol_identity = next(
+        constraint
+        for constraint in inspector.get_unique_constraints("source_symbol")
+        if constraint["name"] == "uq_source_symbol_file_identity"
+    )
+    assert "model" in symbol_identity["column_names"]
     assert {
         constraint["name"]
         for constraint in inspector.get_unique_constraints("xml_record")
@@ -141,11 +157,14 @@ def test_changed_fingerprint_hides_then_replaces_file_derivatives(session: Sessi
                 end_line=12,
             )
         ],
+        extracted_metadata={"parser": "python_ast"},
     )
     finish_scan(session, scan_run_id=first_scan.id, status="succeeded", fingerprint=HASH_A)
 
     assert first.fingerprint_changed is True
     assert symbols[0].fingerprint == HASH_A
+    assert first.file.extracted_metadata == {"parser": "python_ast"}
+    assert first.file.provenance == "unknown"
     assert xml_records[0].fingerprint == HASH_A
     assert len(
         find_source_symbols(
@@ -271,3 +290,56 @@ def test_scan_lifecycle_and_structured_query_limits(session: Session) -> None:
     finish_scan(session, scan_run_id=scan.id, status="failed", error_code="partial_scan")
     with pytest.raises(ValueError, match="already finished"):
         finish_scan(session, scan_run_id=scan.id, status="failed")
+
+
+def test_real_scanner_indexes_and_replaces_action_confirm(
+    session: Session, tmp_path: Path
+) -> None:
+    root = tmp_path / "nondefault" / "extensions"
+    module = root / "sale_fixture"
+    (module / "models").mkdir(parents=True)
+    (module / "__manifest__.py").write_text(
+        "{'name': 'Fixture', 'depends': ['sale']}\n", encoding="utf-8"
+    )
+    source = module / "models" / "sale_order.py"
+    source.write_text(
+        "from odoo import models\nclass SaleOrder(models.Model):\n"
+        "    _inherit = 'sale.order'\n    def action_confirm(self):\n        return True\n",
+        encoding="utf-8",
+    )
+    profile = _profile(session)
+    scanner = SourceScanner(
+        store=SqlAlchemySourceScanStore(session),
+        extractors=m3_source_extractors(),
+    )
+    arguments = {
+        "instance_profile_id": profile.id,
+        "roots": RootSelection(override=(root,)),
+        "installed_modules": ("sale_fixture",),
+    }
+
+    scanner.run(**arguments)
+    symbols = find_source_symbols(
+        session,
+        instance_profile_id=profile.id,
+        model="sale.order",
+        name="action_confirm",
+    )
+
+    assert len(symbols) == 1
+    assert (symbols[0].start_line, symbols[0].end_line) == (4, 5)
+    assert symbols[0].fingerprint.startswith("sha256:")
+
+    source.write_text(
+        "from odoo import models\nclass SaleOrder(models.Model):\n"
+        "    _inherit = 'sale.order'\n",
+        encoding="utf-8",
+    )
+    scanner.run(**arguments)
+
+    assert find_source_symbols(
+        session,
+        instance_profile_id=profile.id,
+        model="sale.order",
+        name="action_confirm",
+    ) == []

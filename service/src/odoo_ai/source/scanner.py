@@ -14,7 +14,13 @@ from pathlib import Path, PurePosixPath
 from typing import Protocol
 from uuid import UUID
 
-from odoo_ai.contracts import SourceCapabilityState, SourceFileKind
+from pydantic import JsonValue
+
+from odoo_ai.contracts import (
+    SourceCapabilityState,
+    SourceFileKind,
+    SourceProvenance,
+)
 
 SOURCE_ROOTS_ENV = "ODOO_AI_SOURCE_ROOTS"
 _MODULE_NAME = re.compile(r"^[A-Za-z0-9_]+$")
@@ -62,6 +68,7 @@ class ModuleSource:
     name: str
     root: ResolvedSourceRoot
     path: Path
+    provenance: SourceProvenance = SourceProvenance.UNKNOWN
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +99,15 @@ class ExtractedXmlRecord:
 class FileExtraction:
     symbols: tuple[ExtractedSymbol, ...] = ()
     xml_records: tuple[ExtractedXmlRecord, ...] = ()
+    metadata: dict[str, JsonValue] | None = None
+
+
+class SourceExtractionError(ValueError):
+    """Sanitized parser failure isolated to one source file."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +151,7 @@ class SourceScanStore(Protocol):
         kind: SourceFileKind,
         fingerprint: str,
         size_bytes: int,
+        provenance: SourceProvenance,
     ) -> StoredSourceFile: ...
 
     def replace_derivatives(
@@ -143,6 +160,7 @@ class SourceScanStore(Protocol):
         source_file_id: UUID,
         symbols: tuple[ExtractedSymbol, ...],
         xml_records: tuple[ExtractedXmlRecord, ...],
+        metadata: Mapping[str, JsonValue] | None,
     ) -> None: ...
 
     def mark_stale(self, *, scan_run_id: UUID, seen_file_ids: set[UUID]) -> int: ...
@@ -313,6 +331,7 @@ def locate_installed_modules(
     installed_modules: Iterable[str],
     *,
     max_modules: int,
+    provenance: Mapping[str, SourceProvenance] | None = None,
 ) -> ModuleInventory:
     names = tuple(dict.fromkeys(installed_modules))
     if len(names) > max_modules:
@@ -337,7 +356,12 @@ def locate_installed_modules(
                 manifest = resolved / "__manifest__.py"
                 if not manifest.is_file():
                     continue
-                located = ModuleSource(name=name, root=root, path=resolved)
+                located = ModuleSource(
+                    name=name,
+                    root=root,
+                    path=resolved,
+                    provenance=(provenance or {}).get(name, SourceProvenance.UNKNOWN),
+                )
                 break
             except PermissionError:
                 errors.append(ScanError("module_no_permission", module=name))
@@ -380,6 +404,7 @@ class SourceScanner:
         instance_profile_id: UUID,
         roots: RootSelection,
         installed_modules: Iterable[str],
+        provenance: Mapping[str, SourceProvenance] | None = None,
     ) -> SourceScanResult:
         resolution = resolve_source_roots(roots, probe=self._root_probe)
         root_errors = tuple(ScanError(issue.code) for issue in resolution.issues)
@@ -392,6 +417,7 @@ class SourceScanner:
             resolution.roots,
             installed_modules,
             max_modules=self._limits.max_modules,
+            provenance=provenance,
         )
         initial_errors = (*root_errors, *inventory.issues)
         if not inventory.modules:
@@ -448,6 +474,7 @@ class SourceScanner:
                         kind=kind,
                         fingerprint=digest,
                         size_bytes=len(content),
+                        provenance=module.provenance,
                     )
                     seen_ids.add(stored.file_id)
                     if not stored.fingerprint_changed:
@@ -473,8 +500,11 @@ class SourceScanner:
                             source_file_id=stored.file_id,
                             symbols=extraction.symbols,
                             xml_records=extraction.xml_records,
+                            metadata=extraction.metadata,
                         )
                         files_extracted += 1
+                    except SourceExtractionError as error:
+                        errors.append(ScanError(error.code, module.name, logical_path))
                     except Exception:  # noqa: BLE001 - isolate one extractor/file
                         errors.append(ScanError("extractor_error", module.name, logical_path))
             stale_files = self._store.mark_stale(

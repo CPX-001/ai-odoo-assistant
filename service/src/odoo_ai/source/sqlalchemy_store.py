@@ -1,10 +1,12 @@
 """SQLAlchemy-backed adapter for the source scan store port."""
 
+from collections.abc import Mapping
 from uuid import UUID
 
+from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
-from odoo_ai.contracts import SourceCapabilityState, SourceFileKind
+from odoo_ai.contracts import SourceCapabilityState, SourceFileKind, SourceProvenance
 from odoo_ai.source.scanner import (
     ExtractedSymbol,
     ExtractedXmlRecord,
@@ -40,6 +42,7 @@ class SqlAlchemySourceScanStore:
         kind: SourceFileKind,
         fingerprint: str,
         size_bytes: int,
+        provenance: SourceProvenance,
     ) -> StoredSourceFile:
         result = upsert_source_file(
             self._session,
@@ -49,6 +52,7 @@ class SqlAlchemySourceScanStore:
             kind=kind.value,
             fingerprint=fingerprint,
             size_bytes=size_bytes,
+            provenance=provenance.value,
         )
         return StoredSourceFile(
             file_id=result.file.id,
@@ -61,6 +65,7 @@ class SqlAlchemySourceScanStore:
         source_file_id: UUID,
         symbols: tuple[ExtractedSymbol, ...],
         xml_records: tuple[ExtractedXmlRecord, ...],
+        metadata: Mapping[str, JsonValue] | None,
     ) -> None:
         replace_file_derivatives(
             self._session,
@@ -84,6 +89,7 @@ class SqlAlchemySourceScanStore:
                 )
                 for value in xml_records
             ],
+            extracted_metadata=metadata,
         )
 
     def mark_stale(self, *, scan_run_id: UUID, seen_file_ids: set[UUID]) -> int:

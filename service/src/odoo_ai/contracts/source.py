@@ -6,7 +6,7 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
 
 FINGERPRINT_PATTERN = r"^sha256:[0-9a-f]{64}$"
 MODULE_PATTERN = r"^[A-Za-z0-9_]+$"
@@ -37,6 +37,37 @@ class SourceCapabilityState(StrEnum):
     NOT_FOUND = "NOT_FOUND"
     NO_PERMISSION = "NO_PERMISSION"
     ERROR = "ERROR"
+
+
+class SourceProvenance(StrEnum):
+    """Conservative module provenance backed by explicit evidence."""
+
+    OFFICIAL = "official"
+    OCA = "oca"
+    REMOTE_KNOWN = "remote_known"
+    MANUAL = "manual"
+    THIRD_PARTY_OR_CUSTOM = "third_party_or_custom"
+    UNKNOWN = "unknown"
+
+
+class ManifestStatus(StrEnum):
+    EVALUATED = "evaluated"
+    UNEVALUABLE = "unevaluable"
+    INVALID = "invalid"
+
+
+class ManifestMetadata(BaseModel):
+    """Bounded literal metadata extracted without importing an addon."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: ManifestStatus
+    name: str | None = Field(default=None, max_length=512)
+    version: str | None = Field(default=None, max_length=128)
+    depends: tuple[str, ...] = Field(default=(), max_length=2048)
+    data: tuple[str, ...] = Field(default=(), max_length=2048)
+    assets: dict[str, JsonValue] = Field(default_factory=dict, max_length=512)
+    license: str | None = Field(default=None, max_length=128)
 
 
 class InstanceInventory(BaseModel):
@@ -134,6 +165,8 @@ class SourceFile(BaseModel):
     logical_path: str = Field(min_length=1, max_length=1024)
     fingerprint: str = Field(pattern=FINGERPRINT_PATTERN)
     size_bytes: int = Field(ge=0)
+    provenance: SourceProvenance = SourceProvenance.UNKNOWN
+    metadata: dict[str, JsonValue] | None = None
     stale: bool = False
 
     @field_validator("logical_path")

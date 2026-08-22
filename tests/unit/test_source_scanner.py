@@ -41,8 +41,9 @@ class FakeStore:
         kind: SourceFileKind,
         fingerprint: str,
         size_bytes: int,
+        provenance,
     ) -> StoredSourceFile:
-        del scan_run_id, kind, size_bytes
+        del scan_run_id, kind, size_bytes, provenance
         key = (module, logical_path)
         previous = self.files.get(key)
         file_id = previous[0] if previous else uuid4()
@@ -50,8 +51,10 @@ class FakeStore:
         self.files[key] = (file_id, fingerprint)
         return StoredSourceFile(file_id=file_id, fingerprint_changed=changed)
 
-    def replace_derivatives(self, *, source_file_id, symbols, xml_records) -> None:
-        del symbols, xml_records
+    def replace_derivatives(
+        self, *, source_file_id, symbols, xml_records, metadata
+    ) -> None:
+        del symbols, xml_records, metadata
         self.replacements.append(source_file_id)
 
     def mark_stale(self, *, scan_run_id: UUID, seen_file_ids: set[UUID]) -> int:

@@ -120,6 +120,7 @@ def test_source_contracts_are_in_public_json_schema_export() -> None:
 
     assert {
         "InstanceInventory",
+        "ManifestMetadata",
         "ScanRun",
         "SourceFile",
         "SourceRef",
