@@ -2,7 +2,7 @@
 
 Este roadmap resume el Source of Truth. No autoriza por sí mismo la implementación de ningún milestone.
 
-Estado actual: M0, M1, M2 y M3 completados; gates PASS. Los task packets de M4 — Codex vertical slice están preparados y M4 es el milestone activo; su implementación todavía no se ha iniciado.
+Estado actual: **M0, M1, M2, M3 y M4 completados; gates PASS.** Los task packets de M5 — QUERY + HOW_TO + RAG están preparados y M5 es el siguiente milestone; su implementación todavía no se ha iniciado.
 
 | Milestone | Objetivo observable |
 | --- | --- |
