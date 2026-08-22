@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-M0, M1, M2 y M3 están completados; sus gates son PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico, el bootstrap instalable de host, el vertical slice contextual de lectura bajo el usuario real y evidencia acotada de source/logs. Los task packets de M4 — Codex vertical slice están preparados; la implementación de M4 todavía no se ha iniciado.
+**M0, M1, M2, M3 y M4 están completados; sus gates son PASS.** El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon Odoo, el bootstrap instalable de host, delegación/lecturas ORM bajo el usuario real, source/log evidence, Codex App Server como `ReasoningEngine`, `ToolExecutor` y el vertical slice real `EXPLAIN` con citas. Los task packets de M5 — QUERY + HOW_TO + RAG están preparados; su implementación todavía no se ha iniciado.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 
@@ -116,7 +116,7 @@ La configuración y los logs no deben contener credenciales reales. La creación
 
 ## Estado administrativo
 
-`GET /v1/admin/status` comprueba el proceso, la conexión a la Assistant DB y la revisión de Alembic. Requiere el shared secret server-side y también resume el perfil/snapshot más reciente cuando existe. Después de M3 el resultado correcto sigue siendo `DEGRADED`: source y logs pueden estar en `OK`, pero `reasoning_engine` pertenece a M4 y continúa pendiente.
+`GET /v1/admin/status` comprueba el runtime y las capabilities del Assistant mediante el shared secret server-side. Tras M4, con DB/migraciones, source, logs y reasoning realmente operativos, el estado puede llegar a `FULLY_READY`; si Codex no está disponible, el servicio degrada a `DEGRADED` sin detener Odoo y expone únicamente un error sanitizado. Las capabilities nuevas de M5 todavía no están implementadas.
 
 ## Bootstrap del host
 
@@ -160,3 +160,4 @@ El procedimiento de instalación, upgrade, backup, rollback y los smokes reprodu
 La evidencia y el veredicto de M1 están en [`docs/M1_GATE_REPORT.md`](docs/M1_GATE_REPORT.md).
 La evidencia y el veredicto de M2 están en [`docs/M2_GATE_REPORT.md`](docs/M2_GATE_REPORT.md).
 La evidencia y el veredicto de M3 están en [`docs/M3_GATE_REPORT.md`](docs/M3_GATE_REPORT.md).
+La evidencia y el veredicto de M4 están en [`docs/M4_GATE_REPORT.md`](docs/M4_GATE_REPORT.md); el E2E real está en [`docs/codex/M4_E2E_REPORT.md`](docs/codex/M4_E2E_REPORT.md).
