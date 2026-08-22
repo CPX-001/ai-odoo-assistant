@@ -109,6 +109,7 @@ def record_log_capability(
     *,
     instance_profile_id: UUID,
     state: LogCapabilityState,
+    provider: str | None = None,
 ) -> CapabilitySnapshot:
     """Append a log-provider state while preserving other known capabilities."""
 
@@ -118,6 +119,10 @@ def record_log_capability(
     capabilities = dict(latest.capabilities) if latest is not None else {}
     capabilities["logs"] = state.value
     capabilities["logs_operational"] = state is LogCapabilityState.OPERATIONAL
+    if provider is not None:
+        if provider not in {"file", "journal"}:
+            raise ValueError("unsupported log provider")
+        capabilities["log_provider"] = provider
     return create_capability_snapshot(
         session,
         instance_profile_id=instance_profile_id,

@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+from odoo import Command
+from odoo.exceptions import AccessError
 from odoo.tests import TransactionCase, tagged
 
 from ..models.assistant_diagnostics import SERVICE_URL_PARAM
@@ -18,6 +20,60 @@ class FakeHealthyClient:
                 "migrations": {"state": "ok"},
             },
             "instance": None,
+        }
+
+    def source_status(self):
+        return {"state": "UNKNOWN", "scan_status": "unknown"}
+
+
+class FakeM3Client(FakeHealthyClient):
+    def source_rescan(self):
+        return {
+            "state": "DETECTED",
+            "scan_id": "12345678-1234-5678-1234-567812345678",
+            "fingerprint": "sha256:" + "a" * 64,
+            "metrics": {"files_seen": 3, "stale_files": 0},
+        }
+
+    def source_test(self):
+        return {
+            "candidate": {
+                "module": "odoo_ai_m3_sale_project",
+                "logical_path": "odoo_ai_m3_sale_project/models/sale_order.py",
+                "start_line": 9,
+                "end_line": 28,
+                "fingerprint": "sha256:" + "a" * 64,
+            },
+            "excerpt": {
+                "lines": [
+                    {"number": 9, "text": "def action_confirm(self):"},
+                    {"number": 12, "text": "if order.client_order_ref != marker:"},
+                ]
+            },
+        }
+
+    def logs_test(self, payload):
+        assert payload["terms"] == ["Traceback"]
+        return {
+            "state": "OPERATIONAL",
+            "provider": "file",
+            "results": [
+                {
+                    "provider": "file",
+                    "traceback_fingerprint": "sha256:" + "b" * 64,
+                    "excerpt": "Traceback",
+                }
+            ],
+        }
+
+    def logs_traceback(self, fingerprint, *, max_bytes):
+        assert fingerprint == "sha256:" + "b" * 64
+        assert max_bytes == 16_384
+        return {
+            "provider": "file",
+            "traceback_fingerprint": fingerprint,
+            "occurrence_count": 1,
+            "excerpt": "Traceback (most recent call last):\nValueError: controlled",
         }
 
 
@@ -48,3 +104,30 @@ class TestAssistantDiagnostics(TransactionCase):
         self.assertEqual(values["service_state"], "error")
         self.assertIn("unavailable", values["message"])
         self.assertNotIn("Traceback", values["message"])
+
+    def test_admin_actions_show_only_bounded_logical_evidence(self):
+        diagnostics = self.env["odoo.ai.assistant.diagnostics"].create({})
+        with patch.object(type(diagnostics), "_client", return_value=FakeM3Client()):
+            diagnostics.action_rescan_source()
+            diagnostics.action_test_source()
+            diagnostics.action_test_logs()
+
+        self.assertEqual(diagnostics.source_state, "DETECTED")
+        self.assertIn("odoo_ai_m3_sale_project/models/sale_order.py", diagnostics.source_result)
+        self.assertIn("Lines: 9-28", diagnostics.source_result)
+        self.assertIn("ValueError: controlled", diagnostics.log_result)
+        self.assertNotIn("shared_secret", diagnostics.source_result)
+        self.assertNotIn("/srv/", diagnostics.log_result)
+
+    def test_non_admin_cannot_invoke_diagnostics_actions(self):
+        user = self.env["res.users"].create(
+            {
+                "name": "M3 Non Admin",
+                "login": "m3-non-admin",
+                "groups_id": [Command.set([self.env.ref("base.group_user").id])],
+            }
+        )
+        diagnostics = self.env["odoo.ai.assistant.diagnostics"].with_user(user)
+
+        with self.assertRaises(AccessError):
+            diagnostics._require_admin()

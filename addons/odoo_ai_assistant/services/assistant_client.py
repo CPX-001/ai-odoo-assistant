@@ -69,6 +69,24 @@ class AssistantServiceClient:
             "/v1/admin/status", headers={SHARED_SECRET_HEADER: secret}
         )
 
+    def source_status(self) -> dict[str, Any]:
+        return self._admin_get("/v1/admin/source/status")
+
+    def source_rescan(self) -> dict[str, Any]:
+        return self._admin_post("/v1/admin/source/rescan", {})
+
+    def source_test(self) -> dict[str, Any]:
+        return self._admin_post("/v1/admin/source/test", {})
+
+    def logs_test(self, payload: dict[str, object]) -> dict[str, Any]:
+        return self._admin_post("/v1/admin/logs/test", payload)
+
+    def logs_traceback(self, fingerprint: str, *, max_bytes: int) -> dict[str, Any]:
+        return self._admin_post(
+            "/v1/admin/logs/traceback",
+            {"fingerprint": fingerprint, "max_bytes": max_bytes},
+        )
+
     def context_read(self, payload: dict[str, object]) -> dict[str, Any]:
         """Submit one bounded server-to-server M2 contextual read turn."""
 
@@ -120,6 +138,37 @@ class AssistantServiceClient:
     ) -> dict[str, Any]:
         return self._request_json("GET", path, headers=headers)
 
+    def _admin_get(self, path: str) -> dict[str, Any]:
+        secret = self._read_shared_secret()
+        return self._get_json(path, headers={SHARED_SECRET_HEADER: secret})
+
+    def _admin_post(
+        self, path: str, payload: dict[str, object]
+    ) -> dict[str, Any]:
+        secret = self._read_shared_secret()
+        try:
+            body = json.dumps(
+                payload,
+                allow_nan=False,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        except (TypeError, ValueError) as error:
+            raise AssistantServiceError("invalid_request") from error
+        if len(body) > MAX_REQUEST_BYTES:
+            raise AssistantServiceError("invalid_request")
+        return self._request_json(
+            "POST",
+            path,
+            body=body,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                SHARED_SECRET_HEADER: secret,
+            },
+        )
+
     def _request_json(
         self,
         method: str,
@@ -141,6 +190,12 @@ class AssistantServiceClient:
             raise AssistantServiceError("authentication_rejected")
         if response.status == 403:
             raise AssistantServiceError("access_denied")
+        if response.status == 404:
+            raise AssistantServiceError("diagnostic_not_found")
+        if response.status == 409:
+            raise AssistantServiceError("diagnostic_unavailable")
+        if response.status == 413:
+            raise AssistantServiceError("invalid_request")
         if response.status == 422:
             raise AssistantServiceError("invalid_context")
         if response.status >= 500:

@@ -22,6 +22,8 @@ _TIMESTAMP = re.compile(
     r"(?:Z|[+-]\d{2}:?\d{2})?)"
 )
 _DATE_LIKE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+_TRACEBACK_START = "Traceback (most recent call last):"
+_TRACEBACK_END = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception|Warning|Interrupt)(?::|$)")
 
 
 class LogProviderError(RuntimeError):
@@ -122,3 +124,21 @@ def context_indexes(matches: list[int], line_count: int, *, context: int) -> lis
     for index in matches:
         selected.update(range(max(0, index - context), min(line_count, index + context + 1)))
     return sorted(selected)
+
+
+def expand_traceback_indexes(
+    raw_lines: list[str], selected: list[int], *, max_traceback_lines: int = 200
+) -> list[int]:
+    """Complete nearby Python tracebacks before applying final output caps."""
+
+    expanded = set(selected)
+    for start, line in enumerate(raw_lines):
+        if _TRACEBACK_START not in line:
+            continue
+        if not any(start - 1 <= index <= start + 1 for index in expanded):
+            continue
+        for index in range(start, min(len(raw_lines), start + max_traceback_lines)):
+            expanded.add(index)
+            if index > start and _TRACEBACK_END.match(raw_lines[index].strip()):
+                break
+    return sorted(expanded)

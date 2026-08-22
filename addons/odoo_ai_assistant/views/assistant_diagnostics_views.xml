@@ -7,6 +7,9 @@
             <form string="AI Assistant Diagnostics" create="0" delete="0">
                 <header>
                     <button name="action_refresh" type="object" string="Test Service" class="btn-primary"/>
+                    <button name="action_rescan_source" type="object" string="Reanalyze Source"/>
+                    <button name="action_test_source" type="object" string="Test Source"/>
+                    <button name="action_test_logs" type="object" string="Test Logs"/>
                 </header>
                 <sheet>
                     <group string="Local Assistant Service">
@@ -22,6 +25,19 @@
                     <group string="Detected Instance Facts">
                         <field name="instance_id"/>
                         <field name="instance_fingerprint"/>
+                    </group>
+                    <group string="Source">
+                        <field name="source_state"/>
+                        <field name="source_scan_status"/>
+                        <field name="source_scan_fingerprint"/>
+                    </group>
+                    <group string="Logs">
+                        <field name="log_state"/>
+                        <field name="log_provider"/>
+                    </group>
+                    <group string="Bounded Diagnostic Evidence" col="1">
+                        <field name="source_result" nolabel="1"/>
+                        <field name="log_result" nolabel="1"/>
                     </group>
                 </sheet>
             </form>

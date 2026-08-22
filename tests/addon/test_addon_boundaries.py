@@ -21,6 +21,8 @@ def test_browser_assets_use_only_the_authenticated_odoo_bridge() -> None:
     assert "X-Odoo-AI-Shared-Secret" not in static_text
     assert "X-Odoo-AI-Delegation" not in static_text
     assert "delegation_token" not in static_text
+    assert "/v1/admin/source" not in static_text
+    assert "/v1/admin/logs" not in static_text
 
     browser_controller = (
         ADDON_ROOT / "controllers/browser_bridge.py"
@@ -54,6 +56,9 @@ def test_internal_endpoint_and_secret_are_not_duplicated_in_views() -> None:
     assert "127.0.0.1" not in view_text
     assert "X-Odoo-AI-Shared-Secret" not in view_text
     assert "shared_secret" not in view_text
+    assert "ODOO_AI_SOURCE_ROOTS" not in view_text
+    assert "ODOO_AI_LOG_FILE" not in view_text
+    assert "ODOO_AI_JOURNAL_UNIT" not in view_text
 
 
 def test_browser_bridge_derives_server_context_and_returns_a_sanitized_shape() -> None:

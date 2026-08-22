@@ -27,3 +27,16 @@ M2_DENIED_ORDER_ID M2_DENIED_ORDER_NAME
 set, the browser fails if any of those exact values appears in the observed
 Odoo bridge request or response. `M2_E2E_SCREENSHOT` optionally writes a final
 screenshot outside the repository.
+
+## M3 source/log Diagnostics acceptance
+
+`tests/integration/test_m3_diagnostics_e2e.py` is the environment-neutral M3
+vertical slice. With `ODOO_AI_TEST_DATABASE_URL` pointing to a disposable
+PostgreSQL database it runs the authenticated Diagnostics API over a
+non-default addon root and file log, verifies exact `action_confirm` lines,
+bounded/redacted traceback lookup, readiness, and stale fingerprint recovery.
+
+The real Odoo 18 gate adds both `addons/` and `tests/fixtures/odoo18/` to the
+runtime `addons_path`, installs `odoo_ai_assistant,odoo_ai_m3_sale_project` with
+their post-install tests, then updates both modules. No database, port, source
+root, log file, or service name is encoded in product code.

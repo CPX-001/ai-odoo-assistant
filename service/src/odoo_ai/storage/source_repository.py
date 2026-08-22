@@ -82,6 +82,17 @@ def open_scan(session: Session, *, instance_profile_id: UUID) -> ScanRun:
     return scan
 
 
+def get_latest_scan_run(
+    session: Session, *, instance_profile_id: UUID
+) -> ScanRun | None:
+    return session.scalar(
+        select(ScanRun)
+        .where(ScanRun.instance_profile_id == instance_profile_id)
+        .order_by(ScanRun.started_at.desc(), ScanRun.id.desc())
+        .limit(1)
+    )
+
+
 def finish_scan(
     session: Session,
     *,

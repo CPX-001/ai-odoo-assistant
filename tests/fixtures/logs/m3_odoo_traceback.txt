@@ -1,0 +1,5 @@
+2026-08-22T10:00:00.000000+00:00 INFO M3 diagnostic fixture start
+2026-08-22T10:00:01.000000+00:00 ERROR M3_DIAGNOSTIC_TRACEBACK action_confirm failed
+Traceback (most recent call last):
+  File "odoo_ai_m3_sale_project/models/sale_order.py", line 27, in action_confirm
+ValueError: M3 controlled failure password=m3-fixture-secret-value

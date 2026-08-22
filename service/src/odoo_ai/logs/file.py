@@ -28,6 +28,7 @@ from odoo_ai.logs.common import (
     LogProviderError,
     LogRedactor,
     context_indexes,
+    expand_traceback_indexes,
     line_in_window,
     parse_log_lines,
 )
@@ -112,6 +113,7 @@ class FileLogProvider:
         if not matches:
             return []
         selected = context_indexes(matches, len(lines), context=self._limits.context_lines)
+        selected = expand_traceback_indexes(raw_lines, selected)
         reasons: list[str] = []
         if tail.file_truncated:
             reasons.append("scan_byte_cap")

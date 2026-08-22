@@ -14,23 +14,43 @@ from odoo_ai.adapters import (
     OdooGatewayError,
     OdooGatewayFactory,
     OdooGatewaySettings,
+    RuntimeDiagnosticsService,
     load_instance_summary,
     persist_trace_events,
 )
 from odoo_ai.application import (
     ContextReadError,
     ContextReadService,
+    DiagnosticsError,
+    DiagnosticsService,
     TraceEventData,
 )
 from odoo_ai.contracts import (
     ContextReadTurnRequest,
     ContextReadTurnResponse,
+    EmptyDiagnosticsRequest,
     InstanceProfileSummary,
+    LogEvidence,
+    LogSearchRequest,
+    LogTestDiagnostics,
+    SourceScanDiagnostics,
+    SourceStatusDiagnostics,
+    SourceTestDiagnostics,
+    TracebackRequest,
 )
 from odoo_ai.runtime.status import AdminStatus, inspect_admin_status
 from odoo_ai.security import require_shared_secret
 
 MAX_CONTEXT_REQUEST_BYTES: Final = 16 * 1024
+_BOUNDED_POST_PATHS: Final = frozenset(
+    {
+        "/v1/turns/context-read",
+        "/v1/admin/source/rescan",
+        "/v1/admin/source/test",
+        "/v1/admin/logs/test",
+        "/v1/admin/logs/traceback",
+    }
+)
 
 
 class HealthResponse(BaseModel):
@@ -41,19 +61,16 @@ class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
 
 
-class ContextRequestLimitMiddleware:
-    """Reject oversized contextual turns before FastAPI parses their JSON body."""
+class BoundedRequestLimitMiddleware:
+    """Reject oversized turn/admin requests before FastAPI parses JSON."""
 
     def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
         self._app = app
         self._max_bytes = max_bytes
 
-    async def __call__(
-        self, scope: Scope, receive: Receive, send: Send
-    ) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or not (
-            scope.get("method") == "POST"
-            and scope.get("path") == "/v1/turns/context-read"
+            scope.get("method") == "POST" and scope.get("path") in _BOUNDED_POST_PATHS
         ):
             await self._app(scope, receive, send)
             return
@@ -62,9 +79,7 @@ class ContextRequestLimitMiddleware:
         if raw_length is not None:
             try:
                 if int(raw_length) > self._max_bytes:
-                    await _error_response("request_too_large", 413)(
-                        scope, receive, send
-                    )
+                    await _error_response("request_too_large", 413)(scope, receive, send)
                     return
             except ValueError:
                 await _error_response("request_too_large", 413)(scope, receive, send)
@@ -100,19 +115,28 @@ def create_app(
     gateway_factory: OdooGatewayFactory | None = None,
     instance_loader: Callable[[], InstanceProfileSummary] = load_instance_summary,
     trace_writer: Callable[[UUID, tuple[TraceEventData, ...]], None] | None = None,
+    diagnostics_service: DiagnosticsService | None = None,
 ) -> FastAPI:
     """Build an isolated application instance for runtime and API tests."""
 
     application = FastAPI(title="Odoo AI Assistant Service")
     application.add_middleware(
-        ContextRequestLimitMiddleware,
+        BoundedRequestLimitMiddleware,
         max_bytes=MAX_CONTEXT_REQUEST_BYTES,
     )
+    diagnostics = diagnostics_service
+
+    def get_diagnostics() -> DiagnosticsService:
+        nonlocal diagnostics
+        if diagnostics is None:
+            try:
+                diagnostics = RuntimeDiagnosticsService.from_env()
+            except (OSError, ValueError):
+                raise DiagnosticsError("diagnostics_unconfigured", 503) from None
+        return diagnostics
 
     @application.exception_handler(RequestValidationError)
-    async def invalid_request(
-        request: Request, error: RequestValidationError
-    ) -> JSONResponse:
+    async def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:
         del request, error
         return _error_response("invalid_request", 422)
 
@@ -127,6 +151,71 @@ def create_app(
     )
     async def admin_status() -> AdminStatus:
         return inspect_admin_status()
+
+    @application.get(
+        "/v1/admin/source/status",
+        response_model=SourceStatusDiagnostics,
+        dependencies=[Depends(require_shared_secret)],
+    )
+    async def source_status() -> SourceStatusDiagnostics | JSONResponse:
+        try:
+            return await get_diagnostics().source_status()
+        except DiagnosticsError as error:
+            return _error_response(error.code, error.status_code)
+
+    @application.post(
+        "/v1/admin/source/rescan",
+        response_model=SourceScanDiagnostics,
+        dependencies=[Depends(require_shared_secret)],
+    )
+    async def source_rescan(
+        payload: EmptyDiagnosticsRequest,
+    ) -> SourceScanDiagnostics | JSONResponse:
+        del payload
+        try:
+            return await get_diagnostics().rescan_source()
+        except DiagnosticsError as error:
+            return _error_response(error.code, error.status_code)
+
+    @application.post(
+        "/v1/admin/source/test",
+        response_model=SourceTestDiagnostics,
+        dependencies=[Depends(require_shared_secret)],
+    )
+    async def source_test(
+        payload: EmptyDiagnosticsRequest,
+    ) -> SourceTestDiagnostics | JSONResponse:
+        del payload
+        try:
+            return await get_diagnostics().test_source()
+        except DiagnosticsError as error:
+            return _error_response(error.code, error.status_code)
+
+    @application.post(
+        "/v1/admin/logs/test",
+        response_model=LogTestDiagnostics,
+        dependencies=[Depends(require_shared_secret)],
+    )
+    async def logs_test(
+        payload: LogSearchRequest,
+    ) -> LogTestDiagnostics | JSONResponse:
+        try:
+            return await get_diagnostics().test_logs(payload)
+        except DiagnosticsError as error:
+            return _error_response(error.code, error.status_code)
+
+    @application.post(
+        "/v1/admin/logs/traceback",
+        response_model=LogEvidence,
+        dependencies=[Depends(require_shared_secret)],
+    )
+    async def logs_traceback(
+        payload: TracebackRequest,
+    ) -> LogEvidence | JSONResponse:
+        try:
+            return await get_diagnostics().read_traceback(payload)
+        except DiagnosticsError as error:
+            return _error_response(error.code, error.status_code)
 
     @application.post(
         "/v1/turns/context-read",
@@ -143,11 +232,7 @@ def create_app(
             service = ContextReadService(
                 gateway_factory=effective_factory,
                 instance_loader=instance_loader,
-                trace_writer=(
-                    persist_trace_events
-                    if trace_writer is None
-                    else trace_writer
-                ),
+                trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
             )
             return await service.run(payload)
         except ContextReadError as error:

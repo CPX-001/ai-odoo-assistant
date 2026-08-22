@@ -29,6 +29,7 @@ from odoo_ai.logs.common import (
     LogProviderError,
     LogRedactor,
     context_indexes,
+    expand_traceback_indexes,
     line_in_window,
     parse_log_lines,
 )
@@ -223,10 +224,8 @@ class JournalLogProvider:
             raise LogProviderError("journal_read_error")
         fetch_truncated = len(command.stdout) > self._limits.max_fetch_bytes
         content = command.stdout[: self._limits.max_fetch_bytes]
-        lines = parse_log_lines(
-            content.decode("utf-8", errors="replace").splitlines(),
-            self._default_timezone,
-        )
+        raw_lines = content.decode("utf-8", errors="replace").splitlines()
+        lines = parse_log_lines(raw_lines, self._default_timezone)
         terms = tuple(term.casefold() for term in request.terms)
         started = self._clock()
         matches: list[int] = []
@@ -243,6 +242,7 @@ class JournalLogProvider:
         if not matches:
             return []
         selected = context_indexes(matches, len(lines), context=self._limits.context_lines)
+        selected = expand_traceback_indexes(raw_lines, selected)
         reasons: list[str] = []
         if fetch_truncated:
             reasons.append("scan_byte_cap")

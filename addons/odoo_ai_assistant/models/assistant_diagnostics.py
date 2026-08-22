@@ -1,8 +1,10 @@
 """Administrator-only Odoo view of Assistant Service health."""
 
 import os
+from datetime import UTC, datetime, timedelta
 
 from odoo import _, api, fields, models
+from odoo.exceptions import AccessError
 
 from ..services import AssistantServiceClient, AssistantServiceError
 
@@ -27,6 +29,13 @@ class AssistantDiagnostics(models.TransientModel):
     migrations_state = fields.Char(readonly=True)
     instance_id = fields.Char(readonly=True)
     instance_fingerprint = fields.Char(readonly=True)
+    source_state = fields.Char(readonly=True)
+    source_scan_status = fields.Char(readonly=True)
+    source_scan_fingerprint = fields.Char(readonly=True)
+    log_state = fields.Char(readonly=True)
+    log_provider = fields.Char(readonly=True)
+    source_result = fields.Text(readonly=True)
+    log_result = fields.Text(readonly=True)
 
     @api.model
     def default_get(self, field_names):
@@ -35,9 +44,116 @@ class AssistantDiagnostics(models.TransientModel):
         return values
 
     def action_refresh(self):
+        self._require_admin()
         self.ensure_one()
         self.write(self._diagnostic_values())
         return {"type": "ir.actions.client", "tag": "reload"}
+
+    def action_rescan_source(self):
+        self._require_admin()
+        self.ensure_one()
+        try:
+            result = self._client().source_rescan()
+        except AssistantServiceError as error:
+            self.write({"source_result": self._error_message(error.code)})
+            return {"type": "ir.actions.client", "tag": "reload"}
+        self.write(
+            {
+                "source_state": str(result.get("state") or _("Unknown")),
+                "source_scan_status": "succeeded" if result.get("scan_id") else "failed",
+                "source_scan_fingerprint": str(
+                    result.get("fingerprint") or _("Unknown")
+                ),
+                "source_result": _("Source scan completed: %(files)s files, %(stale)s stale.")
+                % {
+                    "files": (result.get("metrics") or {}).get("files_seen", 0),
+                    "stale": (result.get("metrics") or {}).get("stale_files", 0),
+                },
+            }
+        )
+        return {"type": "ir.actions.client", "tag": "reload"}
+
+    def action_test_source(self):
+        self._require_admin()
+        self.ensure_one()
+        try:
+            result = self._client().source_test()
+        except AssistantServiceError as error:
+            self.write({"source_result": self._error_message(error.code)})
+            return {"type": "ir.actions.client", "tag": "reload"}
+        candidate = result.get("candidate") or {}
+        excerpt = result.get("excerpt") or {}
+        lines = excerpt.get("lines") or []
+        rendered = "\n".join(
+            f"{line.get('number')}: {line.get('text')}"
+            for line in lines
+            if isinstance(line, dict)
+        )
+        self.write(
+            {
+                "source_result": _(
+                    "Module: %(module)s\nFile: %(path)s\nLines: %(start)s-%(end)s\n"
+                    "Fingerprint: %(fingerprint)s\n\n%(excerpt)s"
+                )
+                % {
+                    "module": candidate.get("module") or _("Unknown"),
+                    "path": candidate.get("logical_path") or _("Unknown"),
+                    "start": candidate.get("start_line") or "?",
+                    "end": candidate.get("end_line") or "?",
+                    "fingerprint": candidate.get("fingerprint") or _("Unknown"),
+                    "excerpt": rendered,
+                }
+            }
+        )
+        return {"type": "ir.actions.client", "tag": "reload"}
+
+    def action_test_logs(self):
+        self._require_admin()
+        self.ensure_one()
+        now = datetime.now(UTC)
+        payload = {
+            "from_ts": (now - timedelta(days=1)).isoformat(),
+            "to_ts": now.isoformat(),
+            "terms": ["Traceback"],
+            "max_lines": 200,
+            "max_bytes": 65_536,
+        }
+        try:
+            result = self._client().logs_test(payload)
+            rows = result.get("results") or []
+            row = rows[0] if rows else None
+            if not isinstance(row, dict):
+                text = _("Log provider is operational; no traceback matched the test window.")
+            else:
+                fingerprint = row.get("traceback_fingerprint")
+                if isinstance(fingerprint, str):
+                    row = self._client().logs_traceback(
+                        fingerprint, max_bytes=16_384
+                    )
+                text = _(
+                    "Provider: %(provider)s\nFingerprint: %(fingerprint)s\n"
+                    "Occurrences: %(count)s\n\n%(excerpt)s"
+                ) % {
+                    "provider": row.get("provider") or result.get("provider"),
+                    "fingerprint": row.get("traceback_fingerprint") or _("None"),
+                    "count": row.get("occurrence_count") or 1,
+                    "excerpt": row.get("excerpt") or "",
+                }
+        except AssistantServiceError as error:
+            self.write({"log_result": self._error_message(error.code)})
+            return {"type": "ir.actions.client", "tag": "reload"}
+        self.write(
+            {
+                "log_state": str(result.get("state") or _("Unknown")),
+                "log_provider": str(result.get("provider") or _("Unknown")),
+                "log_result": text,
+            }
+        )
+        return {"type": "ir.actions.client", "tag": "reload"}
+
+    def _require_admin(self):
+        if not self.env.user.has_group("base.group_system"):
+            raise AccessError(_("Only system administrators can run diagnostics."))
 
     @api.model
     def _configured_value(self, parameter: str, environment_name: str) -> str | None:
@@ -72,6 +188,13 @@ class AssistantDiagnostics(models.TransientModel):
             "migrations_state": unknown,
             "instance_id": unknown,
             "instance_fingerprint": unknown,
+            "source_state": unknown,
+            "source_scan_status": unknown,
+            "source_scan_fingerprint": unknown,
+            "log_state": unknown,
+            "log_provider": unknown,
+            "source_result": False,
+            "log_result": False,
         }
         try:
             client = self._client()
@@ -85,6 +208,12 @@ class AssistantDiagnostics(models.TransientModel):
         database = components.get("assistant_database", {})
         migrations = components.get("migrations", {})
         instance = status.get("instance") if isinstance(status.get("instance"), dict) else {}
+        source = components.get("source", {})
+        logs = components.get("logs", {})
+        try:
+            source_status = client.source_status()
+        except AssistantServiceError:
+            source_status = {}
         values.update(
             service_state="ok",
             message=_("Assistant Service responded successfully."),
@@ -93,6 +222,13 @@ class AssistantDiagnostics(models.TransientModel):
             migrations_state=str(migrations.get("state") or unknown),
             instance_id=str(instance.get("instance_id") or unknown),
             instance_fingerprint=str(instance.get("fingerprint") or unknown),
+            source_state=str(source.get("state") or unknown),
+            source_scan_status=str(source_status.get("scan_status") or unknown),
+            source_scan_fingerprint=str(source_status.get("fingerprint") or unknown),
+            log_state=str(logs.get("state") or unknown),
+            log_provider=str(
+                (instance.get("capabilities") or {}).get("log_provider") or unknown
+            ),
         )
         return values
 
@@ -118,5 +254,8 @@ class AssistantDiagnostics(models.TransientModel):
                 "Assistant Service is unavailable at the configured local endpoint."
             ),
             "invalid_response": _("Assistant Service returned an invalid response."),
+            "diagnostic_not_found": _("The requested diagnostic evidence was not found."),
+            "diagnostic_unavailable": _("The requested diagnostic capability is unavailable."),
+            "invalid_request": _("The diagnostic request was rejected."),
         }
         return messages.get(code, _("Assistant Service check failed."))

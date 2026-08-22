@@ -10,10 +10,7 @@ import pytest
 
 
 def _load_client_module() -> ModuleType:
-    path = (
-        Path(__file__).parents[2]
-        / "addons/odoo_ai_assistant/services/assistant_client.py"
-    )
+    path = Path(__file__).parents[2] / "addons/odoo_ai_assistant/services/assistant_client.py"
     spec = importlib.util.spec_from_file_location("odoo_ai_test_assistant_client", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -42,8 +39,17 @@ class AssistantHandler(BaseHTTPRequestHandler):
                     200,
                     b'{"readiness":"DEGRADED","components":{},"instance":null}',
                 )
+        elif self.path == "/v1/admin/source/status":
+            if self.headers.get("X-Odoo-AI-Shared-Secret") != self.secret:
+                self._json(401, b'{"detail":"invalid"}')
+            else:
+                self._json(
+                    200,
+                    b'{"state":"DETECTED","scan_status":"succeeded",'
+                    b'"scan_id":null,"fingerprint":null,"completed_at":null}',
+                )
         else:
-            self._json(404, b'{}')
+            self._json(404, b"{}")
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
@@ -57,8 +63,16 @@ class AssistantHandler(BaseHTTPRequestHandler):
             self._json(401, b'{"error":{"code":"invalid"},"ok":false}')
         elif self.path == "/v1/turns/context-read":
             self._json(200, b'{"ok":true,"turn_id":"example"}')
+        elif self.path == "/v1/admin/source/rescan":
+            self._json(200, b'{"state":"DETECTED","metrics":{}}')
+        elif self.path == "/v1/admin/source/test":
+            self._json(200, b'{"candidate":{},"excerpt":{}}')
+        elif self.path == "/v1/admin/logs/test":
+            self._json(200, b'{"state":"OPERATIONAL","provider":"file","results":[]}')
+        elif self.path == "/v1/admin/logs/traceback":
+            self._json(200, b'{"provider":"file","excerpt":"bounded"}')
         else:
-            self._json(404, b'{}')
+            self._json(404, b"{}")
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -103,9 +117,7 @@ def test_client_rejects_non_loopback_and_sanitizes_auth_failure(
     tmp_path: Path, local_service: ThreadingHTTPServer
 ) -> None:
     with pytest.raises(AssistantServiceError) as public:
-        AssistantServiceClient(
-            base_url="http://example.com:8000", shared_secret_file=None
-        )
+        AssistantServiceClient(base_url="http://example.com:8000", shared_secret_file=None)
     assert public.value.code == "configuration_invalid"
 
     secret_file = tmp_path / "shared-secret"
@@ -160,3 +172,35 @@ def test_context_read_posts_only_to_the_narrow_authenticated_route(
     headers = AssistantHandler.last_post["headers"]
     assert headers["X-Odoo-AI-Shared-Secret"] == AssistantHandler.secret
     assert headers["Content-Type"] == "application/json"
+
+
+def test_m3_admin_client_uses_only_fixed_server_side_routes(
+    tmp_path: Path, local_service: ThreadingHTTPServer
+) -> None:
+    secret_file = tmp_path / "shared-secret"
+    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
+    secret_file.chmod(0o640)
+    client = AssistantServiceClient(
+        base_url=f"http://127.0.0.1:{local_service.server_port}",
+        shared_secret_file=str(secret_file),
+    )
+
+    assert client.source_status()["state"] == "DETECTED"
+    assert client.source_rescan()["state"] == "DETECTED"
+    assert AssistantHandler.last_post is not None
+    assert AssistantHandler.last_post["path"] == "/v1/admin/source/rescan"
+    assert AssistantHandler.last_post["payload"] == {}
+    assert client.source_test()["candidate"] == {}
+    assert (
+        client.logs_test({"terms": ["Traceback"], "max_lines": 20, "max_bytes": 4096})["provider"]
+        == "file"
+    )
+    assert client.logs_traceback("sha256:" + "a" * 64, max_bytes=1024) == {
+        "provider": "file",
+        "excerpt": "bounded",
+    }
+    assert AssistantHandler.last_post["path"] == "/v1/admin/logs/traceback"
+    assert AssistantHandler.last_post["payload"] == {
+        "fingerprint": "sha256:" + "a" * 64,
+        "max_bytes": 1024,
+    }

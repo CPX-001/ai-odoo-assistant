@@ -45,3 +45,11 @@ files from server environment; no endpoint, token, or secret is sent to the
 browser. The service-side gateway base URL is supplied separately through
 ``ODOO_AI_ODOO_BASE_URL``; it is not a browser setting and has no hardcoded host
 or port default.
+
+M3 extends the administrator-only Diagnostics model with fixed actions for
+source status/rescan, the ``sale.order.action_confirm`` source check, and a
+bounded log/traceback check. These actions call only the corresponding
+machine-authenticated Assistant Service routes from the Odoo server. The form
+shows logical module/file/line references, fingerprints, provider state, and
+redacted excerpts; it does not accept or display physical source roots, log
+paths, journal units, credentials, or arbitrary commands.
