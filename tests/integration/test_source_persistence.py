@@ -1,0 +1,273 @@
+import os
+from pathlib import Path
+from uuid import UUID, uuid4
+
+import pytest
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import Engine, inspect
+from sqlalchemy.orm import Session
+
+from odoo_ai.storage import (
+    DatabaseSettings,
+    SourceSymbolValues,
+    XmlRecordValues,
+    create_database_engine,
+    create_instance_profile,
+    delete_stale_source_files,
+    find_source_symbols,
+    find_xml_records,
+    finish_scan,
+    mark_stale_source_files,
+    open_scan,
+    replace_file_derivatives,
+    upsert_source_file,
+)
+from odoo_ai.storage.config import DATABASE_NAME_ENV, DATABASE_URL_ENV
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TEST_DATABASE_URL_ENV = "ODOO_AI_TEST_DATABASE_URL"
+HASH_A = "sha256:" + "a" * 64
+HASH_B = "sha256:" + "b" * 64
+
+
+@pytest.fixture
+def migrated_engine(monkeypatch: pytest.MonkeyPatch) -> Engine:
+    test_url = os.environ.get(TEST_DATABASE_URL_ENV)
+    if not test_url:
+        pytest.skip(f"{TEST_DATABASE_URL_ENV} is not configured")
+    database_name = test_url.rsplit("/", maxsplit=1)[-1].partition("?")[0]
+    monkeypatch.setenv(DATABASE_URL_ENV, test_url)
+    monkeypatch.setenv(DATABASE_NAME_ENV, database_name)
+    command.upgrade(Config(REPO_ROOT / "alembic.ini"), "head")
+    engine = create_database_engine(DatabaseSettings.from_env())
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def session(migrated_engine: Engine) -> Session:
+    with migrated_engine.connect() as connection:
+        transaction = connection.begin()
+        session = Session(bind=connection, expire_on_commit=False)
+        try:
+            yield session
+        finally:
+            session.close()
+            transaction.rollback()
+
+
+def _profile(session: Session):
+    return create_instance_profile(
+        session,
+        instance_id=f"source-{uuid4()}",
+        fingerprint="sha256:instance",
+    )
+
+
+def _upsert_python(session: Session, scan_id: UUID, fingerprint: str, path: str):
+    return upsert_source_file(
+        session,
+        scan_run_id=scan_id,
+        module="custom_sale",
+        logical_path=path,
+        kind="python",
+        fingerprint=fingerprint,
+        size_bytes=2048,
+    )
+
+
+def test_source_tables_constraints_and_indexes_exist(migrated_engine: Engine) -> None:
+    inspector = inspect(migrated_engine)
+
+    assert {"scan_run", "source_file", "source_symbol", "xml_record"} <= set(
+        inspector.get_table_names()
+    )
+    assert {index["name"] for index in inspector.get_indexes("scan_run")} >= {
+        "ix_scan_run_instance_status_started"
+    }
+    assert {index["name"] for index in inspector.get_indexes("source_file")} >= {
+        "ix_source_file_fingerprint",
+        "ix_source_file_instance_module",
+    }
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_unique_constraints("source_file")
+    } >= {"uq_source_file_instance_module_path"}
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_unique_constraints("source_symbol")
+    } >= {"uq_source_symbol_file_identity"}
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_unique_constraints("xml_record")
+    } >= {"uq_xml_record_file_xml_id"}
+    assert {index["name"] for index in inspector.get_indexes("source_symbol")} >= {
+        "ix_source_symbol_model_name",
+        "ix_source_symbol_module_path",
+    }
+    assert {index["name"] for index in inspector.get_indexes("xml_record")} >= {
+        "ix_xml_record_module_path",
+        "ix_xml_record_xml_id_model",
+    }
+
+
+def test_changed_fingerprint_hides_then_replaces_file_derivatives(session: Session) -> None:
+    profile = _profile(session)
+    first_scan = open_scan(session, instance_profile_id=profile.id)
+    first = _upsert_python(
+        session,
+        first_scan.id,
+        HASH_A,
+        "custom_sale/models/sale_order.py",
+    )
+    symbols, xml_records = replace_file_derivatives(
+        session,
+        source_file_id=first.file.id,
+        symbols=[
+            SourceSymbolValues(
+                kind="method",
+                model="sale.order",
+                name="action_confirm",
+                start_line=42,
+                end_line=71,
+            )
+        ],
+        xml_records=[
+            XmlRecordValues(
+                xml_id="custom_sale.view_order_form",
+                model="ir.ui.view",
+                start_line=3,
+                end_line=12,
+            )
+        ],
+    )
+    finish_scan(session, scan_run_id=first_scan.id, status="succeeded", fingerprint=HASH_A)
+
+    assert first.fingerprint_changed is True
+    assert symbols[0].fingerprint == HASH_A
+    assert xml_records[0].fingerprint == HASH_A
+    assert len(
+        find_source_symbols(
+            session,
+            instance_profile_id=profile.id,
+            model="sale.order",
+            name="action_confirm",
+        )
+    ) == 1
+
+    second_scan = open_scan(session, instance_profile_id=profile.id)
+    changed = _upsert_python(
+        session,
+        second_scan.id,
+        HASH_B,
+        "custom_sale/models/sale_order.py",
+    )
+
+    assert changed.file.id == first.file.id
+    assert changed.fingerprint_changed is True
+    assert (
+        find_source_symbols(
+            session,
+            instance_profile_id=profile.id,
+            name="action_confirm",
+        )
+        == []
+    )
+    assert (
+        find_xml_records(
+            session,
+            instance_profile_id=profile.id,
+            xml_id="custom_sale.view_order_form",
+        )
+        == []
+    )
+
+    replacement, _ = replace_file_derivatives(
+        session,
+        source_file_id=changed.file.id,
+        symbols=[
+            SourceSymbolValues(
+                kind="method",
+                model="sale.order",
+                name="action_confirm",
+                start_line=50,
+                end_line=80,
+            )
+        ],
+        xml_records=[],
+    )
+    finish_scan(session, scan_run_id=second_scan.id, status="succeeded", fingerprint=HASH_B)
+
+    assert replacement[0].fingerprint == HASH_B
+    assert replacement[0].start_line == 50
+    assert len(
+        find_source_symbols(
+            session,
+            instance_profile_id=profile.id,
+            name="action_confirm",
+        )
+    ) == 1
+
+
+def test_stale_mark_and_delete_cascade_removed_derivatives(session: Session) -> None:
+    profile = _profile(session)
+    first_scan = open_scan(session, instance_profile_id=profile.id)
+    kept = _upsert_python(
+        session, first_scan.id, HASH_A, "custom_sale/models/kept.py"
+    )
+    removed = _upsert_python(
+        session, first_scan.id, HASH_A, "custom_sale/models/removed.py"
+    )
+    replace_file_derivatives(
+        session,
+        source_file_id=removed.file.id,
+        symbols=[
+            SourceSymbolValues(
+                kind="method",
+                model="sale.order",
+                name="removed_method",
+                start_line=2,
+                end_line=4,
+            )
+        ],
+        xml_records=[],
+    )
+    finish_scan(session, scan_run_id=first_scan.id, status="succeeded", fingerprint=HASH_A)
+
+    second_scan = open_scan(session, instance_profile_id=profile.id)
+    seen = _upsert_python(session, second_scan.id, HASH_A, kept.file.logical_path)
+    marked = mark_stale_source_files(
+        session, scan_run_id=second_scan.id, seen_file_ids={seen.file.id}
+    )
+
+    assert marked == 1
+    assert (
+        find_source_symbols(
+            session,
+            instance_profile_id=profile.id,
+            name="removed_method",
+        )
+        == []
+    )
+    assert delete_stale_source_files(session, instance_profile_id=profile.id) == 1
+    finish_scan(session, scan_run_id=second_scan.id, status="succeeded", fingerprint=HASH_A)
+
+
+def test_scan_lifecycle_and_structured_query_limits(session: Session) -> None:
+    profile = _profile(session)
+    scan = open_scan(session, instance_profile_id=profile.id)
+
+    with pytest.raises(ValueError, match="identifier"):
+        find_source_symbols(session, instance_profile_id=profile.id)
+    with pytest.raises(ValueError, match="between"):
+        find_xml_records(
+            session,
+            instance_profile_id=profile.id,
+            xml_id="module.record",
+            limit=201,
+        )
+
+    finish_scan(session, scan_run_id=scan.id, status="failed", error_code="partial_scan")
+    with pytest.raises(ValueError, match="already finished"):
+        finish_scan(session, scan_run_id=scan.id, status="failed")

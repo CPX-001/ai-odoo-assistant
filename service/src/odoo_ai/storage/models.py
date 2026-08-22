@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from pydantic import JsonValue
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -88,3 +89,177 @@ class TraceEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp()
     )
+
+
+class ScanRun(Base):
+    """Lifecycle and aggregate fingerprint for one bounded source scan."""
+
+    __tablename__ = "scan_run"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'succeeded', 'failed')",
+            name="ck_scan_run_status",
+        ),
+        CheckConstraint(
+            "(status = 'running' AND completed_at IS NULL) OR "
+            "(status <> 'running' AND completed_at IS NOT NULL)",
+            name="ck_scan_run_completion",
+        ),
+        CheckConstraint(
+            "fingerprint IS NULL OR fingerprint ~ '^sha256:[0-9a-f]{64}$'",
+            name="ck_scan_run_fingerprint",
+        ),
+        CheckConstraint(
+            "status <> 'succeeded' OR error_code IS NULL",
+            name="ck_scan_run_success_error",
+        ),
+        Index(
+            "ix_scan_run_instance_status_started",
+            "instance_profile_id",
+            "status",
+            "started_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    instance_profile_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("instance_profile.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp()
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fingerprint: Mapped[str | None] = mapped_column(String(71))
+    error_code: Mapped[str | None] = mapped_column(String(128))
+
+
+class SourceFile(Base):
+    """Current metadata for one indexed source file."""
+
+    __tablename__ = "source_file"
+    __table_args__ = (
+        CheckConstraint("size_bytes >= 0", name="ck_source_file_size_nonnegative"),
+        CheckConstraint(
+            "kind IN ('manifest', 'python', 'xml', 'csv', 'other')",
+            name="ck_source_file_kind",
+        ),
+        CheckConstraint(
+            "fingerprint ~ '^sha256:[0-9a-f]{64}$'",
+            name="ck_source_file_fingerprint",
+        ),
+        UniqueConstraint(
+            "instance_profile_id",
+            "module",
+            "logical_path",
+            name="uq_source_file_instance_module_path",
+        ),
+        Index("ix_source_file_instance_module", "instance_profile_id", "module"),
+        Index("ix_source_file_fingerprint", "fingerprint"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    instance_profile_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("instance_profile.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    scan_run_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("scan_run.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    module: Mapped[str] = mapped_column(String(255), nullable=False)
+    logical_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(71), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    is_stale: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.clock_timestamp(),
+        onupdate=func.clock_timestamp(),
+    )
+
+
+class SourceSymbol(Base):
+    """A source symbol derived from the current fingerprint of one file."""
+
+    __tablename__ = "source_symbol"
+    __table_args__ = (
+        CheckConstraint("start_line > 0", name="ck_source_symbol_start_line"),
+        CheckConstraint("end_line >= start_line", name="ck_source_symbol_line_range"),
+        CheckConstraint(
+            "fingerprint ~ '^sha256:[0-9a-f]{64}$'",
+            name="ck_source_symbol_fingerprint",
+        ),
+        UniqueConstraint(
+            "source_file_id",
+            "kind",
+            "name",
+            "start_line",
+            "end_line",
+            name="uq_source_symbol_file_identity",
+        ),
+        Index("ix_source_symbol_model_name", "model", "name"),
+        Index("ix_source_symbol_module_path", "module", "logical_path"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    source_file_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("source_file.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    module: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    model: Mapped[str | None] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    logical_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    start_line: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_line: Mapped[int] = mapped_column(Integer, nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(71), nullable=False)
+
+
+class XmlRecord(Base):
+    """An XML record declaration derived from one source file."""
+
+    __tablename__ = "xml_record"
+    __table_args__ = (
+        CheckConstraint(
+            "fingerprint ~ '^sha256:[0-9a-f]{64}$'",
+            name="ck_xml_record_fingerprint",
+        ),
+        CheckConstraint(
+            "(start_line IS NULL AND end_line IS NULL) OR "
+            "(start_line > 0 AND end_line >= start_line)",
+            name="ck_xml_record_line_range",
+        ),
+        UniqueConstraint(
+            "source_file_id", "xml_id", name="uq_xml_record_file_xml_id"
+        ),
+        Index("ix_xml_record_xml_id_model", "xml_id", "model"),
+        Index("ix_xml_record_module_path", "module", "logical_path"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    source_file_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("source_file.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    module: Mapped[str] = mapped_column(String(255), nullable=False)
+    xml_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    model: Mapped[str | None] = mapped_column(String(255))
+    logical_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    start_line: Mapped[int | None] = mapped_column(Integer)
+    end_line: Mapped[int | None] = mapped_column(Integer)
+    fingerprint: Mapped[str] = mapped_column(String(71), nullable=False)

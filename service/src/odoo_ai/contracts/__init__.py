@@ -39,6 +39,15 @@ from odoo_ai.contracts.logs import (
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.schema import PUBLIC_CONTRACT_MODELS, export_public_json_schemas
 from odoo_ai.contracts.screen_context import ScreenContext
+from odoo_ai.contracts.source import (
+    ScanRun,
+    ScanStatus,
+    SourceFile,
+    SourceFileKind,
+    SourceRef,
+    SourceSymbol,
+    XmlRecord,
+)
 
 __all__ = [
     "AnswerConfidence",
@@ -63,7 +72,13 @@ __all__ = [
     "PUBLIC_CONTRACT_MODELS",
     "RecordRef",
     "RecordSnapshot",
+    "ScanRun",
+    "ScanStatus",
     "ScreenContext",
+    "SourceFile",
+    "SourceFileKind",
+    "SourceRef",
+    "SourceSymbol",
     "ToolRisk",
     "ToolSpec",
     "TimestampRange",
@@ -71,5 +86,6 @@ __all__ = [
     "UserExecutionContext",
     "UserRequest",
     "Workflow",
+    "XmlRecord",
     "export_public_json_schemas",
 ]

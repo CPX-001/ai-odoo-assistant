@@ -1,6 +1,6 @@
 # M3 — Source + logs
 
-Estado: no iniciado. M0, M1 y M2 están completados; **M2 GATE: PASS**. M3 es el siguiente milestone.
+Estado: en curso. M0, M1 y M2 están completados; **M2 GATE: PASS**. M3-01 y M3-02 están implementados y verificados; M3-03 es el siguiente task packet.
 
 M3 convierte source y logs en evidencia determinista, acotada y consultable desde Diagnostics, sin introducir todavía Codex ni el agent loop. El objetivo observable del milestone es encontrar `sale.order.action_confirm` con módulo/fichero/líneas correctas y recuperar un traceback por ventana/términos desde Diagnostics.
 
@@ -20,7 +20,7 @@ Assistant Service
 
 ## Orden de ejecución
 
-1. [`M3-01-donor-audit.md`](M3-01-donor-audit.md) — auditoría del scanner donor MIT antes de reutilizar código.
+1. [`M3-01-donor-audit.md`](M3-01-donor-audit.md) — auditoría del scanner donor MIT antes de reutilizar código. Resultado: [`M3_ERPIPE_SCANNER_AUDIT.md`](../../../third_party/M3_ERPIPE_SCANNER_AUDIT.md).
 2. [`M3-02-source-contracts-storage.md`](M3-02-source-contracts-storage.md) — contracts y persistencia mínima de scans/source.
 3. [`M3-03-source-roots-scan-orchestration.md`](M3-03-source-roots-scan-orchestration.md) — roots, módulos instalados y lifecycle incremental.
 4. [`M3-04-manifest-python-ast.md`](M3-04-manifest-python-ast.md) — manifest literal y Python AST.

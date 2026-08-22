@@ -43,3 +43,46 @@ def test_connection_and_upgrade_head_are_idempotent(monkeypatch: pytest.MonkeyPa
 
     assert current_database == settings.database_name
     assert current_revision == expected_head
+
+
+def test_upgrade_from_previous_revision_creates_source_index(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _configure_test_database(monkeypatch)
+    config = Config(REPO_ROOT / "alembic.ini")
+    command.downgrade(config, "0002_m1_03_runtime_tables")
+    command.upgrade(config, "head")
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            tables = set(
+                connection.execute(
+                    text(
+                        "SELECT tablename FROM pg_tables "
+                        "WHERE schemaname = 'public'"
+                    )
+                ).scalars()
+            )
+    finally:
+        engine.dispose()
+
+    assert {"scan_run", "source_file", "source_symbol", "xml_record"} <= tables
+
+
+def test_fresh_database_upgrade_reaches_source_index_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _configure_test_database(monkeypatch)
+    config = Config(REPO_ROOT / "alembic.ini")
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
+    finally:
+        engine.dispose()
+
+    assert revision == "0003_m3_02_source_index"
