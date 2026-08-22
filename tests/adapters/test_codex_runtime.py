@@ -15,6 +15,7 @@ from odoo_ai.adapters import (
     CodexRuntimeProcessError,
     CodexRuntimeSettings,
     CodexRuntimeTimeoutError,
+    probe_codex_readiness,
     probe_codex_runtime,
 )
 
@@ -242,6 +243,45 @@ def test_probe_reports_protocol_without_claiming_auth_or_model(tmp_path: Path) -
         assert result.model_state == "unknown"
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("account", "requires_auth", "expected"),
+    [
+        ({"type": "chatgpt"}, True, "available"),
+        (None, True, "unavailable"),
+        (None, False, "not_required"),
+    ],
+)
+def test_readiness_probe_checks_account_without_starting_a_turn(
+    tmp_path: Path,
+    account: dict[str, str] | None,
+    requires_auth: bool,
+    expected: str,
+) -> None:
+    observed = tmp_path / "methods.json"
+    after = (
+        "methods = []\n"
+        "account_request = json.loads(sys.stdin.readline())\n"
+        "methods.append(account_request['method'])\n"
+        "print(json.dumps({'id': account_request['id'], 'result': {"
+        f"'account': {account!r}, 'requiresOpenaiAuth': {requires_auth!r}"
+        "}}), flush=True)\n"
+        f"open({str(observed)!r}, 'w', encoding='utf-8').write(json.dumps(methods))"
+    )
+    executable = _fake_codex(tmp_path, _valid_handshake(after_initialized=after))
+
+    async def run() -> None:
+        result = await probe_codex_readiness(
+            CodexRuntimeSettings(executable=executable, model="configured-model")
+        )
+        assert result.state is CodexProbeState.COMPATIBLE
+        assert result.auth_state == expected
+        assert result.model_state == "configured"
+        assert result.model == "configured-model"
+
+    asyncio.run(run())
+    assert json.loads(observed.read_text(encoding="utf-8")) == ["account/read"]
 
 
 def test_experimental_api_flag_is_explicit_and_strict() -> None:

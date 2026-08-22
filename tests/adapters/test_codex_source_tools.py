@@ -386,6 +386,9 @@ def test_fake_codex_completes_three_source_tool_roundtrips(tmp_path: Path) -> No
     excerpt_result = json.loads(responses[-1]["result"]["contentItems"][0]["text"])
     assert excerpt_result["evidence"][0]["evidence_id"] == str(EVIDENCE_ID)
     assert excerpt_result["data"]["logical_path"] == ("sale_fixture/models/sale_order.py")
+    exact_source = "self.env['project.task'].create({})"
+    assert exact_source not in json.dumps(captured["turn"])
+    assert exact_source in responses[-1]["result"]["contentItems"][0]["text"]
     assert str(tmp_path.resolve()) not in observed.read_text(encoding="utf-8")
 
 

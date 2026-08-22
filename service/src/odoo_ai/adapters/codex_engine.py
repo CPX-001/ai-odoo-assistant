@@ -160,6 +160,7 @@ class CodexAppServerEngine:
             async with self._executor_context(context, tools) as executor:
                 client = await CodexAppServerClient.start(self._settings)
                 async with client:
+                    turn_deadline = monotonic() + self._settings.turn_timeout_seconds
                     thread_result = await client.request(
                         "thread/start",
                         {
@@ -169,6 +170,7 @@ class CodexAppServerEngine:
                             ),
                             "dynamicTools": codex_dynamic_tools(tools),
                         },
+                        timeout_seconds=_remaining_seconds(turn_deadline),
                     )
                     thread_id, model, provider = _validate_thread_result(thread_result)
                     turn_id = await self._start_turn(
@@ -176,6 +178,7 @@ class CodexAppServerEngine:
                         thread_id=thread_id,
                         turn_input=turn_input,
                         output_schema=schema,
+                        deadline=turn_deadline,
                     )
                     try:
                         completed_turn, dynamic_call_ids = await self._wait_for_completion(
@@ -184,6 +187,7 @@ class CodexAppServerEngine:
                             turn_id=turn_id,
                             executor=executor,
                             dynamic_tool_names=_codex_dynamic_tool_bindings(tools),
+                            deadline=turn_deadline,
                         )
                     except BaseException:
                         await _best_effort_interrupt(client, thread_id=thread_id, turn_id=turn_id)
@@ -272,6 +276,7 @@ class CodexAppServerEngine:
         thread_id: str,
         turn_input: str,
         output_schema: dict[str, object],
+        deadline: float,
     ) -> str:
         result = await client.request(
             "turn/start",
@@ -280,6 +285,7 @@ class CodexAppServerEngine:
                 "outputSchema": output_schema,
                 "threadId": thread_id,
             },
+            timeout_seconds=_remaining_seconds(deadline),
         )
         if not isinstance(result, dict) or not isinstance(result.get("turn"), dict):
             raise CodexEngineError("codex_turn_start_invalid")
@@ -297,11 +303,14 @@ class CodexAppServerEngine:
         turn_id: str,
         executor: ToolExecutor | None,
         dynamic_tool_names: Mapping[str, str],
+        deadline: float,
     ) -> tuple[dict[str, object], frozenset[str]]:
         dynamic_call_ids: set[str] = set()
         request_ids: set[tuple[type[object], object]] = set()
         for _ in range(self._limits.max_events):
-            event = await client.next_event(timeout_seconds=self._settings.turn_timeout_seconds)
+            event = await client.next_event(
+                timeout_seconds=_remaining_seconds(deadline)
+            )
             method = event.get("method")
             params = event.get("params")
             if "id" in event:
@@ -320,6 +329,14 @@ class CodexAppServerEngine:
                 )
                 dynamic_call_ids.add(call_id)
                 continue
+            if not isinstance(method, str):
+                raise CodexEngineError("codex_event_invalid")
+            _enforce_notification_policy(
+                method,
+                params,
+                thread_id=thread_id,
+                turn_id=turn_id,
+            )
             if method == "item/completed":
                 _reject_forbidden_completed_item(
                     params,
@@ -391,7 +408,7 @@ def serialize_codex_context(
                 "view_type": _optional_bounded_text(context.screen.view_type, limits),
             },
             "instance_capabilities": [
-                _bounded_text(capability, limits)
+                _bounded_capability(capability, limits)
                 for capability in sorted(set(context.instance.capabilities))[:64]
             ],
             "conversation": {
@@ -659,7 +676,7 @@ def _reject_forbidden_completed_item(
     if not isinstance(params, dict):
         raise CodexEngineError("codex_item_completion_invalid")
     if params.get("threadId") != thread_id or params.get("turnId") != turn_id:
-        return
+        raise CodexEngineError("codex_item_completion_mismatch")
     item = params.get("item")
     if not isinstance(item, dict):
         raise CodexEngineError("codex_item_completion_invalid")
@@ -669,6 +686,38 @@ def _reject_forbidden_completed_item(
         return
     if item.get("type") not in _ALLOWED_COMPLETED_ITEM_TYPES:
         raise CodexEngineError("codex_tool_call_not_allowed")
+
+
+def _enforce_notification_policy(
+    method: str,
+    params: object,
+    *,
+    thread_id: str,
+    turn_id: str,
+) -> None:
+    if method in {"item/started", "item/completed"}:
+        if not isinstance(params, dict):
+            raise CodexEngineError("codex_item_event_invalid")
+        if params.get("threadId") != thread_id or params.get("turnId") != turn_id:
+            raise CodexEngineError("codex_item_event_mismatch")
+        item = params.get("item")
+        if not isinstance(item, dict):
+            raise CodexEngineError("codex_item_event_invalid")
+        if item.get("type") not in _ALLOWED_COMPLETED_ITEM_TYPES | {"dynamicToolCall"}:
+            raise CodexEngineError("codex_tool_call_not_allowed")
+        return
+    if method == "turn/completed":
+        return
+    if method in {"turn/started", "model/rerouted"} or method.startswith(
+        (
+            "item/agentMessage/",
+            "item/reasoning/",
+            "thread/status/",
+            "turn/plan/",
+        )
+    ):
+        return
+    raise CodexEngineError("codex_event_not_allowed")
 
 
 def _sanitized_turn_error_code(error: object) -> str:
@@ -761,6 +810,13 @@ async def _best_effort_interrupt(
         return
 
 
+def _remaining_seconds(deadline: float) -> float:
+    remaining = deadline - monotonic()
+    if remaining <= 0:
+        raise CodexEngineError("codex_turn_deadline_exceeded")
+    return remaining
+
+
 def _canonical_json(value: object, *, error_code: str) -> str:
     try:
         return json.dumps(
@@ -782,6 +838,17 @@ def _bounded_text(value: str, limits: CodexEngineLimits) -> str:
 
 def _optional_bounded_text(value: str | None, limits: CodexEngineLimits) -> str | None:
     return None if value is None else _bounded_text(value, limits)
+
+
+def _bounded_capability(value: str, limits: CodexEngineLimits) -> str:
+    bounded = _bounded_text(value, limits)
+    if (
+        len(bounded) > 128
+        or _SENSITIVE_KEY.search(bounded)
+        or re.fullmatch(r"[A-Za-z0-9_.:-]+", bounded) is None
+    ):
+        raise CodexEngineError("codex_context_capability_invalid")
+    return bounded
 
 
 def _optional_identifier(value: object) -> str | None:

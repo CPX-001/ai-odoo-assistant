@@ -1,5 +1,6 @@
 """FastAPI application factory for the Assistant Service."""
 
+import asyncio
 from collections.abc import Callable
 from typing import Final, Literal
 from uuid import UUID
@@ -11,6 +12,7 @@ from pydantic import BaseModel, ConfigDict
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from odoo_ai.adapters import (
+    CachedCodexReasoningStatus,
     CodexAppServerEngine,
     CodexRuntimeSettings,
     OdooGatewayError,
@@ -46,7 +48,12 @@ from odoo_ai.contracts import (
     SourceTestDiagnostics,
     TracebackRequest,
 )
-from odoo_ai.runtime.status import AdminStatus, inspect_admin_status
+from odoo_ai.runtime.status import (
+    AdminStatus,
+    ComponentState,
+    ReasoningComponentStatus,
+    inspect_admin_status,
+)
 from odoo_ai.security import require_shared_secret
 
 MAX_CONTEXT_REQUEST_BYTES: Final = 16 * 1024
@@ -135,6 +142,7 @@ def create_app(
         max_bytes=MAX_CONTEXT_REQUEST_BYTES,
     )
     diagnostics = diagnostics_service
+    reasoning_status_probe: CachedCodexReasoningStatus | None = None
 
     def get_explain_service() -> ExplainService:
         if explain_service is not None:
@@ -178,7 +186,17 @@ def create_app(
         dependencies=[Depends(require_shared_secret)],
     )
     async def admin_status() -> AdminStatus:
-        return inspect_admin_status()
+        nonlocal reasoning_status_probe
+        try:
+            if reasoning_status_probe is None:
+                reasoning_status_probe = CachedCodexReasoningStatus.from_env()
+            reasoning = await reasoning_status_probe.inspect()
+        except (OSError, RuntimeError, ValueError):
+            reasoning = ReasoningComponentStatus(
+                state=ComponentState.PENDING,
+                detail="error",
+            )
+        return await asyncio.to_thread(inspect_admin_status, reasoning=reasoning)
 
     @application.get(
         "/v1/admin/source/status",

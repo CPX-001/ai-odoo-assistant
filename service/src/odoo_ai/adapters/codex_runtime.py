@@ -101,6 +101,7 @@ class CodexRuntimeSettings:
             or self.model != self.model.strip()
             or len(self.model) > 128
             or any(character in self.model for character in "\r\n\0")
+            or re.fullmatch(r"[A-Za-z0-9_.:-]+", self.model) is None
         ):
             raise CodexRuntimeConfigurationError("codex_model_invalid")
         if not 0 < self.startup_timeout_seconds <= 60:
@@ -183,13 +184,14 @@ class CodexProbeState(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class CodexRuntimeProbe:
-    """Sanitized compatibility result; auth/model usability remain explicit unknowns."""
+    """Sanitized compatibility and account-read result."""
 
     state: CodexProbeState
     protocol: str | None = None
     runtime_version: str | None = None
     auth_state: str = "unknown"
     model_state: str = "unknown"
+    model: str | None = None
     error_code: str | None = None
 
 
@@ -520,6 +522,75 @@ async def probe_codex_runtime(settings: CodexRuntimeSettings) -> CodexRuntimePro
         )
     finally:
         await client.close()
+
+
+async def probe_codex_readiness(settings: CodexRuntimeSettings) -> CodexRuntimeProbe:
+    """Probe handshake and account state without starting a model turn."""
+
+    if settings.executable is None:
+        return CodexRuntimeProbe(
+            state=CodexProbeState.NOT_CONFIGURED,
+            model_state="configured" if settings.model is not None else "unknown",
+            model=settings.model,
+        )
+    try:
+        client = await CodexAppServerClient.start(settings)
+    except CodexRuntimeNotFoundError as error:
+        return CodexRuntimeProbe(
+            state=CodexProbeState.NOT_FOUND,
+            model_state="configured" if settings.model is not None else "unknown",
+            model=settings.model,
+            error_code=error.code,
+        )
+    except CodexRuntimeError as error:
+        return CodexRuntimeProbe(
+            state=CodexProbeState.HANDSHAKE_FAILED,
+            model_state="configured" if settings.model is not None else "unknown",
+            model=settings.model,
+            error_code=error.code,
+        )
+    try:
+        info = client.server_info
+        version_match = _VERSION.search(info.user_agent) if info is not None else None
+        try:
+            account_result = await client.request(
+                "account/read",
+                {"refreshToken": False},
+                timeout_seconds=settings.startup_timeout_seconds,
+            )
+            auth_state = _auth_state(account_result)
+            error_code = None
+        except CodexProtocolError as error:
+            auth_state = "unavailable"
+            error_code = error.code
+        except CodexRuntimeError as error:
+            auth_state = "unknown"
+            error_code = error.code
+        return CodexRuntimeProbe(
+            state=CodexProbeState.COMPATIBLE,
+            protocol=APP_SERVER_PROTOCOL,
+            runtime_version=version_match.group(1) if version_match else None,
+            auth_state=auth_state,
+            model_state="configured" if settings.model is not None else "runtime_default",
+            model=settings.model,
+            error_code=error_code,
+        )
+    finally:
+        await client.close()
+
+
+def _auth_state(result: object) -> str:
+    if not isinstance(result, dict) or not isinstance(result.get("requiresOpenaiAuth"), bool):
+        raise CodexProtocolError("codex_account_response_invalid")
+    requires_auth = result["requiresOpenaiAuth"]
+    account = result.get("account")
+    if not requires_auth:
+        return "not_required"
+    if isinstance(account, dict) and isinstance(account.get("type"), str):
+        return "available"
+    if account is None:
+        return "unavailable"
+    raise CodexProtocolError("codex_account_response_invalid")
 
 
 def _resolved_executable(executable: Path | None) -> Path:

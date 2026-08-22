@@ -228,6 +228,7 @@ class ToolExecutionLimits:
     max_evidence_bytes: int = 192 * 1024
     max_input_nesting: int = 8
     deadline_seconds: float = 30.0
+    per_tool_timeout_seconds: float = 5.0
 
     def __post_init__(self) -> None:
         if not 0 <= self.max_calls <= 128:
@@ -244,6 +245,8 @@ class ToolExecutionLimits:
             raise ToolExecutorError("tool_nesting_limit_invalid")
         if not 0 < self.deadline_seconds <= 600:
             raise ToolExecutorError("tool_deadline_invalid")
+        if not 0 < self.per_tool_timeout_seconds <= 120:
+            raise ToolExecutorError("tool_timeout_invalid")
 
 
 class ToolExecutor:
@@ -351,14 +354,20 @@ class ToolExecutor:
         self._calls += 1
         self._tool_calls[call.tool_name] = per_tool_calls + 1
         self._input_bytes += len(input_bytes)
-        remaining = self._deadline - self._clock()
+        total_remaining = self._deadline - self._clock()
+        remaining = min(total_remaining, self._limits.per_tool_timeout_seconds)
         if remaining <= 0:
             raise ToolExecutorError("tool_deadline_exceeded")
         try:
             async with asyncio.timeout(remaining):
                 raw_result = await binding.handler(validated_input)
         except TimeoutError:
-            raise ToolExecutorError("tool_deadline_exceeded") from None
+            code = (
+                "tool_deadline_exceeded"
+                if total_remaining <= self._limits.per_tool_timeout_seconds
+                else "tool_timeout_exceeded"
+            )
+            raise ToolExecutorError(code) from None
         except ToolExecutorError:
             raise
         except Exception:

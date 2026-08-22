@@ -13,6 +13,14 @@ from odoo_ai.contracts import LogCapabilityState, SourceCapabilityState
 from odoo_ai.storage.models import CapabilitySnapshot, InstanceProfile, TraceEvent
 
 type Readiness = Literal["FULLY_READY", "DEGRADED", "ERROR"]
+type ReasoningCapabilityState = Literal[
+    "OPERATIONAL",
+    "NOT_CONFIGURED",
+    "RUNTIME_MISSING",
+    "AUTH_UNAVAILABLE",
+    "PROTOCOL_INCOMPATIBLE",
+    "ERROR",
+]
 
 _SENSITIVE_KEY_PARTS = ("password", "secret", "api_key", "authorization", "cookie")
 _SENSITIVE_KEYS = {
@@ -99,7 +107,7 @@ def record_source_capability(
     return create_capability_snapshot(
         session,
         instance_profile_id=instance_profile_id,
-        readiness="DEGRADED",
+        readiness=_readiness_for_capabilities(capabilities),
         capabilities=capabilities,
     )
 
@@ -126,9 +134,87 @@ def record_log_capability(
     return create_capability_snapshot(
         session,
         instance_profile_id=instance_profile_id,
-        readiness="DEGRADED",
+        readiness=_readiness_for_capabilities(capabilities),
         capabilities=capabilities,
     )
+
+
+def record_reasoning_capability(
+    session: Session,
+    *,
+    instance_profile_id: UUID,
+    state: ReasoningCapabilityState,
+    provider: Literal["codex"] = "codex",
+    protocol: str | None = None,
+    runtime_version: str | None = None,
+    model: str | None = None,
+) -> CapabilitySnapshot:
+    """Append only the bounded reasoning facts allowed in capability snapshots."""
+
+    safe_protocol = _safe_capability_text(protocol, max_length=64, field="protocol")
+    safe_version = _safe_capability_text(
+        runtime_version, max_length=64, field="runtime_version"
+    )
+    safe_model = _safe_capability_text(model, max_length=128, field="model")
+    latest = get_latest_capability_snapshot(
+        session, instance_profile_id=instance_profile_id
+    )
+    capabilities = dict(latest.capabilities) if latest is not None else {}
+    capabilities.update(
+        {
+            "reasoning_engine": state,
+            "reasoning_operational": state == "OPERATIONAL",
+            "reasoning_provider": provider,
+        }
+    )
+    optional = {
+        "reasoning_protocol": safe_protocol,
+        "reasoning_runtime_version": safe_version,
+        "reasoning_model": safe_model,
+    }
+    for key, value in optional.items():
+        if value is None:
+            capabilities.pop(key, None)
+        else:
+            capabilities[key] = value
+    readiness = _readiness_for_capabilities(capabilities)
+    if (
+        latest is not None
+        and latest.readiness == readiness
+        and latest.capabilities == capabilities
+    ):
+        return latest
+    return create_capability_snapshot(
+        session,
+        instance_profile_id=instance_profile_id,
+        readiness=readiness,
+        capabilities=capabilities,
+    )
+
+
+def _readiness_for_capabilities(capabilities: Mapping[str, JsonValue]) -> Readiness:
+    if (
+        capabilities.get("source") == SourceCapabilityState.DETECTED.value
+        and capabilities.get("logs") == LogCapabilityState.OPERATIONAL.value
+        and capabilities.get("reasoning_engine") == "OPERATIONAL"
+    ):
+        return "FULLY_READY"
+    return "DEGRADED"
+
+
+def _safe_capability_text(
+    value: str | None, *, max_length: int, field: str
+) -> str | None:
+    if value is None:
+        return None
+    if (
+        not value
+        or value != value.strip()
+        or len(value) > max_length
+        or any(character in value for character in "\r\n\0/\\")
+    ):
+        raise ValueError(f"unsafe reasoning {field}")
+    return value
 
 
 def get_latest_instance_profile(session: Session) -> InstanceProfile | None:

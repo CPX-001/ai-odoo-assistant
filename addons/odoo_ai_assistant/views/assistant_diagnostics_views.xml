@@ -35,6 +35,14 @@
                         <field name="log_state"/>
                         <field name="log_provider"/>
                     </group>
+                    <group string="Reasoning Engine">
+                        <field name="reasoning_engine_state"/>
+                        <field name="reasoning_provider"/>
+                        <field name="reasoning_protocol"/>
+                        <field name="reasoning_runtime_version"/>
+                        <field name="reasoning_model"/>
+                        <field name="reasoning_setup_message"/>
+                    </group>
                     <group string="Bounded Diagnostic Evidence" col="1">
                         <field name="source_result" nolabel="1"/>
                         <field name="log_result" nolabel="1"/>

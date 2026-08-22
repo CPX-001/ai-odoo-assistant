@@ -34,6 +34,12 @@ class AssistantDiagnostics(models.TransientModel):
     source_scan_fingerprint = fields.Char(readonly=True)
     log_state = fields.Char(readonly=True)
     log_provider = fields.Char(readonly=True)
+    reasoning_engine_state = fields.Char(readonly=True)
+    reasoning_provider = fields.Char(readonly=True)
+    reasoning_protocol = fields.Char(readonly=True)
+    reasoning_runtime_version = fields.Char(readonly=True)
+    reasoning_model = fields.Char(readonly=True)
+    reasoning_setup_message = fields.Char(readonly=True)
     source_result = fields.Text(readonly=True)
     log_result = fields.Text(readonly=True)
 
@@ -193,6 +199,14 @@ class AssistantDiagnostics(models.TransientModel):
             "source_scan_fingerprint": unknown,
             "log_state": unknown,
             "log_provider": unknown,
+            "reasoning_engine_state": unknown,
+            "reasoning_provider": unknown,
+            "reasoning_protocol": unknown,
+            "reasoning_runtime_version": unknown,
+            "reasoning_model": unknown,
+            "reasoning_setup_message": _(
+                "Configure and test the Codex runtime from the Assistant setup boundary."
+            ),
             "source_result": False,
             "log_result": False,
         }
@@ -210,6 +224,7 @@ class AssistantDiagnostics(models.TransientModel):
         instance = status.get("instance") if isinstance(status.get("instance"), dict) else {}
         source = components.get("source", {})
         logs = components.get("logs", {})
+        reasoning = components.get("reasoning_engine", {})
         try:
             source_status = client.source_status()
         except AssistantServiceError:
@@ -229,8 +244,43 @@ class AssistantDiagnostics(models.TransientModel):
             log_provider=str(
                 (instance.get("capabilities") or {}).get("log_provider") or unknown
             ),
+            reasoning_engine_state=str(reasoning.get("state") or unknown),
+            reasoning_provider=str(reasoning.get("provider") or unknown),
+            reasoning_protocol=str(reasoning.get("protocol") or unknown),
+            reasoning_runtime_version=str(
+                reasoning.get("runtime_version") or unknown
+            ),
+            reasoning_model=str(reasoning.get("model") or unknown),
+            reasoning_setup_message=self._reasoning_setup_message(
+                reasoning.get("detail")
+            ),
         )
         return values
+
+    @api.model
+    def _reasoning_setup_message(self, detail):
+        messages = {
+            "operational": _("Codex App Server is operational."),
+            "not_configured": _(
+                "Select the Codex runtime in the Assistant host setup, then test again."
+            ),
+            "runtime_missing": _(
+                "The configured Codex runtime is unavailable to the Assistant Service."
+            ),
+            "auth_unavailable": _(
+                "Authenticate Codex as the operating-system user that runs the Assistant Service."
+            ),
+            "protocol_incompatible": _(
+                "The configured Codex runtime is not compatible with this Assistant version."
+            ),
+            "error": _(
+                "Codex could not be tested. Review the sanitized Assistant Service diagnostics."
+            ),
+        }
+        return messages.get(
+            detail,
+            _("Configure and test the Codex runtime from the Assistant setup boundary."),
+        )
 
     @api.model
     def _error_message(self, code: str) -> str:

@@ -19,8 +19,8 @@ from odoo_ai.storage import (
     DatabaseConfigurationError,
     DatabaseSettings,
     create_database_engine,
-    get_latest_capability_snapshot,
     get_latest_instance_profile,
+    record_reasoning_capability,
 )
 
 
@@ -42,6 +42,13 @@ class MigrationStatus(ComponentStatus):
     expected_revision: str | None = None
 
 
+class ReasoningComponentStatus(ComponentStatus):
+    provider: Literal["codex"] = "codex"
+    protocol: str | None = None
+    runtime_version: str | None = None
+    model: str | None = None
+
+
 class InstanceStatus(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -59,14 +66,15 @@ class RuntimeComponents(BaseModel):
     migrations: MigrationStatus
     source: ComponentStatus
     logs: ComponentStatus
+    reasoning_engine: ReasoningComponentStatus
 
 
 class AdminStatus(BaseModel):
-    """Stable admin payload that cannot claim full product readiness in M1."""
+    """Stable, sanitized readiness payload for Odoo Diagnostics."""
 
     model_config = ConfigDict(frozen=True)
 
-    readiness: Literal["DEGRADED", "ERROR"]
+    readiness: Literal["FULLY_READY", "DEGRADED", "ERROR"]
     checked_at: datetime
     components: RuntimeComponents
     pending_capabilities: tuple[str, ...]
@@ -92,11 +100,17 @@ class AdminStatusService:
             ),
         )
 
-    def inspect(self) -> AdminStatus:
+    def inspect(
+        self, *, reasoning: ReasoningComponentStatus | None = None
+    ) -> AdminStatus:
         database = ComponentStatus(state=ComponentState.ERROR, detail="unavailable")
         migrations = MigrationStatus(state=ComponentState.ERROR, detail="unavailable")
         instance: InstanceStatus | None = None
         engine: Engine | None = None
+        reasoning_status = reasoning or ReasoningComponentStatus(
+            state=ComponentState.PENDING,
+            detail="unknown",
+        )
 
         try:
             engine = create_database_engine(self._settings)
@@ -105,7 +119,7 @@ class AdminStatusService:
                 database = ComponentStatus(state=ComponentState.OK, detail="available")
                 migrations = self._inspect_migrations(connection)
                 if migrations.state is ComponentState.OK:
-                    instance = self._read_instance(connection)
+                    instance = self._read_instance(connection, reasoning_status)
         except (CommandError, SQLAlchemyError, OSError, ValueError):
             pass
         finally:
@@ -122,9 +136,19 @@ class AdminStatusService:
             for capability in self._PENDING_CAPABILITIES
             if (capability != "source" or source.state is not ComponentState.OK)
             and (capability != "logs" or logs.state is not ComponentState.OK)
+            and (
+                capability != "reasoning_engine"
+                or reasoning_status.state is not ComponentState.OK
+            )
+        )
+        fully_ready = (
+            not has_error
+            and source.state is ComponentState.OK
+            and logs.state is ComponentState.OK
+            and reasoning_status.state is ComponentState.OK
         )
         return AdminStatus(
-            readiness="ERROR" if has_error else "DEGRADED",
+            readiness="ERROR" if has_error else "FULLY_READY" if fully_ready else "DEGRADED",
             checked_at=datetime.now(UTC),
             components=RuntimeComponents(
                 runtime=ComponentStatus(state=ComponentState.OK, detail="running"),
@@ -132,6 +156,7 @@ class AdminStatusService:
                 migrations=migrations,
                 source=source,
                 logs=logs,
+                reasoning_engine=reasoning_status,
             ),
             pending_capabilities=pending_capabilities,
             instance=instance,
@@ -150,17 +175,28 @@ class AdminStatusService:
         )
 
     @staticmethod
-    def _read_instance(connection: Connection) -> InstanceStatus | None:
+    def _read_instance(
+        connection: Connection, reasoning: ReasoningComponentStatus
+    ) -> InstanceStatus | None:
         with Session(bind=connection) as session:
             profile = get_latest_instance_profile(session)
             if profile is None:
                 return None
-            snapshot = get_latest_capability_snapshot(session, instance_profile_id=profile.id)
+            snapshot = record_reasoning_capability(
+                session,
+                instance_profile_id=profile.id,
+                state=_reasoning_snapshot_state(reasoning),
+                provider=reasoning.provider,
+                protocol=reasoning.protocol,
+                runtime_version=reasoning.runtime_version,
+                model=reasoning.model,
+            )
+            session.commit()
             return InstanceStatus(
                 instance_id=profile.instance_id,
                 fingerprint=profile.fingerprint,
                 reported_readiness=snapshot.readiness if snapshot else None,
-                capabilities=snapshot.capabilities if snapshot else {},
+                capabilities=_public_capabilities(snapshot.capabilities if snapshot else {}),
             )
 
     @staticmethod
@@ -208,15 +244,73 @@ def unavailable_admin_status() -> AdminStatus:
             migrations=MigrationStatus(state=ComponentState.ERROR, detail="unavailable"),
             source=ComponentStatus(state=ComponentState.PENDING, detail="unknown"),
             logs=ComponentStatus(state=ComponentState.PENDING, detail="unknown"),
+            reasoning_engine=ReasoningComponentStatus(
+                state=ComponentState.PENDING,
+                detail="unknown",
+            ),
         ),
         pending_capabilities=AdminStatusService._PENDING_CAPABILITIES,
     )
 
 
-def inspect_admin_status() -> AdminStatus:
+def inspect_admin_status(
+    *, reasoning: ReasoningComponentStatus | None = None
+) -> AdminStatus:
     """Build the default status without leaking configuration errors."""
 
     try:
-        return AdminStatusService.from_env().inspect()
+        return AdminStatusService.from_env().inspect(reasoning=reasoning)
     except DatabaseConfigurationError:
         return unavailable_admin_status()
+
+
+def _reasoning_snapshot_state(reasoning: ReasoningComponentStatus) -> Literal[
+    "OPERATIONAL",
+    "NOT_CONFIGURED",
+    "RUNTIME_MISSING",
+    "AUTH_UNAVAILABLE",
+    "PROTOCOL_INCOMPATIBLE",
+    "ERROR",
+]:
+    if reasoning.state is ComponentState.OK:
+        return "OPERATIONAL"
+    if reasoning.detail == "not_configured":
+        return "NOT_CONFIGURED"
+    if reasoning.detail == "runtime_missing":
+        return "RUNTIME_MISSING"
+    if reasoning.detail == "auth_unavailable":
+        return "AUTH_UNAVAILABLE"
+    if reasoning.detail == "protocol_incompatible":
+        return "PROTOCOL_INCOMPATIBLE"
+    return "ERROR"
+
+
+_PUBLIC_CAPABILITY_KEYS = frozenset(
+    {
+        "assistant_db",
+        "log_provider",
+        "logs",
+        "logs_operational",
+        "reasoning_engine",
+        "reasoning_model",
+        "reasoning_operational",
+        "reasoning_protocol",
+        "reasoning_provider",
+        "reasoning_runtime_version",
+        "runtime_http",
+        "source",
+        "source_operational",
+    }
+)
+
+
+def _public_capabilities(
+    capabilities: dict[str, JsonValue],
+) -> dict[str, JsonValue]:
+    return {
+        key: value
+        for key, value in capabilities.items()
+        if key in _PUBLIC_CAPABILITY_KEYS
+        and not isinstance(value, (dict, list))
+        and (not isinstance(value, str) or len(value) <= 128)
+    }

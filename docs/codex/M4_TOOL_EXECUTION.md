@@ -52,6 +52,7 @@ Los defaults server-side por turn son:
 | output total | 256 KiB | permite candidatos y excerpts acotados |
 | nesting de input | 8 | acepta schemas normales y bloquea payloads patológicos |
 | deadline total | 30 s | evita ocupar el worker indefinidamente |
+| timeout por tool | 5 s | cancela un handler bloqueado sin agotar todo el turn |
 | input por tool | 16 KiB | default conservador, sustituible por binding |
 | output por tool | 96 KiB | soporta resultados source sin respuestas gigantes |
 | calls por tool | 4 | limita repetición incluso si queda budget total |
@@ -118,3 +119,17 @@ comprobada y verifica que no sale el root físico. El smoke opt-in
 `@openai/codex 0.149.0` y `gpt-5.6-sol`: el modelo solicitó exactamente una tool
 registrada y el resultado volvió al mismo turn. La autenticación permaneció
 gestionada por Codex; el test no leyó ni copió tokens.
+
+## M4-08: policy de eventos y deadline del engine
+
+El timeout configurado del turn es ahora un deadline único compartido por
+`thread/start`, `turn/start` y el consumo de eventos. Cada lectura usa sólo el
+tiempo restante. Al fallar una validación, agotar eventos o expirar el deadline,
+el engine solicita `turn/interrupt` de forma acotada y el cierre del runtime
+aplica TERM/KILL bounded si fuera necesario.
+
+Las únicas server requests admitidas son `item/tool/call` correlacionadas con el
+thread/turn actual y con una dynamic tool registrada. Las notificaciones se
+validan contra la superficie M4; command execution, file changes, approvals,
+items de otro turn y métodos inesperados son policy violations. Nunca se aprueba
+una escalación automáticamente.

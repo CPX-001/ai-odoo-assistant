@@ -10,7 +10,12 @@ from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import Engine, text
 
 from odoo_ai.api import create_app
-from odoo_ai.runtime.status import AdminStatusService, ComponentState, InstanceStatus
+from odoo_ai.runtime.status import (
+    AdminStatusService,
+    ComponentState,
+    InstanceStatus,
+    ReasoningComponentStatus,
+)
 from odoo_ai.storage import (
     DatabaseSettings,
     create_capability_snapshot,
@@ -42,6 +47,7 @@ def configured_admin_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     secret_file.write_text(f"{ADMIN_SECRET}\n", encoding="utf-8")
     secret_file.chmod(0o640)
     monkeypatch.setenv("ODOO_AI_SHARED_SECRET_FILE", str(secret_file))
+    monkeypatch.delenv("ODOO_AI_CODEX_EXECUTABLE", raising=False)
 
 
 @pytest.fixture
@@ -89,6 +95,57 @@ def test_admin_status_reports_runtime_db_migrations_and_profile(
     assert payload["components"]["migrations"]["detail"] == "at_head"
     assert payload["instance"]["instance_id"] == instance_id
     assert payload["pending_capabilities"] == ["source", "logs", "reasoning_engine"]
+    assert payload["components"]["reasoning_engine"] == {
+        "state": "pending",
+        "detail": "not_configured",
+        "provider": "codex",
+        "protocol": None,
+        "runtime_version": None,
+        "model": None,
+    }
+
+
+def test_all_required_capabilities_produce_fully_ready_sanitized_snapshot(
+    configured_engine: Engine,
+) -> None:
+    session_factory = create_session_factory(configured_engine)
+    with session_scope(session_factory) as session:
+        profile = create_instance_profile(
+            session,
+            instance_id=f"fully-ready-{uuid4()}",
+            fingerprint="sha256:fully-ready",
+        )
+        create_capability_snapshot(
+            session,
+            instance_profile_id=profile.id,
+            readiness="DEGRADED",
+            capabilities={
+                "source": "DETECTED",
+                "logs": "OPERATIONAL",
+                "log_provider": "file",
+                "source_root": "/srv/private/addons",
+                "shared_secret": "canary-secret",
+            },
+        )
+
+    status = AdminStatusService.from_env().inspect(
+        reasoning=ReasoningComponentStatus(
+            state=ComponentState.OK,
+            detail="operational",
+            protocol="app-server-jsonl-v2",
+            runtime_version="0.149.0",
+            model="configured-model",
+        )
+    )
+    serialized = status.model_dump_json()
+
+    assert status.readiness == "FULLY_READY"
+    assert status.pending_capabilities == ()
+    assert status.instance is not None
+    assert status.instance.reported_readiness == "FULLY_READY"
+    assert status.instance.capabilities["reasoning_engine"] == "OPERATIONAL"
+    assert "/srv/private" not in serialized
+    assert "canary-secret" not in serialized
 
 
 def test_admin_status_sanitizes_database_failure(monkeypatch: pytest.MonkeyPatch) -> None:

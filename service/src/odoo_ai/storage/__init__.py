@@ -22,6 +22,7 @@ from odoo_ai.storage.runtime_repository import (
     get_latest_instance_profile,
     list_trace_events,
     record_log_capability,
+    record_reasoning_capability,
     record_source_capability,
 )
 from odoo_ai.storage.source_repository import (
@@ -81,6 +82,7 @@ __all__ = [
     "list_trace_events",
     "record_source_capability",
     "record_log_capability",
+    "record_reasoning_capability",
     "mark_stale_source_files",
     "open_scan",
     "replace_file_derivatives",

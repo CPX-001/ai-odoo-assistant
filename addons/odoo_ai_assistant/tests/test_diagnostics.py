@@ -18,6 +18,14 @@ class FakeHealthyClient:
             "components": {
                 "assistant_database": {"state": "ok"},
                 "migrations": {"state": "ok"},
+                "reasoning_engine": {
+                    "state": "pending",
+                    "detail": "auth_unavailable",
+                    "provider": "codex",
+                    "protocol": "app-server-jsonl-v2",
+                    "runtime_version": "0.149.0",
+                    "model": None,
+                },
             },
             "instance": None,
         }
@@ -91,6 +99,11 @@ class TestAssistantDiagnostics(TransactionCase):
         self.assertEqual(values["readiness"], "DEGRADED")
         self.assertEqual(values["instance_id"], "Unknown")
         self.assertEqual(values["instance_fingerprint"], "Unknown")
+        self.assertEqual(values["reasoning_engine_state"], "pending")
+        self.assertEqual(values["reasoning_provider"], "codex")
+        self.assertEqual(values["reasoning_runtime_version"], "0.149.0")
+        self.assertIn("Authenticate Codex", values["reasoning_setup_message"])
+        self.assertNotIn("CODEX_HOME", values["reasoning_setup_message"])
 
     def test_service_failure_is_sanitized(self):
         diagnostics = self.env["odoo.ai.assistant.diagnostics"]
