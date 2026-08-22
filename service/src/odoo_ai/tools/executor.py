@@ -13,7 +13,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
-from odoo_ai.contracts import Evidence, ToolRisk, ToolSpec, TurnLimits
+from odoo_ai.contracts import Evidence, ToolExecutionEvent, ToolRisk, ToolSpec, TurnLimits
 
 ToolHandler = Callable[[BaseModel], Awaitable["ToolHandlerOutput"]]
 Clock = Callable[[], float]
@@ -275,6 +275,7 @@ class ToolExecutor:
         self._calls = 0
         self._input_bytes = 0
         self._output_bytes = 0
+        self._events: list[ToolExecutionEvent] = []
 
     @property
     def registry(self) -> ToolRegistry:
@@ -284,7 +285,45 @@ class ToolExecutor:
     def ledger(self) -> EvidenceLedger:
         return self._ledger
 
+    @property
+    def execution_events(self) -> tuple[ToolExecutionEvent, ...]:
+        return tuple(self._events)
+
     async def execute(self, call: ToolCall) -> ValidatedToolResult:
+        self._events.append(
+            ToolExecutionEvent(
+                event_name="tool.requested",
+                status="ok",
+                attributes={"tool_name": call.tool_name},
+            )
+        )
+        try:
+            result = await self._execute(call)
+        except ToolExecutorError as error:
+            self._events.append(
+                ToolExecutionEvent(
+                    event_name="tool.completed",
+                    status="error",
+                    attributes={
+                        "error_code": error.code,
+                        "tool_name": call.tool_name,
+                    },
+                )
+            )
+            raise
+        self._events.append(
+            ToolExecutionEvent(
+                event_name="tool.completed",
+                status="ok",
+                attributes={
+                    "evidence_count": len(result.evidence),
+                    "tool_name": call.tool_name,
+                },
+            )
+        )
+        return result
+
+    async def _execute(self, call: ToolCall) -> ValidatedToolResult:
         if call.call_id in self._seen_call_ids:
             raise ToolExecutorError("tool_call_duplicate")
         binding = self._registry.resolve(call.tool_name)

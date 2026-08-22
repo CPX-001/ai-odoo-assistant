@@ -1,5 +1,6 @@
 """Host-controlled tool execution primitives."""
 
+from odoo_ai.contracts import ToolExecutionEvent, ToolExecutionReport
 from odoo_ai.tools.executor import (
     EvidenceLedger,
     EvidenceOrigin,
@@ -19,6 +20,8 @@ __all__ = [
     "RegisteredTool",
     "ToolCall",
     "ToolExecutionLimits",
+    "ToolExecutionEvent",
+    "ToolExecutionReport",
     "ToolExecutor",
     "ToolExecutorError",
     "ToolHandlerOutput",

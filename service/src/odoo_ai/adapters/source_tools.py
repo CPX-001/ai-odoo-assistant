@@ -36,6 +36,7 @@ from odoo_ai.contracts import (
     SourceExcerptLine,
     SourceFile,
     SourceRef,
+    ToolExecutionReport,
     ToolRisk,
     ToolSpec,
 )
@@ -413,6 +414,7 @@ class SourceToolExecutorFactory:
         self._inventory_gateway_loader = inventory_gateway_loader
         self._database_settings = database_settings
         self._limits = limits or ToolExecutionLimits()
+        self._last_report = ToolExecutionReport()
 
     @classmethod
     def from_env(cls) -> SourceToolExecutorFactory:
@@ -430,6 +432,7 @@ class SourceToolExecutorFactory:
         context: ContextPack,
         advertised_specs: Sequence[ToolSpec],
     ) -> AsyncIterator[ToolExecutor]:
+        self._last_report = ToolExecutionReport()
         validated_specs = _validated_source_specs(advertised_specs)
         try:
             gateway = self._inventory_gateway_loader()
@@ -452,14 +455,28 @@ class SourceToolExecutorFactory:
                 live=context.live_evidence,
                 retrieved=context.retrieved_evidence,
             )
-            yield ToolExecutor(
+            executor = ToolExecutor(
                 registry=registry,
                 ledger=ledger,
                 turn_limits=context.limits,
                 limits=self._limits,
             )
+            try:
+                yield executor
+            finally:
+                self._last_report = ToolExecutionReport(
+                    events=executor.execution_events,
+                    retrieved_evidence=executor.ledger.retrieved_evidence,
+                )
         finally:
             await backend.close()
+
+    def take_report(self) -> ToolExecutionReport:
+        """Consume the report from this per-turn factory without retaining evidence."""
+
+        report = self._last_report
+        self._last_report = ToolExecutionReport()
+        return report
 
 
 def _open_runtime_source_state(

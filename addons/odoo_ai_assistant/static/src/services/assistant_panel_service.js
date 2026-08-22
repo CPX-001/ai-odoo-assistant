@@ -7,10 +7,60 @@ import { reactive } from "@odoo/owl";
 const KNOWN_ERROR_CODES = new Set([
     "access_denied",
     "authentication_failed",
+    "engine_timeout",
+    "engine_unavailable",
+    "evidence_unavailable",
     "invalid_context",
     "invalid_response",
     "service_unavailable",
 ]);
+
+export function normalizeExplainResponse(response) {
+    if (
+        response?.ok === true &&
+        typeof response.turn_id === "string" &&
+        typeof response.answer === "string" &&
+        ["high", "medium", "low"].includes(response.confidence) &&
+        Array.isArray(response.limitations) &&
+        Array.isArray(response.citations)
+    ) {
+        return { result: response, errorCode: null };
+    }
+    const code = response?.error?.code;
+    return {
+        result: null,
+        errorCode: KNOWN_ERROR_CODES.has(code) ? code : "invalid_response",
+    };
+}
+
+export async function submitExplainRequest({ state, screenContext, rpcCall, message }) {
+    if (state.loading) {
+        return false;
+    }
+    state.context = screenContext.capture();
+    state.result = null;
+    state.errorCode = null;
+    if (!state.context?.model || !state.context?.res_id) {
+        state.errorCode = "invalid_context";
+        return false;
+    }
+    state.loading = true;
+    try {
+        const response = await rpcCall("/odoo_ai/v1/explain", {
+            message,
+            screen: state.context,
+        });
+        const normalized = normalizeExplainResponse(response);
+        state.result = normalized.result;
+        state.errorCode = normalized.errorCode;
+    } catch {
+        state.errorCode = "service_unavailable";
+        state.result = null;
+    } finally {
+        state.loading = false;
+    }
+    return true;
+}
 
 export const assistantPanelService = {
     dependencies: ["odoo_ai_screen_context"],
@@ -46,33 +96,12 @@ export const assistantPanelService = {
             },
             refreshContext,
             async submit(message) {
-                refreshContext();
-                if (!state.context?.model || !state.context?.res_id) {
-                    state.errorCode = "invalid_context";
-                    return;
-                }
-                state.loading = true;
-                try {
-                    const response = await rpc("/odoo_ai/v1/context-read", {
-                        message,
-                        screen: state.context,
-                    });
-                    if (response?.ok === true) {
-                        state.result = response;
-                        state.errorCode = null;
-                    } else {
-                        const code = response?.error?.code;
-                        state.errorCode = KNOWN_ERROR_CODES.has(code)
-                            ? code
-                            : "invalid_response";
-                        state.result = null;
-                    }
-                } catch {
-                    state.errorCode = "service_unavailable";
-                    state.result = null;
-                } finally {
-                    state.loading = false;
-                }
+                return submitExplainRequest({
+                    state,
+                    screenContext,
+                    rpcCall: rpc,
+                    message,
+                });
             },
         };
     },

@@ -17,6 +17,7 @@ from odoo_ai.tools import (
     EvidenceLedger,
     RegisteredTool,
     ToolCall,
+    ToolExecutionEvent,
     ToolExecutionLimits,
     ToolExecutor,
     ToolExecutorError,
@@ -134,6 +135,19 @@ def test_explicit_registry_happy_path_validates_output_and_adds_evidence() -> No
     assert result.data == {"echoed": "hello"}
     assert result.evidence == (_evidence(),)
     assert executor.ledger.resolve_refs([EVIDENCE_ID]) == (_evidence(),)
+    assert executor.execution_events == (
+        ToolExecutionEvent(
+            event_name="tool.requested",
+            status="ok",
+            attributes={"tool_name": "fixture.echo"},
+        ),
+        ToolExecutionEvent(
+            event_name="tool.completed",
+            status="ok",
+            attributes={"evidence_count": 1, "tool_name": "fixture.echo"},
+        ),
+    )
+    assert "hello" not in repr(executor.execution_events)
 
 
 def test_unknown_tool_is_rejected_without_running_handler() -> None:
@@ -152,6 +166,14 @@ def test_unknown_tool_is_rejected_without_running_handler() -> None:
             )
         )
     assert calls == 0
+    assert executor.execution_events[-1] == ToolExecutionEvent(
+        event_name="tool.completed",
+        status="error",
+        attributes={
+            "error_code": "tool_not_registered",
+            "tool_name": "fixture.unknown",
+        },
+    )
 
 
 def test_executor_id_and_input_schema_must_match_explicit_binding() -> None:

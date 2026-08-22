@@ -25,17 +25,26 @@ root, has no default path, and must not be readable by the Assistant Service
 account. This separation lets the service transport a short-lived token
 without being able to mint authority for another Odoo user.
 
-The M2 panel captures navigation-only ``ScreenContext`` from the active Odoo
+The panel captures navigation-only ``ScreenContext`` from the active Odoo
 controller. Odoo validates that context, derives identity from the
 authenticated environment, creates a short-lived server-only delegation, and
-calls ``POST /v1/turns/context-read``. The browser never supplies a trusted
-``uid`` or company and never calls the Assistant Service directly.
+calls ``POST /v1/turns/explain``. The M2 ``POST /v1/turns/context-read`` route
+remains available for deterministic regressions. The browser never supplies a
+trusted ``uid`` or company and never calls the Assistant Service directly.
 
 The deterministic context-read turn discovers the effective model metadata,
 then requests only the available fields from this bounded candidate set:
 ``display_name``, ``name``, ``state``, and ``company_id``. It rereads exactly
 the delegated record through Odoo ORM and returns a sanitized record snapshot;
-it does not yet use Codex or another LLM.
+it remains the deterministic pre-read used before Codex or another
+``ReasoningEngine`` handles an M4 explanation.
+
+The M4 response returned to the browser contains only answer text, confidence,
+limitations, and reduced record/source citations. Generated markdown is
+treated as untrusted text and rendered with Owl escaping, not ``t-raw`` or
+``innerHTML``. Source citations expose logical module paths, bounded line
+ranges, fingerprints, and provenance; physical roots and raw excerpts stay
+server-side.
 
 The Assistant Service can call only the internal POST routes
 ``/odoo_ai/internal/v1/model-metadata`` and

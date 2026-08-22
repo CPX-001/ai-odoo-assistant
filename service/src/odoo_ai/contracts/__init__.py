@@ -39,6 +39,13 @@ from odoo_ai.contracts.evidence import (
     EvidenceSensitivity,
     EvidenceStatus,
 )
+from odoo_ai.contracts.explain import (
+    ExplainCitation,
+    ExplainTurnRequest,
+    ExplainTurnResponse,
+    RecordCitation,
+    SourceCitation,
+)
 from odoo_ai.contracts.logs import (
     LogCapabilityState,
     LogCorrelation,
@@ -74,6 +81,7 @@ from odoo_ai.contracts.source import (
     SourceSymbol,
     XmlRecord,
 )
+from odoo_ai.contracts.tool_execution import ToolExecutionEvent, ToolExecutionReport
 
 __all__ = [
     "AnswerConfidence",
@@ -89,6 +97,9 @@ __all__ = [
     "EvidenceKind",
     "EvidenceSensitivity",
     "EvidenceStatus",
+    "ExplainCitation",
+    "ExplainTurnRequest",
+    "ExplainTurnResponse",
     "EmptyDiagnosticsRequest",
     "FindModelExtensionsRequest",
     "FindModelExtensionsResult",
@@ -109,12 +120,14 @@ __all__ = [
     "ProposedAction",
     "PUBLIC_CONTRACT_MODELS",
     "RecordRef",
+    "RecordCitation",
     "RecordSnapshot",
     "ReadExcerptRequest",
     "ScanRun",
     "ScanStatus",
     "ScreenContext",
     "SourceCapabilityState",
+    "SourceCitation",
     "SourceCandidate",
     "SourceExcerpt",
     "SourceExcerptLine",
@@ -129,6 +142,8 @@ __all__ = [
     "SourceTestDiagnostics",
     "SourceSymbol",
     "ToolRisk",
+    "ToolExecutionEvent",
+    "ToolExecutionReport",
     "ToolSpec",
     "TimestampRange",
     "TracebackRequest",

@@ -90,6 +90,19 @@ class AssistantServiceClient:
     def context_read(self, payload: dict[str, object]) -> dict[str, Any]:
         """Submit one bounded server-to-server M2 contextual read turn."""
 
+        return self._turn_post("/v1/turns/context-read", payload)
+
+    def explain(self, payload: dict[str, object]) -> dict[str, Any]:
+        """Submit one bounded server-to-server M4 EXPLAIN turn."""
+
+        return self._turn_post("/v1/turns/explain", payload)
+
+    def _turn_post(
+        self, path: str, payload: dict[str, object]
+    ) -> dict[str, Any]:
+        if path not in {"/v1/turns/context-read", "/v1/turns/explain"}:
+            raise AssistantServiceError("invalid_request")
+
         secret = self._read_shared_secret()
         try:
             body = json.dumps(
@@ -105,7 +118,7 @@ class AssistantServiceClient:
             raise AssistantServiceError("invalid_request")
         return self._request_json(
             "POST",
-            "/v1/turns/context-read",
+            path,
             body=body,
             headers={
                 "Accept": "application/json",
@@ -198,6 +211,15 @@ class AssistantServiceClient:
             raise AssistantServiceError("invalid_request")
         if response.status == 422:
             raise AssistantServiceError("invalid_context")
+        if response.status in {502, 503, 504}:
+            error_code = _response_error_code(response_body)
+            if error_code in {
+                "engine_timeout",
+                "engine_unavailable",
+                "evidence_unavailable",
+            }:
+                raise AssistantServiceError(error_code)
+            raise AssistantServiceError("service_unavailable")
         if response.status >= 500:
             raise AssistantServiceError("service_unavailable")
         content_type = response.getheader("Content-Type", "").partition(";")[0].strip()
@@ -214,3 +236,17 @@ class AssistantServiceClient:
         if not isinstance(response_payload, dict):
             raise AssistantServiceError("invalid_response")
         return response_payload
+
+
+def _response_error_code(value: bytes) -> str | None:
+    try:
+        payload = json.loads(value)
+    except (UnicodeError, ValueError):
+        return None
+    if not isinstance(payload, dict) or set(payload) != {"error", "ok"}:
+        return None
+    error = payload.get("error")
+    if payload.get("ok") is not False or not isinstance(error, dict):
+        return None
+    code = error.get("code")
+    return code if isinstance(code, str) else None

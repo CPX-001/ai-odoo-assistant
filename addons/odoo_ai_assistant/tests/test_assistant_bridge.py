@@ -46,6 +46,39 @@ class FakeContextReadClient:
             "turn_id": payload["turn_id"],
         }
 
+    def explain(self, payload):
+        self.payload = payload
+        screen = payload["screen"]
+        return {
+            "answer_markdown": "El source comprobado explica la tarea.",
+            "citations": [
+                {
+                    "captured_at": datetime.now(UTC).isoformat(),
+                    "display_name": "Bridge Partner",
+                    "evidence_id": "11111111-1111-4111-8111-111111111111",
+                    "id": screen["res_id"],
+                    "kind": "record",
+                    "model": screen["model"],
+                },
+                {
+                    "end_line": 12,
+                    "evidence_id": "22222222-2222-4222-8222-222222222222",
+                    "fingerprint": "sha256:" + "a" * 64,
+                    "kind": "source",
+                    "logical_path": "fixture/models/res_partner.py",
+                    "module": "fixture",
+                    "provenance": "third_party_or_custom",
+                    "start_line": 8,
+                },
+            ],
+            "completed_at": datetime.now(UTC).isoformat(),
+            "confidence": "high",
+            "limitations": [],
+            "status": "ok",
+            "turn_id": payload["turn_id"],
+            "workflow": "EXPLAIN",
+        }
+
 
 @tagged("post_install", "-at_install")
 class TestAssistantBridge(TransactionCase):
@@ -143,4 +176,61 @@ class TestAssistantBridge(TransactionCase):
         self.assertEqual(
             result,
             {"error": {"code": "authentication_failed"}, "ok": False},
+        )
+
+    def test_explain_derives_identity_and_returns_only_renderable_fields(self):
+        client = FakeContextReadClient()
+        user_env = self.env(
+            user=self.user.id,
+            su=False,
+            context={
+                **self.env.context,
+                "allowed_company_ids": [self.env.company.id],
+                "lang": "en_US",
+            },
+        )
+        bridge = user_env["odoo.ai.assistant.bridge"]
+        with (
+            patch.dict(
+                os.environ,
+                {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
+            ),
+            patch.object(type(bridge), "_client", return_value=client),
+        ):
+            result = bridge.submit_explain("¿Por qué?", self._screen())
+
+        self.assertTrue(result.get("ok"), result)
+        self.assertEqual(
+            set(result),
+            {"answer", "citations", "confidence", "limitations", "ok", "turn_id"},
+        )
+        self.assertEqual(result["citations"][0]["kind"], "record")
+        self.assertEqual(result["citations"][1]["kind"], "source")
+        serialized = repr(result)
+        self.assertNotIn(client.payload["delegation_token"], serialized)
+        self.assertNotIn("allowed_company_ids", serialized)
+
+    def test_explain_rejects_a_citation_for_a_different_current_record(self):
+        client = FakeContextReadClient()
+        valid_explain = client.explain
+
+        def manipulated(payload):
+            response = valid_explain(payload)
+            response["citations"][0]["id"] += 1
+            return response
+
+        client.explain = manipulated
+        bridge = self.env(user=self.user.id, su=False)["odoo.ai.assistant.bridge"]
+        with (
+            patch.dict(
+                os.environ,
+                {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
+            ),
+            patch.object(type(bridge), "_client", return_value=client),
+        ):
+            result = bridge.submit_explain("¿Por qué?", self._screen())
+
+        self.assertEqual(
+            result,
+            {"error": {"code": "invalid_response"}, "ok": False},
         )

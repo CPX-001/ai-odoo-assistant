@@ -50,8 +50,15 @@ export class AssistantPanel extends Component {
             authentication_failed: _t(
                 "La autenticación interna del Assistant Service ha fallado."
             ),
+            engine_timeout: _t(
+                "El motor de razonamiento agotó el tiempo disponible. Inténtalo de nuevo."
+            ),
+            engine_unavailable: _t("El motor de razonamiento no está disponible."),
+            evidence_unavailable: _t(
+                "No está disponible la evidencia de source necesaria para explicar este caso."
+            ),
             invalid_context: _t(
-                "Abre un registro guardado para comprobar su contexto en M2."
+                "Abre un registro guardado para poder explicar su contexto."
             ),
             invalid_response: _t("El Assistant Service devolvió una respuesta no válida."),
             service_unavailable: _t("El Assistant Service no está disponible."),
@@ -59,8 +66,13 @@ export class AssistantPanel extends Component {
         return messages[this.state.errorCode] || "";
     }
 
-    get resultFields() {
-        return Object.entries(this.state.result?.fields || {});
+    get confidenceLabel() {
+        const labels = {
+            high: _t("Confianza alta"),
+            medium: _t("Confianza media"),
+            low: _t("Confianza baja"),
+        };
+        return labels[this.state.result?.confidence] || "";
     }
 
     closePanel() {

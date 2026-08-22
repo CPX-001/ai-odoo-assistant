@@ -11,24 +11,32 @@ from pydantic import BaseModel, ConfigDict
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from odoo_ai.adapters import (
+    CodexAppServerEngine,
+    CodexRuntimeSettings,
     OdooGatewayError,
     OdooGatewayFactory,
     OdooGatewaySettings,
     RuntimeDiagnosticsService,
+    SourceToolExecutorFactory,
     load_instance_summary,
     persist_trace_events,
+    source_tool_specs,
 )
 from odoo_ai.application import (
     ContextReadError,
     ContextReadService,
     DiagnosticsError,
     DiagnosticsService,
+    ExplainService,
+    ExplainTurnError,
     TraceEventData,
 )
 from odoo_ai.contracts import (
     ContextReadTurnRequest,
     ContextReadTurnResponse,
     EmptyDiagnosticsRequest,
+    ExplainTurnRequest,
+    ExplainTurnResponse,
     InstanceProfileSummary,
     LogEvidence,
     LogSearchRequest,
@@ -45,6 +53,7 @@ MAX_CONTEXT_REQUEST_BYTES: Final = 16 * 1024
 _BOUNDED_POST_PATHS: Final = frozenset(
     {
         "/v1/turns/context-read",
+        "/v1/turns/explain",
         "/v1/admin/source/rescan",
         "/v1/admin/source/test",
         "/v1/admin/logs/test",
@@ -116,6 +125,7 @@ def create_app(
     instance_loader: Callable[[], InstanceProfileSummary] = load_instance_summary,
     trace_writer: Callable[[UUID, tuple[TraceEventData, ...]], None] | None = None,
     diagnostics_service: DiagnosticsService | None = None,
+    explain_service: ExplainService | None = None,
 ) -> FastAPI:
     """Build an isolated application instance for runtime and API tests."""
 
@@ -125,6 +135,24 @@ def create_app(
         max_bytes=MAX_CONTEXT_REQUEST_BYTES,
     )
     diagnostics = diagnostics_service
+
+    def get_explain_service() -> ExplainService:
+        if explain_service is not None:
+            return explain_service
+        effective_factory = gateway_factory or OdooGatewayFactory(OdooGatewaySettings.from_env())
+        source_factory = SourceToolExecutorFactory.from_env()
+        engine = CodexAppServerEngine(
+            CodexRuntimeSettings.from_env(),
+            tool_executor_factory=source_factory,
+        )
+        return ExplainService(
+            gateway_factory=effective_factory,
+            reasoning_engine=engine,
+            source_tools=source_tool_specs(),
+            report_loader=source_factory.take_report,
+            instance_loader=instance_loader,
+            trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
+        )
 
     def get_diagnostics() -> DiagnosticsService:
         nonlocal diagnostics
@@ -240,6 +268,23 @@ def create_app(
         except OdooGatewayError as error:
             code, status_code = _gateway_error(error.code)
             return _error_response(code, status_code)
+
+    @application.post(
+        "/v1/turns/explain",
+        response_model=ExplainTurnResponse,
+        dependencies=[Depends(require_shared_secret)],
+    )
+    async def explain_turn(
+        payload: ExplainTurnRequest,
+    ) -> ExplainTurnResponse | JSONResponse:
+        try:
+            return await get_explain_service().run(payload)
+        except ExplainTurnError as error:
+            return _error_response(error.code, error.status_code)
+        # This is an authenticated infrastructure boundary; never expose
+        # configuration/provider exception details to Odoo.
+        except Exception:  # noqa: BLE001
+            return _error_response("engine_unavailable", 503)
 
     return application
 

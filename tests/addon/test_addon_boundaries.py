@@ -14,28 +14,28 @@ def test_browser_assets_use_only_the_authenticated_odoo_bridge() -> None:
     assert '"web"' in manifest
     assert '"web.assets_backend"' in manifest
     assert '"web.assets_unit_tests"' in manifest
-    assert 'rpc("/odoo_ai/v1/context-read"' in static_text
+    assert 'rpcCall("/odoo_ai/v1/explain"' in static_text
     assert "orm.call(" not in static_text
     assert "fetch(" not in static_text
     assert "127.0.0.1" not in static_text
     assert "X-Odoo-AI-Shared-Secret" not in static_text
     assert "X-Odoo-AI-Delegation" not in static_text
     assert "delegation_token" not in static_text
+    assert "innerHTML" not in static_text
+    assert "t-raw" not in static_text
     assert "/v1/admin/source" not in static_text
     assert "/v1/admin/logs" not in static_text
 
-    browser_controller = (
-        ADDON_ROOT / "controllers/browser_bridge.py"
-    ).read_text(encoding="utf-8")
+    browser_controller = (ADDON_ROOT / "controllers/browser_bridge.py").read_text(encoding="utf-8")
     assert 'auth="user"' in browser_controller
     assert 'request.env["odoo.ai.assistant.bridge"]' in browser_controller
+    assert "/odoo_ai/v1/context-read" in browser_controller
+    assert "/odoo_ai/v1/explain" in browser_controller
     assert '"uid"' not in browser_controller
 
 
 def test_internal_tool_routes_have_double_auth_and_no_generic_execution() -> None:
-    controller = (
-        ADDON_ROOT / "controllers/internal_tools.py"
-    ).read_text(encoding="utf-8")
+    controller = (ADDON_ROOT / "controllers/internal_tools.py").read_text(encoding="utf-8")
 
     assert "/odoo_ai/internal/v1/model-metadata" in controller
     assert "/odoo_ai/internal/v1/read-records" in controller
@@ -70,6 +70,9 @@ def test_browser_bridge_derives_server_context_and_returns_a_sanitized_shape() -
     assert "prepared.delegation_token" in bridge
     assert '"uid"' not in bridge
     assert '"user"' not in bridge
+    assert "_browser_explain_response" in bridge
+    assert "logical_path" in bridge
+    assert "raw Evidence" not in bridge
 
 
 def test_m2_paths_have_no_privilege_or_generic_execution_escape_hatches() -> None:
@@ -79,9 +82,7 @@ def test_m2_paths_have_no_privilege_or_generic_execution_escape_hatches() -> Non
         ADDON_ROOT / "services",
     ]
     source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for root in roots
-        for path in root.rglob("*.py")
+        path.read_text(encoding="utf-8") for root in roots for path in root.rglob("*.py")
     )
 
     assert ".sudo(" not in source

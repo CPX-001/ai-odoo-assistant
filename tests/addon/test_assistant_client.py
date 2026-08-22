@@ -63,6 +63,8 @@ class AssistantHandler(BaseHTTPRequestHandler):
             self._json(401, b'{"error":{"code":"invalid"},"ok":false}')
         elif self.path == "/v1/turns/context-read":
             self._json(200, b'{"ok":true,"turn_id":"example"}')
+        elif self.path == "/v1/turns/explain":
+            self._json(200, b'{"ok":true,"turn_id":"explain-example"}')
         elif self.path == "/v1/admin/source/rescan":
             self._json(200, b'{"state":"DETECTED","metrics":{}}')
         elif self.path == "/v1/admin/source/test":
@@ -172,6 +174,32 @@ def test_context_read_posts_only_to_the_narrow_authenticated_route(
     headers = AssistantHandler.last_post["headers"]
     assert headers["X-Odoo-AI-Shared-Secret"] == AssistantHandler.secret
     assert headers["Content-Type"] == "application/json"
+
+
+def test_explain_posts_only_to_its_narrow_authenticated_route(
+    tmp_path: Path, local_service: ThreadingHTTPServer
+) -> None:
+    secret_file = tmp_path / "shared-secret"
+    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
+    secret_file.chmod(0o640)
+    client = AssistantServiceClient(
+        base_url=f"http://127.0.0.1:{local_service.server_port}",
+        shared_secret_file=str(secret_file),
+    )
+    payload = {
+        "turn_id": "12345678-1234-5678-1234-567812345678",
+        "message": "explain",
+        "screen": {"model": "sale.order", "res_id": 42},
+    }
+
+    response = client.explain(payload)
+
+    assert response == {"ok": True, "turn_id": "explain-example"}
+    assert AssistantHandler.last_post is not None
+    assert AssistantHandler.last_post["path"] == "/v1/turns/explain"
+    assert AssistantHandler.last_post["payload"] == payload
+    headers = AssistantHandler.last_post["headers"]
+    assert headers["X-Odoo-AI-Shared-Secret"] == AssistantHandler.secret
 
 
 def test_m3_admin_client_uses_only_fixed_server_side_routes(

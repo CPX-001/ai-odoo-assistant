@@ -24,7 +24,7 @@
             <header class="d-flex align-items-center justify-content-between border-bottom px-3 py-2">
                 <div>
                     <h2 class="h5 mb-0">AI Assistant</h2>
-                    <small class="text-muted">Comprobación contextual M2</small>
+                    <small class="text-muted">Explicación contextual con evidencia</small>
                 </div>
                 <button
                     type="button"
@@ -48,16 +48,55 @@
                 </div>
 
                 <section t-if="state.result" class="o_ai_assistant_result" aria-live="polite">
-                    <div class="alert alert-success mb-3">
-                        <i class="fa fa-check-circle me-1" aria-hidden="true"/>
-                        <t t-esc="state.result.message"/>
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <h3 class="h6 mb-0">Respuesta</h3>
+                        <span class="badge text-bg-light border" t-esc="confidenceLabel"/>
                     </div>
-                    <dl class="row small mb-0">
-                        <t t-foreach="resultFields" t-as="field" t-key="field[0]">
-                            <dt class="col-5 text-break" t-esc="field[0]"/>
-                            <dd class="col-7 text-break" t-esc="field[1]"/>
-                        </t>
-                    </dl>
+                    <p class="o_ai_assistant_answer text-break" t-esc="state.result.answer"/>
+
+                    <section t-if="state.result.limitations.length" class="mt-3">
+                        <h4 class="small text-uppercase text-muted fw-bold">Limitaciones</h4>
+                        <ul class="small mb-0">
+                            <li
+                                t-foreach="state.result.limitations"
+                                t-as="limitation"
+                                t-key="limitation_index"
+                                t-esc="limitation"
+                            />
+                        </ul>
+                    </section>
+
+                    <section t-if="state.result.citations.length" class="mt-3">
+                        <h4 class="small text-uppercase text-muted fw-bold">Evidencia</h4>
+                        <div class="d-flex flex-column gap-2">
+                            <details
+                                t-foreach="state.result.citations"
+                                t-as="citation"
+                                t-key="citation.evidence_id"
+                                class="o_ai_assistant_citation border rounded p-2"
+                            >
+                                <summary class="small fw-bold">
+                                    <t t-if="citation.kind === 'record'">
+                                        Registro: <t t-esc="citation.display_name || citation.model"/>
+                                    </t>
+                                    <t t-else="">
+                                        Source: <t t-esc="citation.module"/>
+                                    </t>
+                                </summary>
+                                <div t-if="citation.kind === 'record'" class="small mt-2 text-break">
+                                    <span class="font-monospace" t-esc="citation.model"/>
+                                    <span> #</span><span t-esc="citation.id"/>
+                                </div>
+                                <div t-else="" class="small mt-2 text-break">
+                                    <div class="font-monospace" t-esc="citation.logical_path"/>
+                                    <div>
+                                        Líneas <t t-esc="citation.start_line"/>-<t t-esc="citation.end_line"/>
+                                    </div>
+                                    <div class="text-muted font-monospace" t-esc="citation.fingerprint"/>
+                                </div>
+                            </details>
+                        </div>
+                    </section>
                 </section>
             </div>
 
@@ -82,11 +121,11 @@
                         class="fa fa-spinner fa-spin me-1"
                         aria-hidden="true"
                     />
-                    <t t-if="state.loading">Comprobando...</t>
+                    <t t-if="state.loading">Analizando...</t>
                     <t t-else="">Enviar</t>
                 </button>
                 <p class="small text-muted mb-0 mt-2">
-                    M2 relee el contexto y valida permisos; todavía no interpreta la pregunta con un LLM.
+                    El registro se relee con tus permisos y las citas proceden de evidencia comprobada.
                 </p>
             </form>
         </aside>

@@ -57,6 +57,7 @@ class TraceEventData:
 InstanceLoader = Callable[[], InstanceProfileSummary]
 TraceWriter = Callable[[UUID, tuple[TraceEventData, ...]], None]
 Clock = Callable[[], datetime]
+EventCallback = Callable[[str, str, Mapping[str, object]], None]
 
 
 class ContextReadError(RuntimeError):
@@ -66,6 +67,89 @@ class ContextReadError(RuntimeError):
         super().__init__(code)
         self.code = code
         self.status_code = status_code
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentRecordRead:
+    """Deterministic current-record result shared by M2 and M4 workflows."""
+
+    fields: tuple[str, ...]
+    snapshot: RecordSnapshot
+    evidence: Evidence
+
+
+class CurrentRecordReader:
+    """Read exactly one delegated current record with reusable validation."""
+
+    def __init__(self, gateway_factory: GatewayFactory) -> None:
+        self._gateway_factory = gateway_factory
+
+    async def read(
+        self,
+        request: ContextReadTurnRequest,
+        *,
+        event: EventCallback = lambda name, status, attributes: None,
+    ) -> CurrentRecordRead:
+        gateway = self._gateway_factory.for_turn(
+            turn_id=request.turn_id,
+            delegation_token=request.delegation_token,
+        )
+        event("tool.requested", "ok", {"operation": "fields_get"})
+        try:
+            metadata = await gateway.get_model_metadata(cast(str, request.screen.model))
+            fields = _select_fields(metadata)
+        except Exception as error:
+            event(
+                "tool.completed",
+                "error",
+                {
+                    "error_code": _sanitized_error_code(error),
+                    "operation": "fields_get",
+                },
+            )
+            raise
+        event(
+            "tool.completed",
+            "ok",
+            {"field_count": len(fields), "operation": "fields_get"},
+        )
+        event("tool.requested", "ok", {"operation": "read_records"})
+        try:
+            snapshots = await gateway.read_records(
+                [
+                    RecordRef(
+                        model=cast(str, request.screen.model),
+                        id=cast(int, request.screen.res_id),
+                    )
+                ],
+                list(fields),
+            )
+            snapshot = _single_snapshot(
+                snapshots,
+                model=cast(str, request.screen.model),
+                record_id=cast(int, request.screen.res_id),
+                fields=fields,
+            )
+        except Exception as error:
+            event(
+                "tool.completed",
+                "error",
+                {
+                    "error_code": _sanitized_error_code(error),
+                    "operation": "read_records",
+                },
+            )
+            raise
+        event(
+            "tool.completed",
+            "ok",
+            {"operation": "read_records", "record_count": 1},
+        )
+        return CurrentRecordRead(
+            fields=fields,
+            snapshot=snapshot,
+            evidence=_record_evidence(snapshot),
+        )
 
 
 class ContextReadService:
@@ -81,10 +165,10 @@ class ContextReadService:
         trace_writer: TraceWriter = lambda trace_id, events: None,
         clock: Clock | None = None,
     ) -> None:
-        self._gateway_factory = gateway_factory
         self._instance_loader = instance_loader
         self._trace_writer = trace_writer
         self._clock = clock or _utc_now
+        self._record_reader = CurrentRecordReader(gateway_factory)
 
     async def run(self, request: ContextReadTurnRequest) -> ContextReadTurnResponse:
         started = time.monotonic()
@@ -92,7 +176,7 @@ class ContextReadService:
         self._event(events, "turn.started", "ok", {"turn_id": str(request.turn_id)})
         try:
             now = self._validated_now()
-            self._validate_request(request, now=now)
+            validate_context_turn_request(request, now=now)
             instance = self._safe_instance_summary()
             context = ContextPack(
                 request=UserRequest(message=request.message),
@@ -114,42 +198,15 @@ class ContextReadService:
                     "record_count": 1,
                 },
             )
-            gateway = self._gateway_factory.for_turn(
-                turn_id=request.turn_id,
-                delegation_token=request.delegation_token,
+            current = await self._record_reader.read(
+                request,
+                event=lambda name, status, attributes: self._event(
+                    events, name, status, attributes
+                ),
             )
-            self._event(events, "tool.requested", "ok", {"operation": "fields_get"})
-            metadata = await gateway.get_model_metadata(cast(str, request.screen.model))
-            fields = _select_fields(metadata)
-            self._event(
-                events,
-                "tool.completed",
-                "ok",
-                {"field_count": len(fields), "operation": "fields_get"},
-            )
-            self._event(events, "tool.requested", "ok", {"operation": "read_records"})
-            snapshots = await gateway.read_records(
-                [
-                    RecordRef(
-                        model=cast(str, request.screen.model),
-                        id=cast(int, request.screen.res_id),
-                    )
-                ],
-                list(fields),
-            )
-            snapshot = _single_snapshot(
-                snapshots,
-                model=cast(str, request.screen.model),
-                record_id=cast(int, request.screen.res_id),
-                fields=fields,
-            )
-            self._event(
-                events,
-                "tool.completed",
-                "ok",
-                {"operation": "read_records", "record_count": 1},
-            )
-            evidence = _record_evidence(snapshot)
+            fields = current.fields
+            snapshot = current.snapshot
+            evidence = current.evidence
             self._event(
                 events,
                 "evidence.added",
@@ -246,49 +303,56 @@ class ContextReadService:
             )
         )
 
-    @staticmethod
-    def _validate_request(request: ContextReadTurnRequest, *, now: datetime) -> None:
-        screen = request.screen
-        if not screen.model or screen.res_id is None:
-            raise ContextReadError("record_context_required", 422)
-        if not _valid_model(screen.model):
-            raise ContextReadError("invalid_screen", 422)
-        if type(screen.res_id) is not int or not 1 <= screen.res_id <= MAX_ODOO_ID:
-            raise ContextReadError("invalid_screen", 422)
-        for value in (screen.action_id, screen.menu_id):
-            if value is not None and (type(value) is not int or not 1 <= value <= MAX_ODOO_ID):
-                raise ContextReadError("invalid_screen", 422)
-        if screen.view_type is not None and screen.view_type not in ALLOWED_VIEW_TYPES:
-            raise ContextReadError("invalid_screen", 422)
-        if (
-            len(screen.selected_ids) > MAX_SELECTED_IDS
-            or len(screen.selected_ids) != len(set(screen.selected_ids))
-            or any(type(value) is not int or not 1 <= value <= MAX_ODOO_ID for value in screen.selected_ids)
+
+def validate_context_turn_request(request: ContextReadTurnRequest, *, now: datetime) -> None:
+    """Apply the single M2/M4 screen and effective-user validation policy."""
+
+    screen = request.screen
+    if not screen.model or screen.res_id is None:
+        raise ContextReadError("record_context_required", 422)
+    if not _valid_model(screen.model):
+        raise ContextReadError("invalid_screen", 422)
+    if type(screen.res_id) is not int or not 1 <= screen.res_id <= MAX_ODOO_ID:
+        raise ContextReadError("invalid_screen", 422)
+    for value in (screen.action_id, screen.menu_id):
+        if value is not None and (
+            type(value) is not int or not 1 <= value <= MAX_ODOO_ID
         ):
             raise ContextReadError("invalid_screen", 422)
-        captured_at = screen.captured_at
-        if captured_at.tzinfo is None:
-            raise ContextReadError("invalid_screen", 422)
-        captured_at = captured_at.astimezone(UTC)
-        if captured_at < now - timedelta(seconds=MAX_SCREEN_AGE_SECONDS):
-            raise ContextReadError("screen_expired", 422)
-        if captured_at > now + timedelta(seconds=MAX_SCREEN_FUTURE_SKEW_SECONDS):
-            raise ContextReadError("screen_from_future", 422)
-        user = request.user
-        if (
-            type(user.uid) is not int
-            or not 1 <= user.uid <= MAX_ODOO_ID
-            or type(user.company_id) is not int
-            or not 1 <= user.company_id <= MAX_ODOO_ID
-            or not 1 <= len(user.allowed_company_ids) <= MAX_ACTIVE_COMPANIES
-            or len(user.allowed_company_ids) != len(set(user.allowed_company_ids))
-            or user.company_id not in user.allowed_company_ids
-            or any(
-                type(value) is not int or not 1 <= value <= MAX_ODOO_ID
-                for value in user.allowed_company_ids
-            )
-        ):
-            raise ContextReadError("invalid_user_context", 422)
+    if screen.view_type is not None and screen.view_type not in ALLOWED_VIEW_TYPES:
+        raise ContextReadError("invalid_screen", 422)
+    if (
+        len(screen.selected_ids) > MAX_SELECTED_IDS
+        or len(screen.selected_ids) != len(set(screen.selected_ids))
+        or any(
+            type(value) is not int or not 1 <= value <= MAX_ODOO_ID
+            for value in screen.selected_ids
+        )
+    ):
+        raise ContextReadError("invalid_screen", 422)
+    captured_at = screen.captured_at
+    if captured_at.tzinfo is None:
+        raise ContextReadError("invalid_screen", 422)
+    captured_at = captured_at.astimezone(UTC)
+    if captured_at < now - timedelta(seconds=MAX_SCREEN_AGE_SECONDS):
+        raise ContextReadError("screen_expired", 422)
+    if captured_at > now + timedelta(seconds=MAX_SCREEN_FUTURE_SKEW_SECONDS):
+        raise ContextReadError("screen_from_future", 422)
+    user = request.user
+    if (
+        type(user.uid) is not int
+        or not 1 <= user.uid <= MAX_ODOO_ID
+        or type(user.company_id) is not int
+        or not 1 <= user.company_id <= MAX_ODOO_ID
+        or not 1 <= len(user.allowed_company_ids) <= MAX_ACTIVE_COMPANIES
+        or len(user.allowed_company_ids) != len(set(user.allowed_company_ids))
+        or user.company_id not in user.allowed_company_ids
+        or any(
+            type(value) is not int or not 1 <= value <= MAX_ODOO_ID
+            for value in user.allowed_company_ids
+        )
+    ):
+        raise ContextReadError("invalid_user_context", 422)
 
 
 def _select_fields(metadata: Evidence) -> tuple[str, ...]:
@@ -356,6 +420,20 @@ def _valid_model(value: str) -> bool:
     if not 1 <= len(value) <= 128 or not (value[0].isalpha() or value[0] == "_"):
         return False
     return all(character.isalnum() or character in "_." for character in value)
+
+
+def _sanitized_error_code(error: Exception) -> str:
+    code = getattr(error, "code", "tool_failed")
+    if (
+        not isinstance(code, str)
+        or not 1 <= len(code) <= 64
+        or any(
+            not (character.islower() or character.isdigit() or character == "_")
+            for character in code
+        )
+    ):
+        return "tool_failed"
+    return code
 
 
 def _gateway_failure(error: Exception) -> tuple[str, int]:

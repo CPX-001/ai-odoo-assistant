@@ -4,8 +4,12 @@
     width: 26rem;
     max-width: 100vw;
 
-    .o_ai_assistant_result dd {
+    .o_ai_assistant_answer {
         white-space: pre-wrap;
+    }
+
+    .o_ai_assistant_citation summary {
+        cursor: pointer;
     }
 }
 

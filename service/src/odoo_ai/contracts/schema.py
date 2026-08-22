@@ -20,6 +20,7 @@ from odoo_ai.contracts.delegation import (
     OdooGatewayReference,
 )
 from odoo_ai.contracts.evidence import Evidence
+from odoo_ai.contracts.explain import ExplainTurnRequest, ExplainTurnResponse
 from odoo_ai.contracts.logs import LogEvidence, LogSearchRequest, TimestampRange
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.screen_context import ScreenContext
@@ -42,6 +43,8 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     ContextReadTurnResponse,
     ConversationState,
     Evidence,
+    ExplainTurnRequest,
+    ExplainTurnResponse,
     DelegationClaims,
     InstanceInventory,
     InstanceProfileSummary,

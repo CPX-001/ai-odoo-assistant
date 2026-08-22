@@ -164,6 +164,7 @@ class SourceEvidenceService:
                 {
                     "module": pointer.module,
                     "kind": pointer.kind,
+                    "provenance": pointer.provenance,
                     "trust": "untrusted_source",
                     "lines": [line.model_dump(mode="json") for line in lines],
                 },

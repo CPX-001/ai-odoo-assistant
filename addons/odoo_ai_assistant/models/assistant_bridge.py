@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Mapping
+from pathlib import PurePosixPath
 from typing import Final
+from uuid import UUID
 
 from odoo import api, models
 
@@ -37,6 +40,19 @@ EXPECTED_RESPONSE_KEYS: Final = frozenset(
 ALLOWED_FIELDS: Final = frozenset(
     {"display_name", "name", "state", "company_id"}
 )
+EXPECTED_EXPLAIN_RESPONSE_KEYS: Final = frozenset(
+    {
+        "answer_markdown",
+        "citations",
+        "completed_at",
+        "confidence",
+        "limitations",
+        "status",
+        "turn_id",
+        "workflow",
+    }
+)
+ALLOWED_CONFIDENCE: Final = frozenset({"high", "medium", "low"})
 
 
 class AssistantBridge(models.AbstractModel):
@@ -67,6 +83,31 @@ class AssistantBridge(models.AbstractModel):
             return _error(_client_error_code(error.code))
         # The RPC boundary must not expose unexpected server exception details.
         except Exception:  # noqa: BLE001
+            return _error("service_unavailable")
+
+    @api.model
+    def submit_explain(self, message, screen):
+        """Run M4 EXPLAIN while retaining identity and transport server-side."""
+
+        if not self.env.user._is_internal():
+            return _error("access_denied")
+        if not isinstance(screen, Mapping):
+            return _error("invalid_context")
+        try:
+            prepared = prepare_context_turn(
+                env=self.env,
+                screen_payload=screen,
+                message=message,
+            )
+            response = self._client().explain(prepared.to_assistant_payload())
+            return _browser_explain_response(response, prepared)
+        except ScreenContextValidationError:
+            return _error("invalid_context")
+        except TurnContextError as error:
+            return _error(_turn_error_code(error.code))
+        except AssistantServiceError as error:
+            return _error(_client_error_code(error.code))
+        except Exception:  # noqa: BLE001 - sanitize the browser RPC boundary
             return _error("service_unavailable")
 
     @api.model
@@ -147,6 +188,142 @@ def _browser_response(response, prepared):
     return result
 
 
+def _browser_explain_response(response, prepared):
+    if not isinstance(response, dict) or set(response) != EXPECTED_EXPLAIN_RESPONSE_KEYS:
+        raise AssistantServiceError("invalid_response")
+    answer = response.get("answer_markdown")
+    limitations = response.get("limitations")
+    citations = response.get("citations")
+    if (
+        response.get("status") != "ok"
+        or response.get("workflow") != "EXPLAIN"
+        or response.get("turn_id") != str(prepared.turn_id)
+        or response.get("confidence") not in ALLOWED_CONFIDENCE
+        or not isinstance(answer, str)
+        or not 1 <= len(answer) <= 16_384
+        or not isinstance(response.get("completed_at"), str)
+        or not isinstance(limitations, list)
+        or len(limitations) > 8
+        or any(
+            not isinstance(value, str) or not 1 <= len(value) <= 1_024
+            for value in limitations
+        )
+        or not isinstance(citations, list)
+        or len(citations) > 24
+    ):
+        raise AssistantServiceError("invalid_response")
+    sanitized_citations = [
+        _browser_citation(citation, prepared) for citation in citations
+    ]
+    evidence_ids = [citation["evidence_id"] for citation in sanitized_citations]
+    if len(evidence_ids) != len(set(evidence_ids)):
+        raise AssistantServiceError("invalid_response")
+    result = {
+        "ok": True,
+        "turn_id": str(prepared.turn_id),
+        "answer": answer,
+        "confidence": response["confidence"],
+        "limitations": limitations,
+        "citations": sanitized_citations,
+    }
+    serialized = json.dumps(
+        result,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    if prepared.delegation_token in serialized:
+        raise AssistantServiceError("invalid_response")
+    return result
+
+
+def _browser_citation(citation, prepared):
+    if not isinstance(citation, dict):
+        raise AssistantServiceError("invalid_response")
+    if citation.get("kind") == "record":
+        expected = {
+            "captured_at",
+            "display_name",
+            "evidence_id",
+            "id",
+            "kind",
+            "model",
+        }
+        if (
+            set(citation) != expected
+            or citation.get("model") != prepared.screen.model
+            or citation.get("id") != prepared.screen.res_id
+            or (
+                citation.get("display_name") is not None
+                and not isinstance(citation.get("display_name"), str)
+            )
+            or not isinstance(citation.get("captured_at"), str)
+            or not _uuid(citation.get("evidence_id"))
+        ):
+            raise AssistantServiceError("invalid_response")
+        return dict(citation)
+    if citation.get("kind") == "source":
+        expected = {
+            "end_line",
+            "evidence_id",
+            "fingerprint",
+            "kind",
+            "logical_path",
+            "module",
+            "provenance",
+            "start_line",
+        }
+        start_line = citation.get("start_line")
+        end_line = citation.get("end_line")
+        if (
+            set(citation) != expected
+            or not _uuid(citation.get("evidence_id"))
+            or not _identifier(citation.get("module"), 255)
+            or not _logical_path(citation.get("logical_path"))
+            or type(start_line) is not int
+            or type(end_line) is not int
+            or start_line <= 0
+            or end_line < start_line
+            or not isinstance(citation.get("fingerprint"), str)
+            or re.fullmatch(r"sha256:[0-9a-f]{64}", citation["fingerprint"])
+            is None
+            or not _identifier(citation.get("provenance"), 64)
+        ):
+            raise AssistantServiceError("invalid_response")
+        return dict(citation)
+    raise AssistantServiceError("invalid_response")
+
+
+def _uuid(value):
+    if not isinstance(value, str):
+        return False
+    try:
+        return str(UUID(value)) == value
+    except ValueError:
+        return False
+
+
+def _identifier(value, max_length):
+    return (
+        isinstance(value, str)
+        and 1 <= len(value) <= max_length
+        and value == value.strip()
+        and all(ord(character) >= 32 for character in value)
+    )
+
+
+def _logical_path(value):
+    if not isinstance(value, str) or not 1 <= len(value) <= 1_024 or "\\" in value:
+        return False
+    path = PurePosixPath(value)
+    return (
+        not path.is_absolute()
+        and str(path) == value
+        and all(part not in {"", ".", ".."} for part in path.parts)
+    )
+
+
 def _turn_error_code(code: str) -> str:
     if code in {
         "invalid_message",
@@ -171,6 +348,8 @@ def _client_error_code(code: str) -> str:
         return "invalid_context"
     if code == "invalid_response":
         return "invalid_response"
+    if code in {"engine_timeout", "engine_unavailable", "evidence_unavailable"}:
+        return code
     return "service_unavailable"
 
 
