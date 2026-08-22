@@ -9,9 +9,10 @@ Las sesiones de implementación deben seguir las instrucciones raíz y locales d
 - [`tasks/M1/README.md`](tasks/M1/README.md): M1 completado y gate PASS.
 - [`tasks/M2/README.md`](tasks/M2/README.md): M2 completado y gate PASS.
 - [`tasks/M3/README.md`](tasks/M3/README.md): M3 completado y gate PASS.
-- [`tasks/M4/README.md`](tasks/M4/README.md): milestone activo; runtime App Server, engine estructurado, ToolExecutor y source dynamic tools implementados; M4-05 pendiente.
+- [`tasks/M4/README.md`](tasks/M4/README.md): M4 completado; M4-01..M4-10 verificados y gate PASS.
+- [`tasks/M5/README.md`](tasks/M5/README.md): task packets M5-01..M5-10 preparados; implementación todavía no iniciada.
 - [`../../PLANS.md`](../../PLANS.md): cuándo y cómo mantener un ExecPlan.
 
 Antes de implementar, contrastar siempre el task packet con el Source of Truth y los ADRs aplicables. Si la task toca filesystem, logs, source, servicios, installer o PostgreSQL, revisar también la política de deployment y distinguir explícitamente requisitos reales de defaults/hints del entorno DEV.
 
-M4 es el milestone activo. Ejecutar una sola task cada vez y no avanzar automáticamente a la siguiente sin verificar sus acceptance criteria.
+M5 es el siguiente milestone. Ejecutar una sola task cada vez y no avanzar automáticamente a la siguiente sin verificar sus acceptance criteria.
