@@ -199,6 +199,7 @@ class SourceSymbol(BaseModel):
     end_line: int = Field(gt=0)
     fingerprint: str = Field(pattern=FINGERPRINT_PATTERN)
     ref: SourceRef
+    details: dict[str, JsonValue] | None = None
 
     @model_validator(mode="after")
     def validate_pointer(self) -> "SourceSymbol":
@@ -224,6 +225,7 @@ class XmlRecord(BaseModel):
     logical_path: str = Field(min_length=1, max_length=1024)
     fingerprint: str = Field(pattern=FINGERPRINT_PATTERN)
     ref: SourceRef
+    declaration: dict[str, JsonValue] | None = None
 
     @model_validator(mode="after")
     def validate_pointer(self) -> "XmlRecord":

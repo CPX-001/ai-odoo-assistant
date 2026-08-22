@@ -100,6 +100,12 @@ def test_source_tables_constraints_and_indexes_exist(migrated_engine: Engine) ->
         "provenance",
         "extracted_metadata",
     }
+    assert "details" in {
+        column["name"] for column in inspector.get_columns("source_symbol")
+    }
+    assert "declaration" in {
+        column["name"] for column in inspector.get_columns("xml_record")
+    }
     assert {
         constraint["name"]
         for constraint in inspector.get_unique_constraints("source_file")
@@ -298,6 +304,8 @@ def test_real_scanner_indexes_and_replaces_action_confirm(
     root = tmp_path / "nondefault" / "extensions"
     module = root / "sale_fixture"
     (module / "models").mkdir(parents=True)
+    (module / "views").mkdir()
+    (module / "security").mkdir()
     (module / "__manifest__.py").write_text(
         "{'name': 'Fixture', 'depends': ['sale']}\n", encoding="utf-8"
     )
@@ -305,6 +313,20 @@ def test_real_scanner_indexes_and_replaces_action_confirm(
     source.write_text(
         "from odoo import models\nclass SaleOrder(models.Model):\n"
         "    _inherit = 'sale.order'\n    def action_confirm(self):\n        return True\n",
+        encoding="utf-8",
+    )
+    view = module / "views" / "sale_order.xml"
+    view.write_text(
+        "<odoo>\n  <record id='view_order_form' model='ir.ui.view'>\n"
+        "    <field name='model'>sale.order</field>\n"
+        "    <field name='inherit_id' ref='sale.view_order_form'/>\n"
+        "  </record>\n</odoo>\n",
+        encoding="utf-8",
+    )
+    access = module / "security" / "ir.model.access.csv"
+    access.write_text(
+        "id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink\n"
+        "access_sale_reader,Reader,model_sale_order,base.group_user,1,0,0,0\n",
         encoding="utf-8",
     )
     profile = _profile(session)
@@ -329,6 +351,21 @@ def test_real_scanner_indexes_and_replaces_action_confirm(
     assert len(symbols) == 1
     assert (symbols[0].start_line, symbols[0].end_line) == (4, 5)
     assert symbols[0].fingerprint.startswith("sha256:")
+    xml_records = find_xml_records(
+        session,
+        instance_profile_id=profile.id,
+        xml_id="sale_fixture.view_order_form",
+    )
+    assert len(xml_records) == 1
+    assert xml_records[0].declaration["inherit_id"] == "sale.view_order_form"
+    acl_symbols = find_source_symbols(
+        session,
+        instance_profile_id=profile.id,
+        name="sale_fixture.access_sale_reader",
+    )
+    assert len(acl_symbols) == 1
+    assert acl_symbols[0].kind == "acl"
+    assert acl_symbols[0].details["runtime_effective"] is False
 
     source.write_text(
         "from odoo import models\nclass SaleOrder(models.Model):\n"
@@ -342,4 +379,12 @@ def test_real_scanner_indexes_and_replaces_action_confirm(
         instance_profile_id=profile.id,
         model="sale.order",
         name="action_confirm",
+    ) == []
+
+    view.unlink()
+    scanner.run(**arguments)
+    assert find_xml_records(
+        session,
+        instance_profile_id=profile.id,
+        xml_id="sale_fixture.view_order_form",
     ) == []

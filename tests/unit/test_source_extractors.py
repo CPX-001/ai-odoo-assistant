@@ -211,6 +211,13 @@ class ExtractorStore:
         del instance_profile_id
         return uuid4()
 
+    def find_unchanged_file(
+        self, *, instance_profile_id, module, logical_path, fingerprint
+    ) -> UUID | None:
+        del instance_profile_id
+        previous = self.files.get((module, logical_path))
+        return previous[0] if previous is not None and previous[1] == fingerprint else None
+
     def upsert_file(
         self,
         *,
@@ -239,6 +246,10 @@ class ExtractorStore:
 
     def mark_stale(self, *, scan_run_id, seen_file_ids) -> int:
         del scan_run_id, seen_file_ids
+        return 0
+
+    def delete_stale(self, *, instance_profile_id) -> int:
+        del instance_profile_id
         return 0
 
     def finish_scan(

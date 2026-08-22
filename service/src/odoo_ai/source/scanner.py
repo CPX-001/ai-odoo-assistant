@@ -85,6 +85,7 @@ class ExtractedSymbol:
     name: str
     start_line: int
     end_line: int
+    details: dict[str, JsonValue] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +94,7 @@ class ExtractedXmlRecord:
     model: str | None
     start_line: int | None = None
     end_line: int | None = None
+    declaration: dict[str, JsonValue] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +144,15 @@ class StoredSourceFile:
 class SourceScanStore(Protocol):
     def open_scan(self, *, instance_profile_id: UUID) -> UUID: ...
 
+    def find_unchanged_file(
+        self,
+        *,
+        instance_profile_id: UUID,
+        module: str,
+        logical_path: str,
+        fingerprint: str,
+    ) -> UUID | None: ...
+
     def upsert_file(
         self,
         *,
@@ -164,6 +175,8 @@ class SourceScanStore(Protocol):
     ) -> None: ...
 
     def mark_stale(self, *, scan_run_id: UUID, seen_file_ids: set[UUID]) -> int: ...
+
+    def delete_stale(self, *, instance_profile_id: UUID) -> int: ...
 
     def finish_scan(
         self,
@@ -232,6 +245,16 @@ class SourceScanResult:
 
 
 RootProbe = Callable[[Path], SourceCapabilityState | None]
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedFile:
+    module: ModuleSource
+    logical_path: str
+    kind: SourceFileKind
+    fingerprint: str
+    size_bytes: int
+    extraction: FileExtraction | None
 
 
 def source_root_overrides_from_env(
@@ -413,14 +436,15 @@ class SourceScanner:
             self._store.record_capability(instance_profile_id=instance_profile_id, state=state)
             return SourceScanResult(state, None, None, SourceScanMetrics(), root_errors)
 
+        installed = tuple(dict.fromkeys(installed_modules))
         inventory = locate_installed_modules(
             resolution.roots,
-            installed_modules,
+            installed,
             max_modules=self._limits.max_modules,
             provenance=provenance,
         )
         initial_errors = (*root_errors, *inventory.issues)
-        if not inventory.modules:
+        if not inventory.modules and installed:
             state = (
                 SourceCapabilityState.ERROR
                 if any(error.code == "module_limit_exceeded" for error in inventory.issues)
@@ -431,7 +455,7 @@ class SourceScanner:
 
         scan_id = self._store.open_scan(instance_profile_id=instance_profile_id)
         started = self._clock()
-        seen_ids: set[UUID] = set()
+        prepared_files: list[_PreparedFile] = []
         aggregate_items: list[str] = []
         errors = list(initial_errors)
         files_seen = files_extracted = files_unchanged = bytes_hashed = 0
@@ -467,18 +491,24 @@ class SourceScanner:
                     digest = "sha256:" + hashlib.sha256(content).hexdigest()
                     bytes_hashed += len(content)
                     aggregate_items.append(f"{module.name}\0{logical_path}\0{digest}")
-                    stored = self._store.upsert_file(
-                        scan_run_id=scan_id,
+                    unchanged_id = self._store.find_unchanged_file(
+                        instance_profile_id=instance_profile_id,
                         module=module.name,
                         logical_path=logical_path,
-                        kind=kind,
                         fingerprint=digest,
-                        size_bytes=len(content),
-                        provenance=module.provenance,
                     )
-                    seen_ids.add(stored.file_id)
-                    if not stored.fingerprint_changed:
+                    if unchanged_id is not None:
                         files_unchanged += 1
+                        prepared_files.append(
+                            _PreparedFile(
+                                module,
+                                logical_path,
+                                kind,
+                                digest,
+                                len(content),
+                                None,
+                            )
+                        )
                         continue
                     extractor = self._extractors.get(kind)
                     if extractor is None:
@@ -496,22 +526,48 @@ class SourceScanner:
                                 content=content,
                             )
                         )
-                        self._store.replace_derivatives(
-                            source_file_id=stored.file_id,
-                            symbols=extraction.symbols,
-                            xml_records=extraction.xml_records,
-                            metadata=extraction.metadata,
+                        prepared_files.append(
+                            _PreparedFile(
+                                module,
+                                logical_path,
+                                kind,
+                                digest,
+                                len(content),
+                                extraction,
+                            )
                         )
                         files_extracted += 1
                     except SourceExtractionError as error:
                         errors.append(ScanError(error.code, module.name, logical_path))
                     except Exception:  # noqa: BLE001 - isolate one extractor/file
                         errors.append(ScanError("extractor_error", module.name, logical_path))
+            aggregate = "\n".join(sorted(aggregate_items)).encode("utf-8")
+            fingerprint = "sha256:" + hashlib.sha256(aggregate).hexdigest()
+            if errors:
+                raise _ScanLimitError("partial_scan")
+            seen_ids: set[UUID] = set()
+            for prepared in prepared_files:
+                stored = self._store.upsert_file(
+                    scan_run_id=scan_id,
+                    module=prepared.module.name,
+                    logical_path=prepared.logical_path,
+                    kind=prepared.kind,
+                    fingerprint=prepared.fingerprint,
+                    size_bytes=prepared.size_bytes,
+                    provenance=prepared.module.provenance,
+                )
+                seen_ids.add(stored.file_id)
+                if prepared.extraction is not None:
+                    self._store.replace_derivatives(
+                        source_file_id=stored.file_id,
+                        symbols=prepared.extraction.symbols,
+                        xml_records=prepared.extraction.xml_records,
+                        metadata=prepared.extraction.metadata,
+                    )
             stale_files = self._store.mark_stale(
                 scan_run_id=scan_id, seen_file_ids=seen_ids
             )
-            aggregate = "\n".join(sorted(aggregate_items)).encode("utf-8")
-            fingerprint = "sha256:" + hashlib.sha256(aggregate).hexdigest()
+            self._store.delete_stale(instance_profile_id=instance_profile_id)
             self._store.finish_scan(
                 scan_run_id=scan_id,
                 succeeded=True,

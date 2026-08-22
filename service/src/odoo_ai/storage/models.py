@@ -237,6 +237,7 @@ class SourceSymbol(Base):
     start_line: Mapped[int] = mapped_column(Integer, nullable=False)
     end_line: Mapped[int] = mapped_column(Integer, nullable=False)
     fingerprint: Mapped[str] = mapped_column(String(71), nullable=False)
+    details: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB)
 
 
 class XmlRecord(Base):
@@ -273,3 +274,4 @@ class XmlRecord(Base):
     start_line: Mapped[int | None] = mapped_column(Integer)
     end_line: Mapped[int | None] = mapped_column(Integer)
     fingerprint: Mapped[str] = mapped_column(String(71), nullable=False)
+    declaration: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB)

@@ -24,6 +24,7 @@ class SourceSymbolValues:
     name: str
     start_line: int
     end_line: int
+    details: Mapping[str, JsonValue] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +35,7 @@ class XmlRecordValues:
     model: str | None
     start_line: int | None = None
     end_line: int | None = None
+    declaration: Mapping[str, JsonValue] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +126,25 @@ def upsert_source_file(
     return SourceFileUpsert(file=source_file, fingerprint_changed=changed)
 
 
+def find_unchanged_source_file_id(
+    session: Session,
+    *,
+    instance_profile_id: UUID,
+    module: str,
+    logical_path: str,
+    fingerprint: str,
+) -> UUID | None:
+    return session.scalar(
+        select(SourceFile.id).where(
+            SourceFile.instance_profile_id == instance_profile_id,
+            SourceFile.module == module,
+            SourceFile.logical_path == logical_path,
+            SourceFile.fingerprint == fingerprint,
+            SourceFile.is_stale.is_(False),
+        )
+    )
+
+
 def replace_file_derivatives(
     session: Session,
     *,
@@ -153,6 +174,7 @@ def replace_file_derivatives(
             start_line=value.start_line,
             end_line=value.end_line,
             fingerprint=source_file.fingerprint,
+            details=dict(value.details) if value.details is not None else None,
         )
         for value in symbols
     ]
@@ -166,6 +188,9 @@ def replace_file_derivatives(
             start_line=value.start_line,
             end_line=value.end_line,
             fingerprint=source_file.fingerprint,
+            declaration=(
+                dict(value.declaration) if value.declaration is not None else None
+            ),
         )
         for value in xml_records
     ]

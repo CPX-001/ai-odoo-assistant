@@ -32,6 +32,13 @@ class FakeStore:
         self.scans.append(scan_id)
         return scan_id
 
+    def find_unchanged_file(
+        self, *, instance_profile_id, module, logical_path, fingerprint
+    ) -> UUID | None:
+        del instance_profile_id
+        current = self.files.get((module, logical_path))
+        return current[0] if current is not None and current[1] == fingerprint else None
+
     def upsert_file(
         self,
         *,
@@ -58,8 +65,19 @@ class FakeStore:
         self.replacements.append(source_file_id)
 
     def mark_stale(self, *, scan_run_id: UUID, seen_file_ids: set[UUID]) -> int:
-        del scan_run_id, seen_file_ids
-        return 0
+        del scan_run_id
+        stale = [key for key, value in self.files.items() if value[0] not in seen_file_ids]
+        for key in stale:
+            file_id, fingerprint = self.files[key]
+            self.files[key] = (file_id, f"stale:{fingerprint}")
+        return len(stale)
+
+    def delete_stale(self, *, instance_profile_id: UUID) -> int:
+        del instance_profile_id
+        stale = [key for key, value in self.files.items() if value[1].startswith("stale:")]
+        for key in stale:
+            del self.files[key]
+        return len(stale)
 
     def finish_scan(
         self,

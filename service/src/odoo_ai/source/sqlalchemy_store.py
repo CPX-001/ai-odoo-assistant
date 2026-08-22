@@ -16,6 +16,8 @@ from odoo_ai.storage.runtime_repository import record_source_capability
 from odoo_ai.storage.source_repository import (
     SourceSymbolValues,
     XmlRecordValues,
+    delete_stale_source_files,
+    find_unchanged_source_file_id,
     finish_scan,
     mark_stale_source_files,
     open_scan,
@@ -32,6 +34,22 @@ class SqlAlchemySourceScanStore:
 
     def open_scan(self, *, instance_profile_id: UUID) -> UUID:
         return open_scan(self._session, instance_profile_id=instance_profile_id).id
+
+    def find_unchanged_file(
+        self,
+        *,
+        instance_profile_id: UUID,
+        module: str,
+        logical_path: str,
+        fingerprint: str,
+    ) -> UUID | None:
+        return find_unchanged_source_file_id(
+            self._session,
+            instance_profile_id=instance_profile_id,
+            module=module,
+            logical_path=logical_path,
+            fingerprint=fingerprint,
+        )
 
     def upsert_file(
         self,
@@ -77,6 +95,7 @@ class SqlAlchemySourceScanStore:
                     name=value.name,
                     start_line=value.start_line,
                     end_line=value.end_line,
+                    details=value.details,
                 )
                 for value in symbols
             ],
@@ -86,6 +105,7 @@ class SqlAlchemySourceScanStore:
                     model=value.model,
                     start_line=value.start_line,
                     end_line=value.end_line,
+                    declaration=value.declaration,
                 )
                 for value in xml_records
             ],
@@ -97,6 +117,11 @@ class SqlAlchemySourceScanStore:
             self._session,
             scan_run_id=scan_run_id,
             seen_file_ids=seen_file_ids,
+        )
+
+    def delete_stale(self, *, instance_profile_id: UUID) -> int:
+        return delete_stale_source_files(
+            self._session, instance_profile_id=instance_profile_id
         )
 
     def finish_scan(
@@ -123,3 +148,5 @@ class SqlAlchemySourceScanStore:
             instance_profile_id=instance_profile_id,
             state=state,
         )
+    delete_stale_source_files,
+    find_unchanged_source_file_id,
