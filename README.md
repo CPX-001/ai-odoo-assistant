@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-M0, M1, M2 y M3 están completados; sus gates son PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico, el bootstrap instalable de host, el vertical slice contextual de lectura bajo el usuario real y evidencia acotada de source/logs. M4 — Codex vertical slice es el siguiente milestone y todavía no se ha iniciado.
+M0, M1, M2 y M3 están completados; sus gates son PASS. El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon de diagnóstico, el bootstrap instalable de host, el vertical slice contextual de lectura bajo el usuario real y evidencia acotada de source/logs. Los task packets de M4 — Codex vertical slice están preparados; la implementación de M4 todavía no se ha iniciado.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 
@@ -157,5 +157,6 @@ sudo python3 -m installer.bootstrap \
 El bind del Assistant Service permanece limitado a loopback en el MVP por seguridad. El bootstrap instala un release versionado, prepara el role/DB aislados, aplica Alembic e instala/verifica la unit systemd. Repetirlo valida recursos y corrige únicamente drift seguro.
 
 El procedimiento de instalación, upgrade, backup, rollback y los smokes reproducibles están en [`docs/OPERATIONS_M1.md`](docs/OPERATIONS_M1.md).
-La evidencia y el veredicto del milestone están en [`docs/M1_GATE_REPORT.md`](docs/M1_GATE_REPORT.md).
-La evidencia del flujo contextual y el veredicto de M2 están en [`docs/M2_GATE_REPORT.md`](docs/M2_GATE_REPORT.md).
+La evidencia y el veredicto de M1 están en [`docs/M1_GATE_REPORT.md`](docs/M1_GATE_REPORT.md).
+La evidencia y el veredicto de M2 están en [`docs/M2_GATE_REPORT.md`](docs/M2_GATE_REPORT.md).
+La evidencia y el veredicto de M3 están en [`docs/M3_GATE_REPORT.md`](docs/M3_GATE_REPORT.md).
