@@ -1,6 +1,6 @@
 # M7 — Product hardening
 
-Estado: **task packets preparados; implementación no iniciada.**
+Estado: **Goal A (M7-01 + M7-02 + M7-03) implementado en `main`; pendiente de verificación runtime. M7 no es PASS y M7-04+ no se han iniciado.**
 
 M7 empieza únicamente después de **M6 GATE: PASS**. Su objetivo no es añadir otra familia de capacidades al agente, sino convertir el estado M0-M6 en un piloto operable: un técnico debe poder instalarlo, configurarlo, diagnosticarlo, actualizarlo y mantenerlo sin depender de una consola para la operación diaria.
 
@@ -42,7 +42,7 @@ M7 **no** convierte Odoo en root ni en un panel genérico de administración del
 8. [`M7-08-security-hardening.md`](M7-08-security-hardening.md) — revisión adversarial integral de las nuevas superficies administrativas.
 9. [`M7-09-real-pilot-gate.md`](M7-09-real-pilot-gate.md) — E2E real de piloto y gate final M7.
 
-Cada packet es independiente y debe quedar verificado antes de avanzar.
+Cada packet es independiente y debe quedar verificado antes de considerarse cerrado. En Goal A el código está implementado, pero sus packets continúan **pending runtime verification** hasta ejecutar sus suites obligatorias.
 
 ## Agrupación recomendada para Goal Mode
 
@@ -52,17 +52,23 @@ Ejecutar juntos: **M7-01 + M7-02 + M7-03**.
 
 Cadena conceptual: definir qué puede configurarse y quién es autoridad → exponerlo correctamente en Odoo → aplicar únicamente overrides seguros y validados.
 
+Estado actual: **implemented / pending runtime verification**.
+
 ### Goal B — operación diaria
 
 Ejecutar juntos: **M7-04 + M7-05 + M7-06**.
 
 Cadena conceptual: entender el estado → poder ejecutar mantenimiento seguro → conservar visibilidad/auditoría sin crecimiento o exposición indefinidos.
 
+Estado actual: **not started**.
+
 ### Goal C — lifecycle, seguridad y gate
 
 Ejecutar juntos: **M7-07 + M7-08 + M7-09**.
 
 Cadena conceptual: demostrar instalación/upgrade y handoff operativo → atacar las nuevas superficies → ejecutar el piloto real y cerrar el milestone.
+
+Estado actual: **not started**.
 
 Prompt base recomendado:
 

@@ -127,7 +127,7 @@ determinista.
 | `host.runtime_root`, `host.service_unit` | HOST_ONLY | bootstrap/supervisor | setup |
 | `source.authorized_roots` | HOST_ONLY | `ODOO_AI_SOURCE_ROOTS` materializado por bootstrap | setup |
 | `source.selected_roots` | ADMIN_MUTABLE | subconjunto/descendiente validado de `source.authorized_roots` | hot |
-| `logs.authorized_file`, `logs.authorized_unit` | HOST_ONLY | `ODOO_AI_LOG_FILE` / `ODOO_AI_LOG_UNIT` | setup |
+| `logs.authorized_file`, `logs.authorized_unit` | HOST_ONLY | `ODOO_AI_LOG_FILE` / `ODOO_AI_JOURNAL_UNIT` | setup |
 | `logs.provider` | ADMIN_MUTABLE | sólo `auto`, `file` o `journal` si existe candidato host | hot |
 | `reasoning.executable`, `reasoning.home` | HOST_ONLY | env/bootstrap | setup |
 | `reasoning.model` | ADMIN_MUTABLE | modelo acotado para el runtime Codex | hot |
@@ -144,5 +144,37 @@ la envelope HOST_ONLY, incluyendo escapes mediante symlink.
 No existe ninguna key M7 para ampliar handlers/capabilities ACTION. Los límites
 de M6 siguen siendo código/política curada y no configuración administrativa.
 
-**Estado:** contrato M7-01 implementado; verificación runtime/pytest/Ruff/mypy
-pendiente.
+### Aplicación runtime M7-03
+
+El Assistant expone únicamente una API interna machine-auth para configuración:
+
+- `GET /v1/admin/configuration`: snapshot saneado, revision, fingerprint,
+  provenance y opciones autorizadas;
+- `POST /v1/admin/configuration/validate`: valida el contrato cerrado sin
+  persistir ni activar;
+- `POST /v1/admin/configuration/apply`: exige `expected_revision`, revalida
+  envelopes/providers y sólo entonces avanza el estado.
+
+La Assistant DB mantiene un singleton de estado y un historial append-only de
+revisiones válidas. La revisión `0` significa que no existe overlay persistido.
+Cada apply real bloquea el estado, comprueba la revisión esperada, inserta la
+nueva revisión y mueve el puntero dentro de la misma transacción. Una petición
+inválida o stale no modifica el último estado válido. El audit guarda actor,
+revision, fingerprint y **keys cambiadas**, nunca valores de configuración ni
+secretos.
+
+Los consumers runtime no modifican `os.environ`: source, selección de provider
+de logs y settings Codex superponen sólo las keys `ADMIN_MUTABLE` registradas.
+Executable/home/CWD/sandbox, roots autorizados, fichero/unit de logs, database,
+secrets y supervisor continúan siendo host-owned. Un cambio de revision invalida
+las caches compatibles; `restart_required` y `setup_required` son estados
+representables pero M7 no ejecuta restart/systemd/setup desde Odoo.
+
+La readiness administrativa incluye ahora el estado `configuration`. Una
+configuración persistida que deje de cumplir los límites HOST_ONLY actuales
+queda `ERROR`/fail-closed; restaurar el boundary válido permite volver a usar la
+misma última revisión sin haberla destruido.
+
+**Estado:** M7-01, M7-02 y M7-03 implementados en `main`; verificación runtime,
+pytest, Ruff, mypy, migración PostgreSQL real y addon Odoo pendiente. Esto no
+marca M7 como PASS ni inicia M7-04.
