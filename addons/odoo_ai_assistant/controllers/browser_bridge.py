@@ -8,6 +8,7 @@ from odoo.http import request
 BROWSER_CONTEXT_READ_ROUTE: Final = "/odoo_ai/v1/context-read"
 BROWSER_EXPLAIN_ROUTE: Final = "/odoo_ai/v1/explain"
 BROWSER_QUERY_ROUTE: Final = "/odoo_ai/v1/query"
+BROWSER_HOW_TO_ROUTE: Final = "/odoo_ai/v1/how-to"
 
 
 class BrowserAssistantController(http.Controller):
@@ -47,3 +48,14 @@ class BrowserAssistantController(http.Controller):
         if unexpected:
             return {"error": {"code": "invalid_context"}, "ok": False}
         return request.env["odoo.ai.assistant.bridge"].submit_query(message, screen)
+
+    @http.route(
+        BROWSER_HOW_TO_ROUTE,
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def how_to(self, message=None, screen=None, **unexpected):
+        if unexpected:
+            return {"error": {"code": "invalid_context"}, "ok": False}
+        return request.env["odoo.ai.assistant.bridge"].submit_how_to(message, screen)

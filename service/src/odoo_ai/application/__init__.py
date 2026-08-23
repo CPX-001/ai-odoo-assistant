@@ -13,6 +13,7 @@ from odoo_ai.application.effective_schema import (
     EffectiveSchemaService,
 )
 from odoo_ai.application.explain import ExplainService, ExplainTurnError
+from odoo_ai.application.how_to import HowToService, HowToTurnError
 from odoo_ai.application.navigation import (
     NavigationResult,
     NavigationService,
@@ -37,6 +38,8 @@ __all__ = [
     "EffectiveSchemaService",
     "ExplainService",
     "ExplainTurnError",
+    "HowToService",
+    "HowToTurnError",
     "NavigationResult",
     "NavigationService",
     "NavigationServiceError",

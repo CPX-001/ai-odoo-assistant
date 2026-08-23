@@ -53,6 +53,15 @@ from odoo_ai.contracts.explain import (
     RecordCitation,
     SourceCitation,
 )
+from odoo_ai.contracts.how_to import (
+    DocumentCitation,
+    HowToCitation,
+    HowToTurnRequest,
+    HowToTurnResponse,
+    NavigationCitation,
+    SchemaCitation,
+    SchemaFieldCitation,
+)
 from odoo_ai.contracts.knowledge import (
     KnowledgeChunk,
     KnowledgeDocument,
@@ -167,6 +176,10 @@ __all__ = [
     "FindModelExtensionsResult",
     "FindSymbolRequest",
     "FindSymbolResult",
+    "DocumentCitation",
+    "HowToCitation",
+    "HowToTurnRequest",
+    "HowToTurnResponse",
     "InstanceInventory",
     "InstanceProfileSummary",
     "KnowledgeChunk",
@@ -195,6 +208,7 @@ __all__ = [
     "ManifestStatus",
     "ModelExtensionGroup",
     "NavigationActionSummary",
+    "NavigationCitation",
     "NavigationActionType",
     "NavigationLimits",
     "NavigationNode",
@@ -226,6 +240,8 @@ __all__ = [
     "ScanRun",
     "ScanStatus",
     "ScreenContext",
+    "SchemaCitation",
+    "SchemaFieldCitation",
     "SourceCapabilityState",
     "SourceCitation",
     "SourceCandidate",

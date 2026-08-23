@@ -316,16 +316,25 @@ def validate_query_turn_request(request: ContextReadTurnRequest, *, now: datetim
     _validate_turn_request(request, now=now, require_record=False)
 
 
+def validate_how_to_turn_request(request: ContextReadTurnRequest, *, now: datetime) -> None:
+    """Apply HOW_TO validation while allowing navigation-only screen context."""
+
+    _validate_turn_request(request, now=now, require_record=False, require_model=False)
+
+
 def _validate_turn_request(
     request: ContextReadTurnRequest,
     *,
     now: datetime,
     require_record: bool,
+    require_model: bool = True,
 ) -> None:
     screen = request.screen
-    if not screen.model or (require_record and screen.res_id is None):
+    if (require_model and not screen.model) or (require_record and screen.res_id is None):
         raise ContextReadError("record_context_required", 422)
-    if not _valid_model(screen.model):
+    if screen.model is not None and not _valid_model(screen.model):
+        raise ContextReadError("invalid_screen", 422)
+    if screen.model is None and screen.res_id is not None:
         raise ContextReadError("invalid_screen", 422)
     if screen.res_id is not None and (
         type(screen.res_id) is not int or not 1 <= screen.res_id <= MAX_ODOO_ID

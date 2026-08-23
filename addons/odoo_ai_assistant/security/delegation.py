@@ -76,7 +76,7 @@ class DelegationPayload:
     company_id: int
     allowed_company_ids: tuple[int, ...]
     lang: str | None
-    model: str
+    model: str | None
     record_ids: tuple[int, ...]
     scopes: tuple[DelegationScope, ...]
     issued_at: int
@@ -110,9 +110,10 @@ class DelegationPayload:
             raise ValueError
         if self.lang is not None:
             _validate_text(self.lang, minimum=2, maximum=35)
-        if not _MODEL_PATTERN.fullmatch(self.model):
+        if self.model is not None and not _MODEL_PATTERN.fullmatch(self.model):
             raise ValueError
-        _validate_positive_ids(self.record_ids, maximum=MAX_DELEGATED_RECORD_IDS)
+        if self.record_ids:
+            _validate_positive_ids(self.record_ids, maximum=MAX_DELEGATED_RECORD_IDS)
         if not 1 <= len(self.scopes) <= MAX_DELEGATION_SCOPES:
             raise ValueError
         if len(self.scopes) != len(set(self.scopes)):
@@ -125,8 +126,15 @@ class DelegationPayload:
             raise ValueError
         if not 0 < self.expires_at - self.issued_at <= MAX_DELEGATION_TTL_SECONDS:
             raise ValueError
-        _validate_positive_int(self.max_records)
+        if type(self.max_records) is not int or self.max_records < 0:
+            raise ValueError
         if self.max_records > len(self.record_ids):
+            raise ValueError
+        if "read_records" in self.scopes and (
+            self.model is None or not self.record_ids or self.max_records < 1
+        ):
+            raise ValueError
+        if "fields_get" in self.scopes and self.model is None:
             raise ValueError
         _validate_positive_int(self.max_fields)
         if self.max_fields > MAX_DELEGATED_FIELDS:
@@ -193,7 +201,7 @@ class DelegationPayload:
                     _require_int_list(raw["allowed_company_ids"])
                 ),
                 lang=_require_optional_string(raw["lang"]),
-                model=_require_string(raw["model"]),
+                model=_require_optional_string(raw["model"]),
                 record_ids=tuple(_require_int_list(raw["record_ids"])),
                 scopes=scopes,
                 issued_at=_require_int(raw["issued_at"]),

@@ -67,16 +67,17 @@ class DelegationClaims(BaseModel):
     company_id: PositiveId
     allowed_company_ids: list[PositiveId] = Field(min_length=1, max_length=MAX_ALLOWED_COMPANY_IDS)
     lang: str | None = Field(default=None, min_length=2, max_length=35)
-    model: str = Field(
+    model: str | None = Field(
+        default=None,
         min_length=1,
         max_length=128,
         pattern=r"^[A-Za-z_][A-Za-z0-9_.]*$",
     )
-    record_ids: list[PositiveId] = Field(min_length=1, max_length=MAX_DELEGATED_RECORD_IDS)
+    record_ids: list[PositiveId] = Field(default_factory=list, max_length=MAX_DELEGATED_RECORD_IDS)
     scopes: list[DelegationScope] = Field(min_length=1, max_length=MAX_DELEGATION_SCOPES)
     issued_at: int = Field(strict=True, ge=0)
     expires_at: int = Field(strict=True, ge=0)
-    max_records: int = Field(strict=True, ge=1, le=MAX_DELEGATED_RECORD_IDS)
+    max_records: int = Field(strict=True, ge=0, le=MAX_DELEGATED_RECORD_IDS)
     max_fields: int = Field(strict=True, ge=1, le=MAX_DELEGATED_FIELDS)
 
     @field_validator("database")
@@ -104,6 +105,12 @@ class DelegationClaims(BaseModel):
             raise ValueError("delegation TTL is invalid")
         if self.max_records > len(self.record_ids):
             raise ValueError("record limit exceeds delegated records")
+        if DelegationScope.READ_RECORDS in self.scopes and (
+            self.model is None or not self.record_ids or self.max_records < 1
+        ):
+            raise ValueError("record scope requires bounded record authority")
+        if DelegationScope.FIELDS_GET in self.scopes and self.model is None:
+            raise ValueError("metadata scope requires a model")
         return self
 
 

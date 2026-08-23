@@ -22,6 +22,7 @@ from .screen_context import (
     MAX_ODOO_ID,
     ValidatedScreenContext,
     validate_context_read_screen,
+    validate_how_to_screen,
     validate_query_screen,
 )
 
@@ -304,6 +305,80 @@ class QueryTurnContextPreparer:
         )
 
 
+class HowToTurnContextPreparer:
+    """Create navigation/schema-only authority for one HOW_TO turn."""
+
+    def __init__(
+        self,
+        *,
+        codec: DelegationCodec,
+        clock: Callable[[], int] | None = None,
+        turn_id_factory: Callable[[], UUID] | None = None,
+        nonce_factory: Callable[[], str] | None = None,
+    ) -> None:
+        self._codec = codec
+        self._clock = clock or _unix_time
+        self._turn_id_factory = turn_id_factory or uuid4
+        self._nonce_factory = nonce_factory or (lambda: secrets.token_urlsafe(18))
+
+    def prepare(
+        self,
+        *,
+        env: OdooEnvironment,
+        screen_payload: Mapping[str, object],
+        message: str,
+    ) -> PreparedContextTurn:
+        now = self._clock()
+        if type(now) is not int:
+            raise TurnContextError("clock_unavailable")
+        screen = validate_how_to_screen(
+            screen_payload,
+            clock=lambda: datetime.fromtimestamp(now, UTC),
+        )
+        if screen.model is not None and screen.model not in env:
+            raise TurnContextError("model_unavailable")
+        normalized_message = _message(message)
+        user = derive_user_execution_context(env)
+        database = _database_binding(env)
+        turn_id = self._turn_id_factory()
+        if not isinstance(turn_id, UUID):
+            raise TurnContextError("turn_id_unavailable")
+        scopes = (
+            ("navigation", "fields_get")
+            if screen.model is not None
+            else ("navigation",)
+        )
+        try:
+            payload = DelegationPayload(
+                format_version=1,
+                jti=self._nonce_factory(),
+                turn_id=turn_id,
+                database=database,
+                uid=user.uid,
+                company_id=user.company_id,
+                allowed_company_ids=user.allowed_company_ids,
+                lang=user.lang,
+                model=screen.model,
+                record_ids=(),
+                scopes=scopes,
+                issued_at=now,
+                expires_at=now + DELEGATION_TTL_SECONDS,
+                max_records=0,
+                max_fields=DELEGATED_MAX_FIELDS,
+            )
+            token = self._codec.encode(payload)
+        except DelegationTokenError as error:
+            raise TurnContextError("delegation_unavailable") from error
+        return PreparedContextTurn(
+            turn_id=turn_id,
+            message=normalized_message,
+            screen=screen,
+            user=user,
+            database=database,
+            delegation_token=token,
+        )
+
+
 def prepare_context_turn(
     *,
     env: OdooEnvironment,
@@ -356,6 +431,35 @@ def prepare_query_turn(
     except DelegationTokenError:
         raise TurnContextError("delegation_unavailable") from None
     return QueryTurnContextPreparer(codec=codec, clock=effective_clock).prepare(
+        env=env,
+        screen_payload=screen_payload,
+        message=message,
+    )
+
+
+def prepare_how_to_turn(
+    *,
+    env: OdooEnvironment,
+    screen_payload: Mapping[str, object],
+    message: str,
+    secret_file: str | None = None,
+    clock: Callable[[], int] | None = None,
+) -> PreparedContextTurn:
+    """Configured HOW_TO entrypoint with navigation/schema-only authority."""
+
+    resolved_secret_file = (
+        secret_file or os.environ.get(DELEGATION_SECRET_FILE_ENV, "")
+    ).strip()
+    if not resolved_secret_file:
+        raise TurnContextError("delegation_unconfigured")
+    effective_clock = clock or _unix_time
+    try:
+        codec = DelegationCodec.from_secret_file(
+            resolved_secret_file, clock=effective_clock
+        )
+    except DelegationTokenError:
+        raise TurnContextError("delegation_unavailable") from None
+    return HowToTurnContextPreparer(codec=codec, clock=effective_clock).prepare(
         env=env,
         screen_payload=screen_payload,
         message=message,

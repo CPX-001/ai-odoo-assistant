@@ -151,6 +151,15 @@ def _query_preparer():
     )
 
 
+def _how_to_preparer():
+    return turn_context.HowToTurnContextPreparer(
+        codec=_codec(),
+        clock=lambda: NOW,
+        turn_id_factory=lambda: TURN_ID,
+        nonce_factory=lambda: "jti_0123456789abcdefghij",
+    )
+
+
 def test_server_env_identity_and_current_record_are_signed() -> None:
     prepared = _preparer().prepare(
         env=FakeEnv(), screen_payload=_screen(), message="¿Qué estado tiene?"
@@ -212,6 +221,43 @@ def test_query_turn_accepts_model_only_list_context() -> None:
 
     assert prepared.screen.model == "sale.order"
     assert prepared.screen.res_id is None
+
+
+def test_how_to_authority_contains_navigation_and_optional_schema_but_no_records() -> None:
+    prepared = _how_to_preparer().prepare(
+        env=FakeEnv(),
+        screen_payload=_screen(
+            res_id=None,
+            selected_ids=[],
+            allowed_context_subset={"active_model": "sale.order"},
+        ),
+        message="¿Cómo creo un pedido?",
+    )
+    claims = _codec().decode(prepared.delegation_token)
+
+    assert claims.model == "sale.order"
+    assert claims.record_ids == ()
+    assert claims.max_records == 0
+    assert claims.scopes == ("navigation", "fields_get")
+    assert "read_records" not in claims.scopes
+
+
+def test_how_to_can_prepare_navigation_only_context_without_a_model() -> None:
+    prepared = _how_to_preparer().prepare(
+        env=FakeEnv(),
+        screen_payload=_screen(
+            model=None,
+            res_id=None,
+            selected_ids=[],
+            allowed_context_subset={},
+        ),
+        message="¿Dónde se configura la empresa?",
+    )
+    claims = _codec().decode(prepared.delegation_token)
+
+    assert claims.model is None
+    assert claims.record_ids == ()
+    assert claims.scopes == ("navigation",)
 
 
 def test_browser_identity_is_rejected_and_never_changes_the_delegation() -> None:

@@ -70,6 +70,8 @@ class AssistantHandler(BaseHTTPRequestHandler):
             self._json(200, b'{"ok":true,"turn_id":"explain-example"}')
         elif self.path == "/v1/turns/query":
             self._json(200, b'{"ok":true,"turn_id":"query-example"}')
+        elif self.path == "/v1/turns/how-to":
+            self._json(200, b'{"ok":true,"turn_id":"how-to-example"}')
         elif self.path == "/v1/admin/source/rescan":
             self._json(200, b'{"state":"DETECTED","metrics":{}}')
         elif self.path == "/v1/admin/source/test":
@@ -239,6 +241,30 @@ def test_query_posts_only_to_its_narrow_authenticated_route(
     assert response == {"ok": True, "turn_id": "query-example"}
     assert AssistantHandler.last_post is not None
     assert AssistantHandler.last_post["path"] == "/v1/turns/query"
+    assert AssistantHandler.last_post["payload"] == payload
+
+
+def test_how_to_posts_only_to_its_narrow_authenticated_route(
+    tmp_path: Path, local_service: ThreadingHTTPServer
+) -> None:
+    secret_file = tmp_path / "shared-secret"
+    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
+    secret_file.chmod(0o640)
+    client = AssistantServiceClient(
+        base_url=f"http://127.0.0.1:{local_service.server_port}",
+        shared_secret_file=str(secret_file),
+    )
+    payload = {
+        "turn_id": "12345678-1234-5678-1234-567812345678",
+        "message": "how to",
+        "screen": {"model": "sale.order", "menu_id": 11},
+    }
+
+    response = client.how_to(payload)
+
+    assert response == {"ok": True, "turn_id": "how-to-example"}
+    assert AssistantHandler.last_post is not None
+    assert AssistantHandler.last_post["path"] == "/v1/turns/how-to"
     assert AssistantHandler.last_post["payload"] == payload
 
 

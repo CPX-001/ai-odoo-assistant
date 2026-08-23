@@ -2,7 +2,7 @@
 
 Este roadmap resume el Source of Truth. No autoriza por sí mismo la implementación de ningún milestone.
 
-Estado actual: **M0, M1, M2, M3 y M4 completados; gates PASS. M5 en curso: M5-01 a M5-06 verificadas; M5-07 es la siguiente task.**
+Estado actual: **M0, M1, M2, M3 y M4 completados; gates PASS. M5 en curso: M5-01 a M5-07 verificadas; M5-08 es la siguiente task.**
 
 | Milestone | Objetivo observable |
 | --- | --- |

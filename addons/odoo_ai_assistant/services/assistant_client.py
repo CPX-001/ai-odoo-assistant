@@ -108,12 +108,18 @@ class AssistantServiceClient:
 
         return self._turn_post("/v1/turns/query", payload)
 
+    def how_to(self, payload: dict[str, object]) -> dict[str, Any]:
+        """Submit one bounded server-to-server M5 HOW_TO turn."""
+
+        return self._turn_post("/v1/turns/how-to", payload)
+
     def _turn_post(
         self, path: str, payload: dict[str, object]
     ) -> dict[str, Any]:
         if path not in {
             "/v1/turns/context-read",
             "/v1/turns/explain",
+            "/v1/turns/how-to",
             "/v1/turns/query",
         }:
             raise AssistantServiceError("invalid_request")

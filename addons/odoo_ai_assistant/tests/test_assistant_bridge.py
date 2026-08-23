@@ -105,6 +105,53 @@ class FakeContextReadClient:
             "workflow": "QUERY",
         }
 
+    def how_to(self, payload):
+        self.payload = payload
+        screen = payload["screen"]
+        return {
+            "answer_markdown": "Usa la ruta visible y el campo comprobado.",
+            "citations": [
+                {
+                    "captured_at": datetime.now(UTC).isoformat(),
+                    "evidence_id": "44444444-4444-4444-8444-444444444444",
+                    "kind": "navigation",
+                    "menu_id": screen["menu_id"],
+                    "path": ["Contacts", "Contacts"],
+                    "target_model": screen["model"],
+                    "view_modes": ["list", "form"],
+                },
+                {
+                    "captured_at": datetime.now(UTC).isoformat(),
+                    "evidence_id": "55555555-5555-4555-8555-555555555555",
+                    "fields": [
+                        {"field_type": "char", "label": "Name", "name": "name"}
+                    ],
+                    "kind": "schema",
+                    "model": screen["model"],
+                    "schema_id": "sha256:" + "b" * 64,
+                },
+                {
+                    "document_id": "contacts/how-to.md",
+                    "end_line": 12,
+                    "evidence_id": "66666666-6666-4666-8666-666666666666",
+                    "fingerprint": "sha256:" + "c" * 64,
+                    "kind": "document",
+                    "locale": "en_US",
+                    "media_type": "text/markdown",
+                    "ordinal": 0,
+                    "provider_id": "odoo-docs",
+                    "start_line": 8,
+                    "title": "Contacts guide",
+                },
+            ],
+            "completed_at": datetime.now(UTC).isoformat(),
+            "confidence": "high",
+            "limitations": [],
+            "status": "ok",
+            "turn_id": payload["turn_id"],
+            "workflow": "HOW_TO",
+        }
+
 
 @tagged("post_install", "-at_install")
 class TestAssistantBridge(TransactionCase):
@@ -289,4 +336,37 @@ class TestAssistantBridge(TransactionCase):
         self.assertEqual(result["citations"][0]["kind"], "query")
         self.assertNotIn("records", result)
         self.assertNotIn("groups", result)
+        self.assertNotIn(client.payload["delegation_token"], repr(result))
+
+    def test_how_to_uses_metadata_only_authority_and_browser_safe_citations(self):
+        client = FakeContextReadClient()
+        user_env = self.env(
+            user=self.user.id,
+            su=False,
+            context={
+                **self.env.context,
+                "allowed_company_ids": [self.env.company.id],
+                "lang": "en_US",
+            },
+        )
+        bridge = user_env["odoo.ai.assistant.bridge"]
+        with (
+            patch.dict(
+                os.environ,
+                {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
+            ),
+            patch.object(type(bridge), "_client", return_value=client),
+        ):
+            result = bridge.submit_how_to("¿Cómo abro contactos?", self._screen())
+
+        claims = DelegationCodec(SECRET).decode(client.payload["delegation_token"])
+        self.assertEqual(claims.uid, self.user.id)
+        self.assertEqual(claims.record_ids, ())
+        self.assertEqual(claims.max_records, 0)
+        self.assertEqual(claims.scopes, ("navigation", "fields_get"))
+        self.assertEqual(
+            [citation["kind"] for citation in result["citations"]],
+            ["navigation", "schema", "document"],
+        )
+        self.assertNotIn("pointer", repr(result))
         self.assertNotIn(client.payload["delegation_token"], repr(result))

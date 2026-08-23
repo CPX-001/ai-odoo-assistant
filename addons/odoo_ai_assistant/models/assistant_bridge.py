@@ -18,6 +18,7 @@ from ..services import (
     ScreenContextValidationError,
     TurnContextError,
     prepare_context_turn,
+    prepare_how_to_turn,
     prepare_query_turn,
 )
 
@@ -58,6 +59,7 @@ EXPECTED_EXPLAIN_RESPONSE_KEYS: Final = frozenset(
 )
 ALLOWED_CONFIDENCE: Final = frozenset({"high", "medium", "low"})
 EXPECTED_QUERY_RESPONSE_KEYS: Final = EXPECTED_EXPLAIN_RESPONSE_KEYS
+EXPECTED_HOW_TO_RESPONSE_KEYS: Final = EXPECTED_EXPLAIN_RESPONSE_KEYS
 
 
 class AssistantBridge(models.AbstractModel):
@@ -131,6 +133,31 @@ class AssistantBridge(models.AbstractModel):
             )
             response = self._client().query(prepared.to_assistant_payload())
             return _browser_query_response(response, prepared)
+        except ScreenContextValidationError:
+            return _error("invalid_context")
+        except TurnContextError as error:
+            return _error(_turn_error_code(error.code))
+        except AssistantServiceError as error:
+            return _error(_client_error_code(error.code))
+        except Exception:  # noqa: BLE001 - sanitize the browser RPC boundary
+            return _error("service_unavailable")
+
+    @api.model
+    def submit_how_to(self, message, screen):
+        """Run HOW_TO with navigation/schema-only authority retained server-side."""
+
+        if not self.env.user._is_internal():
+            return _error("access_denied")
+        if not isinstance(screen, Mapping):
+            return _error("invalid_context")
+        try:
+            prepared = prepare_how_to_turn(
+                env=self.env,
+                screen_payload=screen,
+                message=message,
+            )
+            response = self._client().how_to(prepared.to_assistant_payload())
+            return _browser_how_to_response(response, prepared)
         except ScreenContextValidationError:
             return _error("invalid_context")
         except TurnContextError as error:
@@ -350,6 +377,129 @@ def _browser_query_citation(citation, prepared):
     ):
         raise AssistantServiceError("invalid_response")
     return dict(citation)
+
+
+def _browser_how_to_response(response, prepared):
+    if not isinstance(response, dict) or set(response) != EXPECTED_HOW_TO_RESPONSE_KEYS:
+        raise AssistantServiceError("invalid_response")
+    answer = response.get("answer_markdown")
+    limitations = response.get("limitations")
+    citations = response.get("citations")
+    if (
+        response.get("status") != "ok"
+        or response.get("workflow") != "HOW_TO"
+        or response.get("turn_id") != str(prepared.turn_id)
+        or response.get("confidence") not in ALLOWED_CONFIDENCE
+        or not isinstance(answer, str)
+        or not 1 <= len(answer) <= 16_384
+        or not isinstance(response.get("completed_at"), str)
+        or not isinstance(limitations, list)
+        or len(limitations) > 8
+        or any(not _identifier(value, 1_024) for value in limitations)
+        or not isinstance(citations, list)
+        or len(citations) > 24
+    ):
+        raise AssistantServiceError("invalid_response")
+    sanitized = [_browser_how_to_citation(value, prepared) for value in citations]
+    evidence_ids = [value["evidence_id"] for value in sanitized]
+    if len(evidence_ids) != len(set(evidence_ids)):
+        raise AssistantServiceError("invalid_response")
+    result = {
+        "ok": True,
+        "turn_id": str(prepared.turn_id),
+        "answer": answer,
+        "confidence": response["confidence"],
+        "limitations": list(limitations),
+        "citations": sanitized,
+    }
+    serialized = json.dumps(result, allow_nan=False, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    if prepared.delegation_token in serialized:
+        raise AssistantServiceError("invalid_response")
+    return result
+
+
+def _browser_how_to_citation(citation, prepared):
+    if not isinstance(citation, dict) or not _uuid(citation.get("evidence_id")):
+        raise AssistantServiceError("invalid_response")
+    kind = citation.get("kind")
+    if kind == "navigation":
+        expected = {"captured_at", "evidence_id", "kind", "menu_id", "path", "target_model", "view_modes"}
+        path = citation.get("path")
+        view_modes = citation.get("view_modes")
+        if (
+            set(citation) != expected
+            or type(citation.get("menu_id")) is not int
+            or citation["menu_id"] <= 0
+            or not isinstance(path, list)
+            or not 1 <= len(path) <= 8
+            or any(not _identifier(value, 256) for value in path)
+            or citation.get("target_model") not in {None, prepared.screen.model}
+            or not isinstance(view_modes, list)
+            or len(view_modes) > 7
+            or any(value not in {"activity", "calendar", "form", "graph", "kanban", "list", "pivot"} for value in view_modes)
+            or not isinstance(citation.get("captured_at"), str)
+        ):
+            raise AssistantServiceError("invalid_response")
+        return dict(citation)
+    if kind == "schema":
+        expected = {"captured_at", "evidence_id", "fields", "kind", "model", "schema_id"}
+        fields = citation.get("fields")
+        if (
+            set(citation) != expected
+            or citation.get("model") != prepared.screen.model
+            or not isinstance(citation.get("schema_id"), str)
+            or _FINGERPRINT.fullmatch(citation["schema_id"]) is None
+            or not isinstance(fields, list)
+            or not 1 <= len(fields) <= 64
+            or any(not _browser_schema_field(value) for value in fields)
+            or not isinstance(citation.get("captured_at"), str)
+        ):
+            raise AssistantServiceError("invalid_response")
+        return dict(citation)
+    if kind == "document":
+        expected = {"document_id", "end_line", "evidence_id", "fingerprint", "kind", "locale", "media_type", "ordinal", "provider_id", "start_line", "title"}
+        if (
+            set(citation) != expected
+            or not isinstance(citation.get("provider_id"), str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", citation["provider_id"])
+            is None
+            or not _logical_path(citation.get("document_id"))
+            or not _identifier(citation.get("title"), 512)
+            or citation.get("locale") is not None
+            and (
+                not isinstance(citation.get("locale"), str)
+                or re.fullmatch(
+                    r"[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{1,8})*",
+                    citation["locale"],
+                )
+                is None
+            )
+            or citation.get("media_type") not in {"text/markdown", "text/plain"}
+            or type(citation.get("ordinal")) is not int
+            or not 0 <= citation["ordinal"] <= 65_535
+            or type(citation.get("start_line")) is not int
+            or type(citation.get("end_line")) is not int
+            or citation["start_line"] <= 0
+            or citation["end_line"] < citation["start_line"]
+            or not isinstance(citation.get("fingerprint"), str)
+            or _FINGERPRINT.fullmatch(citation["fingerprint"]) is None
+        ):
+            raise AssistantServiceError("invalid_response")
+        return dict(citation)
+    raise AssistantServiceError("invalid_response")
+
+
+_FINGERPRINT = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def _browser_schema_field(value):
+    return (
+        isinstance(value, dict)
+        and set(value) == {"field_type", "label", "name"}
+        and _identifier(value.get("name"), 128)
+        and _identifier(value.get("field_type"), 128)
+        and (value.get("label") is None or _identifier(value.get("label"), 256))
+    )
 
 
 def _browser_citation(citation, prepared):

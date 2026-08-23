@@ -27,6 +27,7 @@ from odoo_ai.contracts.effective_schema import (
 )
 from odoo_ai.contracts.evidence import Evidence
 from odoo_ai.contracts.explain import ExplainTurnRequest, ExplainTurnResponse
+from odoo_ai.contracts.how_to import HowToTurnRequest, HowToTurnResponse
 from odoo_ai.contracts.knowledge import (
     KnowledgeDocument,
     KnowledgeExcerpt,
@@ -90,6 +91,8 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     EffectiveSelectionOption,
     ExplainTurnRequest,
     ExplainTurnResponse,
+    HowToTurnRequest,
+    HowToTurnResponse,
     DelegationClaims,
     InstanceInventory,
     InstanceProfileSummary,

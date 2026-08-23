@@ -7,9 +7,11 @@ from .screen_context import (
     ScreenContextValidationError,
     ValidatedScreenContext,
     validate_context_read_screen,
+    validate_how_to_screen,
 )
 from .turn_context import (
     EffectiveUserContext,
+    HowToTurnContextPreparer,
     PreparedContextTurn,
     PreparedQueryTurn,
     QueryTurnContextPreparer,
@@ -17,6 +19,7 @@ from .turn_context import (
     TurnContextPreparer,
     derive_user_execution_context,
     prepare_context_turn,
+    prepare_how_to_turn,
     prepare_query_turn,
 )
 
@@ -28,6 +31,7 @@ __all__ = [
     "PreparedContextTurn",
     "PreparedQueryTurn",
     "QueryTurnContextPreparer",
+    "HowToTurnContextPreparer",
     "ScreenContextValidationError",
     "TurnContextError",
     "TurnContextPreparer",
@@ -35,6 +39,8 @@ __all__ = [
     "collect_instance_inventory",
     "derive_user_execution_context",
     "prepare_context_turn",
+    "prepare_how_to_turn",
     "prepare_query_turn",
     "validate_context_read_screen",
+    "validate_how_to_screen",
 ]

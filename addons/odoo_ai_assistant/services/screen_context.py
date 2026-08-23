@@ -61,7 +61,7 @@ class ValidatedScreenContext:
     action_id: int | None
     menu_id: int | None
     view_type: str | None
-    model: str
+    model: str | None
     res_id: int | None
     selected_ids: tuple[int, ...]
     allowed_context_subset: dict[str, ContextHint]
@@ -100,11 +100,24 @@ def validate_query_screen(
     return _validate_screen(payload, clock=clock, require_record=False)
 
 
+def validate_how_to_screen(
+    payload: Mapping[str, object],
+    *,
+    clock: Callable[[], datetime] | None = None,
+) -> ValidatedScreenContext:
+    """Validate HOW_TO navigation hints; model and record are optional."""
+
+    return _validate_screen(
+        payload, clock=clock, require_record=False, require_model=False
+    )
+
+
 def _validate_screen(
     payload: Mapping[str, object],
     *,
     clock: Callable[[], datetime] | None,
     require_record: bool,
+    require_model: bool = True,
 ) -> ValidatedScreenContext:
     if not isinstance(payload, Mapping):
         raise ScreenContextValidationError("invalid_screen")
@@ -113,7 +126,11 @@ def _validate_screen(
         code = "identity_not_allowed" if unexpected & IDENTITY_KEYS else "unexpected_screen_key"
         raise ScreenContextValidationError(code)
 
-    model = _model_name(payload.get("model"))
+    model = (
+        _model_name(payload.get("model"))
+        if require_model or payload.get("model") is not None
+        else None
+    )
     res_id = (
         _positive_id(payload.get("res_id"))
         if require_record
@@ -202,7 +219,7 @@ def _captured_at(value: object) -> datetime:
 
 
 def _context_subset(
-    value: object, *, model: str, res_id: int | None
+    value: object, *, model: str | None, res_id: int | None
 ) -> dict[str, ContextHint]:
     if not isinstance(value, Mapping) or not all(
         isinstance(key, str) for key in value
@@ -216,6 +233,8 @@ def _context_subset(
     if "active_model" in value:
         active_model = value["active_model"]
         if active_model != model:
+            raise ScreenContextValidationError("inconsistent_context_hint")
+        if model is None:
             raise ScreenContextValidationError("inconsistent_context_hint")
         result["active_model"] = model
     if "active_id" in value:

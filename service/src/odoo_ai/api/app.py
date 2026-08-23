@@ -15,12 +15,14 @@ from odoo_ai.adapters import (
     CachedCodexReasoningStatus,
     CodexAppServerEngine,
     CodexRuntimeSettings,
+    KnowledgeToolExecutorFactory,
     OdooGatewayError,
     OdooGatewayFactory,
     OdooGatewaySettings,
     QueryToolExecutorFactory,
     RuntimeDiagnosticsService,
     SourceToolExecutorFactory,
+    knowledge_tool_specs,
     load_instance_summary,
     persist_trace_events,
     query_tool_specs,
@@ -33,6 +35,8 @@ from odoo_ai.application import (
     DiagnosticsService,
     ExplainService,
     ExplainTurnError,
+    HowToService,
+    HowToTurnError,
     QueryService,
     QueryTurnError,
     TraceEventData,
@@ -43,6 +47,8 @@ from odoo_ai.contracts import (
     EmptyDiagnosticsRequest,
     ExplainTurnRequest,
     ExplainTurnResponse,
+    HowToTurnRequest,
+    HowToTurnResponse,
     InstanceProfileSummary,
     LogEvidence,
     LogSearchRequest,
@@ -67,6 +73,7 @@ _BOUNDED_POST_PATHS: Final = frozenset(
     {
         "/v1/turns/context-read",
         "/v1/turns/explain",
+        "/v1/turns/how-to",
         "/v1/turns/query",
         "/v1/admin/source/rescan",
         "/v1/admin/source/test",
@@ -141,6 +148,7 @@ def create_app(
     diagnostics_service: DiagnosticsService | None = None,
     explain_service: ExplainService | None = None,
     query_service: QueryService | None = None,
+    how_to_service: HowToService | None = None,
 ) -> FastAPI:
     """Build an isolated application instance for runtime and API tests."""
 
@@ -204,6 +212,26 @@ def create_app(
             reasoning_engine=engine,
             query_tools=query_tool_specs(),
             report_loader=query_factory.take_report,
+            instance_loader=instance_loader,
+            trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
+        )
+
+    def get_how_to_service() -> HowToService:
+        if how_to_service is not None:
+            return how_to_service
+        effective_factory = gateway_factory or OdooGatewayFactory(
+            OdooGatewaySettings.from_env()
+        )
+        knowledge_factory = KnowledgeToolExecutorFactory.from_env()
+        engine = CodexAppServerEngine(
+            CodexRuntimeSettings.from_env(),
+            tool_executor_factory=knowledge_factory,
+        )
+        return HowToService(
+            gateway_factory=effective_factory,
+            reasoning_engine=engine,
+            knowledge_tools=knowledge_tool_specs(),
+            report_loader=knowledge_factory.take_report,
             instance_loader=instance_loader,
             trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
         )
@@ -339,6 +367,21 @@ def create_app(
         # This is an authenticated infrastructure boundary; never expose
         # configuration/provider exception details to Odoo.
         except Exception:  # noqa: BLE001
+            return _error_response("engine_unavailable", 503)
+
+    @application.post(
+        "/v1/turns/how-to",
+        response_model=HowToTurnResponse,
+        dependencies=[Depends(require_shared_secret)],
+    )
+    async def how_to_turn(
+        payload: HowToTurnRequest,
+    ) -> HowToTurnResponse | JSONResponse:
+        try:
+            return await get_how_to_service().run(payload)
+        except HowToTurnError as error:
+            return _error_response(error.code, error.status_code)
+        except Exception:  # noqa: BLE001 - sanitize infrastructure details
             return _error_response("engine_unavailable", 503)
 
     @application.post(
