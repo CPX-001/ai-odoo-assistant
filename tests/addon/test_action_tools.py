@@ -8,6 +8,7 @@ from types import ModuleType
 from uuid import UUID
 
 import pytest
+
 from odoo_ai.application.action_policy import action_payload_fingerprint
 from odoo_ai.contracts import (
     ActionAuthorityClaims,
