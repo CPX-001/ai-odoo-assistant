@@ -95,3 +95,32 @@ Diagnostics/Settings debe ofrecer sólo botones correspondientes a operations al
 1. Documenta catálogo final de operations y sus side-effect semantics.
 2. Lista operaciones que siguen siendo setup-only.
 3. No avances a M7-06 si alguna operation acepta nombres/payloads ejecutables libres.
+
+## Estado de implementación
+
+**Implemented / pending runtime verification.**
+
+El catálogo final tiene ocho endpoints POST explícitos: readiness, source rescan,
+source test, logs test, knowledge reindex, reasoning test, ACTION self-test y
+configuration revalidation. No existe un endpoint que reciba una operation name
+o un payload ejecutable desde browser/LLM.
+
+`source_rescan` y `knowledge_reindex` usan únicamente un job persistido mínimo
+(`queued/running/succeeded/failed`) con control de duplicados y recuperación de
+jobs abandonados. El resto son probes directos y bounded. Cada intento deja
+estado/audit en Assistant PostgreSQL; M7-06 ampliará la observabilidad y
+retención, no la autoridad de ejecución.
+
+Knowledge reindex reutiliza M5 y es transaccional: un scan incompleto revierte la
+ingestión en vez de dejar un índice parcialmente aplicado. ACTION self-test sólo
+comprueba authority + storage del Assistant y no crea ni ejecuta business
+actions Odoo. Configuration revalidation no aplica cambios ni hace restart.
+
+La UI Odoo deriva el actor desde `env.uid`/DB, retargetea los botones source/log
+existentes para evitar duplicados y renderiza resultados desde una allowlist
+local. El detalle del diseño y las operaciones que siguen siendo setup-only están
+en `docs/M7_MAINTENANCE.md`.
+
+Tests unitarios/API/PostgreSQL/addon están escritos, pero su ejecución real,
+Ruff, mypy, regresión del service y addon Odoo 18 install/update siguen
+pendientes. Por tanto M7-05 todavía no se considera cerrado ni habilita M7-06.
