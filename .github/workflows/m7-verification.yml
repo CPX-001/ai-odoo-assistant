@@ -1,0 +1,152 @@
+name: M7 verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  service-static-and-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: service/pyproject.toml
+      - name: Install service dev dependencies
+        run: python -m pip install -e './service[dev]'
+      - name: Ruff
+        run: python -m ruff check service/src tests
+      - name: Mypy
+        run: python -m mypy service/src
+      - name: M7 unit and API contracts
+        run: >-
+          python -m pytest
+          tests/unit/test_configuration_contracts.py
+          tests/unit/test_m7_runtime_configuration.py
+          tests/unit/test_admin_diagnostics_matrix.py
+          tests/api/test_admin_configuration.py
+          tests/api/test_admin_diagnostics.py
+          -q
+
+  service-postgres-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: odoo_ai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d odoo_ai_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ODOO_AI_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/odoo_ai_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: service/pyproject.toml
+      - name: Install service dev dependencies
+        run: python -m pip install -e './service[dev]'
+      - name: Migration and M7 PostgreSQL tests
+        run: >-
+          python -m pytest
+          tests/integration/test_migrations.py
+          tests/integration/test_m7_runtime_configuration.py
+          tests/api/test_admin_status.py
+          -q
+      - name: Service regression
+        run: >-
+          python -m pytest
+          tests/unit
+          tests/contracts
+          tests/api
+          tests/application
+          tests/adapters
+          tests/security
+          tests/integration
+          -q
+
+  odoo18-addon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: odoo/odoo
+          ref: '18.0'
+          path: odoo-src
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Odoo system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libldap2-dev libsasl2-dev libpq-dev libxml2-dev libxslt1-dev \
+            libjpeg-dev zlib1g-dev libffi-dev libssl-dev liblcms2-dev \
+            postgresql-client
+      - name: Install Odoo Python dependencies
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          python -m pip install -r odoo-src/requirements.txt
+      - name: Create Odoo test database and config
+        env:
+          PGPASSWORD: postgres
+        run: |
+          createdb -h 127.0.0.1 -U postgres m7_odoo_test
+          cat > /tmp/odoo-m7.conf <<EOF
+          [options]
+          admin_passwd = m7-local-only
+          db_host = 127.0.0.1
+          db_port = 5432
+          db_user = postgres
+          db_password = postgres
+          addons_path = $GITHUB_WORKSPACE/addons,$GITHUB_WORKSPACE/odoo-src/addons
+          without_demo = all
+          EOF
+      - name: Install addon and run Odoo 18 tests
+        run: >-
+          python odoo-src/odoo-bin
+          -c /tmp/odoo-m7.conf
+          -d m7_odoo_test
+          -i odoo_ai_assistant
+          --test-enable
+          --stop-after-init
+          --test-tags /odoo_ai_assistant
+      - name: Update addon
+        run: >-
+          python odoo-src/odoo-bin
+          -c /tmp/odoo-m7.conf
+          -d m7_odoo_test
+          -u odoo_ai_assistant
+          --stop-after-init
