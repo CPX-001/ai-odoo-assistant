@@ -6,19 +6,34 @@
         <field name="arch" type="xml">
             <form string="AI Assistant Diagnostics" create="0" delete="0">
                 <header>
-                    <button name="action_refresh" type="object" string="Test Service" class="btn-primary"/>
+                    <button name="action_refresh" type="object" string="Refresh Diagnostics" class="btn-primary"/>
+                    <button name="action_open_settings" type="object" string="Open Settings"/>
                     <button name="action_rescan_source" type="object" string="Reanalyze Source"/>
                     <button name="action_test_source" type="object" string="Test Source"/>
                     <button name="action_test_logs" type="object" string="Test Logs"/>
                 </header>
                 <sheet>
+                    <group string="Structured Diagnostic Matrix">
+                        <field name="readiness"/>
+                        <field name="diagnostics_checked_at"/>
+                        <field name="diagnostics_config_revision"/>
+                    </group>
+                    <group string="Errors" col="1" invisible="not diagnostic_errors">
+                        <field name="diagnostic_errors" nolabel="1"/>
+                    </group>
+                    <group string="Warnings / pending" col="1" invisible="not diagnostic_warnings">
+                        <field name="diagnostic_warnings" nolabel="1"/>
+                    </group>
+                    <group string="Healthy checks" col="1" invisible="not diagnostic_ok">
+                        <field name="diagnostic_ok" nolabel="1"/>
+                    </group>
+                    <separator string="Legacy Detail / Evidence"/>
                     <group string="Local Assistant Service">
                         <field name="service_state" widget="badge"/>
                         <field name="message"/>
                         <field name="endpoint_state"/>
                     </group>
-                    <group string="Readiness">
-                        <field name="readiness"/>
+                    <group string="Readiness detail">
                         <field name="assistant_database_state"/>
                         <field name="migrations_state"/>
                     </group>
@@ -43,7 +58,7 @@
                         <field name="reasoning_model"/>
                         <field name="reasoning_setup_message"/>
                     </group>
-                    <group string="Read-only Workflows">
+                    <group string="Workflow detail">
                         <field name="query_capability_state"/>
                         <field name="navigation_capability_state"/>
                         <field name="knowledge_capability_state"/>

@@ -75,6 +75,11 @@ class AssistantServiceClient:
             "/v1/admin/status", headers={SHARED_SECRET_HEADER: secret}
         )
 
+    def diagnostics_matrix(self) -> dict[str, Any]:
+        """Read the versioned M7 administrator diagnostics matrix."""
+
+        return self._admin_get("/v1/admin/diagnostics")
+
     def configuration_snapshot(self) -> dict[str, Any]:
         """Read the sanitized M7 configuration snapshot server-to-server."""
 

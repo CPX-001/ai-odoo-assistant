@@ -13,6 +13,182 @@ SECRET_FILE_PARAM = "odoo_ai_assistant.shared_secret_file"
 SERVICE_URL_ENV = "ODOO_AI_SERVICE_URL"
 SECRET_FILE_ENV = "ODOO_AI_SHARED_SECRET_FILE"
 
+_DIAGNOSTIC_KEYS = {
+    "service.endpoint": "Assistant Service endpoint",
+    "service.machine_auth": "Machine authentication",
+    "assistant.database": "Assistant database",
+    "assistant.migrations": "Database migrations",
+    "assistant.configuration": "Runtime configuration",
+    "instance.profile": "Odoo instance profile",
+    "source.index": "Source index",
+    "source.scan": "Latest source scan",
+    "logs.provider": "Log provider",
+    "knowledge.index": "Knowledge index",
+    "reasoning.codex": "Codex runtime",
+    "action.authority": "ACTION authority",
+    "workflow.explain": "EXPLAIN",
+    "workflow.query": "QUERY",
+    "workflow.how_to": "HOW_TO",
+    "workflow.action": "ACTION",
+}
+
+# Odoo deliberately re-derives trusted presentation from reason codes. Backend
+# summary/remediation strings are never rendered directly.
+_DIAGNOSTIC_REASON_PRESENTATION = {
+    "service_reachable": ("ok", "none", "Assistant Service endpoint is reachable."),
+    "machine_auth_validated": ("ok", "none", "Machine authentication is valid."),
+    "database_available": ("ok", "none", "Assistant PostgreSQL storage is available."),
+    "database_unavailable": (
+        "error",
+        "setup_required",
+        "Assistant PostgreSQL storage is unavailable.",
+    ),
+    "migrations_at_head": ("ok", "none", "Database migrations are at the expected revision."),
+    "migrations_revision_mismatch": (
+        "error",
+        "setup_required",
+        "Database migration revision does not match this service version.",
+    ),
+    "configuration_valid": ("ok", "none", "Effective runtime configuration is valid."),
+    "configuration_invalid": (
+        "error",
+        "settings",
+        "Effective runtime configuration is invalid against current host boundaries.",
+    ),
+    "instance_available": ("ok", "none", "An authenticated Odoo instance profile is available."),
+    "instance_unknown": (
+        "degraded",
+        "retry",
+        "No current Odoo instance profile is available.",
+    ),
+    "source_operational": ("ok", "none", "Source index capability is operational."),
+    "source_not_found": (
+        "degraded",
+        "settings",
+        "No usable source tree was found inside the authorized roots.",
+    ),
+    "source_no_permission": (
+        "error",
+        "setup_required",
+        "The Assistant cannot read the configured source roots.",
+    ),
+    "source_error": ("error", "rescan", "Source indexing reported an operational error."),
+    "source_unknown": (
+        "degraded",
+        "rescan",
+        "Source capability has not been established yet.",
+    ),
+    "source_scan_succeeded": ("ok", "none", "The latest source scan completed successfully."),
+    "source_scan_running": ("degraded", "retry", "A source scan is currently in progress."),
+    "source_scan_failed": ("error", "rescan", "The latest source scan failed."),
+    "source_scan_unknown": (
+        "degraded",
+        "rescan",
+        "No completed source scan is available yet.",
+    ),
+    "logs_operational": ("ok", "none", "The selected log provider is operational."),
+    "logs_not_found": (
+        "degraded",
+        "settings",
+        "No authorized log source is currently available.",
+    ),
+    "logs_no_permission": (
+        "error",
+        "setup_required",
+        "The Assistant cannot read the authorized log source.",
+    ),
+    "logs_error": ("error", "retry", "The selected log provider reported an error."),
+    "logs_unknown": (
+        "degraded",
+        "retry",
+        "Log capability has not been established yet.",
+    ),
+    "knowledge_index_available": (
+        "ok",
+        "none",
+        "The knowledge index contains current documents.",
+    ),
+    "knowledge_index_empty": (
+        "degraded",
+        "reindex",
+        "The knowledge index is available but has no current documents.",
+    ),
+    "knowledge_index_unavailable": (
+        "error",
+        "retry",
+        "The knowledge index could not be inspected safely.",
+    ),
+    "reasoning_operational": ("ok", "none", "Codex App Server is operational."),
+    "reasoning_not_configured": (
+        "degraded",
+        "setup_required",
+        "Codex runtime is not configured.",
+    ),
+    "reasoning_runtime_missing": (
+        "error",
+        "setup_required",
+        "The configured Codex runtime is unavailable to the Assistant process.",
+    ),
+    "reasoning_auth_unavailable": (
+        "degraded",
+        "authenticate_runtime",
+        "Codex runtime authentication is unavailable.",
+    ),
+    "reasoning_protocol_incompatible": (
+        "error",
+        "setup_required",
+        "The configured Codex runtime is incompatible with this Assistant version.",
+    ),
+    "reasoning_error": ("error", "retry", "The reasoning runtime could not be validated."),
+    "action_authority_available": ("ok", "none", "M6 ACTION commit authority is configured."),
+    "action_authority_unavailable": (
+        "degraded",
+        "setup_required",
+        "M6 ACTION commit authority is unavailable.",
+    ),
+    "workflow_ready": ("ok", "none", "Workflow prerequisites are currently available."),
+    "workflow_reasoning_unavailable": (
+        "degraded",
+        "retry",
+        "Workflow is blocked by the reasoning runtime.",
+    ),
+    "workflow_knowledge_unavailable": (
+        "degraded",
+        "reindex",
+        "Workflow is waiting for instance or knowledge state.",
+    ),
+    "workflow_source_unavailable": (
+        "degraded",
+        "rescan",
+        "EXPLAIN is degraded because source evidence is unavailable.",
+    ),
+    "workflow_action_authority_unavailable": (
+        "degraded",
+        "setup_required",
+        "ACTION cannot commit because its host authority is unavailable.",
+    ),
+    "assistant_runtime_unavailable": (
+        "error",
+        "setup_required",
+        "Workflow is blocked by Assistant storage, migrations, or configuration.",
+    ),
+    "status_unrecognized": (
+        "unknown",
+        "retry",
+        "A backend status is not recognized by this addon version.",
+    ),
+}
+
+_REMEDIATION_MESSAGES = {
+    "none": "No action required.",
+    "settings": "Review AI Assistant Settings.",
+    "setup_required": "Review the controlled host setup; Odoo must not receive root privileges.",
+    "retry": "Refresh diagnostics after correcting the related component.",
+    "rescan": "Use the existing bounded source scan and refresh diagnostics.",
+    "reindex": "Use the bounded knowledge maintenance operation when available.",
+    "authenticate_runtime": "Authenticate Codex as the operating-system user running the Assistant Service.",
+}
+
 
 class AssistantDiagnostics(models.TransientModel):
     _name = "odoo.ai.assistant.diagnostics"
@@ -25,6 +201,11 @@ class AssistantDiagnostics(models.TransientModel):
     message = fields.Char(readonly=True)
     endpoint_state = fields.Char(readonly=True)
     readiness = fields.Char(readonly=True)
+    diagnostics_checked_at = fields.Char(readonly=True)
+    diagnostics_config_revision = fields.Integer(readonly=True)
+    diagnostic_errors = fields.Text(readonly=True)
+    diagnostic_warnings = fields.Text(readonly=True)
+    diagnostic_ok = fields.Text(readonly=True)
     assistant_database_state = fields.Char(readonly=True)
     migrations_state = fields.Char(readonly=True)
     instance_id = fields.Char(readonly=True)
@@ -50,6 +231,7 @@ class AssistantDiagnostics(models.TransientModel):
 
     @api.model
     def default_get(self, field_names):
+        self._require_admin()
         values = super().default_get(field_names)
         values.update(self._diagnostic_values())
         return values
@@ -59,6 +241,13 @@ class AssistantDiagnostics(models.TransientModel):
         self.ensure_one()
         self.write(self._diagnostic_values())
         return {"type": "ir.actions.client", "tag": "reload"}
+
+    def action_open_settings(self):
+        self._require_admin()
+        self.ensure_one()
+        action = self.env["ir.actions.actions"]._for_xml_id("base.action_res_config_settings")
+        action["context"] = {"module": "odoo_ai_assistant"}
+        return action
 
     def action_rescan_source(self):
         self._require_admin()
@@ -72,9 +261,7 @@ class AssistantDiagnostics(models.TransientModel):
             {
                 "source_state": str(result.get("state") or _("Unknown")),
                 "source_scan_status": "succeeded" if result.get("scan_id") else "failed",
-                "source_scan_fingerprint": str(
-                    result.get("fingerprint") or _("Unknown")
-                ),
+                "source_scan_fingerprint": str(result.get("fingerprint") or _("Unknown")),
                 "source_result": _("Source scan completed: %(files)s files, %(stale)s stale.")
                 % {
                     "files": (result.get("metrics") or {}).get("files_seen", 0),
@@ -138,9 +325,7 @@ class AssistantDiagnostics(models.TransientModel):
             else:
                 fingerprint = row.get("traceback_fingerprint")
                 if isinstance(fingerprint, str):
-                    row = self._client().logs_traceback(
-                        fingerprint, max_bytes=16_384
-                    )
+                    row = self._client().logs_traceback(fingerprint, max_bytes=16_384)
                 text = _(
                     "Provider: %(provider)s\nFingerprint: %(fingerprint)s\n"
                     "Occurrences: %(count)s\n\n%(excerpt)s"
@@ -184,6 +369,7 @@ class AssistantDiagnostics(models.TransientModel):
 
     @api.model
     def _diagnostic_values(self):
+        self._require_admin()
         unknown = _("Unknown")
         endpoint_state = (
             _("Configured")
@@ -195,6 +381,11 @@ class AssistantDiagnostics(models.TransientModel):
             "message": _("Assistant Service has not been checked."),
             "endpoint_state": endpoint_state,
             "readiness": unknown,
+            "diagnostics_checked_at": unknown,
+            "diagnostics_config_revision": 0,
+            "diagnostic_errors": False,
+            "diagnostic_warnings": False,
+            "diagnostic_ok": False,
             "assistant_database_state": unknown,
             "migrations_state": unknown,
             "instance_id": unknown,
@@ -224,8 +415,14 @@ class AssistantDiagnostics(models.TransientModel):
             client = self._client()
             client.health()
             status = client.admin_status()
+            matrix = client.diagnostics_matrix()
         except AssistantServiceError as error:
-            values.update(service_state="error", message=self._error_message(error.code))
+            message = self._error_message(error.code)
+            values.update(
+                service_state="error",
+                message=message,
+                diagnostic_errors=message,
+            )
             return values
 
         components = status.get("components") if isinstance(status.get("components"), dict) else {}
@@ -256,30 +453,95 @@ class AssistantDiagnostics(models.TransientModel):
             source_scan_status=str(source_status.get("scan_status") or unknown),
             source_scan_fingerprint=str(source_status.get("fingerprint") or unknown),
             log_state=str(logs.get("state") or unknown),
-            log_provider=str(
-                (instance.get("capabilities") or {}).get("log_provider") or unknown
-            ),
+            log_provider=str((instance.get("capabilities") or {}).get("log_provider") or unknown),
             reasoning_engine_state=str(reasoning.get("state") or unknown),
             reasoning_provider=str(reasoning.get("provider") or unknown),
             reasoning_protocol=str(reasoning.get("protocol") or unknown),
-            reasoning_runtime_version=str(
-                reasoning.get("runtime_version") or unknown
-            ),
+            reasoning_runtime_version=str(reasoning.get("runtime_version") or unknown),
             reasoning_model=str(reasoning.get("model") or unknown),
-            reasoning_setup_message=self._reasoning_setup_message(
-                reasoning.get("detail")
-            ),
+            reasoning_setup_message=self._reasoning_setup_message(reasoning.get("detail")),
             query_capability_state=self._capability_label(workflows.get("query")),
-            navigation_capability_state=self._capability_label(
-                workflows.get("navigation")
-            ),
-            knowledge_capability_state=self._capability_label(
-                workflows.get("knowledge")
-            ),
+            navigation_capability_state=self._capability_label(workflows.get("navigation")),
+            knowledge_capability_state=self._capability_label(workflows.get("knowledge")),
             how_to_capability_state=self._capability_label(workflows.get("how_to")),
             action_capability_state=self._capability_label(workflows.get("action")),
         )
+        values.update(self._matrix_values(matrix))
         return values
+
+    @api.model
+    def _matrix_values(self, payload):
+        if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+            return self._invalid_matrix_values()
+        readiness = payload.get("readiness")
+        checked_at = payload.get("checked_at")
+        revision = payload.get("config_revision")
+        entries = payload.get("entries")
+        if (
+            readiness not in {"FULLY_READY", "DEGRADED", "ERROR"}
+            or not isinstance(checked_at, str)
+            or not checked_at
+            or len(checked_at) > 64
+            or type(revision) is not int
+            or revision < 0
+            or not isinstance(entries, list)
+            or len(entries) > 32
+        ):
+            return self._invalid_matrix_values()
+
+        grouped = {"error": [], "degraded": [], "ok": [], "unknown": []}
+        rejected = False
+        for item in entries:
+            if not isinstance(item, dict):
+                rejected = True
+                continue
+            key = item.get("key")
+            reason = item.get("reason_code")
+            state = item.get("state")
+            remediation = item.get("remediation_kind")
+            label = _DIAGNOSTIC_KEYS.get(key)
+            presentation = _DIAGNOSTIC_REASON_PRESENTATION.get(reason)
+            if label is None or presentation is None:
+                rejected = True
+                continue
+            expected_state, expected_remediation, message = presentation
+            if state != expected_state or remediation != expected_remediation:
+                rejected = True
+                continue
+            remediation_message = _REMEDIATION_MESSAGES[expected_remediation]
+            grouped[expected_state].append(
+                _("%(label)s: %(message)s %(remediation)s")
+                % {
+                    "label": _(label),
+                    "message": _(message),
+                    "remediation": _(remediation_message),
+                }
+            )
+
+        if rejected:
+            grouped["unknown"].append(
+                _("One or more diagnostic entries were omitted because their contract was not recognized.")
+            )
+        warnings = [*grouped["degraded"], *grouped["unknown"]]
+        return {
+            "readiness": readiness,
+            "diagnostics_checked_at": checked_at,
+            "diagnostics_config_revision": revision,
+            "diagnostic_errors": "\n".join(grouped["error"]) or False,
+            "diagnostic_warnings": "\n".join(warnings) or False,
+            "diagnostic_ok": "\n".join(grouped["ok"]) or False,
+        }
+
+    @api.model
+    def _invalid_matrix_values(self):
+        return {
+            "readiness": "ERROR",
+            "diagnostic_errors": _(
+                "Structured diagnostics response was invalid or incompatible with this addon version."
+            ),
+            "diagnostic_warnings": False,
+            "diagnostic_ok": False,
+        }
 
     @api.model
     def _capability_label(self, value):

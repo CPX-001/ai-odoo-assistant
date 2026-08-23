@@ -32,8 +32,35 @@ class FakeHealthyClient:
                 "navigation": {"state": "ok", "detail": "validated_per_turn"},
                 "knowledge": {"state": "pending", "detail": "instance_unknown"},
                 "how_to": {"state": "pending", "detail": "reasoning_unavailable"},
+                "action": {"state": "pending", "detail": "reasoning_unavailable"},
             },
             "instance": None,
+        }
+
+    def diagnostics_matrix(self):
+        return {
+            "schema_version": 1,
+            "readiness": "DEGRADED",
+            "checked_at": "2026-08-23T21:00:00+00:00",
+            "config_revision": 3,
+            "entries": [
+                {
+                    "key": "service.endpoint",
+                    "state": "ok",
+                    "reason_code": "service_reachable",
+                    "remediation_kind": "none",
+                    "summary": "ignored backend summary",
+                    "remediation_text": "ignored backend remediation",
+                },
+                {
+                    "key": "reasoning.codex",
+                    "state": "degraded",
+                    "reason_code": "reasoning_auth_unavailable",
+                    "remediation_kind": "authenticate_runtime",
+                    "summary": "ignored backend summary",
+                    "remediation_text": "ignored backend remediation",
+                },
+            ],
         }
 
     def source_status(self):
@@ -91,6 +118,26 @@ class FakeM3Client(FakeHealthyClient):
         }
 
 
+class FakeUntrustedMatrixClient(FakeHealthyClient):
+    def diagnostics_matrix(self):
+        return {
+            "schema_version": 1,
+            "readiness": "DEGRADED",
+            "checked_at": "2026-08-23T21:00:00+00:00",
+            "config_revision": 1,
+            "entries": [
+                {
+                    "key": "logs.provider",
+                    "state": "error",
+                    "reason_code": "backend_canary_reason",
+                    "remediation_kind": "retry",
+                    "summary": "SECRET-CANARY backend supplied text",
+                    "remediation_text": "run rm -rf /",
+                }
+            ],
+        }
+
+
 @tagged("post_install", "-at_install")
 class TestAssistantDiagnostics(TransactionCase):
     def test_unknown_facts_are_not_invented(self):
@@ -103,6 +150,9 @@ class TestAssistantDiagnostics(TransactionCase):
 
         self.assertEqual(values["service_state"], "ok")
         self.assertEqual(values["readiness"], "DEGRADED")
+        self.assertEqual(values["diagnostics_config_revision"], 3)
+        self.assertIn("Codex runtime authentication", values["diagnostic_warnings"])
+        self.assertNotIn("ignored backend summary", values["diagnostic_warnings"])
         self.assertEqual(values["instance_id"], "Unknown")
         self.assertEqual(values["instance_fingerprint"], "Unknown")
         self.assertEqual(values["reasoning_engine_state"], "pending")
@@ -127,6 +177,19 @@ class TestAssistantDiagnostics(TransactionCase):
         )
         self.assertNotIn("CODEX_HOME", values["reasoning_setup_message"])
 
+    def test_unknown_backend_matrix_code_is_not_rendered_as_trusted_text(self):
+        diagnostics = self.env["odoo.ai.assistant.diagnostics"]
+        with patch.object(
+            type(diagnostics),
+            "_client",
+            return_value=FakeUntrustedMatrixClient(),
+        ):
+            values = diagnostics._diagnostic_values()
+
+        self.assertIn("omitted", values["diagnostic_warnings"])
+        self.assertNotIn("SECRET-CANARY", values["diagnostic_warnings"])
+        self.assertNotIn("rm -rf", values["diagnostic_warnings"])
+
     def test_service_failure_is_sanitized(self):
         diagnostics = self.env["odoo.ai.assistant.diagnostics"]
         with patch.object(
@@ -139,6 +202,7 @@ class TestAssistantDiagnostics(TransactionCase):
         self.assertEqual(values["service_state"], "error")
         self.assertIn("unavailable", values["message"])
         self.assertNotIn("Traceback", values["message"])
+        self.assertEqual(values["diagnostic_errors"], values["message"])
 
     def test_admin_actions_show_only_bounded_logical_evidence(self):
         diagnostics = self.env["odoo.ai.assistant.diagnostics"].create({})
@@ -154,11 +218,11 @@ class TestAssistantDiagnostics(TransactionCase):
         self.assertNotIn("shared_secret", diagnostics.source_result)
         self.assertNotIn("/srv/", diagnostics.log_result)
 
-    def test_non_admin_cannot_invoke_diagnostics_actions(self):
+    def test_non_admin_cannot_invoke_diagnostics_actions_or_default_get(self):
         user = self.env["res.users"].create(
             {
-                "name": "M3 Non Admin",
-                "login": "m3-non-admin",
+                "name": "M7 Non Admin",
+                "login": "m7-non-admin",
                 "groups_id": [Command.set([self.env.ref("base.group_user").id])],
             }
         )
@@ -166,3 +230,5 @@ class TestAssistantDiagnostics(TransactionCase):
 
         with self.assertRaises(AccessError):
             diagnostics._require_admin()
+        with self.assertRaises(AccessError):
+            diagnostics.default_get(["readiness"])
