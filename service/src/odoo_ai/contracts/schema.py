@@ -29,9 +29,15 @@ from odoo_ai.contracts.evidence import Evidence
 from odoo_ai.contracts.explain import ExplainTurnRequest, ExplainTurnResponse
 from odoo_ai.contracts.knowledge import (
     KnowledgeDocument,
+    KnowledgeExcerpt,
     KnowledgeProviderIssue,
+    KnowledgeReadExcerptRequest,
+    KnowledgeRef,
     KnowledgeScanMetrics,
     KnowledgeScanResult,
+    KnowledgeSearchCandidate,
+    KnowledgeSearchRequest,
+    KnowledgeSearchResult,
 )
 from odoo_ai.contracts.logs import LogEvidence, LogSearchRequest, TimestampRange
 from odoo_ai.contracts.navigation import (
@@ -88,9 +94,15 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     InstanceInventory,
     InstanceProfileSummary,
     KnowledgeDocument,
+    KnowledgeExcerpt,
     KnowledgeProviderIssue,
+    KnowledgeReadExcerptRequest,
+    KnowledgeRef,
     KnowledgeScanMetrics,
     KnowledgeScanResult,
+    KnowledgeSearchCandidate,
+    KnowledgeSearchRequest,
+    KnowledgeSearchResult,
     LogEvidence,
     LogSearchRequest,
     ManifestMetadata,

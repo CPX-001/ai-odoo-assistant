@@ -10,7 +10,7 @@ Las sesiones de implementación deben seguir las instrucciones raíz y locales d
 - [`tasks/M2/README.md`](tasks/M2/README.md): M2 completado y gate PASS.
 - [`tasks/M3/README.md`](tasks/M3/README.md): M3 completado y gate PASS.
 - [`tasks/M4/README.md`](tasks/M4/README.md): M4 completado; M4-01..M4-10 verificados y gate PASS.
-- [`tasks/M5/README.md`](tasks/M5/README.md): M5-01 a M5-05 implementadas y verificadas; M5-06 es la siguiente task.
+- [`tasks/M5/README.md`](tasks/M5/README.md): M5-01 a M5-06 implementadas y verificadas; M5-07 es la siguiente task.
 - [`../../PLANS.md`](../../PLANS.md): cuándo y cómo mantener un ExecPlan.
 
 Antes de implementar, contrastar siempre el task packet con el Source of Truth y los ADRs aplicables. Si la task toca filesystem, logs, source, servicios, installer o PostgreSQL, revisar también la política de deployment y distinguir explícitamente requisitos reales de defaults/hints del entorno DEV.

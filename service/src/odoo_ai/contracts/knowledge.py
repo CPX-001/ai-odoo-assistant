@@ -3,9 +3,11 @@
 from datetime import datetime
 from enum import StrEnum
 from pathlib import PurePosixPath
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from odoo_ai.contracts.evidence import Evidence
 from odoo_ai.contracts.source import FINGERPRINT_PATTERN
 
 LOGICAL_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
@@ -148,3 +150,125 @@ class KnowledgeScanResult(BaseModel):
     metrics: KnowledgeScanMetrics
     issue_codes: tuple[str, ...] = Field(default=(), max_length=256)
     complete: bool
+
+
+class KnowledgeRef(BaseModel):
+    """Opaque logical pointer bound to one current document chunk version."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    document_uuid: UUID
+    chunk_uuid: UUID
+    provider_id: str = Field(pattern=LOGICAL_ID_PATTERN, max_length=128)
+    document_id: str = Field(min_length=1, max_length=1024)
+    document_fingerprint: str = Field(pattern=FINGERPRINT_PATTERN)
+    chunk_fingerprint: str = Field(pattern=FINGERPRINT_PATTERN)
+    ordinal: int = Field(ge=0, le=65_535)
+
+    @field_validator("document_id")
+    @classmethod
+    def validate_document_id(cls, value: str) -> str:
+        return KnowledgeDocument.validate_document_id(value)
+
+
+class KnowledgeSearchRequest(BaseModel):
+    """Bounded lexical query with only persisted allowlisted filters."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    query: str = Field(min_length=1, max_length=256)
+    provider_id: str | None = Field(default=None, pattern=LOGICAL_ID_PATTERN, max_length=128)
+    locale: str | None = Field(default=None, pattern=LOCALE_PATTERN, max_length=64)
+    top_k: int = Field(default=5, gt=0, le=20)
+
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, value: str) -> str:
+        if value != value.strip() or "\0" in value:
+            raise ValueError("knowledge query must be normalized text")
+        return value
+
+
+class KnowledgeSearchCandidate(BaseModel):
+    """Lightweight untrusted match; it is not checked Evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    position: int = Field(gt=0, le=20)
+    title: str = Field(min_length=1, max_length=512)
+    provider_id: str = Field(pattern=LOGICAL_ID_PATTERN, max_length=128)
+    document_id: str = Field(min_length=1, max_length=1024)
+    locale: str | None = Field(default=None, pattern=LOCALE_PATTERN, max_length=64)
+    media_type: KnowledgeMediaType
+    snippet: str = Field(min_length=1, max_length=512)
+    ref: KnowledgeRef
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> "KnowledgeSearchCandidate":
+        KnowledgeDocument.validate_document_id(self.document_id)
+        if self.ref.provider_id != self.provider_id or self.ref.document_id != self.document_id:
+            raise ValueError("candidate identity must match its ref")
+        return self
+
+
+class KnowledgeSearchResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    candidates: tuple[KnowledgeSearchCandidate, ...] = Field(max_length=20)
+    truncated: bool
+
+
+class KnowledgeReadExcerptRequest(BaseModel):
+    """Read only a fingerprinted ref previously emitted by search."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ref: KnowledgeRef
+    max_lines: int = Field(default=40, gt=0, le=80)
+    max_chars: int = Field(default=4_000, ge=128, le=8_000)
+    max_bytes: int = Field(default=8_000, ge=256, le=16_000)
+
+
+class KnowledgeExcerptLine(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    number: int = Field(gt=0)
+    text: str = Field(max_length=8_000)
+
+
+class KnowledgeStoredChunk(BaseModel):
+    """Internal provider-neutral row returned by the retrieval store."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ref: KnowledgeRef
+    title: str = Field(min_length=1, max_length=512)
+    locale: str | None = Field(default=None, pattern=LOCALE_PATTERN, max_length=64)
+    media_type: KnowledgeMediaType
+    content: str = Field(min_length=1, max_length=32_768)
+    start_line: int = Field(gt=0)
+    end_line: int = Field(gt=0)
+    observed_at: datetime
+
+
+class KnowledgeExcerpt(BaseModel):
+    """Bounded current excerpt plus separately ledgered checked Evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ref: KnowledgeRef
+    title: str = Field(min_length=1, max_length=512)
+    provider_id: str = Field(pattern=LOGICAL_ID_PATTERN, max_length=128)
+    document_id: str = Field(min_length=1, max_length=1024)
+    locale: str | None = Field(default=None, pattern=LOCALE_PATTERN, max_length=64)
+    media_type: KnowledgeMediaType
+    lines: tuple[KnowledgeExcerptLine, ...] = Field(min_length=1, max_length=80)
+    truncated: bool
+    evidence: Evidence
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> "KnowledgeExcerpt":
+        KnowledgeDocument.validate_document_id(self.document_id)
+        if self.ref.provider_id != self.provider_id or self.ref.document_id != self.document_id:
+            raise ValueError("excerpt identity must match its ref")
+        return self

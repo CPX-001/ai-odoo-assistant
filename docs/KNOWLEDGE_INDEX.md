@@ -84,3 +84,53 @@ Un scan fixture de un documento Markdown produce una forma equivalente a:
 
 La duración es observada y variable. La respuesta no contiene roots, paths
 físicos ni contenido documental completo.
+
+## Retrieval y tools
+
+M5-06 añade exactamente dos tools read-only:
+
+| Tool | Input | Resultado |
+|---|---|---|
+| `knowledge.search` | `KnowledgeSearchRequest` | candidatos FTS ligeros, sin Evidence |
+| `knowledge.read_excerpt` | `KnowledgeReadExcerptRequest` | excerpt acotado + Evidence `document/checked` |
+
+`knowledge.search` acepta `query` de hasta 256 caracteres, `top_k` entre 1 y
+20, y filtros opcionales exactos por `provider_id` y `locale`. La consulta usa
+`plainto_tsquery` parametrizado con la configuración FTS persistida de cada
+chunk. Sólo une documentos `current` cuyo fingerprint coincide con el chunk.
+Los candidatos exponen posición, título, provider/document ID lógico, locale,
+media type, snippet de hasta 360 caracteres y un `KnowledgeRef`; no producen
+Evidence comprobada.
+
+La ref liga:
+
+```json
+{
+  "document_uuid": "11111111-1111-4111-8111-111111111111",
+  "chunk_uuid": "22222222-2222-4222-8222-222222222222",
+  "provider_id": "customer.manuals",
+  "document_id": "payments/terms.md",
+  "document_fingerprint": "sha256:<64 hex>",
+  "chunk_fingerprint": "sha256:<64 hex>",
+  "ordinal": 0
+}
+```
+
+`knowledge.read_excerpt` sólo acepta esa ref y caps de 1-80 líneas, 128-8.000
+caracteres y 256-16.000 bytes. Antes de responder vuelve a comparar instancia,
+estado vigente, UUIDs, IDs lógicos, ordinal y ambos fingerprints. La Evidence
+resultante usa un pointer lógico, marca el contenido como
+`untrusted_document` y no incluye paths físicos.
+
+Una ref cuya versión cambió, fue retirada, falta o fue inventada falla de forma
+recuperable y no entra en el `EvidenceLedger`:
+
+```json
+{
+  "ok": false,
+  "error": {"code": "knowledge_ref_stale"}
+}
+```
+
+El registry se construye explícitamente por turn y aplica los budgets agregados
+de `ToolExecutor`; el texto indexado no puede registrar tools ni cambiar policy.

@@ -29,6 +29,16 @@ from odoo_ai.adapters.codex_runtime import (
 from odoo_ai.adapters.codex_status import CachedCodexReasoningStatus
 from odoo_ai.adapters.context_runtime import load_instance_summary, persist_trace_events
 from odoo_ai.adapters.diagnostics_runtime import RuntimeDiagnosticsService
+from odoo_ai.adapters.knowledge_tools import (
+    KNOWLEDGE_READ_EXCERPT,
+    KNOWLEDGE_SEARCH,
+    KnowledgeReadExcerptToolData,
+    KnowledgeToolBackend,
+    KnowledgeToolExecutorFactory,
+    RuntimeKnowledgeToolBackend,
+    build_knowledge_tool_registry,
+    knowledge_tool_specs,
+)
 from odoo_ai.adapters.odoo_http import (
     HttpOdooGateway,
     HttpOdooInstanceGateway,
@@ -82,6 +92,11 @@ __all__ = [
     "CodexThreadPolicy",
     "HttpOdooGateway",
     "HttpOdooInstanceGateway",
+    "KNOWLEDGE_READ_EXCERPT",
+    "KNOWLEDGE_SEARCH",
+    "KnowledgeReadExcerptToolData",
+    "KnowledgeToolBackend",
+    "KnowledgeToolExecutorFactory",
     "OdooGatewayError",
     "OdooGatewayFactory",
     "OdooGatewaySettings",
@@ -95,6 +110,7 @@ __all__ = [
     "QueryToolBackend",
     "QueryToolExecutorFactory",
     "RuntimeDiagnosticsService",
+    "RuntimeKnowledgeToolBackend",
     "RuntimeSourceToolBackend",
     "SOURCE_FIND_MODEL_EXTENSIONS",
     "SOURCE_FIND_SYMBOL",
@@ -103,10 +119,12 @@ __all__ = [
     "SourceToolBackend",
     "SourceToolExecutorFactory",
     "build_source_tool_registry",
+    "build_knowledge_tool_registry",
     "build_query_tool_registry",
     "codex_dynamic_tool_name",
     "codex_dynamic_tools",
     "load_instance_summary",
+    "knowledge_tool_specs",
     "persist_trace_events",
     "probe_codex_readiness",
     "probe_codex_runtime",

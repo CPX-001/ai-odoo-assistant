@@ -62,6 +62,8 @@ _EXPECTED_SCHEMA_PROPERTIES = frozenset(
 _ALLOWED_COMPLETED_ITEM_TYPES = frozenset({"agentMessage", "reasoning", "userMessage"})
 _RECOVERABLE_TOOL_ERRORS = frozenset(
     {
+        "knowledge_ref_stale",
+        "knowledge_tool_unavailable",
         "source_ref_invalid",
         "source_too_large",
         "source_tool_unavailable",
@@ -312,9 +314,7 @@ class CodexAppServerEngine:
         dynamic_call_ids: set[str] = set()
         request_ids: set[tuple[type[object], object]] = set()
         for _ in range(self._limits.max_events):
-            event = await client.next_event(
-                timeout_seconds=_remaining_seconds(deadline)
-            )
+            event = await client.next_event(timeout_seconds=_remaining_seconds(deadline))
             method = event.get("method")
             params = event.get("params")
             if "id" in event:
@@ -750,9 +750,7 @@ def _enforce_notification_policy(
             raise CodexEngineError("codex_token_usage_event_invalid")
         return
     if method == "account/rateLimits/updated":
-        if not isinstance(params, dict) or not isinstance(
-            params.get("rateLimits"), dict
-        ):
+        if not isinstance(params, dict) or not isinstance(params.get("rateLimits"), dict):
             raise CodexEngineError("codex_rate_limit_event_invalid")
         return
     if method in {"item/started", "item/completed"}:

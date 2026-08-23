@@ -13,6 +13,11 @@ from odoo_ai.knowledge.filesystem import (
     knowledge_sources_from_env,
 )
 from odoo_ai.knowledge.ingestion import KnowledgeIngestionService
+from odoo_ai.knowledge.retrieval import (
+    KnowledgeRetrievalError,
+    KnowledgeRetrievalService,
+)
+from odoo_ai.knowledge.retrieval_store import SqlAlchemyKnowledgeRetrievalStore
 from odoo_ai.knowledge.sqlalchemy_store import SqlAlchemyKnowledgeIngestStore
 
 __all__ = [
@@ -22,8 +27,11 @@ __all__ = [
     "KnowledgeChunkLimits",
     "KnowledgeChunkingError",
     "KnowledgeIngestionService",
+    "KnowledgeRetrievalError",
+    "KnowledgeRetrievalService",
     "KnowledgeSourceConfig",
     "SqlAlchemyKnowledgeIngestStore",
+    "SqlAlchemyKnowledgeRetrievalStore",
     "chunk_document",
     "knowledge_sources_from_env",
 ]

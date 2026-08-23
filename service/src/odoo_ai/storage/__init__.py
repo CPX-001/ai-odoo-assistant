@@ -5,9 +5,12 @@ from odoo_ai.storage.config import DatabaseConfigurationError, DatabaseSettings
 from odoo_ai.storage.database import create_database_engine, create_session_factory, session_scope
 from odoo_ai.storage.knowledge_repository import (
     KnowledgeDocumentUpsert,
+    KnowledgeSearchRows,
+    get_current_knowledge_chunk,
     get_knowledge_document,
     list_knowledge_chunks,
     retire_missing_knowledge_documents,
+    search_current_knowledge_chunks,
     upsert_knowledge_document,
 )
 from odoo_ai.storage.models import (
@@ -64,6 +67,7 @@ __all__ = [
     "KnowledgeChunk",
     "KnowledgeDocument",
     "KnowledgeDocumentUpsert",
+    "KnowledgeSearchRows",
     "IndexedSourcePointer",
     "IndexedSourceSymbol",
     "ScanRun",
@@ -88,6 +92,7 @@ __all__ = [
     "finish_scan",
     "get_indexed_source_pointer",
     "get_instance_profile",
+    "get_current_knowledge_chunk",
     "get_knowledge_document",
     "get_latest_capability_snapshot",
     "get_latest_instance_profile",
@@ -104,5 +109,6 @@ __all__ = [
     "session_scope",
     "upsert_source_file",
     "retire_missing_knowledge_documents",
+    "search_current_knowledge_chunks",
     "upsert_knowledge_document",
 ]

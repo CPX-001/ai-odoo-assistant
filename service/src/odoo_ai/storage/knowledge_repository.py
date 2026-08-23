@@ -13,6 +13,12 @@ from sqlalchemy.sql.expression import cast
 
 from odoo_ai.contracts import KnowledgeChunk as KnowledgeChunkData
 from odoo_ai.contracts import KnowledgeDocument as KnowledgeDocumentData
+from odoo_ai.contracts import (
+    KnowledgeMediaType,
+    KnowledgeRef,
+    KnowledgeSearchRequest,
+    KnowledgeStoredChunk,
+)
 from odoo_ai.storage.models import KnowledgeChunk, KnowledgeDocument
 
 _FTS_CONFIG = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
@@ -23,6 +29,12 @@ class KnowledgeDocumentUpsert:
     document_id: UUID
     fingerprint_changed: bool
     chunk_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeSearchRows:
+    chunks: tuple[KnowledgeStoredChunk, ...]
+    truncated: bool
 
 
 def upsert_knowledge_document(
@@ -170,9 +182,110 @@ def list_knowledge_chunks(session: Session, *, knowledge_document_id: UUID) -> l
     )
 
 
+def search_current_knowledge_chunks(
+    session: Session,
+    *,
+    instance_profile_id: UUID,
+    request: KnowledgeSearchRequest,
+) -> KnowledgeSearchRows:
+    """Run one parameterized FTS query against current Assistant-owned chunks."""
+
+    query_vector = func.plainto_tsquery(cast(KnowledgeChunk.fts_config, REGCONFIG), request.query)
+    rank = func.ts_rank_cd(KnowledgeChunk.search_vector, query_vector)
+    statement = (
+        select(KnowledgeChunk, KnowledgeDocument, rank.label("rank"))
+        .join(
+            KnowledgeDocument,
+            KnowledgeDocument.id == KnowledgeChunk.knowledge_document_id,
+        )
+        .where(
+            KnowledgeDocument.instance_profile_id == instance_profile_id,
+            KnowledgeDocument.status == "current",
+            KnowledgeChunk.document_fingerprint == KnowledgeDocument.fingerprint,
+            KnowledgeChunk.search_vector.op("@@")(query_vector),
+        )
+    )
+    if request.provider_id is not None:
+        statement = statement.where(KnowledgeDocument.provider_id == request.provider_id)
+    if request.locale is not None:
+        statement = statement.where(KnowledgeDocument.locale == request.locale)
+    statement = statement.order_by(
+        rank.desc(),
+        KnowledgeDocument.title,
+        KnowledgeDocument.provider_id,
+        KnowledgeDocument.document_id,
+        KnowledgeChunk.ordinal,
+        KnowledgeChunk.id,
+    ).limit(request.top_k + 1)
+    rows = list(session.execute(statement))
+    return KnowledgeSearchRows(
+        chunks=tuple(
+            _stored_chunk(document=document, chunk=chunk)
+            for chunk, document, _rank in rows[: request.top_k]
+        ),
+        truncated=len(rows) > request.top_k,
+    )
+
+
+def get_current_knowledge_chunk(
+    session: Session,
+    *,
+    instance_profile_id: UUID,
+    ref: KnowledgeRef,
+) -> KnowledgeStoredChunk | None:
+    """Resolve an exact current ref without accepting a path or partial identity."""
+
+    row = session.execute(
+        select(KnowledgeChunk, KnowledgeDocument)
+        .join(
+            KnowledgeDocument,
+            KnowledgeDocument.id == KnowledgeChunk.knowledge_document_id,
+        )
+        .where(
+            KnowledgeDocument.instance_profile_id == instance_profile_id,
+            KnowledgeDocument.id == ref.document_uuid,
+            KnowledgeDocument.provider_id == ref.provider_id,
+            KnowledgeDocument.document_id == ref.document_id,
+            KnowledgeDocument.fingerprint == ref.document_fingerprint,
+            KnowledgeDocument.status == "current",
+            KnowledgeChunk.id == ref.chunk_uuid,
+            KnowledgeChunk.knowledge_document_id == ref.document_uuid,
+            KnowledgeChunk.document_fingerprint == ref.document_fingerprint,
+            KnowledgeChunk.fingerprint == ref.chunk_fingerprint,
+            KnowledgeChunk.ordinal == ref.ordinal,
+        )
+    ).one_or_none()
+    if row is None:
+        return None
+    chunk, document = row
+    return _stored_chunk(document=document, chunk=chunk)
+
+
 def _validate_fts_config(fts_config: str) -> None:
     if _FTS_CONFIG.fullmatch(fts_config) is None:
         raise ValueError("invalid PostgreSQL FTS configuration")
+
+
+def _stored_chunk(*, document: KnowledgeDocument, chunk: KnowledgeChunk) -> KnowledgeStoredChunk:
+    ref = KnowledgeRef(
+        document_uuid=document.id,
+        chunk_uuid=chunk.id,
+        provider_id=document.provider_id,
+        document_id=document.document_id,
+        document_fingerprint=document.fingerprint,
+        chunk_fingerprint=chunk.fingerprint,
+        ordinal=chunk.ordinal,
+    )
+    return KnowledgeStoredChunk(
+        ref=ref,
+        title=document.title,
+        locale=document.locale,
+        media_type=KnowledgeMediaType(document.media_type),
+        content=chunk.content,
+        start_line=chunk.start_line,
+        end_line=chunk.end_line,
+        observed_at=document.observed_at,
+    )
 
 
 def _chunk_id(
