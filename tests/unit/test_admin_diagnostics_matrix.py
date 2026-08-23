@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime
 
+import pytest
+
 from odoo_ai.contracts.admin_diagnostics import (
     DiagnosticRemediationKind,
     DiagnosticState,
@@ -74,17 +76,27 @@ def _entries(matrix):
     return {entry.key: entry for entry in matrix.entries}
 
 
-def test_healthy_matrix_covers_required_components_and_workflows() -> None:
-    matrix = build_admin_diagnostics_matrix(
-        status=_status(),
+def _matrix(
+    status: AdminStatus,
+    *,
+    source_scan: str = "succeeded",
+    knowledge_probe: str = "available",
+    authority: bool = True,
+):
+    return build_admin_diagnostics_matrix(
+        status=status,
         configuration=None,
         source_status=SourceStatusDiagnostics(
             state="DETECTED",
-            scan_status="succeeded",
+            scan_status=source_scan,
         ),
-        knowledge_probe="available",
-        action_authority_ready=True,
+        knowledge_probe=knowledge_probe,
+        action_authority_ready=authority,
     )
+
+
+def test_healthy_matrix_covers_required_components_and_workflows() -> None:
+    matrix = _matrix(_status())
     entries = _entries(matrix)
 
     assert matrix.schema_version == 1
@@ -111,15 +123,11 @@ def test_healthy_matrix_covers_required_components_and_workflows() -> None:
 
 
 def test_invalid_configuration_is_distinct_from_provider_unavailable() -> None:
-    matrix = build_admin_diagnostics_matrix(
-        status=_status(
+    matrix = _matrix(
+        _status(
             configuration=ComponentStatus(state=ComponentState.ERROR, detail="invalid"),
             logs=ComponentStatus(state=ComponentState.PENDING, detail="unknown"),
-        ),
-        configuration=None,
-        source_status=None,
-        knowledge_probe="available",
-        action_authority_ready=True,
+        )
     )
     entries = _entries(matrix)
 
@@ -128,43 +136,113 @@ def test_invalid_configuration_is_distinct_from_provider_unavailable() -> None:
     assert matrix.readiness == "ERROR"
 
 
-def test_codex_auth_and_action_authority_have_fixed_remediation() -> None:
-    matrix = build_admin_diagnostics_matrix(
-        status=_status(
-            reasoning=ReasoningComponentStatus(
-                state=ComponentState.PENDING,
-                detail="auth_unavailable",
-            ),
-            action_detail="reasoning_unavailable",
+@pytest.mark.parametrize(
+    ("detail", "state", "reason", "remediation"),
+    [
+        ("not_found", ComponentState.PENDING, "source_not_found", DiagnosticRemediationKind.SETTINGS),
+        (
+            "no_permission",
+            ComponentState.ERROR,
+            "source_no_permission",
+            DiagnosticRemediationKind.SETUP_REQUIRED,
         ),
-        configuration=None,
-        source_status=SourceStatusDiagnostics(state="DETECTED", scan_status="succeeded"),
-        knowledge_probe="available",
-        action_authority_ready=False,
-    )
-    entries = _entries(matrix)
+        ("error", ComponentState.ERROR, "source_error", DiagnosticRemediationKind.RESCAN),
+    ],
+)
+def test_source_failures_have_stable_reason_and_remediation(
+    detail: str,
+    state: ComponentState,
+    reason: str,
+    remediation: DiagnosticRemediationKind,
+) -> None:
+    matrix = _matrix(_status(source=ComponentStatus(state=state, detail=detail)))
+    entry = _entries(matrix)["source.index"]
 
-    assert entries["reasoning.codex"].reason_code == "reasoning_auth_unavailable"
-    assert (
-        entries["reasoning.codex"].remediation_kind
-        is DiagnosticRemediationKind.AUTHENTICATE_RUNTIME
+    assert entry.reason_code == reason
+    assert entry.remediation_kind is remediation
+
+
+@pytest.mark.parametrize(
+    ("detail", "state", "reason", "remediation"),
+    [
+        ("not_found", ComponentState.PENDING, "logs_not_found", DiagnosticRemediationKind.SETTINGS),
+        (
+            "no_permission",
+            ComponentState.ERROR,
+            "logs_no_permission",
+            DiagnosticRemediationKind.SETUP_REQUIRED,
+        ),
+        ("error", ComponentState.ERROR, "logs_error", DiagnosticRemediationKind.RETRY),
+    ],
+)
+def test_log_failures_have_stable_reason_and_remediation(
+    detail: str,
+    state: ComponentState,
+    reason: str,
+    remediation: DiagnosticRemediationKind,
+) -> None:
+    matrix = _matrix(_status(logs=ComponentStatus(state=state, detail=detail)))
+    entry = _entries(matrix)["logs.provider"]
+
+    assert entry.reason_code == reason
+    assert entry.remediation_kind is remediation
+
+
+@pytest.mark.parametrize(
+    ("detail", "state", "reason", "remediation"),
+    [
+        (
+            "runtime_missing",
+            ComponentState.PENDING,
+            "reasoning_runtime_missing",
+            DiagnosticRemediationKind.SETUP_REQUIRED,
+        ),
+        (
+            "auth_unavailable",
+            ComponentState.PENDING,
+            "reasoning_auth_unavailable",
+            DiagnosticRemediationKind.AUTHENTICATE_RUNTIME,
+        ),
+        (
+            "protocol_incompatible",
+            ComponentState.PENDING,
+            "reasoning_protocol_incompatible",
+            DiagnosticRemediationKind.SETUP_REQUIRED,
+        ),
+    ],
+)
+def test_codex_failures_have_stable_reason_and_remediation(
+    detail: str,
+    state: ComponentState,
+    reason: str,
+    remediation: DiagnosticRemediationKind,
+) -> None:
+    matrix = _matrix(
+        _status(
+            reasoning=ReasoningComponentStatus(state=state, detail=detail),
+            action_detail="reasoning_unavailable",
+        )
     )
-    assert entries["action.authority"].reason_code == "action_authority_unavailable"
-    assert (
-        entries["action.authority"].remediation_kind
-        is DiagnosticRemediationKind.SETUP_REQUIRED
-    )
+    entry = _entries(matrix)["reasoning.codex"]
+
+    assert entry.reason_code == reason
+    assert entry.remediation_kind is remediation
+
+
+def test_action_authority_missing_is_visible_without_secret_or_path() -> None:
+    matrix = _matrix(_status(), authority=False)
+    entry = _entries(matrix)["action.authority"]
+    rendered = matrix.model_dump_json()
+
+    assert entry.reason_code == "action_authority_unavailable"
+    assert entry.remediation_kind is DiagnosticRemediationKind.SETUP_REQUIRED
+    assert "SECRET" not in rendered
+    assert "/etc/" not in rendered
 
 
 def test_unknown_backend_detail_becomes_unrecognized_not_free_text() -> None:
-    matrix = build_admin_diagnostics_matrix(
-        status=_status(
-            logs=ComponentStatus(state=ComponentState.ERROR, detail="backend-secret-canary"),
-        ),
-        configuration=None,
-        source_status=SourceStatusDiagnostics(state="DETECTED", scan_status="succeeded"),
-        knowledge_probe="available",
-        action_authority_ready=True,
+    matrix = _matrix(
+        _status(logs=ComponentStatus(state=ComponentState.ERROR, detail="backend-secret-canary"))
     )
     entry = _entries(matrix)["logs.provider"]
     rendered = matrix.model_dump_json()
@@ -173,14 +251,29 @@ def test_unknown_backend_detail_becomes_unrecognized_not_free_text() -> None:
     assert "backend-secret-canary" not in rendered
 
 
-def test_knowledge_failure_prevents_fully_ready_matrix() -> None:
-    matrix = build_admin_diagnostics_matrix(
-        status=_status(),
-        configuration=None,
-        source_status=SourceStatusDiagnostics(state="DETECTED", scan_status="succeeded"),
-        knowledge_probe="unavailable",
-        action_authority_ready=True,
-    )
+@pytest.mark.parametrize(
+    ("probe", "reason", "readiness"),
+    [
+        ("empty", "knowledge_index_empty", "DEGRADED"),
+        ("unavailable", "knowledge_index_unavailable", "ERROR"),
+    ],
+)
+def test_knowledge_states_are_structured(
+    probe: str,
+    reason: str,
+    readiness: str,
+) -> None:
+    matrix = _matrix(_status(), knowledge_probe=probe)
 
+    assert matrix.readiness == readiness
+    assert _entries(matrix)["knowledge.index"].reason_code == reason
+
+
+def test_failed_source_scan_is_separate_from_source_provider_state() -> None:
+    matrix = _matrix(_status(), source_scan="failed")
+    entries = _entries(matrix)
+
+    assert entries["source.index"].reason_code == "source_operational"
+    assert entries["source.scan"].reason_code == "source_scan_failed"
+    assert entries["source.scan"].remediation_kind is DiagnosticRemediationKind.RESCAN
     assert matrix.readiness == "ERROR"
-    assert _entries(matrix)["knowledge.index"].reason_code == "knowledge_index_unavailable"
