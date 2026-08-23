@@ -100,3 +100,49 @@ default: si falta, no es un fichero regular, supera 4096 bytes, tiene permisos
 para `other` o contiene menos de 43 bytes, ACTION queda degradado y no ejecuta
 writes. La provisión/rotación host-level de este segundo secret queda en el
 setup boundary; Odoo Settings no debe leer ni devolver su contenido.
+
+## Contrato de configuración M7
+
+M7 usa un catálogo versionado único para distinguir tres clases de datos:
+
+- `HOST_ONLY`: bootstrap/supervisor conserva la autoridad. Odoo Settings sólo
+  puede mostrar un estado saneado o la razón por la que el valor es de sólo
+  lectura.
+- `ADMIN_MUTABLE`: un administrador de sistema de Odoo puede solicitar un
+  override acotado que tenga un consumidor real.
+- `DISCOVERED`: hechos observados por Odoo/runtime; no son una concesión de
+  privilegios sobre el host.
+
+La provenance efectiva mantiene el orden `explicit_override > runtime >
+supervisor > config > hint > unknown`. `unknown` es distinto de un valor
+conocido pero vacío. Los snapshots se ordenan por key y llevan fingerprint
+determinista.
+
+| Key estable | Ownership | Fuente/límite | Aplicación |
+| --- | --- | --- | --- |
+| `connection.service_url` | ADMIN_MUTABLE (Odoo) | sólo HTTP loopback validado | hot |
+| `connection.machine_credential` | HOST_ONLY | referencia provisionada por setup; sólo se expone `configured` | setup |
+| `host.bind_host`, `host.bind_port` | HOST_ONLY | env/systemd | setup |
+| `host.database_url` | HOST_ONLY | env root-owned; siempre redactado | setup |
+| `host.runtime_root`, `host.service_unit` | HOST_ONLY | bootstrap/supervisor | setup |
+| `source.authorized_roots` | HOST_ONLY | `ODOO_AI_SOURCE_ROOTS` materializado por bootstrap | setup |
+| `source.selected_roots` | ADMIN_MUTABLE | subconjunto/descendiente validado de `source.authorized_roots` | hot |
+| `logs.authorized_file`, `logs.authorized_unit` | HOST_ONLY | `ODOO_AI_LOG_FILE` / `ODOO_AI_LOG_UNIT` | setup |
+| `logs.provider` | ADMIN_MUTABLE | sólo `auto`, `file` o `journal` si existe candidato host | hot |
+| `reasoning.executable`, `reasoning.home` | HOST_ONLY | env/bootstrap | setup |
+| `reasoning.model` | ADMIN_MUTABLE | modelo acotado para el runtime Codex | hot |
+| `reasoning.startup_timeout_seconds` | ADMIN_MUTABLE | `1..120` s | hot |
+| `reasoning.turn_timeout_seconds` | ADMIN_MUTABLE | `5..600` s | hot |
+| `knowledge.provider` | DISCOVERED | índice PostgreSQL ya provisionado por M5 | read-only |
+| `odoo.version`, `odoo.database`, `odoo.addons_roots` | DISCOVERED | runtime Odoo autenticado | read-only |
+
+Los paths físicos del host son información administrativa: no se envían al
+ReasoningEngine ni a usuarios no administradores. Un selector mutable nunca
+crea su propia allowlist; primero se canonicaliza y después se comprueba contra
+la envelope HOST_ONLY, incluyendo escapes mediante symlink.
+
+No existe ninguna key M7 para ampliar handlers/capabilities ACTION. Los límites
+de M6 siguen siendo código/política curada y no configuración administrativa.
+
+**Estado:** contrato M7-01 implementado; verificación runtime/pytest/Ruff/mypy
+pendiente.
