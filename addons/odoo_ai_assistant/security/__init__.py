@@ -1,5 +1,10 @@
 """Security primitives owned by the Odoo addon trust boundary."""
 
+from .action_authority import (
+    ACTION_AUTHORITY_SECRET_FILE_ENV,
+    ActionAuthorityCodec,
+    ActionAuthorityPayload,
+)
 from .delegation import (
     ActionPreviewDelegationCodec,
     ActionPreviewDelegationPayload,
@@ -17,8 +22,11 @@ from .machine_auth import (
 )
 
 __all__ = [
+    "ACTION_AUTHORITY_SECRET_FILE_ENV",
     "SHARED_SECRET_FILE_ENV",
     "SHARED_SECRET_HEADER",
+    "ActionAuthorityCodec",
+    "ActionAuthorityPayload",
     "ActionPreviewDelegationCodec",
     "ActionPreviewDelegationPayload",
     "DelegationCodec",

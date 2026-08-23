@@ -40,6 +40,7 @@ from odoo_ai.adapters.knowledge_tools import (
     knowledge_tool_specs,
 )
 from odoo_ai.adapters.odoo_http import (
+    HttpOdooActionGateway,
     HttpOdooGateway,
     HttpOdooInstanceGateway,
     OdooGatewayError,
@@ -91,6 +92,7 @@ __all__ = [
     "CodexServerInfo",
     "CodexThreadPolicy",
     "HttpOdooGateway",
+    "HttpOdooActionGateway",
     "HttpOdooInstanceGateway",
     "KNOWLEDGE_READ_EXCERPT",
     "KNOWLEDGE_SEARCH",

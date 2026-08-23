@@ -3,8 +3,10 @@
 from typing import Protocol
 
 from odoo_ai.contracts import (
+    ActionCommitResult,
     ActionPreview,
     ActionProposalPayload,
+    ActionVerificationResult,
     AggregateRecordsRequest,
     AggregateRecordsResult,
     Evidence,
@@ -21,6 +23,14 @@ class ModelMetadataGateway(Protocol):
     """Minimal runtime metadata boundary shared by exact-read and QUERY tokens."""
 
     async def get_model_metadata(self, model: str) -> Evidence: ...
+
+
+class OdooGatewayError(RuntimeError):
+    """Sanitized failure shared by all narrow Odoo gateway adapters."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
 
 
 class OdooGateway(ModelMetadataGateway, Protocol):
@@ -64,3 +74,19 @@ class OdooActionPreviewGateway(Protocol):
         *,
         payload_fingerprint: str,
     ) -> ActionPreview: ...
+
+
+class OdooActionGateway(Protocol):
+    """One a1-bound write or reread; implementations expose no generic method."""
+
+    async def commit_record_patch(
+        self, payload: ActionProposalPayload
+    ) -> ActionCommitResult: ...
+
+    async def verify_record_patch(
+        self, payload: ActionProposalPayload
+    ) -> ActionVerificationResult: ...
+
+
+class OdooActionGatewayFactory(Protocol):
+    def for_action(self, *, authority_token: str) -> OdooActionGateway: ...

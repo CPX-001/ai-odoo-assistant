@@ -10,8 +10,10 @@ from psycopg2 import IntegrityError
 _INTERNAL_CREATE_MARKER: Final = object()
 _INTERNAL_CREATE_CONTEXT: Final = "_odoo_ai_delegation_use_create"
 _SCOPES: Final = (
+    ("action_commit", "Action commit"),
     ("action_preview", "Action preview"),
     ("action_write_schema", "Action write schema"),
+    ("action_verify", "Action verify"),
     ("aggregate_records", "Aggregate records"),
     ("fields_get", "Fields metadata"),
     ("navigation", "Navigation metadata"),

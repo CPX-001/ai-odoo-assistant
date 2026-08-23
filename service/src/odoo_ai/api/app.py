@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from odoo_ai.adapters import (
@@ -29,6 +29,10 @@ from odoo_ai.adapters import (
     source_tool_specs,
 )
 from odoo_ai.application import (
+    ActionApprovalError,
+    ActionApprovalService,
+    ActionExecutionError,
+    ActionExecutionService,
     ContextReadError,
     ContextReadService,
     DiagnosticsError,
@@ -42,9 +46,13 @@ from odoo_ai.application import (
     TraceEventData,
 )
 from odoo_ai.contracts import (
+    ActionDecisionReceipt,
+    ActionDecisionRequest,
+    ActionExecutionReceipt,
     ContextReadTurnRequest,
     ContextReadTurnResponse,
     EmptyDiagnosticsRequest,
+    ExecuteApprovedActionRequest,
     ExplainTurnRequest,
     ExplainTurnResponse,
     HowToTurnRequest,
@@ -53,6 +61,8 @@ from odoo_ai.contracts import (
     LogEvidence,
     LogSearchRequest,
     LogTestDiagnostics,
+    PersistActionPreviewRequest,
+    PersistActionPreviewResponse,
     QueryTurnRequest,
     QueryTurnResponse,
     SourceScanDiagnostics,
@@ -66,7 +76,13 @@ from odoo_ai.runtime.status import (
     ReasoningComponentStatus,
     inspect_admin_status,
 )
-from odoo_ai.security import require_shared_secret
+from odoo_ai.security import ActionAuthorityCodec, ActionAuthorityError, require_shared_secret
+from odoo_ai.storage import (
+    DatabaseSettings,
+    SqlActionApprovalStore,
+    create_database_engine,
+    create_session_factory,
+)
 
 MAX_CONTEXT_REQUEST_BYTES: Final = 16 * 1024
 _BOUNDED_POST_PATHS: Final = frozenset(
@@ -79,6 +95,9 @@ _BOUNDED_POST_PATHS: Final = frozenset(
         "/v1/admin/source/test",
         "/v1/admin/logs/test",
         "/v1/admin/logs/traceback",
+        "/v1/actions/previews",
+        "/v1/actions/decisions",
+        "/v1/actions/commits",
     }
 )
 
@@ -149,6 +168,8 @@ def create_app(
     explain_service: ExplainService | None = None,
     query_service: QueryService | None = None,
     how_to_service: HowToService | None = None,
+    action_approval_service: ActionApprovalService | None = None,
+    action_execution_service: ActionExecutionService | None = None,
 ) -> FastAPI:
     """Build an isolated application instance for runtime and API tests."""
 
@@ -158,7 +179,37 @@ def create_app(
         max_bytes=MAX_CONTEXT_REQUEST_BYTES,
     )
     diagnostics = diagnostics_service
+    approvals = action_approval_service
+    executions = action_execution_service
     reasoning_status_probe: CachedCodexReasoningStatus | None = None
+
+    def get_action_approval_service() -> ActionApprovalService:
+        nonlocal approvals
+        if approvals is None:
+            try:
+                engine = create_database_engine(DatabaseSettings.from_env())
+                approvals = ActionApprovalService(
+                    SqlActionApprovalStore(create_session_factory(engine))
+                )
+            except (OSError, ValueError):
+                raise ActionApprovalError("approval_store_unavailable", 503) from None
+        return approvals
+
+    def get_action_execution_service() -> ActionExecutionService:
+        nonlocal executions
+        if executions is None:
+            try:
+                engine = create_database_engine(DatabaseSettings.from_env())
+                store = SqlActionApprovalStore(create_session_factory(engine))
+                executions = ActionExecutionService(
+                    store=store,
+                    authority_codec=ActionAuthorityCodec.from_env(),
+                    gateway_factory=gateway_factory
+                    or OdooGatewayFactory(OdooGatewaySettings.from_env()),
+                )
+            except (ActionAuthorityError, OdooGatewayError, OSError, ValueError):
+                raise ActionExecutionError("action_execution_unavailable", 503) from None
+        return executions
 
     def get_explain_service() -> ExplainService:
         if explain_service is not None:
@@ -244,6 +295,62 @@ def create_app(
     @application.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
         return HealthResponse()
+
+    @application.post(
+        "/v1/actions/previews",
+        response_model=PersistActionPreviewResponse,
+        dependencies=[Depends(require_shared_secret)],
+    )
+    async def persist_action_preview(
+        request: Request,
+    ) -> PersistActionPreviewResponse | JSONResponse:
+        try:
+            payload = PersistActionPreviewRequest.model_validate_json(
+                await request.body()
+            )
+            return await asyncio.to_thread(
+                get_action_approval_service().persist_preview,
+                payload,
+            )
+        except ValidationError:
+            return _error_response("invalid_request", 422)
+        except ActionApprovalError as error:
+            return _error_response(error.code, error.status_code)
+
+    @application.post(
+        "/v1/actions/decisions",
+        response_model=ActionDecisionReceipt,
+        dependencies=[Depends(require_shared_secret)],
+    )
+    async def decide_action(
+        request: Request,
+    ) -> ActionDecisionReceipt | JSONResponse:
+        try:
+            payload = ActionDecisionRequest.model_validate_json(await request.body())
+            return await asyncio.to_thread(
+                get_action_approval_service().decide,
+                payload,
+            )
+        except ValidationError:
+            return _error_response("invalid_request", 422)
+        except ActionApprovalError as error:
+            return _error_response(error.code, error.status_code)
+
+    @application.post(
+        "/v1/actions/commits",
+        response_model=ActionExecutionReceipt,
+        dependencies=[Depends(require_shared_secret)],
+    )
+    async def commit_action(request: Request) -> ActionExecutionReceipt | JSONResponse:
+        try:
+            payload = ExecuteApprovedActionRequest.model_validate_json(
+                await request.body()
+            )
+            return await get_action_execution_service().execute(payload)
+        except ValidationError:
+            return _error_response("invalid_request", 422)
+        except ActionExecutionError as error:
+            return _error_response(error.code, error.status_code)
 
     @application.get(
         "/v1/admin/status",

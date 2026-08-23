@@ -15,6 +15,20 @@ from odoo_ai.contracts.action import (
     EffectiveWriteFieldSchema,
     EffectiveWriteSchema,
 )
+from odoo_ai.contracts.action_approval import (
+    ActionActorContext,
+    ActionDecisionReceipt,
+    ActionDecisionRequest,
+    PersistActionPreviewRequest,
+    PersistActionPreviewResponse,
+)
+from odoo_ai.contracts.action_execution import (
+    ActionAuthorityClaims,
+    ActionCommitResult,
+    ActionExecutionReceipt,
+    ActionVerificationResult,
+    ExecuteApprovedActionRequest,
+)
 from odoo_ai.contracts.agent import AnswerEnvelope, ProposedAction, ToolSpec
 from odoo_ai.contracts.context import (
     ContextPack,
@@ -92,6 +106,12 @@ from odoo_ai.contracts.source import (
 type JsonSchema = dict[str, JsonValue]
 
 PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
+    ActionActorContext,
+    ActionAuthorityClaims,
+    ActionCommitResult,
+    ActionDecisionReceipt,
+    ActionDecisionRequest,
+    ActionExecutionReceipt,
     ActionPreviewDelegationClaims,
     ActionFieldChange,
     ActionPreview,
@@ -100,6 +120,10 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     ActionProposalPayload,
     ActionTarget,
     ActionValue,
+    ActionVerificationResult,
+    ExecuteApprovedActionRequest,
+    PersistActionPreviewRequest,
+    PersistActionPreviewResponse,
     EffectiveWriteFieldSchema,
     EffectiveWriteSchema,
     AnswerEnvelope,

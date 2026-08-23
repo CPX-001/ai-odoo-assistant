@@ -5,10 +5,9 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import text
-
 from odoo_ai.storage import DatabaseSettings, create_database_engine
 from odoo_ai.storage.config import DATABASE_NAME_ENV, DATABASE_URL_ENV
+from sqlalchemy import text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_DATABASE_URL_ENV = "ODOO_AI_TEST_DATABASE_URL"
@@ -119,3 +118,85 @@ def test_upgrade_from_m4_head_creates_knowledge_fts(
 
     assert {"knowledge_document", "knowledge_chunk"} <= tables
     assert index_method == "gin"
+
+
+def test_upgrade_from_m5_head_creates_durable_action_approvals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _configure_test_database(monkeypatch)
+    config = Config(REPO_ROOT / "alembic.ini")
+    command.downgrade(config, "0006_m5_05_knowledge_fts")
+    command.upgrade(config, "head")
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            columns = set(
+                connection.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'action_proposal'"
+                    )
+                ).scalars()
+            )
+            constraints = set(
+                connection.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint "
+                        "WHERE conrelid = 'action_proposal'::regclass"
+                    )
+                ).scalars()
+            )
+    finally:
+        engine.dispose()
+
+    assert {
+        "canonical_payload",
+        "payload_fingerprint",
+        "precondition_fingerprint",
+        "state",
+        "approval_id",
+        "state_version",
+    } <= columns
+    assert "ck_action_proposal_decision_shape" in constraints
+
+
+def test_upgrade_from_m6_04_adds_execution_and_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _configure_test_database(monkeypatch)
+    config = Config(REPO_ROOT / "alembic.ini")
+    command.downgrade(config, "0007_m6_04_action_approvals")
+    command.upgrade(config, "head")
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            columns = set(
+                connection.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = 'action_proposal'"
+                    )
+                ).scalars()
+            )
+            tables = set(
+                connection.execute(
+                    text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+                ).scalars()
+            )
+            constraints = set(
+                connection.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint "
+                        "WHERE conrelid = 'action_proposal'::regclass"
+                    )
+                ).scalars()
+            )
+    finally:
+        engine.dispose()
+
+    assert {"attempt_id", "execution_started_at", "completed_at", "evidence_id"} <= columns
+    assert "action_audit_event" in tables
+    assert "ck_action_proposal_execution_shape" in constraints

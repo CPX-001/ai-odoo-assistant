@@ -47,6 +47,12 @@ shared secret continúa leyéndose desde `ODOO_AI_SHARED_SECRET_FILE`; el token
 de delegación y el `turn_id` se ligan a una instancia del gateway por turn y no
 forman parte del port público.
 
+Los commits ACTION usan además una autoridad `a1` de un solo uso y key purpose
+separado. Tanto el Assistant Service como el proceso Odoo deben recibir la ruta
+del mismo secret file mediante `ODOO_AI_ACTION_AUTHORITY_SECRET_FILE`. El file
+debe ser regular, tener al menos 43 bytes y no conceder permisos a `other`; no
+se incluye nunca en requests, logs, receipts ni audit.
+
 ## Turno contextual determinista de M2
 
 El Odoo server envía el contexto actual a `POST /v1/turns/context-read`; deriva

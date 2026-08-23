@@ -8,15 +8,16 @@ from types import ModuleType
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.application.action_policy import action_payload_fingerprint
 from odoo_ai.contracts import (
+    ActionAuthorityClaims,
     ActionFieldChange,
     ActionProposalPayload,
     ActionTarget,
     ActionValue,
     ActionValueKind,
 )
+from odoo_ai.security import ActionAuthorityCodec as ServiceActionAuthorityCodec
 
 ADDON = Path(__file__).parents[2] / "addons/odoo_ai_assistant"
 NOW = 1_787_337_600
@@ -46,7 +47,7 @@ def _load_module(name: str, path: Path) -> ModuleType:
     return module
 
 
-def _load_action_tools() -> tuple[ModuleType, ModuleType]:
+def _load_action_tools() -> tuple[ModuleType, ModuleType, ModuleType]:
     root_name = "odoo_ai_test_action_addon"
     for package_name, package_path in (
         (root_name, ADDON),
@@ -78,9 +79,15 @@ def _load_action_tools() -> tuple[ModuleType, ModuleType]:
     delegation = _load_module(
         f"{root_name}.security.delegation", ADDON / "security/delegation.py"
     )
+    action_authority = _load_module(
+        f"{root_name}.security.action_authority",
+        ADDON / "security/action_authority.py",
+    )
     security = sys.modules[f"{root_name}.security"]
     security.ActionPreviewDelegationCodec = delegation.ActionPreviewDelegationCodec
     security.ActionPreviewDelegationPayload = delegation.ActionPreviewDelegationPayload
+    security.ActionAuthorityCodec = action_authority.ActionAuthorityCodec
+    security.ActionAuthorityPayload = action_authority.ActionAuthorityPayload
     security.DelegationTokenError = delegation.DelegationTokenError
 
     orm_tools = ModuleType(f"{root_name}.services.orm_tools")
@@ -112,10 +119,10 @@ def _load_action_tools() -> tuple[ModuleType, ModuleType]:
     action_tools = _load_module(
         f"{root_name}.services.action_tools", ADDON / "services/action_tools.py"
     )
-    return delegation, action_tools
+    return delegation, action_authority, action_tools
 
 
-delegation, action_tools = _load_action_tools()
+delegation, action_authority, action_tools = _load_action_tools()
 
 
 class FakeRecords:
@@ -138,6 +145,11 @@ class FakeRecords:
     def exists(self) -> "FakeRecords":
         return self
 
+    def write(self, values: dict[str, object]) -> bool:
+        self.model.write_calls.append(values)
+        self.model.state.update(values)
+        return True
+
     def __len__(self) -> int:
         return len(self.ids)
 
@@ -158,6 +170,7 @@ class FakeModel:
         self.access_checks: list[str] = []
         self.field_access_checks: list[tuple[str, tuple[str, ...]]] = []
         self.read_fields: list[tuple[str, ...]] = []
+        self.write_calls: list[dict[str, object]] = []
 
     def browse(self, ids: list[int] | None = None) -> FakeRecords:
         return FakeRecords(self, ids or [])
@@ -266,12 +279,14 @@ def test_real_user_preview_returns_exact_diff_and_never_has_a_write_call() -> No
     assert "write" in env.models["sale.order"].access_checks
 
     tree = ast.parse((ADDON / "services/action_tools.py").read_text(encoding="utf-8"))
-    assert not any(
-        isinstance(node, ast.Call)
+    writes = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "write"
-        for node in ast.walk(tree)
-    )
+    ]
+    assert len(writes) == 1
 
 
 def test_state_change_changes_precondition_without_changing_payload() -> None:
@@ -322,3 +337,102 @@ def test_tampered_fingerprint_is_rejected_before_record_read() -> None:
         )
 
     assert env.models["sale.order"].read_fields == []
+
+
+def _authority_token(
+    proposal: ActionProposalPayload,
+    precondition: str,
+    *,
+    scope: str,
+    fingerprint: str | None = None,
+) -> str:
+    codec = ServiceActionAuthorityCodec(SECRET, clock=lambda: NOW)
+    claims = ActionAuthorityClaims(
+        jti=("commit_0123456789abcdefg" if scope == "action_commit" else "verify_0123456789abcdefg"),
+        proposal_id=proposal.proposal_id,
+        approval_id=UUID("44444444-4444-4444-8444-444444444444"),
+        attempt_id=UUID("55555555-5555-4555-8555-555555555555"),
+        instance_id=proposal.instance_id,
+        database=proposal.database,
+        uid=proposal.uid,
+        company_id=proposal.company_id,
+        allowed_company_ids=proposal.allowed_company_ids,
+        model=proposal.target.model,
+        record_id=proposal.target.record_id,
+        fields=("client_order_ref",),
+        payload_fingerprint=fingerprint or action_payload_fingerprint(proposal),
+        precondition_fingerprint=precondition,
+        policy_revision=proposal.policy_revision,
+        schema_revision=proposal.schema_revision,
+        scopes=(scope,),
+        issued_at=NOW,
+        expires_at=NOW + 60,
+    )
+    return codec.encode(claims)
+
+
+def _approved_executor(env: FakeEnv):
+    @contextmanager
+    def environment_provider(claims: object):
+        del claims
+        yield env
+
+    return action_tools.ApprovedActionToolExecutor(
+        codec=action_authority.ActionAuthorityCodec(SECRET, clock=lambda: NOW),
+        environment_provider=environment_provider,
+        replay_guard=lambda claims, scope: None,
+        observed_at=lambda: OBSERVED_AT,
+    )
+
+
+def test_a1_commit_performs_exactly_one_write_then_verify_rereads() -> None:
+    env = FakeEnv()
+    proposal = _proposal()
+    preview = _execute(env, proposal)["preview"]
+    executor = _approved_executor(env)
+
+    committed = executor.commit_record_patch(
+        authority_token=_authority_token(
+            proposal, preview["precondition_fingerprint"], scope="action_commit"
+        ),
+        proposal=proposal.model_dump(mode="json"),
+    )
+    verified = executor.verify_record_patch(
+        authority_token=_authority_token(
+            proposal, preview["precondition_fingerprint"], scope="action_verify"
+        ),
+        proposal=proposal.model_dump(mode="json"),
+    )
+
+    assert committed["ok"] is True
+    assert env.models["sale.order"].write_calls == [{"client_order_ref": "PO-43"}]
+    assert verified["matches"] is True
+    assert verified["after"] == {
+        "client_order_ref": {"kind": "text", "value": "PO-43"}
+    }
+
+
+def test_a1_stale_or_wrong_token_family_never_writes() -> None:
+    env = FakeEnv("PO-changed")
+    proposal = _proposal()
+    executor = _approved_executor(env)
+    stale_precondition = "action-precondition:v1:sha256:" + "0" * 64
+
+    with pytest.raises(FakeOrmToolError, match="stale_precondition"):
+        executor.commit_record_patch(
+            authority_token=_authority_token(
+                proposal, stale_precondition, scope="action_commit"
+            ),
+            proposal=proposal.model_dump(mode="json"),
+        )
+
+    p1 = delegation.ActionPreviewDelegationCodec(SECRET, clock=lambda: NOW).encode(
+        _claims()
+    )
+    with pytest.raises(FakeOrmToolError, match="delegation_rejected"):
+        executor.commit_record_patch(
+            authority_token=p1,
+            proposal=proposal.model_dump(mode="json"),
+        )
+
+    assert env.models["sale.order"].write_calls == []

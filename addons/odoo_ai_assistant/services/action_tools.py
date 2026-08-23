@@ -18,6 +18,8 @@ from odoo.exceptions import AccessError, MissingError, ValidationError
 from odoo.modules.registry import Registry
 
 from ..security import (
+    ActionAuthorityCodec,
+    ActionAuthorityPayload,
     ActionPreviewDelegationCodec,
     ActionPreviewDelegationPayload,
     DelegationTokenError,
@@ -264,6 +266,138 @@ class DelegatedActionPreviewToolExecutor:
         return claims
 
 
+class ApprovedActionToolExecutor:
+    """Execute or verify exactly one a1-bound persisted record patch."""
+
+    def __init__(
+        self,
+        *,
+        codec: ActionAuthorityCodec,
+        environment_provider: Callable[[ActionAuthorityPayload], AbstractContextManager[object]] | None = None,
+        replay_guard: Callable[[ActionAuthorityPayload, str], None] | None = None,
+        observed_at: Callable[[], datetime] | None = None,
+    ) -> None:
+        self._codec = codec
+        self._environment_provider = environment_provider or _runtime_action_environment
+        self._replay_guard = replay_guard or _runtime_action_replay_guard
+        self._observed_at = observed_at or _utc_now
+
+    def commit_record_patch(
+        self, *, authority_token: str, proposal: object
+    ) -> dict[str, JsonValue]:
+        parsed = _proposal(proposal)
+        claims = self._authorize(authority_token, parsed, "action_commit")
+        self._replay_guard(claims, "action_commit")
+        target = parsed["target"]
+        changes = parsed["changes"]
+        fields = tuple(change["field"] for change in changes)
+        try:
+            with self._environment_provider(claims) as env:
+                model_set = env[target["model"]]
+                metadata = _action_metadata(model_set, fields, claims, self._observed_at())
+                records = model_set.browse([target["record_id"]])
+                records.check_access("read")
+                records.check_access("write")
+                rows = records.read(list(fields), load=None)
+                if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
+                    raise OrmToolError("access_denied", 403)
+                preview_changes = _preview_changes(
+                    env, changes=changes, metadata=metadata, row=rows[0]
+                )
+                before = {change["field"]: change["before"] for change in preview_changes}
+                current = _precondition_fingerprint(
+                    model=target["model"], record_id=target["record_id"], before=before
+                )
+                if not hmac.compare_digest(current, claims.precondition_fingerprint):
+                    raise OrmToolError("stale_precondition", 409)
+                values = {
+                    change["field"]: _orm_write_value(change["value"])
+                    for change in changes
+                }
+                records.write(values)
+        except OrmToolError:
+            raise
+        except (AccessError, MissingError, ValidationError, KeyError):
+            raise OrmToolError("access_denied", 403) from None
+        except ValueError:
+            raise OrmToolError("invalid_action", 400) from None
+        committed_at = self._observed_at()
+        return {
+            "attempt_id": str(claims.attempt_id),
+            "committed_at": iso_datetime(committed_at),
+            "ok": True,
+            "payload_fingerprint": claims.payload_fingerprint,
+            "precondition_fingerprint": claims.precondition_fingerprint,
+            "proposal_id": str(claims.proposal_id),
+        }
+
+    def verify_record_patch(
+        self, *, authority_token: str, proposal: object
+    ) -> dict[str, JsonValue]:
+        parsed = _proposal(proposal)
+        claims = self._authorize(authority_token, parsed, "action_verify")
+        self._replay_guard(claims, "action_verify")
+        target = parsed["target"]
+        changes = parsed["changes"]
+        fields = tuple(change["field"] for change in changes)
+        try:
+            with self._environment_provider(claims) as env:
+                model_set = env[target["model"]]
+                metadata = _action_metadata(model_set, fields, claims, self._observed_at())
+                records = model_set.browse([target["record_id"]])
+                records.check_access("read")
+                rows = records.read(list(fields), load=None)
+                if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
+                    raise OrmToolError("access_denied", 403)
+                observed = _preview_changes(
+                    env, changes=changes, metadata=metadata, row=rows[0]
+                )
+                after = {change["field"]: change["before"] for change in observed}
+                expected = {change["field"]: change["value"] for change in changes}
+        except OrmToolError:
+            raise
+        except (AccessError, MissingError, ValidationError, KeyError):
+            raise OrmToolError("access_denied", 403) from None
+        verified_at = self._observed_at()
+        return {
+            "after": after,
+            "attempt_id": str(claims.attempt_id),
+            "matches": after == expected,
+            "ok": True,
+            "proposal_id": str(claims.proposal_id),
+            "verified_at": iso_datetime(verified_at),
+        }
+
+    def _authorize(
+        self, token: str, proposal: dict[str, object], scope: str
+    ) -> ActionAuthorityPayload:
+        try:
+            claims = self._codec.decode(token)
+        except DelegationTokenError:
+            raise OrmToolError("delegation_rejected", 403) from None
+        target = proposal["target"]
+        fields = tuple(sorted(change["field"] for change in proposal["changes"]))
+        fingerprint = _action_payload_fingerprint(proposal)
+        if (
+            claims.scopes != (scope,)
+            or str(claims.proposal_id) != proposal["proposal_id"]
+            or claims.instance_id != proposal["instance_id"]
+            or claims.database != proposal["database"]
+            or claims.uid != proposal["uid"]
+            or claims.company_id != proposal["company_id"]
+            or claims.allowed_company_ids != tuple(proposal["allowed_company_ids"])
+            or claims.model != target["model"]
+            or claims.record_id != target["record_id"]
+            or claims.fields != fields
+            or claims.policy_revision != ACTION_POLICY_REVISION
+            or claims.policy_revision != proposal["policy_revision"]
+            or claims.schema_revision != proposal["schema_revision"]
+            or not hmac.compare_digest(claims.payload_fingerprint, fingerprint)
+        ):
+            raise OrmToolError("scope_denied", 403)
+        return claims
+
+
 @contextmanager
 def _runtime_action_environment(
     claims: ActionPreviewDelegationPayload,
@@ -499,6 +633,31 @@ def _preview_metadata(
     return descriptions
 
 
+def _action_metadata(
+    model_set: object,
+    fields: tuple[str, ...],
+    claims: ActionAuthorityPayload,
+    observed_at: datetime,
+) -> dict[str, dict[str, JsonValue]]:
+    if tuple(sorted(fields)) != claims.fields:
+        raise OrmToolError("scope_denied", 403)
+    model_set.browse().check_access("read")
+    model_set.browse().check_access("write")
+    model_set.check_field_access_rights("read", list(fields))
+    model_set.check_field_access_rights("write", list(fields))
+    metadata = collect_model_metadata(
+        model_set.env,
+        model=claims.model,
+        max_fields=len(fields),
+        observed_at=observed_at,
+        allowed_fields=frozenset(fields),
+    )
+    descriptions = metadata.get("fields")
+    if not isinstance(descriptions, dict) or set(descriptions) != set(fields):
+        raise OrmToolError("field_not_allowed", 403)
+    return descriptions
+
+
 def _preview_changes(
     env: object,
     *,
@@ -609,6 +768,18 @@ def _observed_action_value(kind: str, value: object) -> dict[str, object]:
             raise OrmToolError("unsupported_value", 400)
         normalized = value
     return {"kind": kind, "value": normalized}
+
+
+def _orm_write_value(value: dict[str, object]) -> object:
+    kind = value["kind"]
+    item = value["value"]
+    if item is None:
+        return False
+    if kind == "decimal":
+        return float(item)
+    if kind == "datetime":
+        return str(item).replace("T", " ").removesuffix("Z")
+    return item
 
 
 def _action_payload_fingerprint(proposal: dict[str, object]) -> str:

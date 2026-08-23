@@ -9,6 +9,7 @@ from odoo.http import request
 
 from ..security import (
     SHARED_SECRET_HEADER,
+    ActionAuthorityCodec,
     ActionPreviewDelegationCodec,
     DelegationCodec,
     DelegationTokenError,
@@ -17,7 +18,10 @@ from ..security import (
     require_machine_secret,
 )
 from ..services import InstanceInventoryError, collect_instance_inventory
-from ..services.action_tools import DelegatedActionPreviewToolExecutor
+from ..services.action_tools import (
+    ApprovedActionToolExecutor,
+    DelegatedActionPreviewToolExecutor,
+)
 from ..services.orm_tools import DelegatedOrmToolExecutor, OrmToolError
 from ..services.query_tools import DelegatedQueryToolExecutor
 from ..services.turn_context import DELEGATION_SECRET_FILE_ENV
@@ -33,9 +37,33 @@ QUERY_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/query-records"
 AGGREGATE_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/aggregate-records"
 WRITE_SCHEMA_ROUTE: Final = "/odoo_ai/internal/v1/action-write-schema"
 ACTION_PREVIEW_ROUTE: Final = "/odoo_ai/internal/v1/action-preview"
+ACTION_COMMIT_ROUTE: Final = "/odoo_ai/internal/v1/action-commit"
+ACTION_VERIFY_ROUTE: Final = "/odoo_ai/internal/v1/action-verify"
 
 
 class InternalOdooToolsController(http.Controller):
+    @http.route(
+        ACTION_COMMIT_ROUTE,
+        type="http",
+        auth="none",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    def action_commit(self):
+        return self._dispatch("action_commit")
+
+    @http.route(
+        ACTION_VERIFY_ROUTE,
+        type="http",
+        auth="none",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    def action_verify(self):
+        return self._dispatch("action_verify")
+
     @http.route(
         ACTION_PREVIEW_ROUTE,
         type="http",
@@ -148,6 +176,22 @@ class InternalOdooToolsController(http.Controller):
             token = request.httprequest.headers.get(DELEGATION_HEADER)
             if not token or len(token) > 8192:
                 raise OrmToolError("delegation_rejected", 403)
+            if operation in {"action_commit", "action_verify"}:
+                _require_keys(payload, {"proposal"})
+                action_executor = ApprovedActionToolExecutor(
+                    codec=ActionAuthorityCodec.from_env()
+                )
+                if operation == "action_commit":
+                    result = action_executor.commit_record_patch(
+                        authority_token=token,
+                        proposal=payload["proposal"],
+                    )
+                else:
+                    result = action_executor.verify_record_patch(
+                        authority_token=token,
+                        proposal=payload["proposal"],
+                    )
+                return request.make_json_response(result, status=200)
             if operation == "action_write_schema":
                 _require_keys(payload, {"model", "turn_id"})
                 action_executor = DelegatedActionPreviewToolExecutor(

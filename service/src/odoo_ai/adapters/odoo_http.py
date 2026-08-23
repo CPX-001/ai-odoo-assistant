@@ -25,8 +25,10 @@ from pydantic import (
 )
 
 from odoo_ai.contracts import (
+    ActionCommitResult,
     ActionPreview,
     ActionProposalPayload,
+    ActionVerificationResult,
     AggregateGroup,
     AggregateRecordsRequest,
     AggregateRecordsResult,
@@ -42,6 +44,7 @@ from odoo_ai.contracts import (
     RecordRef,
     RecordSnapshot,
 )
+from odoo_ai.ports import OdooGatewayError
 from odoo_ai.security import SHARED_SECRET_HEADER, SharedSecretError, load_shared_secret
 
 ODOO_BASE_URL_ENV: Final = "ODOO_AI_ODOO_BASE_URL"
@@ -55,6 +58,8 @@ QUERY_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/query-records"
 AGGREGATE_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/aggregate-records"
 WRITE_SCHEMA_ROUTE: Final = "/odoo_ai/internal/v1/action-write-schema"
 ACTION_PREVIEW_ROUTE: Final = "/odoo_ai/internal/v1/action-preview"
+ACTION_COMMIT_ROUTE: Final = "/odoo_ai/internal/v1/action-commit"
+ACTION_VERIFY_ROUTE: Final = "/odoo_ai/internal/v1/action-verify"
 DEFAULT_TIMEOUT_SECONDS: Final = 2.0
 MAX_REQUEST_BYTES: Final = 32 * 1024
 MAX_RESPONSE_BYTES: Final = 128 * 1024
@@ -81,14 +86,6 @@ _METADATA_ATTRIBUTES = frozenset(
 PositiveId = Annotated[int, Field(strict=True, gt=0)]
 BoundedText = Annotated[str, Field(max_length=32 * 1024)]
 SecretLoader = Callable[[], str]
-
-
-class OdooGatewayError(RuntimeError):
-    """Sanitized adapter failure that contains no endpoint or credential data."""
-
-    def __init__(self, code: str) -> None:
-        super().__init__(code)
-        self.code = code
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +181,66 @@ class OdooGatewayFactory:
             settings=self._settings,
             machine_secret=machine_secret,
         )
+
+    def for_action(self, *, authority_token: str) -> HttpOdooActionGateway:
+        """Bind a single separately authorized ACTION call."""
+
+        _validate_header_secret(authority_token, maximum=8192)
+        try:
+            machine_secret = self._secret_loader()
+        except SharedSecretError:
+            raise OdooGatewayError("machine_auth_unavailable") from None
+        return HttpOdooActionGateway(
+            settings=self._settings,
+            authority_token=authority_token,
+            machine_secret=machine_secret,
+        )
+
+
+class HttpOdooActionGateway:
+    """Narrow a1 transport exposing only record-patch commit and verification."""
+
+    def __init__(
+        self,
+        *,
+        settings: OdooGatewaySettings,
+        authority_token: str,
+        machine_secret: str,
+    ) -> None:
+        self._transport = HttpOdooGateway(
+            settings=settings,
+            turn_id=UUID(int=0),
+            delegation_token=authority_token,
+            machine_secret=machine_secret,
+        )
+
+    async def commit_record_patch(
+        self, payload: ActionProposalPayload
+    ) -> ActionCommitResult:
+        raw = await asyncio.to_thread(
+            self._transport._post_json,
+            ACTION_COMMIT_ROUTE,
+            {"proposal": payload.model_dump(mode="json")},
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            return _ActionCommitResponse.model_validate_json(raw).result()
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+
+    async def verify_record_patch(
+        self, payload: ActionProposalPayload
+    ) -> ActionVerificationResult:
+        raw = await asyncio.to_thread(
+            self._transport._post_json,
+            ACTION_VERIFY_ROUTE,
+            {"proposal": payload.model_dump(mode="json")},
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            return _ActionVerificationResponse.model_validate_json(raw).result()
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
 
 
 class HttpOdooInstanceGateway:
@@ -605,6 +662,28 @@ class _ActionPreviewResponse(BaseModel):
     preview: ActionPreview
 
 
+class _ActionCommitResponse(ActionCommitResult):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+
+    def result(self) -> ActionCommitResult:
+        return ActionCommitResult.model_validate(
+            self.model_dump(exclude={"ok"})
+        )
+
+
+class _ActionVerificationResponse(ActionVerificationResult):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+
+    def result(self) -> ActionVerificationResult:
+        return ActionVerificationResult.model_validate(
+            self.model_dump(exclude={"ok"})
+        )
+
+
 class _InventoryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -810,5 +889,6 @@ def _status_error(status: int) -> str:
         401: "machine_auth_rejected",
         403: "delegation_rejected",
         404: "endpoint_unavailable",
+        409: "stale_precondition",
         429: "rate_limited",
     }.get(status, "upstream_unavailable" if status >= 500 else "upstream_rejected")

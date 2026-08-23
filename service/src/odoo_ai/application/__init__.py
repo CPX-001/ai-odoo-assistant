@@ -1,5 +1,13 @@
 """Deterministic Assistant Service application workflows."""
 
+from odoo_ai.application.action_approval import (
+    ActionApprovalError,
+    ActionApprovalService,
+)
+from odoo_ai.application.action_execution import (
+    ActionExecutionError,
+    ActionExecutionService,
+)
 from odoo_ai.application.action_policy import (
     ACTION_POLICY_REVISION,
     ActionPolicy,
@@ -46,6 +54,10 @@ from odoo_ai.application.query_workflow import QueryService, QueryTurnError
 
 __all__ = [
     "ACTION_POLICY_REVISION",
+    "ActionApprovalError",
+    "ActionApprovalService",
+    "ActionExecutionError",
+    "ActionExecutionService",
     "ActionPolicy",
     "ActionPolicyError",
     "ActionPreviewError",

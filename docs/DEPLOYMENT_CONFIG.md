@@ -90,3 +90,13 @@ rechaza credentials, path, query y fragmento para que las únicas rutas posibles
 sean los dos handlers internos fijos. La futura superficie de Settings podrá
 administrar este dato server-side sin cambiar el port ni aceptar valores desde
 JS o prompts.
+
+## Estado actual de M6
+
+La autoridad de commit ACTION no reutiliza los tokens `v1`, `q1` o `p1`.
+`ODOO_AI_ACTION_AUTHORITY_SECRET_FILE` es un override explícito obligatorio en
+el Assistant Service y en el proceso Odoo para habilitar `a1`. No tiene ruta
+default: si falta, no es un fichero regular, supera 4096 bytes, tiene permisos
+para `other` o contiene menos de 43 bytes, ACTION queda degradado y no ejecuta
+writes. La provisión/rotación host-level de este segundo secret queda en el
+setup boundary; Odoo Settings no debe leer ni devolver su contenido.

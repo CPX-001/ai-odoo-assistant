@@ -14,6 +14,22 @@ from odoo_ai.contracts.action import (
     EffectiveWriteFieldSchema,
     EffectiveWriteSchema,
 )
+from odoo_ai.contracts.action_approval import (
+    ActionActorContext,
+    ActionDecision,
+    ActionDecisionReceipt,
+    ActionDecisionRequest,
+    ActionProposalState,
+    PersistActionPreviewRequest,
+    PersistActionPreviewResponse,
+)
+from odoo_ai.contracts.action_execution import (
+    ActionAuthorityClaims,
+    ActionCommitResult,
+    ActionExecutionReceipt,
+    ActionVerificationResult,
+    ExecuteApprovedActionRequest,
+)
 from odoo_ai.contracts.agent import (
     AnswerConfidence,
     AnswerEnvelope,
@@ -176,6 +192,18 @@ __all__ = [
     "ActionTarget",
     "ActionValue",
     "ActionValueKind",
+    "ActionActorContext",
+    "ActionAuthorityClaims",
+    "ActionCommitResult",
+    "ActionDecision",
+    "ActionDecisionReceipt",
+    "ActionDecisionRequest",
+    "ActionExecutionReceipt",
+    "ActionProposalState",
+    "ActionVerificationResult",
+    "ExecuteApprovedActionRequest",
+    "PersistActionPreviewRequest",
+    "PersistActionPreviewResponse",
     "ActionPreviewDelegationClaims",
     "ActionPreviewDelegationScope",
     "EffectiveWriteFieldSchema",

@@ -1,12 +1,12 @@
-# M6 ACTION foundation — M6-01 a M6-03
+# M6 ACTION transactional boundary — M6-01 a M6-06
 
-Estado: **implementado y verificado; no existe capacidad de commit.**
+Estado: **implementado y verificado hasta M6-06.**
 
-Este documento fija la base entregada antes de persistir approvals o habilitar
-escrituras. El flujo disponible termina en:
+El flujo transaccional disponible es:
 
 ```text
-proposal validada → schema efectivo de escritura → preview sin efectos
+proposal validada → schema efectivo → preview persistida → aprobación
+→ commit único → relectura y verificación
 ```
 
 ## Payload y policy
@@ -71,11 +71,57 @@ para “simular” produciría side effects o resultados incompletos difíciles 
 representar con seguridad. La respuesta muestra una limitación host-controlled
 y genera Evidence `RECORD` checked, pero no concede autoridad de escritura.
 
+## Approval durable (M6-04)
+
+El Assistant Service persiste el payload canónico exacto, fingerprint, preview,
+precondition, actor y caducidad en su PostgreSQL separado. La decisión entrante
+contiene sólo `proposal_id`, `approve|reject` y el contexto de actor derivado por
+Odoo; values, target o payload alternativos son rechazados por contrato.
+
+La fila se bloquea durante la decisión. Sólo `previewed` puede pasar una vez a
+`approved` o `rejected`; concurrencia, replay, actor distinto y expiración
+fallan cerrados. El approval aprobado devuelve un UUID opaco, no un payload
+editable, y no existe write durante esta fase.
+
+## Autoridad y commit (M6-05)
+
+`a1` es una familia HMAC distinta de `v1`, `q1` y `p1`, con key purpose propio
+y secret file configurable mediante `ODOO_AI_ACTION_AUTHORITY_SECRET_FILE`.
+El Assistant Service sólo la emite después de cambiar atómicamente un approval
+de `approved` a `executing`. Liga approval/proposal/attempt, instance/database,
+usuario, compañías, model, record, fields, fingerprints, revisiones, scope y
+caducidad.
+
+`/odoo_ai/internal/v1/action-commit` acepta únicamente esa autoridad y el
+proposal persistido. Odoo vuelve a validar policy, schema, ACL, field access,
+record rules, compañías y precondition usando `api.Environment(..., su=False)`.
+Construye server-side el diccionario de values y contiene exactamente una
+llamada posible a `write()` sobre un registro. No acepta métodos, context,
+domains, SQL, Python ni command lists. El `(jti, action_commit)` se consume en
+el ledger antes del intento. Un timeout o respuesta ambigua nunca provoca un
+retry del write.
+
+## Verificación, Evidence y audit (M6-06)
+
+Tras un commit confirmado, o para resolver un resultado ambiguo, el servicio
+emite otro `a1` de un solo uso con scope `action_verify`. Odoo relee sólo los
+fields afectados bajo el mismo usuario y normaliza los valores con el mismo
+contrato que la preview. El estado es `verified` exclusivamente cuando el mapa
+after coincide exactamente con el payload aprobado.
+
+Un commit confirmado que no puede verificarse queda `committed_unverified`; un
+commit ambiguo sin confirmación exacta permanece `execution_unknown`. Una
+precondition distinta queda `stale`. La verificación exacta produce Evidence
+`RECORD` checked y un receipt ligado a proposal/approval/attempt/fingerprint.
+La Assistant DB conserva además eventos append-only sanitizados con IDs,
+estado, revisiones y fingerprints; no guarda tokens de autoridad, secrets ni
+prompts en el audit.
+
 ## Deliberadamente pendiente
 
-M6-04 a M6-06 permanecen sin implementar: persistencia/state machine de
-approval, autoridad separada de commit, ORM write, relectura, receipt y audit.
-En consecuencia, esta base no permite modificar Odoo.
+M6-07 y siguientes conectarán este boundary a handlers de negocio y a la UX
+Odoo-native. Codex sigue sin recibir un tool de commit y el browser continúa
+hablando sólo con Odoo.
 
 El análisis previo del donor ERPipe y las razones para adoptar sólo conceptos
 están en [`third_party/M6_ERPIPE_WRITE_AUDIT.md`](third_party/M6_ERPIPE_WRITE_AUDIT.md).
