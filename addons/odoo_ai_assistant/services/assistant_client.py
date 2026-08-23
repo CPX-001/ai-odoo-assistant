@@ -80,6 +80,38 @@ class AssistantServiceClient:
 
         return self._admin_get("/v1/admin/diagnostics")
 
+    def maintenance_status(self) -> dict[str, Any]:
+        return self._admin_get("/v1/admin/maintenance/status")
+
+    def maintenance_readiness_test(self, payload: dict[str, object]) -> dict[str, Any]:
+        return self._admin_post("/v1/admin/maintenance/readiness/test", payload)
+
+    def maintenance_source_rescan(self, payload: dict[str, object]) -> dict[str, Any]:
+        return self._admin_post("/v1/admin/maintenance/source/rescan", payload)
+
+    def maintenance_source_test(self, payload: dict[str, object]) -> dict[str, Any]:
+        return self._admin_post("/v1/admin/maintenance/source/test", payload)
+
+    def maintenance_logs_test(self, payload: dict[str, object]) -> dict[str, Any]:
+        return self._admin_post("/v1/admin/maintenance/logs/test", payload)
+
+    def maintenance_knowledge_reindex(self, payload: dict[str, object]) -> dict[str, Any]:
+        return self._admin_post("/v1/admin/maintenance/knowledge/reindex", payload)
+
+    def maintenance_reasoning_test(self, payload: dict[str, object]) -> dict[str, Any]:
+        return self._admin_post("/v1/admin/maintenance/reasoning/test", payload)
+
+    def maintenance_action_self_test(self, payload: dict[str, object]) -> dict[str, Any]:
+        return self._admin_post("/v1/admin/maintenance/action/self-test", payload)
+
+    def maintenance_configuration_revalidate(
+        self, payload: dict[str, object]
+    ) -> dict[str, Any]:
+        return self._admin_post(
+            "/v1/admin/maintenance/configuration/revalidate",
+            payload,
+        )
+
     def configuration_snapshot(self) -> dict[str, Any]:
         """Read the sanitized M7 configuration snapshot server-to-server."""
 
@@ -273,7 +305,13 @@ class AssistantServiceClient:
                 "configuration_invalid",
                 "configuration_revision_conflict",
             }
-            if error_code in action_codes | configuration_codes:
+            maintenance_codes = {
+                "maintenance_invalid",
+                "maintenance_job_active",
+                "maintenance_job_not_found",
+                "maintenance_unavailable",
+            }
+            if error_code in action_codes | configuration_codes | maintenance_codes:
                 raise AssistantServiceError(error_code)
             if response.status == 404:
                 raise AssistantServiceError("diagnostic_not_found")
@@ -293,6 +331,7 @@ class AssistantServiceClient:
                 "engine_timeout",
                 "engine_unavailable",
                 "evidence_unavailable",
+                "maintenance_unavailable",
                 "query_budget_exceeded",
             }:
                 raise AssistantServiceError(error_code)
