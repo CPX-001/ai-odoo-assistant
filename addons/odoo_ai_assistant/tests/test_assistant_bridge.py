@@ -176,8 +176,8 @@ class FakeContextReadClient:
                 ],
                 "evidence_id": "77777777-7777-4777-8777-777777777777",
                 "expires_at": datetime.now(UTC).isoformat(),
-                "payload_fingerprint": "sha256:" + "d" * 64,
-                "precondition_fingerprint": "sha256:" + "e" * 64,
+                "payload_fingerprint": "action-payload:v1:sha256:" + "d" * 64,
+                "precondition_fingerprint": "action-precondition:v1:sha256:" + "e" * 64,
                 "proposal_id": "88888888-8888-4888-8888-888888888888",
                 "target": {
                     "model": screen["model"],
