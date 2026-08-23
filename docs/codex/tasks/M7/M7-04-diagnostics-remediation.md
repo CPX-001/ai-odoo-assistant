@@ -98,3 +98,34 @@ Los mensajes deben ser suficientemente específicos para que un técnico sepa qu
 1. Documenta reason codes/remediation kinds.
 2. Señala cualquier capability que aún no pueda diagnosticarse sin consola y por qué.
 3. No avances a M7-05 si Diagnostics depende de mensajes libres del backend.
+
+## Estado de implementación
+
+**Implemented / pending runtime verification.**
+
+La implementación añade `GET /v1/admin/diagnostics`, protegido por la machine
+credential existente, y el contrato versionado `AdminDiagnosticsMatrix`. La
+matriz cubre endpoint/auth, DB/migrations, configuración M7, instance profile,
+source + último scan, logs, knowledge, Codex, ACTION authority y EXPLAIN/QUERY/
+HOW_TO/ACTION.
+
+Los reason codes, states y remediation kinds son cerrados. El addon Odoo vuelve
+a validar `key + reason_code + state + remediation_kind` y genera el texto desde
+su propio catálogo; `summary` y `remediation_text` enviados por el backend no se
+renderizan. Entries desconocidas o malformadas quedan omitidas con warning
+local, sin reutilizar el texto recibido. Provenance se muestra sólo mediante
+etiquetas locales conocidas.
+
+La UI agrupa errores, warnings/pending y checks sanos y puede abrir Settings. No
+se introducen fixes automáticos ni nuevas operaciones de mantenimiento: el
+source rescan/log test ya existentes se reutilizan y `reindex` sólo identifica
+la operación que corresponde a M7-05.
+
+Reason codes, remediation kinds y límites restantes están documentados en
+`docs/M7_DIAGNOSTICS.md`.
+
+Tests unitarios/API/addon se han escrito para estados sanos y degradados,
+configuración inválida, source/log/knowledge, Codex, ACTION authority,
+autenticación y backend codes no confiables. Su ejecución real, junto con Ruff,
+mypy y addon install/update Odoo 18, sigue pendiente; por tanto este packet no se
+considera verificado ni autoriza M7 PASS.
