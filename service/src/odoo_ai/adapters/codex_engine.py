@@ -40,6 +40,17 @@ network, apps, skills, subagents, or any unregistered tool.
 Never propose or perform an action in this read-only turn.
 Reference evidence only by an evidence_id returned by the host in this turn.
 If evidence is insufficient, say so in limitations and lower confidence."""
+_WORKFLOW_TOOL_INSTRUCTIONS = {
+    Workflow.QUERY: """For an allowed QUERY question, you must first call
+odoo_get_effective_schema for the exact current screen model, then call exactly the needed
+odoo_query_records or odoo_aggregate_records tool. Base the answer on that checked
+result and cite its returned evidence_id; do not cite schema metadata as query evidence.
+If the request asks for any write or action, call no tool and return no evidence refs.""",
+    Workflow.HOW_TO: """For HOW_TO, use the supplied checked navigation and schema
+evidence. You must also call knowledge_search and then knowledge_read_excerpt when relevant
+configured documentation is available. Cite the relevant checked navigation, schema, and
+document evidence; never cite a search candidate before reading its current excerpt.""",
+}
 
 _SENSITIVE_KEY = re.compile(
     r"(?:auth|authorization|credential|delegation|dsn|password|secret|token)",
@@ -94,7 +105,7 @@ class CodexEngineLimits:
     max_output_schema_bytes: int = 48 * 1024
     max_answer_bytes: int = 64 * 1024
     max_evidence_items: int = 24
-    max_events: int = 512
+    max_events: int = 2_048
     max_string_chars: int = 8_000
 
     def __post_init__(self) -> None:
@@ -170,9 +181,7 @@ class CodexAppServerEngine:
                         "thread/start",
                         {
                             **client.thread_policy.start_params(),
-                            "baseInstructions": (
-                                _TOOL_INSTRUCTIONS if tools else _NO_TOOL_INSTRUCTIONS
-                            ),
+                            "baseInstructions": _base_instructions(context, bool(tools)),
                             "dynamicTools": codex_dynamic_tools(tools),
                         },
                         timeout_seconds=_remaining_seconds(turn_deadline),
@@ -401,6 +410,7 @@ def serialize_codex_context(
             "tools_available": bool(tool_names),
             "tool_names": sorted(set(tool_names)),
             "max_evidence_refs": evidence_cap,
+            "workflow_tool_policy": _workflow_tool_policy(context, bool(tool_names)),
         },
         "untrusted_data": {
             "user_request": _bounded_text(context.request.message, limits),
@@ -436,6 +446,20 @@ def serialize_codex_context(
     if len(serialized.encode("utf-8")) > limits.max_context_bytes:
         raise CodexEngineError("codex_context_too_large")
     return serialized
+
+
+def _base_instructions(context: ContextPack, has_tools: bool) -> str:
+    if not has_tools:
+        return _NO_TOOL_INSTRUCTIONS
+    workflow = context.workflow_hint
+    workflow_policy = "" if workflow is None else _WORKFLOW_TOOL_INSTRUCTIONS.get(workflow, "")
+    return f"{_TOOL_INSTRUCTIONS}\n{workflow_policy}" if workflow_policy else _TOOL_INSTRUCTIONS
+
+
+def _workflow_tool_policy(context: ContextPack, has_tools: bool) -> str | None:
+    if not has_tools or context.workflow_hint is None:
+        return None
+    return _WORKFLOW_TOOL_INSTRUCTIONS.get(context.workflow_hint)
 
 
 def _serialize_evidence(evidence: Evidence, limits: CodexEngineLimits) -> dict[str, object]:

@@ -231,6 +231,8 @@ class AssistantServiceClient:
         if response.status == 413:
             raise AssistantServiceError("invalid_request")
         if response.status == 422:
+            if _response_error_code(response_body) == "query_rejected":
+                raise AssistantServiceError("query_rejected")
             raise AssistantServiceError("invalid_context")
         if response.status in {502, 503, 504}:
             error_code = _response_error_code(response_body)

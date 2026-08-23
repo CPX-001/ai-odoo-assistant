@@ -58,6 +58,7 @@ EXPECTED_EXPLAIN_RESPONSE_KEYS: Final = frozenset(
     }
 )
 ALLOWED_CONFIDENCE: Final = frozenset({"high", "medium", "low"})
+ALLOWED_WORKFLOWS: Final = frozenset({"EXPLAIN", "QUERY", "HOW_TO"})
 EXPECTED_QUERY_RESPONSE_KEYS: Final = EXPECTED_EXPLAIN_RESPONSE_KEYS
 EXPECTED_HOW_TO_RESPONSE_KEYS: Final = EXPECTED_EXPLAIN_RESPONSE_KEYS
 
@@ -65,6 +66,19 @@ EXPECTED_HOW_TO_RESPONSE_KEYS: Final = EXPECTED_EXPLAIN_RESPONSE_KEYS
 class AssistantBridge(models.AbstractModel):
     _name = "odoo.ai.assistant.bridge"
     _description = "Odoo AI Assistant Context Bridge"
+
+    @api.model
+    def submit_turn(self, message, screen, workflow):
+        """Select one read-only workflow before deriving its narrow authority."""
+
+        if workflow not in ALLOWED_WORKFLOWS:
+            return _error("invalid_workflow")
+        handlers = {
+            "EXPLAIN": self.submit_explain,
+            "QUERY": self.submit_query,
+            "HOW_TO": self.submit_how_to,
+        }
+        return handlers[workflow](message, screen)
 
     @api.model
     def submit_context_read(self, message, screen):
@@ -283,6 +297,7 @@ def _browser_explain_response(response, prepared):
     result = {
         "ok": True,
         "turn_id": str(prepared.turn_id),
+        "workflow": "EXPLAIN",
         "answer": answer,
         "confidence": response["confidence"],
         "limitations": limitations,
@@ -331,6 +346,7 @@ def _browser_query_response(response, prepared):
     result = {
         "ok": True,
         "turn_id": str(prepared.turn_id),
+        "workflow": "QUERY",
         "answer": answer,
         "confidence": response["confidence"],
         "limitations": limitations,
@@ -407,6 +423,7 @@ def _browser_how_to_response(response, prepared):
     result = {
         "ok": True,
         "turn_id": str(prepared.turn_id),
+        "workflow": "HOW_TO",
         "answer": answer,
         "confidence": response["confidence"],
         "limitations": list(limitations),
@@ -617,6 +634,7 @@ def _client_error_code(code: str) -> str:
         "engine_unavailable",
         "evidence_unavailable",
         "query_budget_exceeded",
+        "query_rejected",
     }:
         return code
     return "service_unavailable"

@@ -177,6 +177,8 @@ class HowToService:
             )
             report = self._report_loader()
             report_taken = True
+            for event in report.events:
+                self._event(events, event.event_name, event.status, event.attributes)
             for evidence in report.retrieved_evidence:
                 self._event(
                     events,
@@ -220,7 +222,9 @@ class HowToService:
         finally:
             if not report_taken:
                 try:
-                    self._report_loader()
+                    report = self._report_loader()
+                    for event in report.events:
+                        self._event(events, event.event_name, event.status, event.attributes)
                 except Exception:
                     pass
             try:
@@ -297,11 +301,16 @@ def _navigation_node_evidence(node: NavigationNode, *, captured_at: datetime) ->
 def _has_relevant_navigation(
     evidence: Sequence[Evidence], *, model: str | None
 ) -> bool:
+    del model
     for item in evidence:
-        action = item.payload.get("action")
-        if not isinstance(action, dict):
-            continue
-        if model is None or action.get("target_model") == model:
+        path = item.payload.get("path")
+        if isinstance(path, list) and path and all(
+            isinstance(part, str) and part for part in path
+        ):
+            # These items were already narrowed either to the exact active menu
+            # lineage or to an action targeting the screen model. The visible
+            # path remains valid evidence even when ordinary users cannot read
+            # ``ir.actions.act_window`` metadata directly.
             return True
     return False
 

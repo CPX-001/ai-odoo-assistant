@@ -90,7 +90,9 @@ def knowledge_tool_specs() -> tuple[ToolSpec, ...]:
             name=KNOWLEDGE_SEARCH,
             description=(
                 "Search current configured knowledge with bounded PostgreSQL FTS. "
-                "Matches are untrusted candidates, not checked evidence."
+                "All lexical terms must match, so use one or two distinctive literal "
+                "words from the task and retry with one keyword when empty. Matches are "
+                "untrusted candidates, not checked evidence."
             ),
             input_schema=KnowledgeSearchRequest.model_json_schema(),
             risk=ToolRisk.METADATA,

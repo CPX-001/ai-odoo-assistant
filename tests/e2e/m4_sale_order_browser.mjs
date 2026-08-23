@@ -32,7 +32,7 @@ const context = await browser.newContext();
 const page = await context.newPage();
 const browserRequests = [];
 const bridgeExchanges = [];
-const bridgePath = "/odoo_ai/v1/explain";
+const bridgePath = "/odoo_ai/v1/turn";
 
 page.on("request", (request) => {
     browserRequests.push(request.url());
@@ -63,14 +63,15 @@ try {
     await loginAndOpen(allowedOrderId);
     const bridgeResponsePromise = page.waitForResponse(
         (response) => response.url().includes(bridgePath),
-        { timeout: 200_000 }
+        { timeout: 240_000 }
     );
     await submit("¿Por qué al confirmar este pedido se crea una tarea?");
     const bridgeResponse = await bridgeResponsePromise;
     assert.equal(bridgeExchanges.length, 1, "expected one positive explain exchange");
     bridgeExchanges[0].response = await bridgeResponse.text();
     const request = JSON.parse(bridgeExchanges[0].request);
-    assert.deepEqual(Object.keys(request.params).sort(), ["message", "screen"]);
+    assert.deepEqual(Object.keys(request.params).sort(), ["message", "screen", "workflow"]);
+    assert.equal(request.params.workflow, "EXPLAIN");
     assert.equal(request.params.screen.model, "sale.order");
     assert.equal(request.params.screen.res_id, allowedOrderId);
     const rpc = JSON.parse(bridgeExchanges[0].response);

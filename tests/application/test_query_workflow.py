@@ -4,7 +4,7 @@ from uuid import UUID
 
 import pytest
 
-from odoo_ai.adapters import query_tool_specs
+from odoo_ai.adapters import CodexEngineError, query_tool_specs
 from odoo_ai.application import QueryService, QueryTurnError, TraceEventData
 from odoo_ai.contracts import (
     AggregateGroup,
@@ -261,6 +261,18 @@ def test_invented_ref_action_and_unacknowledged_truncation_are_rejected() -> Non
     service, _ = _service(lambda context: _answer(), _record_evidence(truncated=True))
     with pytest.raises(QueryTurnError, match="answer_truncation_unacknowledged"):
         asyncio.run(service.run(_request()))
+
+
+def test_provider_proposed_action_maps_to_query_rejected() -> None:
+    service, _ = _service(
+        lambda context: CodexEngineError("codex_proposed_action_not_allowed"),
+        _record_evidence(),
+    )
+
+    with pytest.raises(QueryTurnError, match="query_rejected") as captured:
+        asyncio.run(service.run(_request()))
+
+    assert captured.value.status_code == 422
 
 
 def test_budget_failure_and_traces_are_sanitized() -> None:

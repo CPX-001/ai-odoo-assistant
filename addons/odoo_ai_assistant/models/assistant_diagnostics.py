@@ -40,6 +40,10 @@ class AssistantDiagnostics(models.TransientModel):
     reasoning_runtime_version = fields.Char(readonly=True)
     reasoning_model = fields.Char(readonly=True)
     reasoning_setup_message = fields.Char(readonly=True)
+    query_capability_state = fields.Char(readonly=True)
+    navigation_capability_state = fields.Char(readonly=True)
+    knowledge_capability_state = fields.Char(readonly=True)
+    how_to_capability_state = fields.Char(readonly=True)
     source_result = fields.Text(readonly=True)
     log_result = fields.Text(readonly=True)
 
@@ -207,6 +211,10 @@ class AssistantDiagnostics(models.TransientModel):
             "reasoning_setup_message": _(
                 "Configure and test the Codex runtime from the Assistant setup boundary."
             ),
+            "query_capability_state": unknown,
+            "navigation_capability_state": unknown,
+            "knowledge_capability_state": unknown,
+            "how_to_capability_state": unknown,
             "source_result": False,
             "log_result": False,
         }
@@ -225,6 +233,11 @@ class AssistantDiagnostics(models.TransientModel):
         source = components.get("source", {})
         logs = components.get("logs", {})
         reasoning = components.get("reasoning_engine", {})
+        workflows = (
+            status.get("workflow_capabilities")
+            if isinstance(status.get("workflow_capabilities"), dict)
+            else {}
+        )
         try:
             source_status = client.source_status()
         except AssistantServiceError:
@@ -254,8 +267,35 @@ class AssistantDiagnostics(models.TransientModel):
             reasoning_setup_message=self._reasoning_setup_message(
                 reasoning.get("detail")
             ),
+            query_capability_state=self._capability_label(workflows.get("query")),
+            navigation_capability_state=self._capability_label(
+                workflows.get("navigation")
+            ),
+            knowledge_capability_state=self._capability_label(
+                workflows.get("knowledge")
+            ),
+            how_to_capability_state=self._capability_label(workflows.get("how_to")),
         )
         return values
+
+    @api.model
+    def _capability_label(self, value):
+        if not isinstance(value, dict):
+            return _("Unknown")
+        state = value.get("state")
+        detail = value.get("detail")
+        allowed_states = {"ok", "pending", "error"}
+        allowed_details = {
+            "assistant_runtime_unavailable",
+            "available",
+            "instance_unknown",
+            "knowledge_unavailable",
+            "reasoning_unavailable",
+            "validated_per_turn",
+        }
+        if state not in allowed_states or detail not in allowed_details:
+            return _("Unknown")
+        return f"{state} - {detail}"
 
     @api.model
     def _reasoning_setup_message(self, detail):

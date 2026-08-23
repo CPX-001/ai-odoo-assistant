@@ -275,8 +275,17 @@ class TestAssistantBridge(TransactionCase):
         self.assertTrue(result.get("ok"), result)
         self.assertEqual(
             set(result),
-            {"answer", "citations", "confidence", "limitations", "ok", "turn_id"},
+            {
+                "answer",
+                "citations",
+                "confidence",
+                "limitations",
+                "ok",
+                "turn_id",
+                "workflow",
+            },
         )
+        self.assertEqual(result["workflow"], "EXPLAIN")
         self.assertEqual(result["citations"][0]["kind"], "record")
         self.assertEqual(result["citations"][1]["kind"], "source")
         serialized = repr(result)
@@ -337,6 +346,37 @@ class TestAssistantBridge(TransactionCase):
         self.assertNotIn("records", result)
         self.assertNotIn("groups", result)
         self.assertNotIn(client.payload["delegation_token"], repr(result))
+
+    def test_explicit_router_selects_query_before_authority_is_prepared(self):
+        client = FakeContextReadClient()
+        bridge = self.env(user=self.user.id, su=False)["odoo.ai.assistant.bridge"]
+        with (
+            patch.dict(
+                os.environ,
+                {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
+            ),
+            patch.object(type(bridge), "_client", return_value=client),
+        ):
+            result = bridge.submit_turn("¿Cuántos?", self._screen(), "QUERY")
+
+        self.assertTrue(result.get("ok"), result)
+        self.assertEqual(result["workflow"], "QUERY")
+        claims = QueryDelegationCodec(SECRET).decode(client.payload["delegation_token"])
+        self.assertEqual(claims.scopes, ("query_schema", "query_records", "aggregate_records"))
+
+    def test_explicit_router_rejects_unknown_workflow_before_client_creation(self):
+        bridge = self.env(user=self.user.id, su=False)["odoo.ai.assistant.bridge"]
+        with patch.object(
+            type(bridge),
+            "_client",
+            side_effect=AssertionError("client must not be constructed"),
+        ):
+            result = bridge.submit_turn("Hazlo", self._screen(), "ACTION")
+
+        self.assertEqual(
+            result,
+            {"error": {"code": "invalid_workflow"}, "ok": False},
+        )
 
     def test_how_to_uses_metadata_only_authority_and_browser_safe_citations(self):
         client = FakeContextReadClient()

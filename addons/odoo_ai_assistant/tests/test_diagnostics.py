@@ -27,6 +27,12 @@ class FakeHealthyClient:
                     "model": None,
                 },
             },
+            "workflow_capabilities": {
+                "query": {"state": "pending", "detail": "reasoning_unavailable"},
+                "navigation": {"state": "ok", "detail": "validated_per_turn"},
+                "knowledge": {"state": "pending", "detail": "instance_unknown"},
+                "how_to": {"state": "pending", "detail": "reasoning_unavailable"},
+            },
             "instance": None,
         }
 
@@ -103,6 +109,22 @@ class TestAssistantDiagnostics(TransactionCase):
         self.assertEqual(values["reasoning_provider"], "codex")
         self.assertEqual(values["reasoning_runtime_version"], "0.149.0")
         self.assertIn("Authenticate Codex", values["reasoning_setup_message"])
+        self.assertEqual(
+            values["query_capability_state"],
+            "pending - reasoning_unavailable",
+        )
+        self.assertEqual(
+            values["navigation_capability_state"],
+            "ok - validated_per_turn",
+        )
+        self.assertEqual(
+            values["knowledge_capability_state"],
+            "pending - instance_unknown",
+        )
+        self.assertEqual(
+            values["how_to_capability_state"],
+            "pending - reasoning_unavailable",
+        )
         self.assertNotIn("CODEX_HOME", values["reasoning_setup_message"])
 
     def test_service_failure_is_sanitized(self):

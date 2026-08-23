@@ -36,8 +36,11 @@ export class AssistantPanel extends Component {
 
     get contextLabel() {
         const context = this.state.context;
-        if (!context?.model || !context?.res_id) {
-            return _t("No hay un registro abierto en esta pantalla.");
+        if (!context?.model) {
+            return _t("No hay un modelo activo en esta pantalla.");
+        }
+        if (!context.res_id) {
+            return context.model;
         }
         return `${context.model} #${context.res_id}`;
     }
@@ -61,6 +64,11 @@ export class AssistantPanel extends Component {
                 "Abre un registro guardado para poder explicar su contexto."
             ),
             invalid_response: _t("El Assistant Service devolvió una respuesta no válida."),
+            invalid_workflow: _t("Elige uno de los flujos de lectura disponibles."),
+            query_budget_exceeded: _t("La consulta superó los límites seguros del turno."),
+            query_rejected: _t(
+                "La consulta solicitada no está permitida por el esquema efectivo."
+            ),
             service_unavailable: _t("El Assistant Service no está disponible."),
         };
         return messages[this.state.errorCode] || "";
@@ -73,6 +81,28 @@ export class AssistantPanel extends Component {
             low: _t("Confianza baja"),
         };
         return labels[this.state.result?.confidence] || "";
+    }
+
+    get workflowDescription() {
+        const descriptions = {
+            EXPLAIN: _t("Explica el registro abierto con evidencia de runtime y source."),
+            QUERY: _t(
+                "Consulta el modelo actual mediante ORM acotado y permisos efectivos."
+            ),
+            HOW_TO: _t(
+                "Construye una guía con menús, schema y documentación comprobados."
+            ),
+        };
+        return descriptions[this.state.workflow] || "";
+    }
+
+    get questionPlaceholder() {
+        const placeholders = {
+            EXPLAIN: _t("¿Por qué ocurre esto en el registro abierto?"),
+            QUERY: _t("¿Cuántos registros abiertos puedo ver?"),
+            HOW_TO: _t("¿Cómo realizo esta tarea en esta instalación?"),
+        };
+        return placeholders[this.state.workflow] || _t("Escribe una pregunta");
     }
 
     closePanel() {

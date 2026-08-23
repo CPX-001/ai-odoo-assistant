@@ -69,6 +69,17 @@ class RuntimeComponents(BaseModel):
     reasoning_engine: ReasoningComponentStatus
 
 
+class WorkflowCapabilities(BaseModel):
+    """M5 workflow diagnostics that do not redefine global readiness."""
+
+    model_config = ConfigDict(frozen=True)
+
+    query: ComponentStatus
+    navigation: ComponentStatus
+    knowledge: ComponentStatus
+    how_to: ComponentStatus
+
+
 class AdminStatus(BaseModel):
     """Stable, sanitized readiness payload for Odoo Diagnostics."""
 
@@ -77,6 +88,7 @@ class AdminStatus(BaseModel):
     readiness: Literal["FULLY_READY", "DEGRADED", "ERROR"]
     checked_at: datetime
     components: RuntimeComponents
+    workflow_capabilities: WorkflowCapabilities
     pending_capabilities: tuple[str, ...]
     instance: InstanceStatus | None = None
 
@@ -147,6 +159,12 @@ class AdminStatusService:
             and logs.state is ComponentState.OK
             and reasoning_status.state is ComponentState.OK
         )
+        workflow_capabilities = self._workflow_capabilities(
+            database=database,
+            migrations=migrations,
+            instance=instance,
+            reasoning=reasoning_status,
+        )
         return AdminStatus(
             readiness="ERROR" if has_error else "FULLY_READY" if fully_ready else "DEGRADED",
             checked_at=datetime.now(UTC),
@@ -158,6 +176,7 @@ class AdminStatusService:
                 logs=logs,
                 reasoning_engine=reasoning_status,
             ),
+            workflow_capabilities=workflow_capabilities,
             pending_capabilities=pending_capabilities,
             instance=instance,
         )
@@ -229,10 +248,87 @@ class AdminStatusService:
             return ComponentStatus(state=ComponentState.ERROR, detail="error")
         return ComponentStatus(state=ComponentState.PENDING, detail="unknown")
 
+    @staticmethod
+    def _workflow_capabilities(
+        *,
+        database: ComponentStatus,
+        migrations: MigrationStatus,
+        instance: InstanceStatus | None,
+        reasoning: ReasoningComponentStatus,
+    ) -> WorkflowCapabilities:
+        if (
+            database.state is not ComponentState.OK
+            or migrations.state is not ComponentState.OK
+        ):
+            unavailable = ComponentStatus(
+                state=ComponentState.ERROR,
+                detail="assistant_runtime_unavailable",
+            )
+            return WorkflowCapabilities(
+                query=unavailable,
+                navigation=unavailable,
+                knowledge=unavailable,
+                how_to=unavailable,
+            )
+
+        navigation = ComponentStatus(
+            state=ComponentState.OK,
+            detail="validated_per_turn",
+        )
+        knowledge = ComponentStatus(
+            state=(
+                ComponentState.OK
+                if instance is not None
+                else ComponentState.PENDING
+            ),
+            detail="available" if instance is not None else "instance_unknown",
+        )
+        query = ComponentStatus(
+            state=(
+                ComponentState.OK
+                if reasoning.state is ComponentState.OK
+                else ComponentState.PENDING
+            ),
+            detail=(
+                "validated_per_turn"
+                if reasoning.state is ComponentState.OK
+                else "reasoning_unavailable"
+            ),
+        )
+        how_to_ready = (
+            reasoning.state is ComponentState.OK
+            and knowledge.state is ComponentState.OK
+        )
+        return WorkflowCapabilities(
+            query=query,
+            navigation=navigation,
+            knowledge=knowledge,
+            how_to=ComponentStatus(
+                state=(
+                    ComponentState.OK
+                    if how_to_ready
+                    else ComponentState.PENDING
+                ),
+                detail=(
+                    "validated_per_turn"
+                    if how_to_ready
+                    else (
+                        "reasoning_unavailable"
+                        if reasoning.state is not ComponentState.OK
+                        else "knowledge_unavailable"
+                    )
+                ),
+            ),
+        )
+
 
 def unavailable_admin_status() -> AdminStatus:
     """Return a sanitized status when external configuration cannot be loaded."""
 
+    unavailable = ComponentStatus(
+        state=ComponentState.ERROR,
+        detail="assistant_runtime_unavailable",
+    )
     return AdminStatus(
         readiness="ERROR",
         checked_at=datetime.now(UTC),
@@ -248,6 +344,12 @@ def unavailable_admin_status() -> AdminStatus:
                 state=ComponentState.PENDING,
                 detail="unknown",
             ),
+        ),
+        workflow_capabilities=WorkflowCapabilities(
+            query=unavailable,
+            navigation=unavailable,
+            knowledge=unavailable,
+            how_to=unavailable,
         ),
         pending_capabilities=AdminStatusService._PENDING_CAPABILITIES,
     )

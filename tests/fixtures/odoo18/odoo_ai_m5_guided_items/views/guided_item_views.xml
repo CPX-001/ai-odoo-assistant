@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_m5_guided_item_list" model="ir.ui.view">
+        <field name="name">odoo.ai.m5.guided.item.list</field>
+        <field name="model">odoo.ai.m5.guided.item</field>
+        <field name="arch" type="xml">
+            <list create="0" edit="0" delete="0">
+                <field name="name"/>
+                <field name="state"/>
+                <field name="guide_code"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_m5_guided_item_form" model="ir.ui.view">
+        <field name="name">odoo.ai.m5.guided.item.form</field>
+        <field name="model">odoo.ai.m5.guided.item</field>
+        <field name="arch" type="xml">
+            <form create="0" edit="0" delete="0">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="state"/>
+                        <field name="guide_code"/>
+                        <field name="owner_id"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_m5_guided_items" model="ir.actions.act_window">
+        <field name="name">Guided Items</field>
+        <field name="res_model">odoo.ai.m5.guided.item</field>
+        <field name="view_mode">list,form</field>
+    </record>
+    <menuitem id="menu_m5_guided_root" name="M5 Guidance" sequence="95" groups="base.group_user"/>
+    <menuitem id="menu_m5_guided_items" name="Guided Items" parent="menu_m5_guided_root" action="action_m5_guided_items" sequence="10" groups="base.group_user"/>
+</odoo>

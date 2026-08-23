@@ -1,6 +1,12 @@
 # HOW_TO read-only workflow
 
-M5-07 adds a dedicated `HOW_TO` turn for installation-aware guidance. The browser calls only Odoo (`/odoo_ai/v1/how-to`); Odoo derives the effective user, companies and database, signs a short-lived delegation, and calls the Assistant Service (`/v1/turns/how-to`). The browser never receives the delegation token, shared secret, internal endpoint, physical knowledge path, raw action payload or raw Evidence.
+M5-07 adds a dedicated `HOW_TO` turn for installation-aware guidance. M5-08
+routes the integrated panel through Odoo (`/odoo_ai/v1/turn`) after an explicit
+`HOW_TO` selection; the dedicated `/odoo_ai/v1/how-to` route remains compatible.
+Odoo derives the effective user, companies and database, signs a short-lived
+delegation, and calls the Assistant Service (`/v1/turns/how-to`). The browser
+never receives the delegation token, shared secret, internal endpoint, physical
+knowledge path, raw action payload or raw Evidence.
 
 ## Authority and registry
 
@@ -52,4 +58,8 @@ If `Sales > Orders` is not visible for that user, the service does not return th
 
 ## Scope boundary
 
-HOW_TO remains read-only. It does not execute steps, query business records, fetch the web, persist conversation state, preview writes, request approvals or perform actions. Multi-workflow panel routing and hardening beyond this dedicated path belong to M5-08.
+HOW_TO remains read-only. It does not execute steps, query business records,
+fetch the web, persist conversation state, preview writes, request approvals or
+perform actions. The integrated routing, registries, browser response and
+hardening are documented in
+[`M5_ROUTING_SECURITY.md`](M5_ROUTING_SECURITY.md).

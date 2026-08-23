@@ -14,7 +14,7 @@ def test_browser_assets_use_only_the_authenticated_odoo_bridge() -> None:
     assert '"web"' in manifest
     assert '"web.assets_backend"' in manifest
     assert '"web.assets_unit_tests"' in manifest
-    assert 'rpcCall("/odoo_ai/v1/explain"' in static_text
+    assert 'rpcCall("/odoo_ai/v1/turn"' in static_text
     assert "orm.call(" not in static_text
     assert "fetch(" not in static_text
     assert "127.0.0.1" not in static_text
@@ -35,6 +35,7 @@ def test_browser_assets_use_only_the_authenticated_odoo_bridge() -> None:
     assert "/odoo_ai/v1/explain" in browser_controller
     assert "/odoo_ai/v1/query" in browser_controller
     assert "/odoo_ai/v1/how-to" in browser_controller
+    assert "/odoo_ai/v1/turn" in browser_controller
     assert '"uid"' not in browser_controller
 
 
@@ -79,6 +80,7 @@ def test_browser_bridge_derives_server_context_and_returns_a_sanitized_shape() -
     assert "prepare_context_turn(" in bridge
     assert "prepare_query_turn(" in bridge
     assert "prepare_how_to_turn(" in bridge
+    assert "ALLOWED_WORKFLOWS" in bridge
     assert "env=self.env" in bridge
     assert "prepared.to_assistant_payload()" in bridge
     assert "prepared.delegation_token" in bridge

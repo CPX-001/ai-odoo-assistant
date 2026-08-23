@@ -366,6 +366,7 @@ def _query_failure(error: Exception) -> tuple[str, int]:
         return "engine_timeout", 504
     if code.startswith("query_") or code in {
         "aggregate_not_allowed",
+        "codex_proposed_action_not_allowed",
         "field_not_in_schema",
         "field_not_groupable",
         "field_not_sortable",

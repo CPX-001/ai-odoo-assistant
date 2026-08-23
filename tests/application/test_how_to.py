@@ -138,6 +138,15 @@ class FakeGateway:
         raise AssertionError("HOW_TO must not read records")
 
 
+class AccessDeniedError(RuntimeError):
+    code = "access_denied"
+
+
+class DeniedGateway(FakeGateway):
+    async def get_navigation(self) -> NavigationSnapshot:
+        raise AccessDeniedError
+
+
 class FakeGatewayFactory:
     def __init__(self, gateway: FakeGateway) -> None:
         self.gateway = gateway
@@ -257,6 +266,22 @@ def test_how_to_combines_visible_menu_schema_and_current_document() -> None:
         "knowledge.read_excerpt",
     ]
     assert all("query" not in tool.name for tool in engine.tools)
+
+
+def test_acl_denial_stops_before_reasoning_receives_any_registry() -> None:
+    engine = StubEngine(
+        lambda context: AnswerEnvelope(
+            answer_markdown="Must not run.",
+            workflow=Workflow.HOW_TO,
+            confidence=AnswerConfidence.LOW,
+        )
+    )
+
+    with pytest.raises(HowToTurnError, match="access_denied"):
+        asyncio.run(_service(DeniedGateway(), engine).run(_request()))
+
+    assert engine.context is None
+    assert engine.tools is None
 
 
 def test_missing_installation_menu_replaces_an_invented_route_with_a_limitation() -> None:

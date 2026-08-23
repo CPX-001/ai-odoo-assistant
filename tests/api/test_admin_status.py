@@ -103,6 +103,12 @@ def test_admin_status_reports_runtime_db_migrations_and_profile(
         "runtime_version": None,
         "model": None,
     }
+    assert payload["workflow_capabilities"] == {
+        "query": {"state": "pending", "detail": "reasoning_unavailable"},
+        "navigation": {"state": "ok", "detail": "validated_per_turn"},
+        "knowledge": {"state": "ok", "detail": "available"},
+        "how_to": {"state": "pending", "detail": "reasoning_unavailable"},
+    }
 
 
 def test_all_required_capabilities_produce_fully_ready_sanitized_snapshot(
@@ -144,6 +150,10 @@ def test_all_required_capabilities_produce_fully_ready_sanitized_snapshot(
     assert status.instance is not None
     assert status.instance.reported_readiness == "FULLY_READY"
     assert status.instance.capabilities["reasoning_engine"] == "OPERATIONAL"
+    assert status.workflow_capabilities.query.state is ComponentState.OK
+    assert status.workflow_capabilities.navigation.state is ComponentState.OK
+    assert status.workflow_capabilities.knowledge.state is ComponentState.OK
+    assert status.workflow_capabilities.how_to.state is ComponentState.OK
     assert "/srv/private" not in serialized
     assert "canary-secret" not in serialized
 

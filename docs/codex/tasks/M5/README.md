@@ -1,6 +1,6 @@
 # M5 — QUERY + HOW_TO + RAG
 
-Estado: **M5-01 a M5-07 implementadas y verificadas; M5-08 es la siguiente task.**
+Estado: **M5-01..M5-10 implementadas y verificadas; M5 GATE: PASS.**
 
 M5 empieza únicamente después de **M4 GATE: PASS**. Su objetivo es ampliar el vertical slice de sólo lectura para que el asistente pueda:
 
@@ -69,7 +69,7 @@ panel muestra guía + citas sin inventar menús/campos ausentes
 9. [`M5-09-real-e2e-query-how-to.md`](M5-09-real-e2e-query-how-to.md) — E2E real de QUERY y HOW_TO con Codex/Odoo 18.
 10. [`M5-10-gate.md`](M5-10-gate.md) — gate integral y cierre de M5.
 
-Ejecutar **una sola task cada vez** y no avanzar automáticamente a la siguiente sin verificar sus acceptance criteria.
+Los packets se ejecutaron en orden y M5 quedó cerrado sin avanzar a M6.
 
 ## Invariantes de M5
 

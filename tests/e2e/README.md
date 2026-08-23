@@ -75,3 +75,22 @@ M4_POSTGRES_ADMIN_DSN=postgresql://gate-admin@127.0.0.1:5432/postgres \
 The PostgreSQL identity must be allowed to create/drop the runner's randomized
 databases and roles. Use only a disposable cluster. The runner never deletes a
 pre-existing database or role name.
+
+## M5 real QUERY + HOW_TO acceptance
+
+`run_m5_query_how_to_codex.py` creates its own Odoo/Assistant databases and
+roles, installs a test-only model with an owner record rule, ingests a temporary
+knowledge document, and demonstrates QUERY/HOW_TO with real Codex and Chromium.
+It also checks a second user, write rejection, retired knowledge, missing Codex,
+browser isolation, canaries, DB separation and cleanup.
+
+Required runtime variables mirror M4 and remain deployment inputs rather than
+product assumptions:
+
+```text
+M5_ODOO_PYTHON M5_ODOO_BIN M5_ODOO_CORE_ADDONS
+M5_CODEX_EXECUTABLE M5_PLAYWRIGHT_ROOT M5_NODE
+M5_POSTGRES_ADMIN_DSN
+```
+
+`M5_CODEX_MODEL` is optional; the reproducible gate default is `gpt-5.4`.

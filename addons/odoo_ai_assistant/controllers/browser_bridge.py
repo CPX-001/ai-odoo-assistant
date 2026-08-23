@@ -9,10 +9,24 @@ BROWSER_CONTEXT_READ_ROUTE: Final = "/odoo_ai/v1/context-read"
 BROWSER_EXPLAIN_ROUTE: Final = "/odoo_ai/v1/explain"
 BROWSER_QUERY_ROUTE: Final = "/odoo_ai/v1/query"
 BROWSER_HOW_TO_ROUTE: Final = "/odoo_ai/v1/how-to"
+BROWSER_TURN_ROUTE: Final = "/odoo_ai/v1/turn"
 
 
 class BrowserAssistantController(http.Controller):
     """Accept navigation hints while deriving all authority from the session."""
+
+    @http.route(
+        BROWSER_TURN_ROUTE,
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def turn(self, message=None, screen=None, workflow=None, **unexpected):
+        if unexpected:
+            return {"error": {"code": "invalid_context"}, "ok": False}
+        return request.env["odoo.ai.assistant.bridge"].submit_turn(
+            message, screen, workflow
+        )
 
     @http.route(
         BROWSER_CONTEXT_READ_ROUTE,

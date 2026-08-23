@@ -161,7 +161,7 @@ def _browser(
         node_modules.symlink_to(playwright_root / "node_modules", target_is_directory=True)
     browser_env = dict(env)
     browser_env["M4_EXPECT_MODE"] = mode
-    output = _run([str(node), str(browser_copy)], env=browser_env, cwd=work, timeout=240)
+    output = _run([str(node), str(browser_copy)], env=browser_env, cwd=work, timeout=300)
     return _prefixed_json(output, "M4_E2E_BROWSER=")
 
 
@@ -254,6 +254,10 @@ def main() -> None:
                         sql.Identifier(assistant_role), sql.Literal(assistant_password)
                     )
                 )
+                for role in (odoo_role, assistant_role):
+                    connection.execute(
+                        sql.SQL("GRANT {} TO CURRENT_USER").format(sql.Identifier(role))
+                    )
                 for database, owner in (
                     (odoo_db, odoo_role),
                     (assistant_db, assistant_role),

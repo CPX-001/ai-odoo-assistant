@@ -2,44 +2,34 @@
 <templates xml:space="preserve">
     <t t-name="odoo_ai_assistant.AssistantSystray">
         <div class="o_ai_assistant_systray d-flex">
-            <button
-                type="button"
-                class="o_nav_entry border-0 px-3"
-                title="AI Assistant"
-                aria-label="Abrir AI Assistant"
-                t-att-aria-expanded="state.isOpen ? 'true' : 'false'"
-                t-on-click="togglePanel"
-            >
+            <button type="button" class="o_nav_entry border-0 px-3" title="AI Assistant"
+                aria-label="Abrir AI Assistant" t-att-aria-expanded="state.isOpen ? 'true' : 'false'"
+                t-on-click="togglePanel">
                 <i class="fa fa-magic" aria-hidden="true"/>
             </button>
         </div>
     </t>
 
     <t t-name="odoo_ai_assistant.AssistantPanel">
-        <aside
-            t-if="state.isOpen"
+        <aside t-if="state.isOpen"
             class="o_ai_assistant_panel position-fixed end-0 bottom-0 bg-body border-start shadow d-flex flex-column"
-            aria-label="AI Assistant"
-        >
+            aria-label="AI Assistant">
             <header class="d-flex align-items-center justify-content-between border-bottom px-3 py-2">
                 <div>
                     <h2 class="h5 mb-0">AI Assistant</h2>
-                    <small class="text-muted">Explicación contextual con evidencia</small>
+                    <small class="text-muted">Asistente de solo lectura con evidencia</small>
                 </div>
-                <button
-                    type="button"
-                    class="btn btn-link text-body"
-                    aria-label="Cerrar AI Assistant"
-                    title="Cerrar"
-                    t-on-click="closePanel"
-                >
+                <button type="button" class="btn btn-link text-body"
+                    aria-label="Cerrar AI Assistant" title="Cerrar" t-on-click="closePanel">
                     <i class="fa fa-times" aria-hidden="true"/>
                 </button>
             </header>
 
             <div class="flex-grow-1 overflow-auto p-3">
                 <section class="alert alert-light border" aria-live="polite">
-                    <div class="small text-uppercase text-muted fw-bold mb-1">Contexto detectado</div>
+                    <div class="small text-uppercase text-muted fw-bold mb-1">
+                        Contexto detectado
+                    </div>
                     <div class="font-monospace text-break" t-esc="contextLabel"/>
                 </section>
 
@@ -49,7 +39,7 @@
 
                 <section t-if="state.result" class="o_ai_assistant_result" aria-live="polite">
                     <div class="d-flex align-items-center justify-content-between mb-2">
-                        <h3 class="h6 mb-0">Respuesta</h3>
+                        <h3 class="h6 mb-0"><t t-esc="state.result.workflow"/></h3>
                         <span class="badge text-bg-light border" t-esc="confidenceLabel"/>
                     </div>
                     <p class="o_ai_assistant_answer text-break" t-esc="state.result.answer"/>
@@ -57,42 +47,89 @@
                     <section t-if="state.result.limitations.length" class="mt-3">
                         <h4 class="small text-uppercase text-muted fw-bold">Limitaciones</h4>
                         <ul class="small mb-0">
-                            <li
-                                t-foreach="state.result.limitations"
-                                t-as="limitation"
-                                t-key="limitation_index"
-                                t-esc="limitation"
-                            />
+                            <li t-foreach="state.result.limitations" t-as="limitation"
+                                t-key="limitation_index" t-esc="limitation"/>
                         </ul>
                     </section>
 
                     <section t-if="state.result.citations.length" class="mt-3">
                         <h4 class="small text-uppercase text-muted fw-bold">Evidencia</h4>
                         <div class="d-flex flex-column gap-2">
-                            <details
-                                t-foreach="state.result.citations"
-                                t-as="citation"
+                            <details t-foreach="state.result.citations" t-as="citation"
                                 t-key="citation.evidence_id"
-                                class="o_ai_assistant_citation border rounded p-2"
-                            >
+                                class="o_ai_assistant_citation border rounded p-2">
                                 <summary class="small fw-bold">
                                     <t t-if="citation.kind === 'record'">
                                         Registro: <t t-esc="citation.display_name || citation.model"/>
                                     </t>
-                                    <t t-else="">
+                                    <t t-elif="citation.kind === 'source'">
                                         Source: <t t-esc="citation.module"/>
                                     </t>
+                                    <t t-elif="citation.kind === 'query'">
+                                        Consulta: <t t-esc="citation.model"/>
+                                    </t>
+                                    <t t-elif="citation.kind === 'navigation'">
+                                        Menú: <t t-esc="citation.path.join(' > ')"/>
+                                    </t>
+                                    <t t-elif="citation.kind === 'schema'">
+                                        Schema: <t t-esc="citation.model"/>
+                                    </t>
+                                    <t t-elif="citation.kind === 'document'">
+                                        Documento: <t t-esc="citation.title"/>
+                                    </t>
                                 </summary>
-                                <div t-if="citation.kind === 'record'" class="small mt-2 text-break">
+
+                                <div t-if="citation.kind === 'record'"
+                                    class="small mt-2 text-break">
                                     <span class="font-monospace" t-esc="citation.model"/>
                                     <span> #</span><span t-esc="citation.id"/>
                                 </div>
-                                <div t-else="" class="small mt-2 text-break">
+                                <div t-elif="citation.kind === 'source'"
+                                    class="small mt-2 text-break">
                                     <div class="font-monospace" t-esc="citation.logical_path"/>
                                     <div>
                                         Líneas <t t-esc="citation.start_line"/>-<t t-esc="citation.end_line"/>
                                     </div>
-                                    <div class="text-muted font-monospace" t-esc="citation.fingerprint"/>
+                                    <div class="text-muted font-monospace"
+                                        t-esc="citation.fingerprint"/>
+                                </div>
+                                <div t-elif="citation.kind === 'query'"
+                                    class="small mt-2 text-break">
+                                    <div>
+                                        <t t-esc="citation.operation"/>:
+                                        <t t-esc="citation.returned_count"/> resultado(s)
+                                    </div>
+                                    <div t-if="citation.empty" class="text-muted">
+                                        Resultado vacío comprobado
+                                    </div>
+                                    <div t-if="citation.truncated" class="text-warning">
+                                        Resultado limitado
+                                    </div>
+                                </div>
+                                <div t-elif="citation.kind === 'navigation'"
+                                    class="small mt-2 text-break">
+                                    <div t-esc="citation.path.join(' > ')"/>
+                                    <div class="text-muted"
+                                        t-esc="citation.view_modes.join(', ')"/>
+                                </div>
+                                <div t-elif="citation.kind === 'schema'"
+                                    class="small mt-2 text-break">
+                                    <div t-foreach="citation.fields" t-as="field"
+                                        t-key="field.name">
+                                        <span class="font-monospace" t-esc="field.name"/>
+                                        <span> - </span>
+                                        <span t-esc="field.label || field.field_type"/>
+                                    </div>
+                                </div>
+                                <div t-elif="citation.kind === 'document'"
+                                    class="small mt-2 text-break">
+                                    <div>
+                                        <t t-esc="citation.document_id"/>
+                                        <span> · líneas </span>
+                                        <t t-esc="citation.start_line"/>-<t t-esc="citation.end_line"/>
+                                    </div>
+                                    <div class="text-muted font-monospace"
+                                        t-esc="citation.fingerprint"/>
                                 </div>
                             </details>
                         </div>
@@ -101,31 +138,29 @@
             </div>
 
             <form class="border-top p-3" t-on-submit.prevent="submit">
-                <label class="form-label fw-bold" for="o_ai_assistant_question">Pregunta</label>
-                <textarea
-                    id="o_ai_assistant_question"
-                    class="form-control mb-2"
-                    rows="3"
-                    maxlength="4000"
-                    placeholder="Pregunta sobre el registro abierto"
-                    t-model="form.question"
-                    t-att-disabled="state.loading"
-                />
-                <button
-                    type="submit"
-                    class="btn btn-primary w-100"
-                    t-att-disabled="state.loading or !form.question.trim()"
-                >
-                    <i
-                        t-if="state.loading"
-                        class="fa fa-spinner fa-spin me-1"
-                        aria-hidden="true"
-                    />
+                <label class="form-label fw-bold"
+                    for="o_ai_assistant_workflow">Flujo</label>
+                <select id="o_ai_assistant_workflow" class="form-select mb-1"
+                    t-model="state.workflow" t-att-disabled="state.loading">
+                    <option value="EXPLAIN">Explicar</option>
+                    <option value="QUERY">Consultar</option>
+                    <option value="HOW_TO">Cómo hacerlo</option>
+                </select>
+                <p class="small text-muted mb-2" t-esc="workflowDescription"/>
+                <label class="form-label fw-bold"
+                    for="o_ai_assistant_question">Pregunta</label>
+                <textarea id="o_ai_assistant_question" class="form-control mb-2"
+                    rows="3" maxlength="4000" t-att-placeholder="questionPlaceholder"
+                    t-model="form.question" t-att-disabled="state.loading"/>
+                <button type="submit" class="btn btn-primary w-100"
+                    t-att-disabled="state.loading or !form.question.trim()">
+                    <i t-if="state.loading" class="fa fa-spinner fa-spin me-1"
+                        aria-hidden="true"/>
                     <t t-if="state.loading">Analizando...</t>
                     <t t-else="">Enviar</t>
                 </button>
                 <p class="small text-muted mb-0 mt-2">
-                    El registro se relee con tus permisos y las citas proceden de evidencia comprobada.
+                    Odoo valida identidad y permisos; el flujo sólo recibe sus tools mínimas.
                 </p>
             </form>
         </aside>
