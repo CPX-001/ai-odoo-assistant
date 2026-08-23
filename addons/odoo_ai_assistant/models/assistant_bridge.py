@@ -44,9 +44,7 @@ EXPECTED_RESPONSE_KEYS: Final = frozenset(
         "turn_id",
     }
 )
-ALLOWED_FIELDS: Final = frozenset(
-    {"display_name", "name", "state", "company_id"}
-)
+ALLOWED_FIELDS: Final = frozenset({"display_name", "name", "state", "company_id"})
 EXPECTED_EXPLAIN_RESPONSE_KEYS: Final = frozenset(
     {
         "answer_markdown",
@@ -342,7 +340,10 @@ def _browser_response(response, prepared):
 
 
 def _browser_explain_response(response, prepared):
-    if not isinstance(response, dict) or set(response) != EXPECTED_EXPLAIN_RESPONSE_KEYS:
+    if (
+        not isinstance(response, dict)
+        or set(response) != EXPECTED_EXPLAIN_RESPONSE_KEYS
+    ):
         raise AssistantServiceError("invalid_response")
     answer = response.get("answer_markdown")
     limitations = response.get("limitations")
@@ -525,6 +526,10 @@ def _browser_action_response(response, prepared):
 
 
 def _browser_action_proposal(proposal, prepared, references):
+    if isinstance(proposal, dict) and proposal.get("action_kind") == "record_create":
+        return _browser_action_create_proposal(proposal, prepared, references)
+    if isinstance(proposal, dict) and proposal.get("action_kind") == "business_action":
+        return _browser_business_action_proposal(proposal, prepared, references)
     expected = {
         "changes",
         "evidence_id",
@@ -547,8 +552,7 @@ def _browser_action_proposal(proposal, prepared, references):
         or not isinstance(proposal.get("payload_fingerprint"), str)
         or _ACTION_FINGERPRINT.fullmatch(proposal["payload_fingerprint"]) is None
         or not isinstance(proposal.get("precondition_fingerprint"), str)
-        or _ACTION_FINGERPRINT.fullmatch(proposal["precondition_fingerprint"])
-        is None
+        or _ACTION_FINGERPRINT.fullmatch(proposal["precondition_fingerprint"]) is None
         or not _uuid(proposal.get("evidence_id"))
         or proposal["evidence_id"] not in references
         or not isinstance(proposal.get("expires_at"), str)
@@ -561,16 +565,14 @@ def _browser_action_proposal(proposal, prepared, references):
         or not isinstance(warnings, list)
         or len(warnings) > 8
         or any(
-            not _bounded_text(value, 512, require_nonempty=True)
-            for value in warnings
+            not _bounded_text(value, 512, require_nonempty=True) for value in warnings
         )
     ):
         raise AssistantServiceError("invalid_response")
     sanitized_changes = [_browser_action_change(value) for value in changes]
     fields = [value["field"] for value in sanitized_changes]
-    if (
-        len(fields) != len(set(fields))
-        or not set(fields).issubset(prepared.allowed_fields)
+    if len(fields) != len(set(fields)) or not set(fields).issubset(
+        prepared.allowed_fields
     ):
         raise AssistantServiceError("invalid_response")
     return {
@@ -579,6 +581,138 @@ def _browser_action_proposal(proposal, prepared, references):
         "changes": sanitized_changes,
         "warnings": list(warnings),
         "expires_at": proposal["expires_at"],
+    }
+
+
+def _browser_action_create_proposal(proposal, prepared, references):
+    expected = {
+        "action_kind",
+        "evidence_id",
+        "expires_at",
+        "payload_fingerprint",
+        "precondition_fingerprint",
+        "proposal_id",
+        "target",
+        "turn_id",
+        "values",
+        "warnings",
+    }
+    target = proposal.get("target")
+    values = proposal.get("values")
+    warnings = proposal.get("warnings")
+    if (
+        not isinstance(proposal, dict)
+        or set(proposal) != expected
+        or proposal.get("action_kind") != "record_create"
+        or not _uuid(proposal.get("proposal_id"))
+        or proposal.get("turn_id") != str(prepared.turn_id)
+        or not isinstance(proposal.get("payload_fingerprint"), str)
+        or _ACTION_FINGERPRINT.fullmatch(proposal["payload_fingerprint"]) is None
+        or not isinstance(proposal.get("precondition_fingerprint"), str)
+        or _ACTION_FINGERPRINT.fullmatch(proposal["precondition_fingerprint"]) is None
+        or not _uuid(proposal.get("evidence_id"))
+        or proposal["evidence_id"] not in references
+        or not isinstance(proposal.get("expires_at"), str)
+        or not isinstance(target, dict)
+        or set(target) != {"model"}
+        or target.get("model") != prepared.screen.model
+        or not isinstance(values, list)
+        or not 1 <= len(values) <= 4
+        or not isinstance(warnings, list)
+        or len(warnings) > 8
+        or any(
+            not _bounded_text(value, 512, require_nonempty=True) for value in warnings
+        )
+    ):
+        raise AssistantServiceError("invalid_response")
+    sanitized_values = []
+    fields = set()
+    for value in values:
+        if (
+            not isinstance(value, dict)
+            or set(value) != {"field", "label", "value"}
+            or not _identifier(value.get("field"), 128)
+            or value.get("label") is not None
+            and not _identifier(value.get("label"), 256)
+            or value["field"] in fields
+        ):
+            raise AssistantServiceError("invalid_response")
+        fields.add(value["field"])
+        sanitized_values.append(
+            {
+                "field": value["field"],
+                "label": value["label"],
+                "value": _browser_action_value(value.get("value")),
+            }
+        )
+    if not fields.issubset(prepared.allowed_fields):
+        raise AssistantServiceError("invalid_response")
+    return {
+        "action_kind": "record_create",
+        "proposal_id": proposal["proposal_id"],
+        "target": dict(target),
+        "values": sanitized_values,
+        "warnings": list(warnings),
+        "expires_at": proposal["expires_at"],
+    }
+
+
+def _browser_business_action_proposal(proposal, prepared, references):
+    expected = {
+        "action_id",
+        "action_kind",
+        "display_name",
+        "evidence_id",
+        "expected_states",
+        "expires_at",
+        "payload_fingerprint",
+        "precondition_fingerprint",
+        "proposal_id",
+        "state_before",
+        "target",
+        "turn_id",
+        "warnings",
+    }
+    target = proposal.get("target")
+    warnings = proposal.get("warnings")
+    if (
+        not isinstance(proposal, dict)
+        or set(proposal) != expected
+        or proposal.get("action_kind") != "business_action"
+        or proposal.get("action_id") != "sale.order.confirm.v1"
+        or not _uuid(proposal.get("proposal_id"))
+        or proposal.get("turn_id") != str(prepared.turn_id)
+        or not isinstance(proposal.get("payload_fingerprint"), str)
+        or _ACTION_FINGERPRINT.fullmatch(proposal["payload_fingerprint"]) is None
+        or not isinstance(proposal.get("precondition_fingerprint"), str)
+        or _ACTION_FINGERPRINT.fullmatch(proposal["precondition_fingerprint"]) is None
+        or not _uuid(proposal.get("evidence_id"))
+        or proposal["evidence_id"] not in references
+        or not isinstance(proposal.get("expires_at"), str)
+        or not isinstance(target, dict)
+        or set(target) != {"model", "record_id"}
+        or target != {"model": "sale.order", "record_id": prepared.screen.res_id}
+        or prepared.screen.model != "sale.order"
+        or not _bounded_text(proposal.get("display_name"), 256, require_nonempty=True)
+        or proposal.get("state_before") not in {"draft", "sent"}
+        or proposal.get("expected_states") != ["sale", "done"]
+        or not isinstance(warnings, list)
+        or len(warnings) > 8
+        or any(
+            not _bounded_text(value, 512, require_nonempty=True) for value in warnings
+        )
+    ):
+        raise AssistantServiceError("invalid_response")
+    return {
+        "action_id": "sale.order.confirm.v1",
+        "action_kind": "business_action",
+        "display_name": proposal["display_name"],
+        "expected_states": ["sale", "done"],
+        "expires_at": proposal["expires_at"],
+        "proposal_id": proposal["proposal_id"],
+        "state_before": proposal["state_before"],
+        "target": dict(target),
+        "warnings": list(warnings),
     }
 
 
@@ -645,7 +779,9 @@ def _browser_action_decision_response(response, proposal_id):
         or (evidence_id is not None and not _uuid(evidence_id))
         or (error_code is not None and not _identifier(error_code, 128))
         or state == "rejected"
-        and (approval_id is not None or attempt_id is not None or evidence_id is not None)
+        and (
+            approval_id is not None or attempt_id is not None or evidence_id is not None
+        )
         or state != "rejected"
         and (approval_id is None or attempt_id is None)
         or state == "verified"
@@ -700,7 +836,13 @@ def _browser_how_to_response(response, prepared):
         "limitations": list(limitations),
         "citations": sanitized,
     }
-    serialized = json.dumps(result, allow_nan=False, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    serialized = json.dumps(
+        result,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
     if prepared.delegation_token in serialized:
         raise AssistantServiceError("invalid_response")
     return result
@@ -711,7 +853,15 @@ def _browser_how_to_citation(citation, prepared):
         raise AssistantServiceError("invalid_response")
     kind = citation.get("kind")
     if kind == "navigation":
-        expected = {"captured_at", "evidence_id", "kind", "menu_id", "path", "target_model", "view_modes"}
+        expected = {
+            "captured_at",
+            "evidence_id",
+            "kind",
+            "menu_id",
+            "path",
+            "target_model",
+            "view_modes",
+        }
         path = citation.get("path")
         view_modes = citation.get("view_modes")
         if (
@@ -724,13 +874,32 @@ def _browser_how_to_citation(citation, prepared):
             or citation.get("target_model") not in {None, prepared.screen.model}
             or not isinstance(view_modes, list)
             or len(view_modes) > 7
-            or any(value not in {"activity", "calendar", "form", "graph", "kanban", "list", "pivot"} for value in view_modes)
+            or any(
+                value
+                not in {
+                    "activity",
+                    "calendar",
+                    "form",
+                    "graph",
+                    "kanban",
+                    "list",
+                    "pivot",
+                }
+                for value in view_modes
+            )
             or not isinstance(citation.get("captured_at"), str)
         ):
             raise AssistantServiceError("invalid_response")
         return dict(citation)
     if kind == "schema":
-        expected = {"captured_at", "evidence_id", "fields", "kind", "model", "schema_id"}
+        expected = {
+            "captured_at",
+            "evidence_id",
+            "fields",
+            "kind",
+            "model",
+            "schema_id",
+        }
         fields = citation.get("fields")
         if (
             set(citation) != expected
@@ -745,11 +914,25 @@ def _browser_how_to_citation(citation, prepared):
             raise AssistantServiceError("invalid_response")
         return dict(citation)
     if kind == "document":
-        expected = {"document_id", "end_line", "evidence_id", "fingerprint", "kind", "locale", "media_type", "ordinal", "provider_id", "start_line", "title"}
+        expected = {
+            "document_id",
+            "end_line",
+            "evidence_id",
+            "fingerprint",
+            "kind",
+            "locale",
+            "media_type",
+            "ordinal",
+            "provider_id",
+            "start_line",
+            "title",
+        }
         if (
             set(citation) != expected
             or not isinstance(citation.get("provider_id"), str)
-            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", citation["provider_id"])
+            or re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", citation["provider_id"]
+            )
             is None
             or not _logical_path(citation.get("document_id"))
             or not _identifier(citation.get("title"), 512)
@@ -778,9 +961,7 @@ def _browser_how_to_citation(citation, prepared):
 
 
 _FINGERPRINT = re.compile(r"sha256:[0-9a-f]{64}")
-_ACTION_FINGERPRINT = re.compile(
-    r"[a-z][a-z0-9_-]{0,31}:v[0-9]+:sha256:[0-9a-f]{64}"
-)
+_ACTION_FINGERPRINT = re.compile(r"[a-z][a-z0-9_-]{0,31}:v[0-9]+:sha256:[0-9a-f]{64}")
 
 
 def _browser_schema_field(value):
@@ -841,8 +1022,7 @@ def _browser_citation(citation, prepared):
             or start_line <= 0
             or end_line < start_line
             or not isinstance(citation.get("fingerprint"), str)
-            or re.fullmatch(r"sha256:[0-9a-f]{64}", citation["fingerprint"])
-            is None
+            or re.fullmatch(r"sha256:[0-9a-f]{64}", citation["fingerprint"]) is None
             or not _identifier(citation.get("provenance"), 64)
         ):
             raise AssistantServiceError("invalid_response")
@@ -896,7 +1076,11 @@ def _turn_error_code(code: str) -> str:
         return "invalid_context"
     if code in {"delegation_unavailable", "delegation_unconfigured"}:
         return "service_unavailable"
-    return "access_denied" if code == "superuser_delegation_forbidden" else "invalid_context"
+    return (
+        "access_denied"
+        if code == "superuser_delegation_forbidden"
+        else "invalid_context"
+    )
 
 
 def _client_error_code(code: str) -> str:

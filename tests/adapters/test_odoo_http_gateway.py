@@ -21,7 +21,9 @@ from odoo_ai.adapters import (
     OdooGatewaySettings,
 )
 from odoo_ai.adapters.odoo_http import (
+    ACTION_COMMIT_ROUTE,
     ACTION_PREVIEW_ROUTE,
+    ACTION_VERIFY_ROUTE,
     AGGREGATE_RECORDS_ROUTE,
     DELEGATION_HEADER,
     INVENTORY_ROUTE,
@@ -35,6 +37,10 @@ from odoo_ai.adapters.odoo_http import (
     WRITE_SCHEMA_ROUTE,
 )
 from odoo_ai.contracts import (
+    ActionCreatePreview,
+    ActionCreatePreviewSummary,
+    ActionCreatePreviewValue,
+    ActionCreateTarget,
     ActionFieldChange,
     ActionPreview,
     ActionPreviewChange,
@@ -44,6 +50,9 @@ from odoo_ai.contracts import (
     ActionValue,
     ActionValueKind,
     AggregateRecordsRequest,
+    BusinessActionPreview,
+    BusinessActionPreviewSummary,
+    BusinessActionProposalPayload,
     EvidenceKind,
     EvidenceStatus,
     QueryAggregateOperation,
@@ -54,6 +63,7 @@ from odoo_ai.contracts import (
     QueryRecordsRequest,
     QuerySort,
     QuerySortDirection,
+    RecordCreateProposalPayload,
     RecordRef,
 )
 from odoo_ai.security import SHARED_SECRET_HEADER
@@ -333,6 +343,7 @@ def test_action_write_schema_uses_separate_p1_route_and_write_access_flag() -> N
                 "label": "Sales Order",
                 "model": "sale.order",
                 "ok": True,
+                "create_access": True,
                 "write_access": True,
             }
         )
@@ -346,6 +357,7 @@ def test_action_write_schema_uses_separate_p1_route_and_write_access_flag() -> N
 
     assert evidence.status is EvidenceStatus.CHECKED
     assert evidence.payload["write_access"] is True
+    assert evidence.payload["create_access"] is True
     assert evidence.pointer == {
         "model": "sale.order",
         "provider": "odoo_action_preview_http",
@@ -414,6 +426,199 @@ def test_action_preview_sends_only_canonical_proposal_and_maps_strict_diff() -> 
         )
 
     assert actual == expected
+
+
+def test_create_preview_commit_and_verify_use_only_strict_action_routes() -> None:
+    proposal = RecordCreateProposalPayload(
+        proposal_id=UUID("11111111-1111-4111-8111-111111111111"),
+        turn_id=TURN_ID,
+        instance_id="odoo-production",
+        database="acme",
+        uid=17,
+        company_id=1,
+        allowed_company_ids=(1,),
+        target=ActionCreateTarget(model="res.partner"),
+        values=(
+            ActionFieldChange(
+                field="name",
+                value=ActionValue(kind=ActionValueKind.TEXT, value="New customer"),
+            ),
+        ),
+        policy_revision="m6-record-patch-v1",
+        schema_revision="action-schema:v1:sha256:" + "a" * 64,
+    )
+    payload_fingerprint = "action-payload:v1:sha256:" + "b" * 64
+    precondition = "action-precondition:v1:sha256:" + "c" * 64
+    attempt_id = UUID("55555555-5555-4555-8555-555555555555")
+    now = datetime(2026, 8, 23, 10, 30, tzinfo=UTC)
+    preview = ActionCreatePreview(
+        preview_id=UUID("33333333-3333-4333-8333-333333333333"),
+        summary=ActionCreatePreviewSummary(
+            proposal_id=proposal.proposal_id,
+            target=proposal.target,
+            values=(
+                ActionCreatePreviewValue(
+                    field="name", label="Name", value=proposal.values[0].value
+                ),
+            ),
+            warnings=("Requested values only.",),
+        ),
+        payload_fingerprint=payload_fingerprint,
+        precondition_fingerprint=precondition,
+        policy_revision=proposal.policy_revision,
+        schema_revision=proposal.schema_revision,
+        observed_at=now,
+        expires_at=now + timedelta(seconds=120),
+    )
+    responses = {
+        ACTION_PREVIEW_ROUTE: {
+            "ok": True,
+            "preview": preview.model_dump(mode="json"),
+        },
+        ACTION_COMMIT_ROUTE: {
+            "attempt_id": str(attempt_id),
+            "committed_at": now.isoformat().replace("+00:00", "Z"),
+            "ok": True,
+            "payload_fingerprint": payload_fingerprint,
+            "precondition_fingerprint": precondition,
+            "proposal_id": str(proposal.proposal_id),
+            "record_id": 84,
+        },
+        ACTION_VERIFY_ROUTE: {
+            "after": {"name": {"kind": "text", "value": "New customer"}},
+            "attempt_id": str(attempt_id),
+            "matches": True,
+            "ok": True,
+            "proposal_id": str(proposal.proposal_id),
+            "record_id": 84,
+            "verified_at": now.isoformat().replace("+00:00", "Z"),
+        },
+    }
+
+    def responder(request: CapturedRequest) -> ResponseSpec:
+        body = json.loads(request.body)
+        assert body["proposal"] == proposal.model_dump(mode="json")
+        if request.path == ACTION_PREVIEW_ROUTE:
+            assert body == {
+                "payload_fingerprint": payload_fingerprint,
+                "proposal": proposal.model_dump(mode="json"),
+                "turn_id": str(TURN_ID),
+            }
+        else:
+            assert body == {"proposal": proposal.model_dump(mode="json")}
+        return _json_response(responses[request.path])
+
+    with fake_odoo_server(responder) as server:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        preview_result = asyncio.run(
+            _gateway(base_url).preview_record_create(
+                proposal, payload_fingerprint=payload_fingerprint
+            )
+        )
+        action_gateway = _factory(base_url).for_action(authority_token=DELEGATION_TOKEN)
+        commit = asyncio.run(action_gateway.commit_record_create(proposal))
+        verification = asyncio.run(action_gateway.verify_record_create(proposal))
+
+    assert preview_result == preview
+    assert commit.record_id == verification.record_id == 84
+    assert verification.matches is True
+    assert [request.path for request in server.requests] == [
+        ACTION_PREVIEW_ROUTE,
+        ACTION_COMMIT_ROUTE,
+        ACTION_VERIFY_ROUTE,
+    ]
+
+
+def test_business_action_preview_commit_and_verify_use_strict_action_contract() -> None:
+    proposal = BusinessActionProposalPayload(
+        proposal_id=UUID("11111111-1111-4111-8111-111111111111"),
+        turn_id=TURN_ID,
+        instance_id="odoo-production",
+        database="acme",
+        uid=17,
+        company_id=1,
+        allowed_company_ids=(1,),
+        target=ActionTarget(model="sale.order", record_id=42),
+        policy_revision="m6-record-patch-v1",
+    )
+    payload_fingerprint = "action-payload:v1:sha256:" + "b" * 64
+    precondition = "action-precondition:v1:sha256:" + "c" * 64
+    attempt_id = UUID("55555555-5555-4555-8555-555555555555")
+    now = datetime(2026, 8, 23, 10, 30, tzinfo=UTC)
+    preview = BusinessActionPreview(
+        preview_id=UUID("33333333-3333-4333-8333-333333333333"),
+        summary=BusinessActionPreviewSummary(
+            proposal_id=proposal.proposal_id,
+            target=proposal.target,
+            display_name="S00042",
+            state_before="draft",
+            warnings=("Installed modules may add side effects.",),
+        ),
+        payload_fingerprint=payload_fingerprint,
+        precondition_fingerprint=precondition,
+        policy_revision=proposal.policy_revision,
+        action_spec_revision=proposal.action_spec_revision,
+        observed_at=now,
+        expires_at=now + timedelta(seconds=120),
+    )
+    responses = {
+        ACTION_PREVIEW_ROUTE: {
+            "ok": True,
+            "preview": preview.model_dump(mode="json"),
+        },
+        ACTION_COMMIT_ROUTE: {
+            "action_id": proposal.action_id,
+            "attempt_id": str(attempt_id),
+            "committed_at": now.isoformat().replace("+00:00", "Z"),
+            "ok": True,
+            "payload_fingerprint": payload_fingerprint,
+            "precondition_fingerprint": precondition,
+            "proposal_id": str(proposal.proposal_id),
+            "record_id": 42,
+        },
+        ACTION_VERIFY_ROUTE: {
+            "action_id": proposal.action_id,
+            "attempt_id": str(attempt_id),
+            "matches": True,
+            "ok": True,
+            "proposal_id": str(proposal.proposal_id),
+            "record_id": 42,
+            "state": "sale",
+            "verified_at": now.isoformat().replace("+00:00", "Z"),
+        },
+    }
+
+    def responder(request: CapturedRequest) -> ResponseSpec:
+        body = json.loads(request.body)
+        assert body["proposal"] == proposal.model_dump(mode="json")
+        assert "method" not in body["proposal"]
+        if request.path == ACTION_PREVIEW_ROUTE:
+            assert body["payload_fingerprint"] == payload_fingerprint
+            assert body["turn_id"] == str(TURN_ID)
+        else:
+            assert body == {"proposal": proposal.model_dump(mode="json")}
+        return _json_response(responses[request.path])
+
+    with fake_odoo_server(responder) as server:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        preview_result = asyncio.run(
+            _gateway(base_url).preview_business_action(
+                proposal, payload_fingerprint=payload_fingerprint
+            )
+        )
+        action_gateway = _factory(base_url).for_action(authority_token=DELEGATION_TOKEN)
+        commit = asyncio.run(action_gateway.commit_business_action(proposal))
+        verification = asyncio.run(action_gateway.verify_business_action(proposal))
+
+    assert preview_result == preview
+    assert commit.action_id == verification.action_id == "sale.order.confirm.v1"
+    assert commit.record_id == verification.record_id == 42
+    assert verification.state == "sale"
+    assert [request.path for request in server.requests] == [
+        ACTION_PREVIEW_ROUTE,
+        ACTION_COMMIT_ROUTE,
+        ACTION_VERIFY_ROUTE,
+    ]
 
 
 def test_query_records_sends_only_structured_ast_and_validates_response() -> None:
@@ -585,9 +790,7 @@ def test_settings_require_server_side_env_and_accept_nondefault_port() -> None:
     with pytest.raises(OdooGatewayError, match="gateway_unconfigured"):
         OdooGatewaySettings.from_env({})
 
-    settings = OdooGatewaySettings.from_env(
-        {ODOO_BASE_URL_ENV: "http://odoo.internal:18069"}
-    )
+    settings = OdooGatewaySettings.from_env({ODOO_BASE_URL_ENV: "http://odoo.internal:18069"})
 
     assert settings.base_url == "http://odoo.internal:18069"
 
@@ -615,9 +818,7 @@ def test_timeout_is_sanitized() -> None:
         return ResponseSpec(delay_seconds=0.15)
 
     with fake_odoo_server(responder) as server:
-        gateway = _gateway(
-            f"http://127.0.0.1:{server.server_port}", timeout_seconds=0.02
-        )
+        gateway = _gateway(f"http://127.0.0.1:{server.server_port}", timeout_seconds=0.02)
         with pytest.raises(OdooGatewayError, match="upstream_timeout") as failure:
             asyncio.run(gateway.get_model_metadata("sale.order"))
 
@@ -643,9 +844,7 @@ def test_request_body_cap_is_enforced_before_connecting() -> None:
 def test_oversized_or_malformed_bodies_are_rejected(response: ResponseSpec) -> None:
     with fake_odoo_server(lambda request: response) as server:
         gateway = _gateway(f"http://127.0.0.1:{server.server_port}")
-        with pytest.raises(
-            OdooGatewayError, match="malformed_response|response_too_large"
-        ):
+        with pytest.raises(OdooGatewayError, match="malformed_response|response_too_large"):
             asyncio.run(gateway.get_model_metadata("sale.order"))
 
 

@@ -6,6 +6,7 @@ import pytest
 
 from odoo_ai.adapters import action_tool_specs
 from odoo_ai.application import ActionService, ActionTurnError
+from odoo_ai.application.action_workflow import _select_action_tools
 from odoo_ai.contracts import (
     ActionPreviewChange,
     ActionProposalHandle,
@@ -220,3 +221,36 @@ def test_no_preview_requires_low_confidence_and_explicit_limitation() -> None:
     assert response.proposal is None
     assert response.confidence is AnswerConfidence.LOW
     assert response.limitations
+
+
+@pytest.mark.parametrize(
+    ("message", "model", "expected"),
+    [
+        (
+            "Create a new customer record",
+            "res.partner",
+            ["odoo.get_effective_write_schema", "odoo.preview_record_create"],
+        ),
+        (
+            "Confirma este pedido",
+            "sale.order",
+            ["odoo.preview_business_action"],
+        ),
+        (
+            "Change only the reference",
+            "sale.order",
+            ["odoo.get_effective_write_schema", "odoo.preview_record_patch"],
+        ),
+        (
+            "Ayúdame con este registro",
+            "res.partner",
+            [tool.name for tool in action_tool_specs()],
+        ),
+    ],
+)
+def test_action_registry_is_minimized_only_for_explicit_intent(
+    message: str, model: str, expected: list[str]
+) -> None:
+    selected = _select_action_tools(action_tool_specs(), message=message, model=model)
+
+    assert [tool.name for tool in selected] == expected

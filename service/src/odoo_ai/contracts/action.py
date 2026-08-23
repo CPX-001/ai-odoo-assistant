@@ -16,6 +16,8 @@ MAX_ACTION_COMPANIES: Final = 16
 MAX_ACTION_FIELDS: Final = 4
 MAX_ACTION_WARNINGS: Final = 8
 MAX_ACTION_VALUE_TEXT: Final = 4_000
+SALE_ORDER_CONFIRM_ACTION_ID: Final = "sale.order.confirm.v1"
+SALE_ORDER_CONFIRM_SPEC_REVISION: Final = "sale-order-confirm-spec-v1"
 
 PositiveId = Annotated[int, Field(strict=True, gt=0)]
 ModelName = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")]
@@ -35,6 +37,8 @@ class ActionKind(StrEnum):
     """Closed ACTION kinds supported by the first write slice."""
 
     RECORD_PATCH = "record_patch"
+    RECORD_CREATE = "record_create"
+    BUSINESS_ACTION = "business_action"
 
 
 class ActionValueKind(StrEnum):
@@ -121,6 +125,14 @@ class ActionTarget(BaseModel):
     record_id: PositiveId
 
 
+class ActionCreateTarget(BaseModel):
+    """A create target names a model but can never carry a caller-chosen id."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    model: ModelName
+
+
 class ActionFieldChange(BaseModel):
     """One field assignment in a record patch."""
 
@@ -168,6 +180,91 @@ class ActionProposalPayload(BaseModel):
         if len(fields) != len(set(fields)):
             raise ValueError("action fields must be unique")
         return self
+
+
+class RecordCreateProposalPayload(BaseModel):
+    """Canonical request to create exactly one record with bounded initial values."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    format_version: Literal[1] = ACTION_PAYLOAD_FORMAT_VERSION
+    proposal_id: UUID
+    turn_id: UUID
+    action_kind: Literal[ActionKind.RECORD_CREATE] = ActionKind.RECORD_CREATE
+    instance_id: str = Field(min_length=1, max_length=255)
+    database: str = Field(min_length=1, max_length=128)
+    uid: PositiveId
+    company_id: PositiveId
+    allowed_company_ids: tuple[PositiveId, ...] = Field(
+        min_length=1, max_length=MAX_ACTION_COMPANIES
+    )
+    target: ActionCreateTarget
+    values: tuple[ActionFieldChange, ...] = Field(min_length=1, max_length=MAX_ACTION_FIELDS)
+    policy_revision: Revision
+    schema_revision: Revision
+
+    @field_validator("database", "instance_id")
+    @classmethod
+    def validate_binding_text(cls, value: str) -> str:
+        if value != value.strip() or any(ord(character) < 32 for character in value):
+            raise ValueError("action binding is invalid")
+        return value
+
+    @model_validator(mode="after")
+    def validate_binding_and_values(self) -> Self:
+        if self.company_id not in self.allowed_company_ids:
+            raise ValueError("effective company must be allowed")
+        if self.allowed_company_ids != tuple(sorted(set(self.allowed_company_ids))):
+            raise ValueError("allowed companies must be canonically ordered and unique")
+        fields = tuple(value.field for value in self.values)
+        if len(fields) != len(set(fields)):
+            raise ValueError("action fields must be unique")
+        return self
+
+
+class BusinessActionProposalPayload(BaseModel):
+    """Canonical invocation of one host-curated, parameter-free business action."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    format_version: Literal[1] = ACTION_PAYLOAD_FORMAT_VERSION
+    proposal_id: UUID
+    turn_id: UUID
+    action_kind: Literal[ActionKind.BUSINESS_ACTION] = ActionKind.BUSINESS_ACTION
+    action_id: Literal["sale.order.confirm.v1"] = SALE_ORDER_CONFIRM_ACTION_ID
+    instance_id: str = Field(min_length=1, max_length=255)
+    database: str = Field(min_length=1, max_length=128)
+    uid: PositiveId
+    company_id: PositiveId
+    allowed_company_ids: tuple[PositiveId, ...] = Field(
+        min_length=1, max_length=MAX_ACTION_COMPANIES
+    )
+    target: ActionTarget
+    policy_revision: Revision
+    action_spec_revision: Literal["sale-order-confirm-spec-v1"] = SALE_ORDER_CONFIRM_SPEC_REVISION
+
+    @field_validator("database", "instance_id")
+    @classmethod
+    def validate_binding_text(cls, value: str) -> str:
+        if value != value.strip() or any(ord(character) < 32 for character in value):
+            raise ValueError("action binding is invalid")
+        return value
+
+    @model_validator(mode="after")
+    def validate_closed_action(self) -> Self:
+        if (
+            self.company_id not in self.allowed_company_ids
+            or self.allowed_company_ids != tuple(sorted(set(self.allowed_company_ids)))
+            or self.target.model != "sale.order"
+        ):
+            raise ValueError("invalid curated business action")
+        return self
+
+
+ActionPayload = Annotated[
+    ActionProposalPayload | RecordCreateProposalPayload | BusinessActionProposalPayload,
+    Field(discriminator="action_kind"),
+]
 
 
 class ActionPreviewChange(BaseModel):
@@ -220,6 +317,107 @@ class ActionPreview(BaseModel):
         return self
 
 
+class ActionCreatePreviewValue(BaseModel):
+    """One requested create value shown without pretending defaults are materialized."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    field: FieldName
+    label: str | None = Field(default=None, min_length=1, max_length=256)
+    value: ActionValue
+
+
+class ActionCreatePreviewSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    proposal_id: UUID
+    target: ActionCreateTarget
+    values: tuple[ActionCreatePreviewValue, ...] = Field(min_length=1, max_length=MAX_ACTION_FIELDS)
+    warnings: tuple[str, ...] = Field(default=(), max_length=MAX_ACTION_WARNINGS)
+
+    @field_validator("warnings")
+    @classmethod
+    def validate_warnings(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not 1 <= len(item) <= 512 for item in value):
+            raise ValueError("preview warning is invalid")
+        return value
+
+
+class ActionCreatePreview(BaseModel):
+    """Effect-free create preview bound to schema, references, actor and expiry."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    action_kind: Literal[ActionKind.RECORD_CREATE] = ActionKind.RECORD_CREATE
+    preview_id: UUID
+    summary: ActionCreatePreviewSummary
+    payload_fingerprint: Fingerprint
+    precondition_fingerprint: Fingerprint
+    policy_revision: Revision
+    schema_revision: Revision
+    observed_at: AwareDatetime
+    expires_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_expiry(self) -> Self:
+        if self.expires_at <= self.observed_at:
+            raise ValueError("preview expiry must follow observation")
+        return self
+
+
+class BusinessActionPreviewSummary(BaseModel):
+    """Effect-free, citable preview of the curated sale confirmation action."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    proposal_id: UUID
+    action_id: Literal["sale.order.confirm.v1"] = SALE_ORDER_CONFIRM_ACTION_ID
+    target: ActionTarget
+    display_name: str = Field(min_length=1, max_length=256)
+    state_before: Literal["draft", "sent"]
+    expected_states: tuple[Literal["sale", "done"], ...] = ("sale", "done")
+    warnings: tuple[str, ...] = Field(default=(), max_length=MAX_ACTION_WARNINGS)
+
+    @field_validator("warnings")
+    @classmethod
+    def validate_warnings(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not 1 <= len(item) <= 512 for item in value):
+            raise ValueError("preview warning is invalid")
+        return value
+
+    @model_validator(mode="after")
+    def validate_expected_states(self) -> Self:
+        if self.expected_states != ("sale", "done"):
+            raise ValueError("curated action outcome is invalid")
+        return self
+
+
+class BusinessActionPreview(BaseModel):
+    """Checked preview for one exact allowlisted business action."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    action_kind: Literal[ActionKind.BUSINESS_ACTION] = ActionKind.BUSINESS_ACTION
+    action_id: Literal["sale.order.confirm.v1"] = SALE_ORDER_CONFIRM_ACTION_ID
+    preview_id: UUID
+    summary: BusinessActionPreviewSummary
+    payload_fingerprint: Fingerprint
+    precondition_fingerprint: Fingerprint
+    policy_revision: Revision
+    action_spec_revision: Literal["sale-order-confirm-spec-v1"] = SALE_ORDER_CONFIRM_SPEC_REVISION
+    observed_at: AwareDatetime
+    expires_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_expiry_and_action(self) -> Self:
+        if self.expires_at <= self.observed_at or self.summary.action_id != self.action_id:
+            raise ValueError("business action preview is invalid")
+        return self
+
+
+ActionPreviewContract = ActionPreview | ActionCreatePreview | BusinessActionPreview
+
+
 class EffectiveWriteFieldSchema(BaseModel):
     """One runtime-visible field that is eligible for the bounded patch policy."""
 
@@ -257,6 +455,10 @@ class EffectiveWriteSchema(BaseModel):
     label: str | None = Field(default=None, min_length=1, max_length=256)
     write_access: bool
     fields: dict[FieldName, EffectiveWriteFieldSchema] = Field(max_length=64)
+    create_access: bool = False
+    create_fields: dict[FieldName, EffectiveWriteFieldSchema] = Field(
+        default_factory=dict, max_length=64
+    )
     source: Literal["runtime"] = "runtime"
     captured_for_user: PositiveId
     company_id: PositiveId
@@ -285,4 +487,10 @@ class EffectiveWriteSchema(BaseModel):
             raise ValueError("effective write schema fields must be deterministically ordered")
         if not self.write_access and self.fields:
             raise ValueError("a non-writeable model cannot expose write fields")
+        if any(name != field.name for name, field in self.create_fields.items()):
+            raise ValueError("effective create schema field keys must match names")
+        if tuple(self.create_fields) != tuple(sorted(self.create_fields)):
+            raise ValueError("effective create schema fields must be deterministically ordered")
+        if not self.create_access and self.create_fields:
+            raise ValueError("a non-createable model cannot expose create fields")
         return self

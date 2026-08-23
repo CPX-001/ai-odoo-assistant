@@ -2,7 +2,7 @@
 
 Este roadmap resume el Source of Truth. No autoriza por sí mismo la implementación de ningún milestone.
 
-Estado actual: **M0-M5 completados; gates PASS. M6-01..10 implementados y gate técnico real verde, pero M6 permanece abierto con gate FAIL por la desviación de alcance frente al Source of Truth. M6-11..13 están preparados para cerrar safe create + curated business action + gate final.**
+Estado actual: **M0-M6 completados; gates PASS. M7 es el siguiente milestone y aún no se ha iniciado.**
 
 | Milestone | Objetivo observable |
 | --- | --- |
@@ -16,4 +16,7 @@ Estado actual: **M0-M5 completados; gates PASS. M6-01..10 implementados y gate t
 | M7 — Product hardening | Permitir que un técnico instale, actualice y opere el piloto sin consola diaria, con Diagnostics, Settings/overrides administrables y tests de seguridad. |
 | M8 — Odoo 19 | Superar la misma contract suite y workflows en Odoo 19 sin cambios en `application`. |
 
-El plan ejecutable y el Goal de cierre de M6 están en [`tasks/M6/README.md`](tasks/M6/README.md). M7 no se inicia hasta que M6-13 produzca `M6 GATE: PASS`.
+El plan y la evidencia del cierre M6 están en
+[`tasks/M6/README.md`](tasks/M6/README.md) y
+[`../M6_GATE_REPORT.md`](../M6_GATE_REPORT.md). M7 queda para una instrucción
+posterior.

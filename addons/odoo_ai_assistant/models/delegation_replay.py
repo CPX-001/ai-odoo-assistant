@@ -11,6 +11,10 @@ _INTERNAL_CREATE_MARKER: Final = object()
 _INTERNAL_CREATE_CONTEXT: Final = "_odoo_ai_delegation_use_create"
 _SCOPES: Final = (
     ("action_commit", "Action commit"),
+    ("action_create_commit", "Action create commit"),
+    ("action_create_verify", "Action create verify"),
+    ("business_action_commit", "Business action commit"),
+    ("business_action_verify", "Business action verify"),
     ("action_preview", "Action preview"),
     ("action_write_schema", "Action write schema"),
     ("action_verify", "Action verify"),

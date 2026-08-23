@@ -38,17 +38,25 @@ from run_m4_sale_order_codex import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_SCRIPT = REPO_ROOT / "tests/e2e/m6_action_fixture.py"
 BROWSER_SCRIPT = REPO_ROOT / "tests/e2e/m6_action_browser.mjs"
+COMPLETION_BROWSER_SCRIPT = REPO_ROOT / "tests/e2e/m6_completion_browser.mjs"
 FIXTURE_ADDON = REPO_ROOT / "tests/fixtures/odoo18/odoo_ai_m6_action_items"
 
 
 class _DropCommitProxy(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], upstream_port: int, record_id: int):
+    def __init__(
+        self,
+        address: tuple[str, int],
+        upstream_port: int,
+        patch_record_id: int,
+        business_record_id: int,
+    ):
         super().__init__(address, _ProxyHandler)
         self.upstream_port = upstream_port
-        self.record_id = record_id
-        self.drop_count = 0
+        self.patch_record_id = patch_record_id
+        self.business_record_id = business_record_id
+        self.drop_counts = {"record_patch": 0, "record_create": 0, "business_action": 0}
         self._lock = threading.Lock()
 
     def should_drop(self, path: str, body: bytes) -> bool:
@@ -56,13 +64,28 @@ class _DropCommitProxy(ThreadingHTTPServer):
             return False
         try:
             payload = json.loads(body)
-            record_id = payload["proposal"]["target"]["record_id"]
+            proposal = payload["proposal"]
+            action_kind = proposal["action_kind"]
         except (KeyError, TypeError, ValueError):
             return False
+        should_drop = False
+        if action_kind == "record_patch":
+            should_drop = proposal.get("target", {}).get("record_id") == self.patch_record_id
+        elif action_kind == "record_create":
+            should_drop = any(
+                value.get("field") == "name"
+                and value.get("value", {}).get("value") == "M6 Created Ambiguous"
+                for value in proposal.get("values", [])
+                if isinstance(value, dict)
+            )
+        elif action_kind == "business_action":
+            should_drop = proposal.get("target", {}).get("record_id") == self.business_record_id
+        if not should_drop or action_kind not in self.drop_counts:
+            return False
         with self._lock:
-            if record_id != self.record_id or self.drop_count:
+            if self.drop_counts[action_kind]:
                 return False
-            self.drop_count += 1
+            self.drop_counts[action_kind] += 1
             return True
 
 
@@ -134,6 +157,18 @@ def _browser(
     return _prefixed_json(output, "M6_E2E_BROWSER=")
 
 
+def _completion_browser(
+    *, work: Path, playwright_root: Path, node: Path, env: dict[str, str]
+) -> dict[str, Any]:
+    script = work / "m6-browser-completion.mjs"
+    shutil.copy2(COMPLETION_BROWSER_SCRIPT, script)
+    modules = work / "node_modules"
+    if not modules.exists():
+        modules.symlink_to(playwright_root / "node_modules", target_is_directory=True)
+    output = _run([str(node), str(script)], env=env, cwd=work, timeout=1_800)
+    return _prefixed_json(output, "M6_COMPLETION_BROWSER=")
+
+
 def _tool_names(dsn: str, turn_id: str) -> list[str]:
     with psycopg.connect(dsn) as connection:
         rows = connection.execute(
@@ -145,8 +180,7 @@ def _tool_names(dsn: str, turn_id: str) -> list[str]:
     return [
         name
         for (attributes,) in rows
-        if isinstance(attributes, dict)
-        and isinstance(name := attributes.get("tool_name"), str)
+        if isinstance(attributes, dict) and isinstance(name := attributes.get("tool_name"), str)
     ]
 
 
@@ -222,6 +256,14 @@ def main() -> None:
     odoo_python = _required_path("M6_ODOO_PYTHON")
     odoo_bin = _required_path("M6_ODOO_BIN")
     core_addons = _required_path("M6_ODOO_CORE_ADDONS", directory=True)
+    extra_addons: list[Path] = []
+    for raw_path in os.environ.get("M6_ODOO_EXTRA_ADDONS", "").split(os.pathsep):
+        if not raw_path.strip():
+            continue
+        path = Path(raw_path).expanduser().resolve()
+        if not path.is_dir():
+            raise GateError("M6_ODOO_EXTRA_ADDONS contains a non-directory path")
+        extra_addons.append(path)
     codex = _required_path("M6_CODEX_EXECUTABLE")
     playwright_root = _required_path("M6_PLAYWRIGHT_ROOT", directory=True)
     node = _required_path("M6_NODE")
@@ -260,7 +302,13 @@ def main() -> None:
         shared_secret = "m6-shared-" + secrets.token_urlsafe(48)
         delegation_secret = "m6-delegation-" + secrets.token_urlsafe(48)
         authority_secret = "m6-authority-" + secrets.token_urlsafe(48)
-        secret_values = (shared_secret, delegation_secret, authority_secret, assistant_password, odoo_password)
+        secret_values = (
+            shared_secret,
+            delegation_secret,
+            authority_secret,
+            assistant_password,
+            odoo_password,
+        )
         shared_file = work / "shared-secret"
         delegation_file = work / "delegation-secret"
         authority_file = work / "action-authority-secret"
@@ -331,7 +379,12 @@ def main() -> None:
             proxy_url = f"http://127.0.0.1:{proxy_port}"
             assistant_url = f"http://127.0.0.1:{assistant_port}"
             addons_path = ",".join(
-                (str(core_addons), str(REPO_ROOT / "addons"), str(fixture_addons))
+                (
+                    str(core_addons),
+                    *(str(path) for path in extra_addons),
+                    str(REPO_ROOT / "addons"),
+                    str(fixture_addons),
+                )
             )
             common_env = dict(os.environ)
             common_env.update(
@@ -412,6 +465,7 @@ def main() -> None:
                 ("127.0.0.1", proxy_port),
                 odoo_port,
                 int(fixture["items"]["ambiguous"]),
+                int(fixture["quotations"]["ambiguous"]),
             )
             proxy_thread = threading.Thread(target=proxy.serve_forever, daemon=True)
             proxy_thread.start()
@@ -419,9 +473,7 @@ def main() -> None:
             assistant_url_db = _database_uri(
                 parsed, assistant_role, assistant_password, assistant_db
             )
-            assistant_dsn = assistant_url_db.replace(
-                "postgresql+psycopg://", "postgresql://"
-            )
+            assistant_dsn = assistant_url_db.replace("postgresql+psycopg://", "postgresql://")
             service_env = dict(common_env)
             service_env.update(
                 {
@@ -474,26 +526,30 @@ def main() -> None:
                 secret=shared_secret,
                 payload={"max_bytes": 8192, "max_lines": 20, "terms": ["M6"]},
             )
-            ready = _json_request(
-                f"{assistant_url}/v1/admin/status", secret=shared_secret
-            )
+            ready = _json_request(f"{assistant_url}/v1/admin/status", secret=shared_secret)
             if (
                 ready.get("readiness") != "FULLY_READY"
-                or ready.get("workflow_capabilities", {})
-                .get("action", {})
-                .get("state")
-                != "ok"
+                or ready.get("workflow_capabilities", {}).get("action", {}).get("state") != "ok"
             ):
-                raise GateError("FULLY_READY ACTION capability was not demonstrated")
+                diagnostic = {
+                    "action": ready.get("workflow_capabilities", {}).get("action"),
+                    "readiness": ready.get("readiness"),
+                    "reasoning": ready.get("providers", {}).get("reasoning"),
+                }
+                service_log.flush()
+                raise GateError(
+                    "FULLY_READY ACTION capability was not demonstrated: "
+                    + json.dumps(diagnostic, sort_keys=True)
+                    + "\nassistant log:\n"
+                    + _sanitized_log_tail(work / "assistant-service.log", secret_values)
+                )
 
             browser_env = dict(fixture_env)
             browser_env.update(
                 {
                     "M6_ACTION_ID": str(fixture["action_id"]),
                     "M6_ASSISTANT_BASE_URL": assistant_url,
-                    "M6_FORBIDDEN_VALUES": ",".join(
-                        (*secret_values, str(fixture_addons))
-                    ),
+                    "M6_FORBIDDEN_VALUES": ",".join((*secret_values, str(fixture_addons))),
                     "M6_ITEMS": json.dumps(fixture["items"], sort_keys=True),
                     "M6_MENU_ID": str(fixture["menu_id"]),
                     "M6_MODEL": fixture["model"],
@@ -521,7 +577,7 @@ def main() -> None:
                     f"{_sanitized_log_tail(work / 'odoo-server.log', secret_values)}"
                 ) from None
 
-            if proxy.drop_count != 1:
+            if proxy.drop_counts["record_patch"] != 1:
                 raise GateError("ambiguous commit response was not dropped exactly once")
             preview_tools = {
                 "odoo.get_effective_write_schema",
@@ -547,12 +603,89 @@ def main() -> None:
                 env=expiry_env,
                 mode="expiry",
             )
+            completion_env = dict(browser_env)
+            completion_env["M6_COMPLETION_FIXTURE"] = json.dumps(
+                {
+                    "create_action_id": fixture["action_id"],
+                    "create_menu_id": fixture["menu_id"],
+                    "create_model": fixture["model"],
+                    "create_seed_id": fixture["items"]["happy"],
+                    "quotations": fixture["quotations"],
+                    "sale_action_id": fixture["sale_action_id"],
+                    "sale_menu_id": fixture["sale_menu_id"],
+                },
+                sort_keys=True,
+            )
+            try:
+                completion = _completion_browser(
+                    work=work,
+                    playwright_root=playwright_root,
+                    node=node,
+                    env=completion_env,
+                )
+            except GateError as error:
+                service_log.flush()
+                odoo_log.flush()
+                raise GateError(
+                    f"{error}\nassistant log:\n"
+                    f"{_sanitized_log_tail(work / 'assistant-service.log', secret_values)}\n"
+                    f"recent trace:\n"
+                    f"{json.dumps(_recent_trace(assistant_dsn), ensure_ascii=False)}\n"
+                    f"odoo log:\n"
+                    f"{_sanitized_log_tail(work / 'odoo-server.log', secret_values)}"
+                ) from None
+            completion_tools: dict[str, list[str]] = {}
+            for family, key, expected_tools in (
+                (
+                    "create",
+                    "happy",
+                    {
+                        "odoo.get_effective_write_schema",
+                        "odoo.preview_record_create",
+                    },
+                ),
+                (
+                    "create",
+                    "ambiguous",
+                    {
+                        "odoo.get_effective_write_schema",
+                        "odoo.preview_record_create",
+                    },
+                ),
+                (
+                    "business",
+                    "happy",
+                    {"odoo.preview_business_action"},
+                ),
+                (
+                    "business",
+                    "ambiguous",
+                    {"odoo.preview_business_action"},
+                ),
+            ):
+                turn_id = completion[family][key]["turn_id"]
+                tools = _tool_names(assistant_dsn, turn_id)
+                if set(tools) != expected_tools or len(tools) != len(expected_tools):
+                    raise GateError(f"ACTION {family}/{key} registry/tools were not exact: {tools}")
+                if any("commit" in name or "approve" in name for name in tools):
+                    raise GateError("Codex received an approval or commit tool")
+                completion_tools[f"{family}_{key}"] = tools
+            if proxy.drop_counts != {
+                "business_action": 1,
+                "record_create": 1,
+                "record_patch": 1,
+            }:
+                raise GateError(f"ambiguous response drops were incomplete: {proxy.drop_counts}")
             evidence = _action_evidence(assistant_dsn)
             states = {item["state"] for item in evidence["proposals"]}
             if not {"verified", "rejected", "stale", "expired"}.issubset(states):
                 raise GateError(f"required durable ACTION states missing: {sorted(states)}")
-            serialized = json.dumps((positive, expired, evidence), ensure_ascii=False)
-            for forbidden in (*secret_values, str(fixture_addons), "FORBIDDEN M6 COMPANY-B RECORD"):
+            serialized = json.dumps((positive, expired, completion, evidence), ensure_ascii=False)
+            for forbidden in (
+                *secret_values,
+                str(fixture_addons),
+                "FORBIDDEN M6 COMPANY-B RECORD",
+            ):
                 if forbidden in serialized:
                     raise GateError("secret, path, or ACL-hidden record leaked")
 
@@ -561,14 +694,12 @@ def main() -> None:
                 env=common_env,
                 timeout=60,
             ).strip()
-            codex_version = _run(
-                [str(codex), "--version"], env=service_env, timeout=60
-            ).strip()
+            codex_version = _run([str(codex), "--version"], env=service_env, timeout=60).strip()
             print(
                 "M6_E2E_RESULT="
                 + json.dumps(
                     {
-                        "ambiguous_response_drops": proxy.drop_count,
+                        "ambiguous_response_drops": dict(proxy.drop_counts),
                         "audit_events": len(evidence["audits"]),
                         "browser_to_assistant_requests": 0,
                         "codex_version": codex_version,
@@ -577,7 +708,15 @@ def main() -> None:
                         "full_readiness": ready["readiness"],
                         "odoo_version": odoo_version,
                         "proposal_states": sorted(states),
-                        "tool_names": turn_tools,
+                        "tool_names": {**turn_tools, **completion_tools},
+                        "completion": {
+                            "business_happy": completion["business"]["happy_receipt"]["state"],
+                            "business_ambiguous": completion["business"]["ambiguous_receipt"][
+                                "state"
+                            ],
+                            "create_happy": completion["create"]["happy_receipt"]["state"],
+                            "create_ambiguous": completion["create"]["ambiguous_receipt"]["state"],
+                        },
                         "writes_expected": {
                             "ambiguous": 1,
                             "happy": 1,
@@ -610,9 +749,7 @@ def main() -> None:
                         )
                     for role in (odoo_role, assistant_role):
                         connection.execute(
-                            sql.SQL("DROP ROLE IF EXISTS {}").format(
-                                sql.Identifier(role)
-                            )
+                            sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role))
                         )
 
 

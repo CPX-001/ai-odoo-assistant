@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import cast
 from uuid import UUID
 
-from pydantic import JsonValue, ValidationError
+from pydantic import JsonValue, TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -19,10 +19,15 @@ from odoo_ai.application.action_policy import (
 )
 from odoo_ai.contracts import (
     ActionActorContext,
+    ActionCreatePreview,
     ActionDecision,
+    ActionPayload,
     ActionPreview,
     ActionProposalPayload,
     ActionProposalState,
+    BusinessActionPreview,
+    BusinessActionProposalPayload,
+    RecordCreateProposalPayload,
 )
 from odoo_ai.ports.actions import (
     ActionDecisionOutcome,
@@ -41,6 +46,12 @@ class ActionStoreError(RuntimeError):
         self.code = code
 
 
+_PAYLOAD_ADAPTER: TypeAdapter[ActionPayload] = TypeAdapter(ActionPayload)
+_PREVIEW_ADAPTER: TypeAdapter[ActionPreview | ActionCreatePreview | BusinessActionPreview] = (
+    TypeAdapter(ActionPreview | ActionCreatePreview | BusinessActionPreview)
+)
+
+
 class SqlActionApprovalStore:
     """Use PostgreSQL row locks to serialize decisions for one proposal."""
 
@@ -55,6 +66,7 @@ class SqlActionApprovalStore:
         record = ActionProposalRecord(
             proposal_id=payload.proposal_id,
             format_version=payload.format_version,
+            action_kind=payload.action_kind.value,
             turn_id=payload.turn_id,
             workflow="ACTION",
             instance_id=payload.instance_id,
@@ -63,11 +75,19 @@ class SqlActionApprovalStore:
             company_id=payload.company_id,
             allowed_company_ids=list(payload.allowed_company_ids),
             target_model=payload.target.model,
-            target_record_id=payload.target.record_id,
+            target_record_id=(
+                payload.target.record_id
+                if isinstance(payload, (ActionProposalPayload, BusinessActionProposalPayload))
+                else None
+            ),
             canonical_payload=proposal.canonical_payload,
             payload_fingerprint=proposal.payload_fingerprint,
             policy_revision=payload.policy_revision,
-            schema_revision=payload.schema_revision,
+            schema_revision=(
+                payload.schema_revision
+                if isinstance(payload, (ActionProposalPayload, RecordCreateProposalPayload))
+                else payload.action_spec_revision
+            ),
             preview_id=preview.preview_id,
             preview_payload=cast(dict[str, JsonValue], preview.model_dump(mode="json")),
             precondition_fingerprint=preview.precondition_fingerprint,
@@ -224,8 +244,8 @@ class SqlActionApprovalStore:
 
 def _snapshot(record: ActionProposalRecord) -> StoredActionProposal:
     try:
-        payload = ActionProposalPayload.model_validate_json(record.canonical_payload)
-        preview = ActionPreview.model_validate_json(json.dumps(record.preview_payload))
+        payload = _PAYLOAD_ADAPTER.validate_json(record.canonical_payload)
+        preview = _PREVIEW_ADAPTER.validate_json(json.dumps(record.preview_payload))
         state = ActionProposalState(record.state)
     except (ValidationError, ValueError, TypeError):
         raise ActionStoreError("corrupt_proposal") from None
@@ -235,6 +255,7 @@ def _snapshot(record: ActionProposalRecord) -> StoredActionProposal:
         not hmac.compare_digest(canonical, record.canonical_payload)
         or not hmac.compare_digest(expected_fingerprint, record.payload_fingerprint)
         or record.proposal_id != payload.proposal_id
+        or record.action_kind != payload.action_kind.value
         or record.turn_id != payload.turn_id
         or record.instance_id != payload.instance_id
         or record.database != payload.database
@@ -242,9 +263,19 @@ def _snapshot(record: ActionProposalRecord) -> StoredActionProposal:
         or record.company_id != payload.company_id
         or tuple(record.allowed_company_ids) != payload.allowed_company_ids
         or record.target_model != payload.target.model
-        or record.target_record_id != payload.target.record_id
+        or record.target_record_id
+        != (
+            payload.target.record_id
+            if isinstance(payload, (ActionProposalPayload, BusinessActionProposalPayload))
+            else None
+        )
         or record.policy_revision != payload.policy_revision
-        or record.schema_revision != payload.schema_revision
+        or record.schema_revision
+        != (
+            payload.schema_revision
+            if isinstance(payload, (ActionProposalPayload, RecordCreateProposalPayload))
+            else payload.action_spec_revision
+        )
         or record.preview_id != preview.preview_id
         or preview.summary.proposal_id != payload.proposal_id
         or preview.summary.target != payload.target
@@ -314,6 +345,12 @@ def _audit(session: Session, record: ActionProposalRecord, event_type: str, at: 
             payload_fingerprint=record.payload_fingerprint,
             error_code=record.error_code,
             attributes={
+                "action_kind": record.action_kind,
+                "action_id": (
+                    record.preview_payload.get("action_id")
+                    if record.action_kind == "business_action"
+                    else None
+                ),
                 "policy_revision": record.policy_revision,
                 "schema_revision": record.schema_revision,
                 "target_model": record.target_model,
@@ -324,7 +361,7 @@ def _audit(session: Session, record: ActionProposalRecord, event_type: str, at: 
     )
 
 
-def _actor_matches(payload: ActionProposalPayload, actor: ActionActorContext) -> bool:
+def _actor_matches(payload: ActionPayload, actor: ActionActorContext) -> bool:
     return (
         actor.instance_id == payload.instance_id
         and actor.database == payload.database

@@ -4,16 +4,24 @@ from typing import Protocol
 
 from odoo_ai.contracts import (
     ActionCommitResult,
+    ActionCreateCommitResult,
+    ActionCreatePreview,
+    ActionCreateVerificationResult,
     ActionPreview,
     ActionProposalPayload,
     ActionVerificationResult,
     AggregateRecordsRequest,
     AggregateRecordsResult,
+    BusinessActionCommitResult,
+    BusinessActionPreview,
+    BusinessActionProposalPayload,
+    BusinessActionVerificationResult,
     Evidence,
     InstanceInventory,
     NavigationSnapshot,
     QueryRecordsRequest,
     QueryRecordsResult,
+    RecordCreateProposalPayload,
     RecordRef,
     RecordSnapshot,
 )
@@ -75,17 +83,45 @@ class OdooActionPreviewGateway(Protocol):
         payload_fingerprint: str,
     ) -> ActionPreview: ...
 
+    async def preview_record_create(
+        self,
+        payload: RecordCreateProposalPayload,
+        *,
+        payload_fingerprint: str,
+    ) -> ActionCreatePreview: ...
+
+    async def preview_business_action(
+        self,
+        payload: BusinessActionProposalPayload,
+        *,
+        payload_fingerprint: str,
+    ) -> BusinessActionPreview: ...
+
 
 class OdooActionGateway(Protocol):
     """One a1-bound write or reread; implementations expose no generic method."""
 
-    async def commit_record_patch(
-        self, payload: ActionProposalPayload
-    ) -> ActionCommitResult: ...
+    async def commit_record_patch(self, payload: ActionProposalPayload) -> ActionCommitResult: ...
 
     async def verify_record_patch(
         self, payload: ActionProposalPayload
     ) -> ActionVerificationResult: ...
+
+    async def commit_record_create(
+        self, payload: RecordCreateProposalPayload
+    ) -> ActionCreateCommitResult: ...
+
+    async def verify_record_create(
+        self, payload: RecordCreateProposalPayload
+    ) -> ActionCreateVerificationResult: ...
+
+    async def commit_business_action(
+        self, payload: BusinessActionProposalPayload
+    ) -> BusinessActionCommitResult: ...
+
+    async def verify_business_action(
+        self, payload: BusinessActionProposalPayload
+    ) -> BusinessActionVerificationResult: ...
 
 
 class OdooActionGatewayFactory(Protocol):

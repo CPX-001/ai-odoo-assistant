@@ -30,6 +30,8 @@ _JTI = re.compile(r"^[A-Za-z0-9_-]{22,64}$")
 @dataclass(frozen=True, slots=True)
 class ActionAuthorityPayload:
     format_version: int
+    action_kind: str
+    action_id: str | None
     jti: str
     proposal_id: UUID
     approval_id: UUID
@@ -40,7 +42,7 @@ class ActionAuthorityPayload:
     company_id: int
     allowed_company_ids: tuple[int, ...]
     model: str
-    record_id: int
+    record_id: int | None
     fields: tuple[str, ...]
     payload_fingerprint: str
     precondition_fingerprint: str
@@ -54,6 +56,8 @@ class ActionAuthorityPayload:
     def from_mapping(cls, raw: dict[str, object]) -> ActionAuthorityPayload:
         expected = {
             "allowed_company_ids",
+            "action_kind",
+            "action_id",
             "approval_id",
             "attempt_id",
             "company_id",
@@ -74,11 +78,15 @@ class ActionAuthorityPayload:
             "scopes",
             "uid",
         }
-        if set(raw) != expected:
+        if set(raw) == expected - {"action_id"}:
+            raw = {**raw, "action_id": None}
+        elif set(raw) != expected:
             raise DelegationTokenError("invalid_action_authority")
         try:
             value = cls(
                 format_version=_integer(raw["format_version"]),
+                action_kind=_text(raw["action_kind"]),
+                action_id=_optional_text(raw["action_id"]),
                 jti=_text(raw["jti"]),
                 proposal_id=UUID(_text(raw["proposal_id"])),
                 approval_id=UUID(_text(raw["approval_id"])),
@@ -89,7 +97,7 @@ class ActionAuthorityPayload:
                 company_id=_integer(raw["company_id"]),
                 allowed_company_ids=tuple(_integers(raw["allowed_company_ids"])),
                 model=_text(raw["model"]),
-                record_id=_integer(raw["record_id"]),
+                record_id=_optional_integer(raw["record_id"]),
                 fields=tuple(_texts(raw["fields"])),
                 payload_fingerprint=_text(raw["payload_fingerprint"]),
                 precondition_fingerprint=_text(raw["precondition_fingerprint"]),
@@ -110,7 +118,6 @@ class ActionAuthorityPayload:
             or not _JTI.fullmatch(self.jti)
             or not 1 <= self.uid
             or not 1 <= self.company_id
-            or not 1 <= self.record_id
             or not 1 <= len(self.database) <= 128
             or self.database != self.database.strip()
             or not 1 <= len(self.instance_id) <= 255
@@ -122,7 +129,38 @@ class ActionAuthorityPayload:
             or not 1 <= len(self.fields) <= 4
             or self.fields != tuple(sorted(set(self.fields)))
             or any(not _FIELDS.fullmatch(field) for field in self.fields)
-            or self.scopes not in {("action_commit",), ("action_verify",)}
+            or (
+                self.action_kind == "record_patch"
+                and (
+                    self.action_id is not None
+                    or self.record_id is None
+                    or self.record_id <= 0
+                    or self.scopes not in {("action_commit",), ("action_verify",)}
+                )
+            )
+            or (
+                self.action_kind == "record_create"
+                and (
+                    self.action_id is not None
+                    or self.record_id is not None
+                    or self.scopes
+                    not in {("action_create_commit",), ("action_create_verify",)}
+                )
+            )
+            or (
+                self.action_kind == "business_action"
+                and (
+                    self.action_id != "sale.order.confirm.v1"
+                    or self.model != "sale.order"
+                    or self.record_id is None
+                    or self.record_id <= 0
+                    or self.fields != ("state",)
+                    or self.scopes
+                    not in {("business_action_commit",), ("business_action_verify",)}
+                )
+            )
+            or self.action_kind
+            not in {"record_patch", "record_create", "business_action"}
             or not _FINGERPRINT.fullmatch(self.payload_fingerprint)
             or not _FINGERPRINT.fullmatch(self.precondition_fingerprint)
             or not 1 <= len(self.policy_revision) <= 128
@@ -223,10 +261,22 @@ def _text(value: object) -> str:
     return value
 
 
+def _optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    return _text(value)
+
+
 def _integer(value: object) -> int:
     if type(value) is not int:
         raise TypeError
     return value
+
+
+def _optional_integer(value: object) -> int | None:
+    if value is None:
+        return None
+    return _integer(value)
 
 
 def _texts(value: object) -> list[str]:

@@ -350,7 +350,9 @@ def test_action_turn_allows_only_preview_presentation_schema(tmp_path: Path) -> 
     )
 
     answer = asyncio.run(
-        engine.run_turn(context, list(action_tool_specs()), AnswerEnvelope.model_json_schema())
+        engine.run_turn(
+            context, list(action_tool_specs()), AnswerEnvelope.model_json_schema()
+        )
     )
 
     assert answer.workflow is Workflow.ACTION
@@ -362,6 +364,8 @@ def test_action_turn_allows_only_preview_presentation_schema(tmp_path: Path) -> 
     }
     assert dynamic_names == {
         "odoo_get_effective_write_schema",
+            "odoo_preview_record_create",
+            "odoo_preview_business_action",
         "odoo_preview_record_patch",
     }
     assert "cannot\napprove, commit" in instructions

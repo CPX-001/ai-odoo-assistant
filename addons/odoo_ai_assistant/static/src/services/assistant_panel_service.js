@@ -117,6 +117,82 @@ function validActionValue(value) {
 }
 
 function validActionProposal(proposal) {
+    if (proposal?.action_kind === "business_action") {
+        return (
+            exactKeys(proposal, [
+                "action_id",
+                "action_kind",
+                "display_name",
+                "expected_states",
+                "expires_at",
+                "proposal_id",
+                "state_before",
+                "target",
+                "warnings",
+            ]) &&
+            proposal.action_id === "sale.order.confirm.v1" &&
+            typeof proposal.proposal_id === "string" &&
+            exactKeys(proposal.target, ["model", "record_id"]) &&
+            proposal.target.model === "sale.order" &&
+            Number.isSafeInteger(proposal.target.record_id) &&
+            proposal.target.record_id > 0 &&
+            typeof proposal.display_name === "string" &&
+            proposal.display_name.length > 0 &&
+            proposal.display_name.length <= 256 &&
+            ["draft", "sent"].includes(proposal.state_before) &&
+            Array.isArray(proposal.expected_states) &&
+            proposal.expected_states.join("|") === "sale|done" &&
+            Array.isArray(proposal.warnings) &&
+            proposal.warnings.length <= 8 &&
+            proposal.warnings.every(
+                (value) => typeof value === "string" && value.length > 0 && value.length <= 512
+            ) &&
+            typeof proposal.expires_at === "string"
+        );
+    }
+    if (proposal?.action_kind === "record_create") {
+        if (
+            !exactKeys(proposal, [
+                "action_kind",
+                "proposal_id",
+                "target",
+                "values",
+                "warnings",
+                "expires_at",
+            ]) ||
+            typeof proposal.proposal_id !== "string" ||
+            !exactKeys(proposal.target, ["model"]) ||
+            typeof proposal.target.model !== "string" ||
+            !Array.isArray(proposal.values) ||
+            proposal.values.length < 1 ||
+            proposal.values.length > 4 ||
+            !Array.isArray(proposal.warnings) ||
+            proposal.warnings.length > 8 ||
+            !proposal.warnings.every(
+                (value) => typeof value === "string" && value.length > 0 && value.length <= 512
+            ) ||
+            typeof proposal.expires_at !== "string"
+        ) {
+            return false;
+        }
+        const fields = new Set();
+        for (const value of proposal.values) {
+            if (
+                !exactKeys(value, ["field", "label", "value"]) ||
+                typeof value.field !== "string" ||
+                value.field.length < 1 ||
+                value.field.length > 128 ||
+                (value.label !== null &&
+                    (typeof value.label !== "string" || value.label.length > 256)) ||
+                !validActionValue(value.value) ||
+                fields.has(value.field)
+            ) {
+                return false;
+            }
+            fields.add(value.field);
+        }
+        return true;
+    }
     if (
         !exactKeys(proposal, [
             "proposal_id",

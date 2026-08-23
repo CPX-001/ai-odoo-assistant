@@ -181,16 +181,45 @@ class InternalOdooToolsController(http.Controller):
                 action_executor = ApprovedActionToolExecutor(
                     codec=ActionAuthorityCodec.from_env()
                 )
+                proposal = payload["proposal"]
                 if operation == "action_commit":
-                    result = action_executor.commit_record_patch(
-                        authority_token=token,
-                        proposal=payload["proposal"],
-                    )
+                    if (
+                        isinstance(proposal, dict)
+                        and proposal.get("action_kind") == "business_action"
+                    ):
+                        result = action_executor.commit_business_action(
+                            authority_token=token, proposal=proposal
+                        )
+                    elif (
+                        isinstance(proposal, dict)
+                        and proposal.get("action_kind") == "record_create"
+                    ):
+                        result = action_executor.commit_record_create(
+                            authority_token=token, proposal=proposal
+                        )
+                    else:
+                        result = action_executor.commit_record_patch(
+                            authority_token=token, proposal=proposal
+                        )
                 else:
-                    result = action_executor.verify_record_patch(
-                        authority_token=token,
-                        proposal=payload["proposal"],
-                    )
+                    if (
+                        isinstance(proposal, dict)
+                        and proposal.get("action_kind") == "business_action"
+                    ):
+                        result = action_executor.verify_business_action(
+                            authority_token=token, proposal=proposal
+                        )
+                    elif (
+                        isinstance(proposal, dict)
+                        and proposal.get("action_kind") == "record_create"
+                    ):
+                        result = action_executor.verify_record_create(
+                            authority_token=token, proposal=proposal
+                        )
+                    else:
+                        result = action_executor.verify_record_patch(
+                            authority_token=token, proposal=proposal
+                        )
                 return request.make_json_response(result, status=200)
             if operation == "action_write_schema":
                 _require_keys(payload, {"model", "turn_id"})
@@ -208,12 +237,34 @@ class InternalOdooToolsController(http.Controller):
                 action_executor = DelegatedActionPreviewToolExecutor(
                     codec=_action_preview_delegation_codec()
                 )
-                result = action_executor.preview_record_patch(
-                    delegation_token=token,
-                    turn_id=payload["turn_id"],
-                    proposal=payload["proposal"],
-                    payload_fingerprint=payload["payload_fingerprint"],
-                )
+                proposal = payload["proposal"]
+                if (
+                    isinstance(proposal, dict)
+                    and proposal.get("action_kind") == "business_action"
+                ):
+                    result = action_executor.preview_business_action(
+                        delegation_token=token,
+                        turn_id=payload["turn_id"],
+                        proposal=proposal,
+                        payload_fingerprint=payload["payload_fingerprint"],
+                    )
+                elif (
+                    isinstance(proposal, dict)
+                    and proposal.get("action_kind") == "record_create"
+                ):
+                    result = action_executor.preview_record_create(
+                        delegation_token=token,
+                        turn_id=payload["turn_id"],
+                        proposal=proposal,
+                        payload_fingerprint=payload["payload_fingerprint"],
+                    )
+                else:
+                    result = action_executor.preview_record_patch(
+                        delegation_token=token,
+                        turn_id=payload["turn_id"],
+                        proposal=proposal,
+                        payload_fingerprint=payload["payload_fingerprint"],
+                    )
                 return request.make_json_response(result, status=200)
             if operation in {"aggregate_records", "query_records", "query_schema"}:
                 query_executor = DelegatedQueryToolExecutor(

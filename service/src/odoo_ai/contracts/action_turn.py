@@ -10,6 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from odoo_ai.contracts.action import (
     MAX_ACTION_WARNINGS,
+    SALE_ORDER_CONFIRM_ACTION_ID,
+    ActionCreatePreviewValue,
+    ActionCreateTarget,
+    ActionKind,
     ActionPreviewChange,
     ActionTarget,
     Fingerprint,
@@ -43,6 +47,52 @@ class ActionProposalHandle(BaseModel):
     evidence_id: UUID
 
 
+class ActionCreateProposalHandle(BaseModel):
+    """Browser-safe presentation of a persisted effect-free create preview."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    action_kind: Literal[ActionKind.RECORD_CREATE] = ActionKind.RECORD_CREATE
+    proposal_id: UUID
+    turn_id: UUID
+    payload_fingerprint: Fingerprint
+    precondition_fingerprint: Fingerprint
+    target: ActionCreateTarget
+    values: tuple[ActionCreatePreviewValue, ...] = Field(min_length=1, max_length=4)
+    warnings: tuple[Annotated[str, Field(min_length=1, max_length=512)], ...] = Field(
+        default=(), max_length=MAX_ACTION_WARNINGS
+    )
+    expires_at: datetime
+    evidence_id: UUID
+
+
+class BusinessActionProposalHandle(BaseModel):
+    """Browser-safe presentation of an exact curated business action preview."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    action_kind: Literal[ActionKind.BUSINESS_ACTION] = ActionKind.BUSINESS_ACTION
+    action_id: Literal["sale.order.confirm.v1"] = SALE_ORDER_CONFIRM_ACTION_ID
+    proposal_id: UUID
+    turn_id: UUID
+    payload_fingerprint: Fingerprint
+    precondition_fingerprint: Fingerprint
+    target: ActionTarget
+    display_name: str = Field(min_length=1, max_length=256)
+    state_before: Literal["draft", "sent"]
+    expected_states: tuple[Literal["sale", "done"], ...] = ("sale", "done")
+    warnings: tuple[Annotated[str, Field(min_length=1, max_length=512)], ...] = Field(
+        default=(), max_length=MAX_ACTION_WARNINGS
+    )
+    expires_at: datetime
+    evidence_id: UUID
+
+
+ActionProposalPresentation = (
+    ActionProposalHandle | ActionCreateProposalHandle | BusinessActionProposalHandle
+)
+
+
 class ActionTurnResponse(BaseModel):
     """Sanitized ACTION presentation returned to Odoo; it grants no authority."""
 
@@ -57,7 +107,7 @@ class ActionTurnResponse(BaseModel):
         default=(), max_length=8
     )
     evidence_refs: tuple[UUID, ...] = Field(default=(), max_length=8)
-    proposal: ActionProposalHandle | None = None
+    proposal: ActionProposalPresentation | None = None
     completed_at: datetime
 
 
@@ -67,7 +117,7 @@ class ActionToolReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     tool_report: ToolExecutionReport = Field(default_factory=ToolExecutionReport)
-    proposals: tuple[ActionProposalHandle, ...] = Field(default=(), max_length=1)
+    proposals: tuple[ActionProposalPresentation, ...] = Field(default=(), max_length=1)
 
 
 class OdooActionActorContext(BaseModel):

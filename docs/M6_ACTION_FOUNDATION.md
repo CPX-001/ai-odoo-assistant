@@ -1,6 +1,6 @@
-# M6 ACTION transactional boundary — M6-01 a M6-06
+# M6 ACTION transactional boundary — M6-01 a M6-13
 
-Estado: **implementado y verificado hasta M6-06.**
+Estado: **implementado, verificado y con M6 GATE: PASS.**
 
 El flujo transaccional disponible es:
 
@@ -11,11 +11,13 @@ proposal validada → schema efectivo → preview persistida → aprobación
 
 ## Payload y policy
 
-`ActionProposalPayload` representa un único `record_patch` sobre un registro y
-un máximo de cuatro fields. Liga `instance_id`, database, uid, compañías,
-turn/proposal, target, policy y schema. Los valores están etiquetados y son
-datos escalares; no admite métodos, context, domains, Python, SQL ni command
-lists de Odoo.
+El payload ACTION es una unión cerrada: `record_patch` actualiza un registro,
+`record_create` solicita crear exactamente uno y `business_action` sólo admite
+acciones curadas por ID estable. Patch/create admiten un máximo de cuatro
+fields y ligan `instance_id`, database, uid, compañías, turn/proposal, target,
+policy y schema. Los valores están etiquetados y son datos escalares; no
+admiten métodos, context, domains, IDs de destino para create, defaults
+ejecutables, Python, SQL ni command lists de Odoo.
 
 La única canonicalización ordena compañías y cambios por field y serializa JSON
 estricto UTF-8. Su identificador es
@@ -44,7 +46,12 @@ admitidos son:
 - many2one con relación explícita y comprobación de lectura del id objetivo.
 
 Quedan pospuestos x2many, binary, HTML, reference/polymorphic, JSON, fields
-técnicos/sensibles, create/delete y métodos de negocio.
+técnicos/sensibles, delete y métodos de negocio.
+
+El mismo documento de schema distingue `write_access/fields` de
+`create_access/create_fields`. La capacidad create se calcula bajo el usuario
+efectivo y aplica los mismos límites de tipos, field access y policy sin asumir
+que todo field escribible sea automáticamente creable.
 
 ## Preview y precondition
 
@@ -70,6 +77,12 @@ La preview no llama `write()`, `onchange` ni métodos de negocio. Ejecutarlos
 para “simular” produciría side effects o resultados incompletos difíciles de
 representar con seguridad. La respuesta muestra una limitación host-controlled
 y genera Evidence `RECORD` checked, pero no concede autoridad de escritura.
+
+Para `record_create`, la preview tampoco llama `create()` ni simula mediante
+rollback. Presenta únicamente los valores solicitados y avisa que defaults,
+computados y efectos secundarios sólo se conocerán tras el commit. Las
+referencias `many2one` se comprueban bajo el usuario real. Su precondition liga
+payload, actor, compañías, revisiones y referencias validadas.
 
 ## Approval durable (M6-04)
 
@@ -117,10 +130,48 @@ La Assistant DB conserva además eventos append-only sanitizados con IDs,
 estado, revisiones y fingerprints; no guarda tokens de autoridad, secrets ni
 prompts en el audit.
 
-## Deliberadamente pendiente
+## Create seguro e idempotencia (M6-11)
 
-M6-07 y siguientes conectarán este boundary a handlers de negocio y a la UX
-Odoo-native. Codex sigue sin recibir un tool de commit y el browser continúa
+Tras approval, `record_create` recibe scopes `action_create_commit` y
+`action_create_verify`, distintos de patch, preview y query. Odoo revalida
+policy, schema create, ACL, field access, compañías y referencias con
+`su=False`, construye los values server-side y ejecuta como máximo un
+`model.create(values)`.
+
+Antes del efecto, Odoo reclama un receipt privado
+`odoo.ai.action.execution` ligado a `attempt_id`, authority `jti`, proposal,
+kind, payload fingerprint y model. El receipt y el registro creado se confirman
+en la misma transacción PostgreSQL de Odoo. Si la respuesta se pierde, una
+repetición del mismo intento devuelve el `target_record_id` ya persistido; no
+vuelve a ejecutar `create`. Verification localiza ese receipt, relee el
+registro original como el mismo usuario y sólo produce Evidence checked cuando
+los valores explícitamente aprobados coinciden.
+
+La garantía cubre retries o recovery del mismo `attempt_id`. Un intento nuevo
+requiere una approval nueva y constituye una nueva acción de usuario. Los
+receipts expirados se eliminan mediante autovacuum después de que haya vencido
+su autoridad; la Assistant DB nunca decide si el commit Odoo ocurrió.
+
+## Business action curada (M6-12)
+
+La primera spec de producto es `sale.order.confirm.v1`: model exacto
+`sale.order`, target de un solo registro y cero parámetros libres. La preview
+relee `name` y `state` bajo el usuario real, sólo acepta `draft|sent`, muestra
+el outcome esperado y liga una revisión de spec y una precondition al estado.
+El addon declara `sale` como dependencia, de modo que la spec no se habilita
+por accidente sólo porque otro módulo del deployment la haya instalado.
+
+El commit usa un handler dedicado que llama directamente a
+`records.action_confirm()`; no resuelve nombres con reflection ni acepta
+method/context/kwargs desde Codex, browser o Assistant. Sus scopes
+`business_action_commit` y `business_action_verify` son distintos de patch,
+create, preview, QUERY y lectura. ACL, record rules, compañía, estado y
+precondition se revalidan con `su=False` inmediatamente antes de la acción.
+
+El receipt Odoo se reclama y completa en la misma transacción que la
+confirmación. Una respuesta perdida se recupera por el mismo attempt sin
+repetir `action_confirm`; verification relee el estado y sólo acepta
+`sale|done`. Codex sigue sin recibir un tool de commit y el browser continúa
 hablando sólo con Odoo.
 
 El análisis previo del donor ERPipe y las razones para adoptar sólo conceptos

@@ -1,5 +1,8 @@
 # M6-11 — Safe record create
 
+Estado: **implementada y verificada** (2026-08-23). M6-12 y el gate M6-13
+también están completados con PASS.
+
 ## Contexto
 
 - Requiere M6-01..M6-10 implementados y el estado técnico descrito en `docs/M6_GATE_REPORT.md`.
@@ -232,5 +235,5 @@ Test real o integración equivalente que:
 ## Después
 
 1. Documenta la semántica final de `record_create`, especialmente idempotencia y recovery.
-2. Actualiza únicamente el estado de esta task; **M6 sigue FAIL hasta M6-12 y M6-13**.
+2. M6-12 y M6-13 se ejecutaron después; el gate integral final es PASS.
 3. No avances a M7.

@@ -10,9 +10,14 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 from odoo_ai.contracts.action import (
     MAX_ACTION_COMPANIES,
+    ActionCreatePreview,
+    ActionPayload,
     ActionPreview,
     ActionProposalPayload,
+    BusinessActionPreview,
+    BusinessActionProposalPayload,
     Fingerprint,
+    RecordCreateProposalPayload,
 )
 
 PositiveId = Annotated[int, Field(strict=True, gt=0)]
@@ -75,8 +80,21 @@ class PersistActionPreviewRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    payload: ActionProposalPayload
-    preview: ActionPreview
+    payload: ActionPayload
+    preview: ActionPreview | ActionCreatePreview | BusinessActionPreview
+
+    @model_validator(mode="after")
+    def validate_operation_pair(self) -> Self:
+        if not (
+            isinstance(self.payload, ActionProposalPayload)
+            and isinstance(self.preview, ActionPreview)
+            or isinstance(self.payload, RecordCreateProposalPayload)
+            and isinstance(self.preview, ActionCreatePreview)
+            or isinstance(self.payload, BusinessActionProposalPayload)
+            and isinstance(self.preview, BusinessActionPreview)
+        ):
+            raise ValueError("ACTION payload and preview kinds do not match")
+        return self
 
 
 class PersistActionPreviewResponse(BaseModel):

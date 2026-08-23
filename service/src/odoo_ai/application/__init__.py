@@ -17,9 +17,13 @@ from odoo_ai.application.action_policy import (
     canonical_action_payload_bytes,
 )
 from odoo_ai.application.action_preview import (
+    ActionCreatePreviewResult,
+    ActionCreatePreviewService,
     ActionPreviewError,
     ActionPreviewResult,
     ActionPreviewService,
+    BusinessActionPreviewResult,
+    BusinessActionPreviewService,
 )
 from odoo_ai.application.action_workflow import ActionService, ActionTurnError
 from odoo_ai.application.context_read import (
@@ -63,9 +67,13 @@ __all__ = [
     "ActionExecutionService",
     "ActionPolicy",
     "ActionPolicyError",
+    "ActionCreatePreviewResult",
+    "ActionCreatePreviewService",
     "ActionPreviewError",
     "ActionPreviewResult",
     "ActionPreviewService",
+    "BusinessActionPreviewResult",
+    "BusinessActionPreviewService",
     "ActionService",
     "ActionTurnError",
     "ContextReadError",

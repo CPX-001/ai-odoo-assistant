@@ -11,10 +11,12 @@ from uuid import UUID
 from odoo_ai.contracts import (
     ActionActorContext,
     ActionAuthorityClaims,
+    ActionCreatePreview,
     ActionDecision,
+    ActionPayload,
     ActionPreview,
-    ActionProposalPayload,
     ActionProposalState,
+    BusinessActionPreview,
 )
 
 
@@ -26,10 +28,10 @@ class ActionAuthorityIssuer(Protocol):
 class StoredActionProposal:
     """Validated application view of one immutable proposal plus mutable state."""
 
-    payload: ActionProposalPayload
+    payload: ActionPayload
     canonical_payload: str
     payload_fingerprint: str
-    preview: ActionPreview
+    preview: ActionPreview | ActionCreatePreview | BusinessActionPreview
     state: ActionProposalState
     created_at: datetime
     decided_at: datetime | None = None

@@ -1,10 +1,14 @@
 # M6 — ACTION segura
 
-Estado: **M6-01..M6-10 implementados; gate técnico real verde, pero M6 GATE permanece FAIL por una desviación de alcance frente al Source of Truth. M6-11..M6-13 están preparados para cerrar esa desviación.**
+Estado: **M6-01..M6-13 completados; M6 GATE: PASS** (2026-08-23).
 
-El E2E real Odoo 18 + Assistant PostgreSQL + Codex + Chromium ya está verificado. El blocker pendiente no es infraestructura: el Source of Truth exige `create/update` seguro y al menos una business action curada, mientras M6-01..10 implementaron únicamente el slice de update `record_patch`. Ver [`docs/M6_GATE_REPORT.md`](../../../M6_GATE_REPORT.md).
+El E2E real Odoo 18 + Assistant PostgreSQL + Codex + Chromium demuestra
+`record_patch`, `record_create` y `sale.order.confirm.v1`, incluidos rechazo,
+ACL/stale y recuperación idempotente tras respuesta perdida. Ver
+[`docs/M6_GATE_REPORT.md`](../../../M6_GATE_REPORT.md).
 
-M6 empieza después de **M5 GATE: PASS** y no puede considerarse cerrado hasta que M6-13 vuelva a ejecutar el gate completo y el check de Source of Truth sea PASS.
+M6 está cerrado contra el scope completo del Source of Truth. M7 es el siguiente
+milestone y todavía no se ha iniciado.
 
 Fuente de verdad: `docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf`, `docs/ARCHITECTURE.md`, `docs/DEPLOYMENT_CONFIG.md`, `AGENTS.md`, `service/AGENTS.md`, `addons/AGENTS.md`, `tests/AGENTS.md` y el estado real dejado por M0-M5.
 
@@ -33,7 +37,7 @@ El ReasoningEngine puede ayudar a construir una proposal y solicitar previews ho
 9. [`M6-09-real-e2e-action.md`](M6-09-real-e2e-action.md) — E2E real Codex/Odoo/Chromium y casos adversariales.
 10. [`M6-10-gate.md`](M6-10-gate.md) — primer gate integral; técnicamente verde pero FAIL por scope del Source of Truth.
 
-### Closure packets pendientes
+### Packets de cierre completados
 
 11. [`M6-11-safe-record-create.md`](M6-11-safe-record-create.md) — `record_create` seguro, approved, verificado e idempotente ante respuesta ambigua.
 12. [`M6-12-curated-business-action.md`](M6-12-curated-business-action.md) — una business action real explícitamente allowlisted, con preview/approval/authority/idempotencia/verification propias.
@@ -41,11 +45,11 @@ El ReasoningEngine puede ayudar a construir una proposal y solicitar previews ho
 
 Cada packet es un contrato de aceptación independiente aunque se ejecute dentro de un Goal compartido.
 
-## Goal Mode
+## Goal ejecutado
 
-Los Goals históricos M6-01..10 ya fueron ejecutados. Para cerrar el milestone queda **un único Goal recomendado**:
+Los Goals M6-01..10 y el Goal E de cierre ya fueron ejecutados.
 
-### Goal E — cierre Source of Truth
+### Goal E — cierre Source of Truth (completado)
 
 Ejecutar juntos, secuencialmente:
 
@@ -61,9 +65,10 @@ curated business action
 full Source-of-Truth gate
 ```
 
-M6-11 y M6-12 deben completarse y testearse individualmente antes de iniciar M6-13. M6-13 no puede modificar/relajar requisitos sólo para conseguir PASS.
+M6-11 y M6-12 se completaron y verificaron individualmente antes del gate
+integral M6-13, sin relajar requisitos.
 
-Prompt base recomendado:
+Prompt base usado:
 
 ```text
 Implement M6-11, M6-12 and M6-13 sequentially.
@@ -136,4 +141,5 @@ M6 sólo se marca completado si **M6-13** actualiza `docs/M6_GATE_REPORT.md` a `
 - E2E real Odoo 18 + Codex + Chromium;
 - ausencia de capabilities M7/M8 fuera de scope.
 
-Hasta entonces **M6 permanece abierto y no se avanza a M7**.
+El gate final es **PASS**. El repositorio queda listo para planificar M7 en una
+instrucción posterior; esta entrega no inicia trabajo M7.

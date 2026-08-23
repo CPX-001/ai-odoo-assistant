@@ -1,5 +1,8 @@
 # M6-13 — Source of Truth final gate
 
+Estado: **completada; M6 GATE: PASS** (2026-08-23). Evidencia reproducible en
+`docs/M6_GATE_REPORT.md`.
+
 ## Contexto
 
 - Requiere M6-11 y M6-12 implementadas y verificadas.

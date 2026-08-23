@@ -116,18 +116,28 @@ class EffectiveWriteSchemaService:
             raise EffectiveWriteSchemaError("invalid_user_context", 422)
 
         metadata = await self._gateway.get_write_model_metadata(model)
-        raw_fields, label, write_access, captured_at = _validate_metadata(metadata, model=model)
+        raw_fields, label, write_access, create_access, captured_at = _validate_metadata(
+            metadata, model=model
+        )
         fields: dict[str, EffectiveWriteFieldSchema] = {}
-        if write_access and self._policy.permits_model(model):
+        create_fields: dict[str, EffectiveWriteFieldSchema] = {}
+        if (write_access or create_access) and self._policy.permits_model(model):
             for name in sorted(raw_fields):
                 field = _effective_write_field(name, raw_fields[name], self._policy)
                 if field is not None:
-                    fields[name] = field
+                    if write_access:
+                        fields[name] = field
+                    if create_access:
+                        create_fields[name] = field
 
         canonical_body = {
             "allowed_company_ids": list(allowed_company_ids),
             "captured_for_user": captured_for_user,
             "company_id": company_id,
+            "create_access": create_access,
+            "create_fields": {
+                name: field.model_dump(mode="json") for name, field in create_fields.items()
+            },
             "database": database,
             "fields": {name: field.model_dump(mode="json") for name, field in fields.items()},
             "instance_id": instance_id,
@@ -148,6 +158,8 @@ class EffectiveWriteSchemaService:
                 label=label,
                 write_access=write_access,
                 fields=fields,
+                create_access=create_access,
+                create_fields=create_fields,
                 captured_for_user=captured_for_user,
                 company_id=company_id,
                 allowed_company_ids=allowed_company_ids,
@@ -164,7 +176,10 @@ class EffectiveWriteSchemaService:
             kind=EvidenceKind.METADATA,
             status=EvidenceStatus.CHECKED,
             title=f"Effective Odoo write schema: {model}",
-            summary="Write eligibility was checked under the delegated user and bounded by policy.",
+            summary=(
+                "Write and create eligibility were checked under the delegated user "
+                "and bounded by policy."
+            ),
             payload=cast(dict[str, JsonValue], schema.model_dump(mode="json")),
             pointer={
                 "model": model,
@@ -180,13 +195,17 @@ class EffectiveWriteSchemaService:
 
 def _validate_metadata(
     metadata: Evidence, *, model: str
-) -> tuple[dict[str, dict[str, JsonValue]], str | None, bool, datetime]:
+) -> tuple[dict[str, dict[str, JsonValue]], str | None, bool, bool, datetime]:
     if (
         metadata.kind is not EvidenceKind.METADATA
         or metadata.status is not EvidenceStatus.CHECKED
         or metadata.observed_at is None
         or metadata.observed_at.utcoffset() is None
-        or set(metadata.payload) != {"fields", "label", "model", "write_access"}
+        or set(metadata.payload)
+        not in (
+            {"fields", "label", "model", "write_access"},
+            {"create_access", "fields", "label", "model", "write_access"},
+        )
         or metadata.payload.get("model") != model
         or not isinstance(metadata.pointer, dict)
         or metadata.pointer.get("model") != model
@@ -194,10 +213,12 @@ def _validate_metadata(
         raise EffectiveWriteSchemaError("invalid_metadata")
     label = metadata.payload.get("label")
     write_access = metadata.payload.get("write_access")
+    create_access = metadata.payload.get("create_access", False)
     raw_fields = metadata.payload.get("fields")
     if (
         (label is not None and (not isinstance(label, str) or not 1 <= len(label) <= 256))
         or not isinstance(write_access, bool)
+        or not isinstance(create_access, bool)
         or not isinstance(raw_fields, dict)
         or len(raw_fields) > MAX_EFFECTIVE_WRITE_FIELDS
         or any(
@@ -212,6 +233,7 @@ def _validate_metadata(
         cast(dict[str, dict[str, JsonValue]], raw_fields),
         label,
         write_access,
+        create_access,
         metadata.observed_at,
     )
 

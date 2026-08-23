@@ -9,9 +9,13 @@ from typing import Final
 
 from odoo_ai.contracts.action import (
     MAX_ACTION_FIELDS,
+    SALE_ORDER_CONFIRM_ACTION_ID,
+    SALE_ORDER_CONFIRM_SPEC_REVISION,
     ActionKind,
+    ActionPayload,
     ActionProposalPayload,
     ActionValueKind,
+    BusinessActionProposalPayload,
 )
 
 MAX_ACTION_PAYLOAD_BYTES: Final = 8 * 1024
@@ -59,12 +63,14 @@ class ActionPolicyError(ValueError):
         self.code = code
 
 
-def canonical_action_payload_bytes(payload: ActionProposalPayload) -> bytes:
+def canonical_action_payload_bytes(payload: ActionPayload) -> bytes:
     """Serialize validated security fields exactly once and deterministically."""
 
     body = payload.model_dump(mode="json")
     body["allowed_company_ids"] = sorted(body["allowed_company_ids"])
-    body["changes"] = sorted(body["changes"], key=lambda change: change["field"])
+    if not isinstance(payload, BusinessActionProposalPayload):
+        assignments = "changes" if isinstance(payload, ActionProposalPayload) else "values"
+        body[assignments] = sorted(body[assignments], key=lambda change: change["field"])
     try:
         return json.dumps(
             body,
@@ -77,7 +83,7 @@ def canonical_action_payload_bytes(payload: ActionProposalPayload) -> bytes:
         raise ActionPolicyError("invalid_payload") from None
 
 
-def action_payload_fingerprint(payload: ActionProposalPayload) -> str:
+def action_payload_fingerprint(payload: ActionPayload) -> str:
     """Hash the canonical payload using an explicitly versioned domain."""
 
     digest = hashlib.sha256(canonical_action_payload_bytes(payload)).hexdigest()
@@ -122,16 +128,33 @@ class ActionPolicy:
             and (self.allowed_fields is None or field in self.allowed_fields)
         )
 
-    def validate_payload(self, payload: ActionProposalPayload) -> None:
-        if payload.action_kind is not ActionKind.RECORD_PATCH:
+    def validate_payload(self, payload: ActionPayload) -> None:
+        if payload.action_kind not in {
+            ActionKind.RECORD_PATCH,
+            ActionKind.RECORD_CREATE,
+            ActionKind.BUSINESS_ACTION,
+        }:
             raise ActionPolicyError("unsupported_action_kind")
         if payload.policy_revision != self.revision:
             raise ActionPolicyError("policy_revision_mismatch")
         if not self.permits_model(payload.target.model):
             raise ActionPolicyError("model_denied")
-        if len(payload.changes) > self.max_fields:
+        if isinstance(payload, BusinessActionProposalPayload):
+            if (
+                payload.action_id != SALE_ORDER_CONFIRM_ACTION_ID
+                or payload.action_spec_revision != SALE_ORDER_CONFIRM_SPEC_REVISION
+                or payload.target.model != "sale.order"
+            ):
+                raise ActionPolicyError("business_action_denied")
+            if len(canonical_action_payload_bytes(payload)) > self.max_payload_bytes:
+                raise ActionPolicyError("payload_too_large")
+            return
+        assignments = (
+            payload.changes if isinstance(payload, ActionProposalPayload) else payload.values
+        )
+        if len(assignments) > self.max_fields:
             raise ActionPolicyError("field_limit_exceeded")
-        for change in payload.changes:
+        for change in assignments:
             if not self.permits_field(change.field):
                 raise ActionPolicyError("field_denied")
             if change.value.kind not in self.allowed_value_kinds:

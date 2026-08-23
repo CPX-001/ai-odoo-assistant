@@ -26,12 +26,19 @@ from pydantic import (
 
 from odoo_ai.contracts import (
     ActionCommitResult,
+    ActionCreateCommitResult,
+    ActionCreatePreview,
+    ActionCreateVerificationResult,
     ActionPreview,
     ActionProposalPayload,
     ActionVerificationResult,
     AggregateGroup,
     AggregateRecordsRequest,
     AggregateRecordsResult,
+    BusinessActionCommitResult,
+    BusinessActionPreview,
+    BusinessActionProposalPayload,
+    BusinessActionVerificationResult,
     Evidence,
     EvidenceKind,
     EvidenceSensitivity,
@@ -41,6 +48,7 @@ from odoo_ai.contracts import (
     QueryRecord,
     QueryRecordsRequest,
     QueryRecordsResult,
+    RecordCreateProposalPayload,
     RecordRef,
     RecordSnapshot,
 )
@@ -214,9 +222,7 @@ class HttpOdooActionGateway:
             machine_secret=machine_secret,
         )
 
-    async def commit_record_patch(
-        self, payload: ActionProposalPayload
-    ) -> ActionCommitResult:
+    async def commit_record_patch(self, payload: ActionProposalPayload) -> ActionCommitResult:
         raw = await asyncio.to_thread(
             self._transport._post_json,
             ACTION_COMMIT_ROUTE,
@@ -228,9 +234,7 @@ class HttpOdooActionGateway:
         except (ValidationError, ValueError):
             raise OdooGatewayError("malformed_response") from None
 
-    async def verify_record_patch(
-        self, payload: ActionProposalPayload
-    ) -> ActionVerificationResult:
+    async def verify_record_patch(self, payload: ActionProposalPayload) -> ActionVerificationResult:
         raw = await asyncio.to_thread(
             self._transport._post_json,
             ACTION_VERIFY_ROUTE,
@@ -239,6 +243,62 @@ class HttpOdooActionGateway:
         try:
             _json_object_without_duplicates(raw)
             return _ActionVerificationResponse.model_validate_json(raw).result()
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+
+    async def commit_record_create(
+        self, payload: RecordCreateProposalPayload
+    ) -> ActionCreateCommitResult:
+        raw = await asyncio.to_thread(
+            self._transport._post_json,
+            ACTION_COMMIT_ROUTE,
+            {"proposal": payload.model_dump(mode="json")},
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            return _ActionCreateCommitResponse.model_validate_json(raw).result()
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+
+    async def verify_record_create(
+        self, payload: RecordCreateProposalPayload
+    ) -> ActionCreateVerificationResult:
+        raw = await asyncio.to_thread(
+            self._transport._post_json,
+            ACTION_VERIFY_ROUTE,
+            {"proposal": payload.model_dump(mode="json")},
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            return _ActionCreateVerificationResponse.model_validate_json(raw).result()
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+
+    async def commit_business_action(
+        self, payload: BusinessActionProposalPayload
+    ) -> BusinessActionCommitResult:
+        raw = await asyncio.to_thread(
+            self._transport._post_json,
+            ACTION_COMMIT_ROUTE,
+            {"proposal": payload.model_dump(mode="json")},
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            return _BusinessActionCommitResponse.model_validate_json(raw).result()
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+
+    async def verify_business_action(
+        self, payload: BusinessActionProposalPayload
+    ) -> BusinessActionVerificationResult:
+        raw = await asyncio.to_thread(
+            self._transport._post_json,
+            ACTION_VERIFY_ROUTE,
+            {"proposal": payload.model_dump(mode="json")},
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            return _BusinessActionVerificationResponse.model_validate_json(raw).result()
         except (ValidationError, ValueError):
             raise OdooGatewayError("malformed_response") from None
 
@@ -489,6 +549,7 @@ class HttpOdooGateway:
             title=f"Odoo ACTION write metadata: {parsed_model}",
             summary="Write metadata checked under the separately delegated Odoo user.",
             payload={
+                "create_access": response.create_access,
                 "fields": cast(JsonValue, response.fields),
                 "label": response.label,
                 "model": response.model,
@@ -520,6 +581,48 @@ class HttpOdooGateway:
         except (ValidationError, ValueError):
             raise OdooGatewayError("malformed_response") from None
         return response.preview
+
+    async def preview_record_create(
+        self,
+        payload: RecordCreateProposalPayload,
+        *,
+        payload_fingerprint: str,
+    ) -> ActionCreatePreview:
+        raw = await asyncio.to_thread(
+            self._post_json,
+            ACTION_PREVIEW_ROUTE,
+            {
+                "payload_fingerprint": payload_fingerprint,
+                "proposal": payload.model_dump(mode="json"),
+                "turn_id": str(self._turn_id),
+            },
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            return _ActionCreatePreviewResponse.model_validate_json(raw).preview
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+
+    async def preview_business_action(
+        self,
+        payload: BusinessActionProposalPayload,
+        *,
+        payload_fingerprint: str,
+    ) -> BusinessActionPreview:
+        raw = await asyncio.to_thread(
+            self._post_json,
+            ACTION_PREVIEW_ROUTE,
+            {
+                "payload_fingerprint": payload_fingerprint,
+                "proposal": payload.model_dump(mode="json"),
+                "turn_id": str(self._turn_id),
+            },
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            return _BusinessActionPreviewResponse.model_validate_json(raw).preview
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
 
     async def query_records(self, request: QueryRecordsRequest) -> QueryRecordsResult:
         raw = await asyncio.to_thread(
@@ -653,6 +756,7 @@ class _WriteMetadataResponse(_MetadataResponse):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     write_access: bool
+    create_access: bool = False
 
 
 class _ActionPreviewResponse(BaseModel):
@@ -662,15 +766,27 @@ class _ActionPreviewResponse(BaseModel):
     preview: ActionPreview
 
 
+class _ActionCreatePreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+    preview: ActionCreatePreview
+
+
+class _BusinessActionPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+    preview: BusinessActionPreview
+
+
 class _ActionCommitResponse(ActionCommitResult):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     ok: Literal[True]
 
     def result(self) -> ActionCommitResult:
-        return ActionCommitResult.model_validate(
-            self.model_dump(exclude={"ok"})
-        )
+        return ActionCommitResult.model_validate(self.model_dump(exclude={"ok"}))
 
 
 class _ActionVerificationResponse(ActionVerificationResult):
@@ -679,9 +795,43 @@ class _ActionVerificationResponse(ActionVerificationResult):
     ok: Literal[True]
 
     def result(self) -> ActionVerificationResult:
-        return ActionVerificationResult.model_validate(
-            self.model_dump(exclude={"ok"})
-        )
+        return ActionVerificationResult.model_validate(self.model_dump(exclude={"ok"}))
+
+
+class _ActionCreateCommitResponse(ActionCreateCommitResult):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+
+    def result(self) -> ActionCreateCommitResult:
+        return ActionCreateCommitResult.model_validate(self.model_dump(exclude={"ok"}))
+
+
+class _ActionCreateVerificationResponse(ActionCreateVerificationResult):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+
+    def result(self) -> ActionCreateVerificationResult:
+        return ActionCreateVerificationResult.model_validate(self.model_dump(exclude={"ok"}))
+
+
+class _BusinessActionCommitResponse(BusinessActionCommitResult):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+
+    def result(self) -> BusinessActionCommitResult:
+        return BusinessActionCommitResult.model_validate(self.model_dump(exclude={"ok"}))
+
+
+class _BusinessActionVerificationResponse(BusinessActionVerificationResult):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+
+    def result(self) -> BusinessActionVerificationResult:
+        return BusinessActionVerificationResult.model_validate(self.model_dump(exclude={"ok"}))
 
 
 class _InventoryResponse(BaseModel):

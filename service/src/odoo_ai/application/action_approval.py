@@ -16,13 +16,19 @@ from odoo_ai.application.action_policy import (
 )
 from odoo_ai.contracts import (
     ActionActorContext,
+    ActionCreatePreview,
     ActionDecision,
     ActionDecisionReceipt,
     ActionDecisionRequest,
+    ActionPreview,
+    ActionProposalPayload,
     ActionProposalState,
+    BusinessActionPreview,
+    BusinessActionProposalPayload,
     OdooActionActorContext,
     PersistActionPreviewRequest,
     PersistActionPreviewResponse,
+    RecordCreateProposalPayload,
 )
 from odoo_ai.ports.actions import (
     ActionApprovalStore,
@@ -191,17 +197,41 @@ class ActionApprovalService:
 def _validate_preview_binding(request: PersistActionPreviewRequest, fingerprint: str) -> None:
     payload = request.payload
     preview = request.preview
-    expected_after = {change.field: change.value for change in payload.changes}
-    actual_after = {change.field: change.after for change in preview.summary.changes}
-    if (
+    common_mismatch = (
         preview.summary.proposal_id != payload.proposal_id
         or preview.summary.target != payload.target
         or not hmac.compare_digest(preview.payload_fingerprint, fingerprint)
         or preview.policy_revision != payload.policy_revision
-        or preview.schema_revision != payload.schema_revision
-        or len(actual_after) != len(preview.summary.changes)
-        or actual_after != expected_after
+        or (
+            preview.schema_revision
+            if isinstance(preview, (ActionPreview, ActionCreatePreview))
+            else preview.action_spec_revision
+        )
+        != (
+            payload.schema_revision
+            if isinstance(payload, (ActionProposalPayload, RecordCreateProposalPayload))
+            else payload.action_spec_revision
+        )
+    )
+    if isinstance(payload, ActionProposalPayload) and isinstance(preview, ActionPreview):
+        expected = {change.field: change.value for change in payload.changes}
+        actual = {change.field: change.after for change in preview.summary.changes}
+        operation_mismatch = len(actual) != len(preview.summary.changes) or actual != expected
+    elif isinstance(payload, RecordCreateProposalPayload) and isinstance(
+        preview, ActionCreatePreview
     ):
+        expected = {value.field: value.value for value in payload.values}
+        actual = {value.field: value.value for value in preview.summary.values}
+        operation_mismatch = len(actual) != len(preview.summary.values) or actual != expected
+    elif isinstance(payload, BusinessActionProposalPayload) and isinstance(
+        preview, BusinessActionPreview
+    ):
+        operation_mismatch = (
+            payload.action_id != preview.action_id or payload.action_id != preview.summary.action_id
+        )
+    else:
+        operation_mismatch = True
+    if common_mismatch or operation_mismatch:
         raise ActionApprovalError("preview_binding_mismatch", 422)
 
 

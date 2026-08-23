@@ -13,6 +13,12 @@ from odoo_ai.application import (
 from odoo_ai.contracts import (
     ActionActorContext,
     ActionCommitResult,
+    ActionCreateCommitResult,
+    ActionCreatePreview,
+    ActionCreatePreviewSummary,
+    ActionCreatePreviewValue,
+    ActionCreateTarget,
+    ActionCreateVerificationResult,
     ActionFieldChange,
     ActionPreview,
     ActionPreviewChange,
@@ -23,7 +29,13 @@ from odoo_ai.contracts import (
     ActionValue,
     ActionValueKind,
     ActionVerificationResult,
+    BusinessActionCommitResult,
+    BusinessActionPreview,
+    BusinessActionPreviewSummary,
+    BusinessActionProposalPayload,
+    BusinessActionVerificationResult,
     ExecuteApprovedActionRequest,
+    RecordCreateProposalPayload,
 )
 from odoo_ai.ports import (
     ActionDecisionOutcome,
@@ -39,6 +51,22 @@ ATTEMPT_ID = UUID("55555555-5555-4555-8555-555555555555")
 EVIDENCE_ID = UUID("66666666-6666-4666-8666-666666666666")
 SCHEMA_ID = "action-schema:v1:sha256:" + "a" * 64
 PRECONDITION = "action-precondition:v1:sha256:" + "b" * 64
+
+
+def _stored(payload, preview) -> StoredActionProposal:
+    fingerprint = action_payload_fingerprint(payload)
+    return StoredActionProposal(
+        payload=payload,
+        canonical_payload=canonical_action_payload_bytes(payload).decode(),
+        payload_fingerprint=fingerprint,
+        preview=preview,
+        state=ActionProposalState.APPROVED,
+        created_at=NOW,
+        decided_at=NOW,
+        decided_by_uid=17,
+        approval_id=APPROVAL_ID,
+        state_version=1,
+    )
 
 
 def _proposal() -> StoredActionProposal:
@@ -60,7 +88,6 @@ def _proposal() -> StoredActionProposal:
         policy_revision=ACTION_POLICY_REVISION,
         schema_revision=SCHEMA_ID,
     )
-    fingerprint = action_payload_fingerprint(payload)
     preview = ActionPreview(
         preview_id=UUID("33333333-3333-4333-8333-333333333333"),
         summary=ActionPreviewSummary(
@@ -76,25 +103,86 @@ def _proposal() -> StoredActionProposal:
             ),
             warnings=("Preview only.",),
         ),
-        payload_fingerprint=fingerprint,
+        payload_fingerprint=action_payload_fingerprint(payload),
         precondition_fingerprint=PRECONDITION,
         policy_revision=ACTION_POLICY_REVISION,
         schema_revision=SCHEMA_ID,
         observed_at=NOW,
         expires_at=NOW + timedelta(minutes=2),
     )
-    return StoredActionProposal(
-        payload=payload,
-        canonical_payload=canonical_action_payload_bytes(payload).decode(),
-        payload_fingerprint=fingerprint,
-        preview=preview,
-        state=ActionProposalState.APPROVED,
-        created_at=NOW,
-        decided_at=NOW,
-        decided_by_uid=17,
-        approval_id=APPROVAL_ID,
-        state_version=1,
+    return _stored(payload, preview)
+
+
+def _create_proposal() -> StoredActionProposal:
+    payload = RecordCreateProposalPayload(
+        proposal_id=PROPOSAL_ID,
+        turn_id=UUID("22222222-2222-4222-8222-222222222222"),
+        instance_id="odoo-production",
+        database="acme",
+        uid=17,
+        company_id=1,
+        allowed_company_ids=(1, 3),
+        target=ActionCreateTarget(model="res.partner"),
+        values=(
+            ActionFieldChange(
+                field="name",
+                value=ActionValue(kind=ActionValueKind.TEXT, value="New customer"),
+            ),
+        ),
+        policy_revision=ACTION_POLICY_REVISION,
+        schema_revision=SCHEMA_ID,
     )
+    preview = ActionCreatePreview(
+        preview_id=UUID("33333333-3333-4333-8333-333333333333"),
+        summary=ActionCreatePreviewSummary(
+            proposal_id=PROPOSAL_ID,
+            target=payload.target,
+            values=(
+                ActionCreatePreviewValue(field="name", label="Name", value=payload.values[0].value),
+            ),
+            warnings=("Requested values only.",),
+        ),
+        payload_fingerprint=action_payload_fingerprint(payload),
+        precondition_fingerprint=PRECONDITION,
+        policy_revision=ACTION_POLICY_REVISION,
+        schema_revision=SCHEMA_ID,
+        observed_at=NOW,
+        expires_at=NOW + timedelta(minutes=2),
+    )
+    return _stored(payload, preview)
+
+
+def _business_proposal() -> StoredActionProposal:
+    payload = BusinessActionProposalPayload(
+        proposal_id=PROPOSAL_ID,
+        turn_id=UUID("22222222-2222-4222-8222-222222222222"),
+        instance_id="odoo-production",
+        database="acme",
+        uid=17,
+        company_id=1,
+        allowed_company_ids=(1, 3),
+        target=ActionTarget(model="sale.order", record_id=42),
+        policy_revision=ACTION_POLICY_REVISION,
+    )
+    preview = BusinessActionPreview(
+        preview_id=UUID("33333333-3333-4333-8333-333333333333"),
+        summary=BusinessActionPreviewSummary(
+            proposal_id=PROPOSAL_ID,
+            action_id=payload.action_id,
+            target=payload.target,
+            display_name="S00042",
+            state_before="draft",
+            warnings=("Installed modules may add side effects.",),
+        ),
+        action_id=payload.action_id,
+        payload_fingerprint=action_payload_fingerprint(payload),
+        precondition_fingerprint=PRECONDITION,
+        policy_revision=payload.policy_revision,
+        action_spec_revision=payload.action_spec_revision,
+        observed_at=NOW,
+        expires_at=NOW + timedelta(minutes=2),
+    )
+    return _stored(payload, preview)
 
 
 def _actor() -> ActionActorContext:
@@ -114,9 +202,7 @@ class MemoryExecutionStore:
 
     def claim_execution(self, **values: object) -> StoredDecisionResult:
         if self.proposal.state is not ActionProposalState.APPROVED:
-            return StoredDecisionResult(
-                ActionDecisionOutcome.INVALID_STATE, self.proposal
-            )
+            return StoredDecisionResult(ActionDecisionOutcome.INVALID_STATE, self.proposal)
         actor = values["actor"]
         if actor != _actor():
             return StoredDecisionResult(ActionDecisionOutcome.BINDING_MISMATCH)
@@ -144,14 +230,24 @@ class MemoryExecutionStore:
         return self.proposal
 
 
+class MemoryCreateExecutionStore(MemoryExecutionStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.proposal = _create_proposal()
+
+
+class MemoryBusinessExecutionStore(MemoryExecutionStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.proposal = _business_proposal()
+
+
 class FakeActionGateway:
     def __init__(self, factory: "FakeGatewayFactory", token: str) -> None:
         self.factory = factory
         self.claims = factory.codec.decode(token)
 
-    async def commit_record_patch(
-        self, payload: ActionProposalPayload
-    ) -> ActionCommitResult:
+    async def commit_record_patch(self, payload: ActionProposalPayload) -> ActionCommitResult:
         self.factory.commit_calls += 1
         assert self.claims.scopes == ("action_commit",)
         if self.factory.commit_error:
@@ -164,9 +260,7 @@ class FakeActionGateway:
             precondition_fingerprint=self.claims.precondition_fingerprint,
         )
 
-    async def verify_record_patch(
-        self, payload: ActionProposalPayload
-    ) -> ActionVerificationResult:
+    async def verify_record_patch(self, payload: ActionProposalPayload) -> ActionVerificationResult:
         self.factory.verify_calls += 1
         assert self.claims.scopes == ("action_verify",)
         if self.factory.verify_error:
@@ -182,6 +276,79 @@ class FakeActionGateway:
             verified_at=NOW + timedelta(seconds=2),
             matches=self.factory.matches,
             after={"client_order_ref": value},
+        )
+
+    async def commit_record_create(
+        self, payload: RecordCreateProposalPayload
+    ) -> ActionCreateCommitResult:
+        self.factory.create_commit_calls += 1
+        assert self.claims.scopes == ("action_create_commit",)
+        assert self.claims.record_id is None
+        if self.factory.commit_error:
+            raise OdooGatewayError(self.factory.commit_error)
+        return ActionCreateCommitResult(
+            proposal_id=payload.proposal_id,
+            attempt_id=self.claims.attempt_id,
+            record_id=self.factory.created_record_id,
+            committed_at=NOW + timedelta(seconds=1),
+            payload_fingerprint=self.claims.payload_fingerprint,
+            precondition_fingerprint=self.claims.precondition_fingerprint,
+        )
+
+    async def verify_record_create(
+        self, payload: RecordCreateProposalPayload
+    ) -> ActionCreateVerificationResult:
+        self.factory.create_verify_calls += 1
+        assert self.claims.scopes == ("action_create_verify",)
+        if self.factory.verify_error:
+            raise OdooGatewayError(self.factory.verify_error)
+        value = (
+            payload.values[0].value
+            if self.factory.matches
+            else ActionValue(kind=ActionValueKind.TEXT, value="Other customer")
+        )
+        return ActionCreateVerificationResult(
+            proposal_id=payload.proposal_id,
+            attempt_id=self.claims.attempt_id,
+            record_id=self.factory.created_record_id,
+            verified_at=NOW + timedelta(seconds=2),
+            matches=self.factory.matches,
+            after={"name": value},
+        )
+
+    async def commit_business_action(
+        self, payload: BusinessActionProposalPayload
+    ) -> BusinessActionCommitResult:
+        self.factory.business_commit_calls += 1
+        assert self.claims.scopes == ("business_action_commit",)
+        assert self.claims.action_id == "sale.order.confirm.v1"
+        if self.factory.commit_error:
+            raise OdooGatewayError(self.factory.commit_error)
+        return BusinessActionCommitResult(
+            proposal_id=payload.proposal_id,
+            attempt_id=self.claims.attempt_id,
+            action_id=payload.action_id,
+            record_id=payload.target.record_id,
+            committed_at=NOW + timedelta(seconds=1),
+            payload_fingerprint=self.claims.payload_fingerprint,
+            precondition_fingerprint=self.claims.precondition_fingerprint,
+        )
+
+    async def verify_business_action(
+        self, payload: BusinessActionProposalPayload
+    ) -> BusinessActionVerificationResult:
+        self.factory.business_verify_calls += 1
+        assert self.claims.scopes == ("business_action_verify",)
+        if self.factory.verify_error:
+            raise OdooGatewayError(self.factory.verify_error)
+        return BusinessActionVerificationResult(
+            proposal_id=payload.proposal_id,
+            attempt_id=self.claims.attempt_id,
+            action_id=payload.action_id,
+            record_id=payload.target.record_id,
+            verified_at=NOW + timedelta(seconds=2),
+            matches=self.factory.matches,
+            state="sale" if self.factory.matches else "draft",
         )
 
 
@@ -200,14 +367,17 @@ class FakeGatewayFactory:
         self.matches = matches
         self.commit_calls = 0
         self.verify_calls = 0
+        self.create_commit_calls = 0
+        self.create_verify_calls = 0
+        self.created_record_id = 84
+        self.business_commit_calls = 0
+        self.business_verify_calls = 0
 
     def for_action(self, *, authority_token: str) -> FakeActionGateway:
         return FakeActionGateway(self, authority_token)
 
 
-def _service(
-    store: MemoryExecutionStore, factory: FakeGatewayFactory
-) -> ActionExecutionService:
+def _service(store: MemoryExecutionStore, factory: FakeGatewayFactory) -> ActionExecutionService:
     ids = iter((ATTEMPT_ID, EVIDENCE_ID))
     return ActionExecutionService(
         store=store,
@@ -231,9 +401,7 @@ def test_commit_is_one_shot_and_exact_reread_produces_verified_receipt() -> None
     service = _service(store, factory)
 
     receipt = asyncio.run(
-        service.execute(
-            ExecuteApprovedActionRequest(approval_id=APPROVAL_ID, actor=_actor())
-        )
+        service.execute(ExecuteApprovedActionRequest(approval_id=APPROVAL_ID, actor=_actor()))
     )
 
     assert receipt.state is ActionProposalState.VERIFIED
@@ -247,9 +415,7 @@ def test_commit_is_one_shot_and_exact_reread_produces_verified_receipt() -> None
         ActionProposalState.VERIFIED,
     ]
     replay = asyncio.run(
-        service.execute(
-            ExecuteApprovedActionRequest(approval_id=APPROVAL_ID, actor=_actor())
-        )
+        service.execute(ExecuteApprovedActionRequest(approval_id=APPROVAL_ID, actor=_actor()))
     )
     assert replay == receipt
     assert factory.commit_calls == 1
@@ -322,3 +488,108 @@ def test_interrupted_executing_state_recovers_by_reread_without_commit_retry() -
     assert receipt.state is ActionProposalState.VERIFIED
     assert factory.commit_calls == 0
     assert factory.verify_calls == 1
+
+
+def test_create_commit_verifies_odoo_supplied_record_id_and_is_one_shot() -> None:
+    store = MemoryCreateExecutionStore()
+    factory = FakeGatewayFactory(_codec())
+    service = _service(store, factory)
+
+    receipt = asyncio.run(
+        service.execute(ExecuteApprovedActionRequest(approval_id=APPROVAL_ID, actor=_actor()))
+    )
+
+    assert receipt.state is ActionProposalState.VERIFIED
+    assert receipt.evidence is not None
+    assert receipt.evidence.payload["record_id"] == 84
+    assert receipt.evidence.pointer["record_id"] == 84
+    assert factory.create_commit_calls == factory.create_verify_calls == 1
+
+    replay = asyncio.run(
+        service.execute(ExecuteApprovedActionRequest(approval_id=APPROVAL_ID, actor=_actor()))
+    )
+    assert replay == receipt
+    assert factory.create_commit_calls == factory.create_verify_calls == 1
+
+
+def test_create_timeout_after_commit_recovers_original_record_without_retry() -> None:
+    store = MemoryCreateExecutionStore()
+    factory = FakeGatewayFactory(_codec(), commit_error="upstream_timeout")
+
+    receipt = asyncio.run(
+        _service(store, factory).execute(
+            ExecuteApprovedActionRequest(approval_id=APPROVAL_ID, actor=_actor())
+        )
+    )
+
+    assert receipt.state is ActionProposalState.VERIFIED
+    assert receipt.evidence is not None
+    assert receipt.evidence.payload["record_id"] == factory.created_record_id
+    assert factory.create_commit_calls == 1
+    assert factory.create_verify_calls == 1
+    assert store.transitions == [
+        ActionProposalState.EXECUTION_UNKNOWN,
+        ActionProposalState.VERIFIED,
+    ]
+
+
+def test_interrupted_create_recovers_from_odoo_receipt_without_commit_retry() -> None:
+    store = MemoryCreateExecutionStore()
+    store.proposal = replace(
+        store.proposal,
+        state=ActionProposalState.EXECUTING,
+        attempt_id=ATTEMPT_ID,
+        execution_started_at=NOW + timedelta(seconds=5),
+    )
+    factory = FakeGatewayFactory(_codec())
+
+    receipt = asyncio.run(
+        _service(store, factory).execute(
+            ExecuteApprovedActionRequest(approval_id=APPROVAL_ID, actor=_actor())
+        )
+    )
+
+    assert receipt.state is ActionProposalState.VERIFIED
+    assert factory.create_commit_calls == 0
+    assert factory.create_verify_calls == 1
+
+
+def test_business_action_executes_once_and_only_verified_outcome_is_success() -> None:
+    store = MemoryBusinessExecutionStore()
+    factory = FakeGatewayFactory(_codec())
+    service = _service(store, factory)
+
+    receipt = asyncio.run(
+        service.execute(ExecuteApprovedActionRequest(approval_id=APPROVAL_ID, actor=_actor()))
+    )
+
+    assert receipt.state is ActionProposalState.VERIFIED
+    assert receipt.evidence is not None
+    assert receipt.evidence.payload["action_id"] == "sale.order.confirm.v1"
+    assert receipt.evidence.payload["after"] == {"state": "sale"}
+    assert factory.business_commit_calls == factory.business_verify_calls == 1
+
+    replay = asyncio.run(
+        service.execute(ExecuteApprovedActionRequest(approval_id=APPROVAL_ID, actor=_actor()))
+    )
+    assert replay == receipt
+    assert factory.business_commit_calls == factory.business_verify_calls == 1
+
+
+def test_business_action_timeout_recovers_by_receipt_without_second_execution() -> None:
+    store = MemoryBusinessExecutionStore()
+    factory = FakeGatewayFactory(_codec(), commit_error="upstream_timeout")
+
+    receipt = asyncio.run(
+        _service(store, factory).execute(
+            ExecuteApprovedActionRequest(approval_id=APPROVAL_ID, actor=_actor())
+        )
+    )
+
+    assert receipt.state is ActionProposalState.VERIFIED
+    assert factory.business_commit_calls == 1
+    assert factory.business_verify_calls == 1
+    assert store.transitions == [
+        ActionProposalState.EXECUTION_UNKNOWN,
+        ActionProposalState.VERIFIED,
+    ]

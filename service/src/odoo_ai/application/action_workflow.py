@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -16,12 +17,15 @@ from odoo_ai.application.context_read import (
     validate_context_turn_request,
 )
 from odoo_ai.contracts import (
+    ActionCreateProposalHandle,
     ActionProposalHandle,
+    ActionProposalPresentation,
     ActionToolReport,
     ActionTurnRequest,
     ActionTurnResponse,
     AnswerConfidence,
     AnswerEnvelope,
+    BusinessActionProposalHandle,
     ContextPack,
     ConversationState,
     Evidence,
@@ -34,10 +38,21 @@ from odoo_ai.contracts import (
 )
 from odoo_ai.ports import ReasoningEngine
 
-MAX_ACTION_TOOL_CALLS = 2
+# Schema + one invalid preview selection + one corrected preview. Each registered
+# preview remains one-shot and commit authority is still absent from reasoning.
+MAX_ACTION_TOOL_CALLS = 3
 MAX_ACTION_EVIDENCE_ITEMS = 8
 MAX_ANSWER_BYTES = 32 * 1024
 MAX_ANSWER_CHARS = 16_384
+
+_CREATE_INTENT = re.compile(r"\b(?:create|crear|crea|cree|new|nuevo|nueva|alta)\b", re.IGNORECASE)
+_UPDATE_INTENT = re.compile(
+    r"\b(?:change|update|modify|set|cambia|cambiar|actualiza|modifica)\b",
+    re.IGNORECASE,
+)
+_CONFIRM_INTENT = re.compile(
+    r"\b(?:confirm|confirmation|confirma|confirmar|confirmación)\b", re.IGNORECASE
+)
 
 ActionReportLoader = Callable[[], ActionToolReport]
 
@@ -79,9 +94,7 @@ class ActionService:
         try:
             now = self._validated_now()
             validate_context_turn_request(request, now=now)
-            if request.user.allowed_company_ids != sorted(
-                request.user.allowed_company_ids
-            ):
+            if request.user.allowed_company_ids != sorted(request.user.allowed_company_ids):
                 raise ActionTurnError("invalid_user_context", 422)
             instance = self._safe_instance_summary()
             context = ContextPack(
@@ -108,15 +121,20 @@ class ActionService:
                     "workflow": Workflow.ACTION.value,
                 },
             )
+            turn_tools = _select_action_tools(
+                self._action_tools,
+                message=request.message,
+                model=request.screen.model or "",
+            )
             self._event(
                 events,
                 "reasoning.started",
                 "ok",
-                {"tool_count": len(self._action_tools), "workflow": "ACTION"},
+                {"tool_count": len(turn_tools), "workflow": "ACTION"},
             )
             answer = await self._reasoning_engine.run_turn(
                 context,
-                list(self._action_tools),
+                list(turn_tools),
                 AnswerEnvelope.model_json_schema(),
             )
             report = self._report_loader()
@@ -200,9 +218,7 @@ class ActionService:
         events.append(TraceEventData(event_name, status, dict(attributes)))
 
     @classmethod
-    def _append_tool_report(
-        cls, events: list[TraceEventData], report: ActionToolReport
-    ) -> None:
+    def _append_tool_report(cls, events: list[TraceEventData], report: ActionToolReport) -> None:
         for event in report.tool_report.events:
             cls._event(events, event.event_name, event.status, event.attributes)
         for evidence in report.tool_report.retrieved_evidence:
@@ -217,9 +233,7 @@ class ActionService:
             )
 
     @classmethod
-    def _error_event(
-        cls, events: list[TraceEventData], code: str, started: float
-    ) -> None:
+    def _error_event(cls, events: list[TraceEventData], code: str, started: float) -> None:
         if any(item.event_name == "reasoning.started" for item in events) and not any(
             item.event_name == "reasoning.completed" for item in events
         ):
@@ -241,6 +255,29 @@ class ActionService:
         )
 
 
+def _select_action_tools(
+    tools: Sequence[ToolSpec], *, message: str, model: str
+) -> tuple[ToolSpec, ...]:
+    """Narrow a turn only for explicit high-confidence action-family intent."""
+
+    normalized = message.casefold()
+    names: frozenset[str] | None = None
+    if "sale.order.confirm.v1" in normalized or (
+        model == "sale.order"
+        and _CONFIRM_INTENT.search(normalized)
+        and not _CREATE_INTENT.search(normalized)
+    ):
+        names = frozenset({"odoo.preview_business_action"})
+    elif _CREATE_INTENT.search(normalized):
+        names = frozenset({"odoo.get_effective_write_schema", "odoo.preview_record_create"})
+    elif _UPDATE_INTENT.search(normalized):
+        names = frozenset({"odoo.get_effective_write_schema", "odoo.preview_record_patch"})
+    if names is None:
+        return tuple(tools)
+    selected = tuple(tool for tool in tools if tool.name in names)
+    return selected if selected else tuple(tools)
+
+
 def _validated_answer(
     answer: AnswerEnvelope,
     *,
@@ -248,7 +285,7 @@ def _validated_answer(
     turn_id: UUID,
     model: str,
     record_id: int,
-) -> tuple[AnswerEnvelope, ActionProposalHandle | None, tuple[UUID, ...]]:
+) -> tuple[AnswerEnvelope, ActionProposalPresentation | None, tuple[UUID, ...]]:
     if answer.workflow is not Workflow.ACTION:
         raise ActionTurnError("answer_workflow_invalid", 502)
     if (
@@ -280,12 +317,25 @@ def _validated_answer(
             None,
             references,
         )
+    if isinstance(proposal, ActionProposalHandle):
+        target_matches = proposal.target.model == model and proposal.target.record_id == record_id
+        action_type = "record_patch"
+        evidence_provider = "odoo_action_preview"
+    elif isinstance(proposal, ActionCreateProposalHandle):
+        target_matches = proposal.target.model == model
+        action_type = "record_create"
+        evidence_provider = "odoo_action_create_preview"
+    elif isinstance(proposal, BusinessActionProposalHandle):
+        target_matches = proposal.target.model == model and proposal.target.record_id == record_id
+        action_type = "business_action"
+        evidence_provider = "odoo_business_action_preview"
+    else:
+        raise ActionTurnError("action_proposal_mismatch", 502)
     if (
         proposal.turn_id != turn_id
-        or proposal.target.model != model
-        or proposal.target.record_id != record_id
+        or not target_matches
         or presentation is None
-        or presentation.action_type != "record_patch"
+        or presentation.action_type != action_type
         or set(presentation.details) != {"payload_fingerprint", "proposal_id"}
         or presentation.details.get("proposal_id") != str(proposal.proposal_id)
         or presentation.details.get("payload_fingerprint") != proposal.payload_fingerprint
@@ -297,7 +347,7 @@ def _validated_answer(
     if (
         preview_evidence is None
         or not isinstance(pointer, dict)
-        or pointer.get("provider") != "odoo_action_preview"
+        or pointer.get("provider") != evidence_provider
         or pointer.get("proposal_id") != str(proposal.proposal_id)
     ):
         raise ActionTurnError("action_evidence_invalid", 502)

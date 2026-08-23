@@ -121,12 +121,16 @@ M6_CODEX_EXECUTABLE M6_PLAYWRIGHT_ROOT M6_NODE
 M6_POSTGRES_ADMIN_DSN
 ```
 
+`M6_ODOO_EXTRA_ADDONS` accepts an optional platform-path-separated list when
+the Odoo distribution exposes core and standard addons in more than one root.
+
 Example:
 
 ```text
 M6_ODOO_PYTHON=/path/to/odoo-python \
 M6_ODOO_BIN=/path/to/odoo-bin \
 M6_ODOO_CORE_ADDONS=/path/to/odoo/addons \
+M6_ODOO_EXTRA_ADDONS=/path/to/odoo/standard-addons \
 M6_CODEX_EXECUTABLE=/path/to/codex \
 M6_PLAYWRIGHT_ROOT=/tmp/playwright-runtime \
 M6_NODE=/usr/bin/node \

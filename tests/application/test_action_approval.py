@@ -16,6 +16,10 @@ from odoo_ai.application.action_policy import (
 )
 from odoo_ai.contracts import (
     ActionActorContext,
+    ActionCreatePreview,
+    ActionCreatePreviewSummary,
+    ActionCreatePreviewValue,
+    ActionCreateTarget,
     ActionDecision,
     ActionDecisionRequest,
     ActionFieldChange,
@@ -28,6 +32,7 @@ from odoo_ai.contracts import (
     ActionValue,
     ActionValueKind,
     PersistActionPreviewRequest,
+    RecordCreateProposalPayload,
 )
 from odoo_ai.ports import (
     ActionDecisionOutcome,
@@ -353,3 +358,71 @@ def test_persisted_shape_contains_no_token_secret_prompt_or_delegation() -> None
     assert "shared_secret" not in serialized
     assert "system_prompt" not in serialized
     assert "approval_token" not in serialized
+
+
+def test_create_uses_same_immutable_approval_pipeline_and_actor_binding() -> None:
+    payload = RecordCreateProposalPayload(
+        proposal_id=PROPOSAL_ID,
+        turn_id=TURN_ID,
+        instance_id="odoo-production",
+        database="acme",
+        uid=17,
+        company_id=1,
+        allowed_company_ids=(1, 3),
+        target=ActionCreateTarget(model="res.partner"),
+        values=(
+            ActionFieldChange(
+                field="name",
+                value=ActionValue(kind=ActionValueKind.TEXT, value="New customer"),
+            ),
+        ),
+        policy_revision=ACTION_POLICY_REVISION,
+        schema_revision=SCHEMA_ID,
+    )
+    preview = ActionCreatePreview(
+        preview_id=PREVIEW_ID,
+        summary=ActionCreatePreviewSummary(
+            proposal_id=PROPOSAL_ID,
+            target=payload.target,
+            values=(
+                ActionCreatePreviewValue(
+                    field="name", label="Name", value=payload.values[0].value
+                ),
+            ),
+            warnings=("Requested values only.",),
+        ),
+        payload_fingerprint=action_payload_fingerprint(payload),
+        precondition_fingerprint=PRECONDITION,
+        policy_revision=payload.policy_revision,
+        schema_revision=payload.schema_revision,
+        observed_at=NOW,
+        expires_at=NOW + timedelta(minutes=2),
+    )
+    store = InMemoryActionStore()
+    service = _service(store)
+    service.persist_preview(
+        PersistActionPreviewRequest(payload=payload, preview=preview)
+    )
+
+    with pytest.raises(ActionApprovalError, match="approval_binding_mismatch"):
+        service.decide(
+            ActionDecisionRequest(
+                proposal_id=PROPOSAL_ID,
+                decision=ActionDecision.APPROVE,
+                actor=_actor(uid=18),
+            )
+        )
+    receipt = service.decide(
+        ActionDecisionRequest(
+            proposal_id=PROPOSAL_ID,
+            decision=ActionDecision.APPROVE,
+            actor=_actor(),
+        )
+    )
+
+    assert receipt.state is ActionProposalState.APPROVED
+    approved = service.load_approved(approval_id=APPROVAL_ID, actor=_actor())
+    assert approved.payload == payload
+    assert (
+        approved.canonical_payload == canonical_action_payload_bytes(payload).decode()
+    )

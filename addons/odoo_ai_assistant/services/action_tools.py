@@ -14,7 +14,7 @@ from typing import Final, Protocol
 from uuid import UUID, uuid4
 
 from odoo import api
-from odoo.exceptions import AccessError, MissingError, ValidationError
+from odoo.exceptions import AccessError, MissingError, UserError, ValidationError
 from odoo.modules.registry import Registry
 
 from ..security import (
@@ -87,6 +87,16 @@ _SENSITIVE_FIELD_PARTS: Final = ("api_key", "credential", "password", "secret", 
 _PREVIEW_WARNING: Final = (
     "Preview only: onchange and secondary write side effects are not simulated."
 )
+_CREATE_PREVIEW_WARNING: Final = (
+    "Requested values only: server defaults, computed values, and create side effects "
+    "are verified after approval."
+)
+SALE_ORDER_CONFIRM_ACTION_ID: Final = "sale.order.confirm.v1"
+SALE_ORDER_CONFIRM_SPEC_REVISION: Final = "sale-order-confirm-spec-v1"
+_BUSINESS_ACTION_WARNING: Final = (
+    "Confirming a sale order may trigger deliveries, invoices, messages, or other "
+    "side effects added by installed modules; extensions are not simulated."
+)
 
 JsonValue = str | int | float | bool | list["JsonValue"] | dict[str, "JsonValue"] | None
 
@@ -145,21 +155,28 @@ class DelegatedActionPreviewToolExecutor:
                 )
                 try:
                     model_set.browse().check_access("write")
+                    write_access = True
                 except (AccessError, MissingError, ValidationError):
-                    result["write_access"] = False
-                    return result
+                    write_access = False
+                try:
+                    model_set.browse().check_access("create")
+                    create_access = True
+                except (AccessError, MissingError, ValidationError):
+                    create_access = False
                 fields = result.get("fields")
                 if not isinstance(fields, dict):
                     raise OrmToolError("invalid_metadata", 500)
                 write_fields: dict[str, JsonValue] = {}
-                for name, description in fields.items():
-                    try:
-                        model_set.check_field_access_rights("write", [name])
-                    except AccessError:
-                        continue
-                    write_fields[name] = description
+                if write_access or create_access:
+                    for name, description in fields.items():
+                        try:
+                            model_set.check_field_access_rights("write", [name])
+                        except AccessError:
+                            continue
+                        write_fields[name] = description
                 result["fields"] = write_fields
-                result["write_access"] = True
+                result["write_access"] = write_access
+                result["create_access"] = create_access
                 return result
         except OrmToolError:
             raise
@@ -244,6 +261,147 @@ class DelegatedActionPreviewToolExecutor:
         check_response_size(result)
         return result
 
+    def preview_record_create(
+        self,
+        *,
+        delegation_token: str,
+        turn_id: object,
+        proposal: object,
+        payload_fingerprint: object,
+    ) -> dict[str, JsonValue]:
+        """Validate requested values and references without calling ORM create."""
+
+        parsed_turn = _turn_id(turn_id)
+        parsed = _proposal(proposal)
+        if parsed["action_kind"] != "record_create":
+            raise OrmToolError("invalid_action", 400)
+        fingerprint = _fingerprint(payload_fingerprint, prefix="action-payload")
+        expected = _action_payload_fingerprint(parsed)
+        if not hmac.compare_digest(fingerprint, expected):
+            raise OrmToolError("payload_fingerprint_mismatch", 403)
+        target = parsed["target"]
+        claims = self._authorize(
+            delegation_token,
+            turn_id=parsed_turn,
+            scope="action_preview",
+            model=target["model"],
+        )
+        _check_proposal_authority(parsed, claims)
+        self._replay_guard(claims, "action_preview")
+        observed_at = self._observed_at()
+        try:
+            with self._environment_provider(claims) as env:
+                model_set = env[target["model"]]
+                values = parsed["values"]
+                field_names = tuple(value["field"] for value in values)
+                metadata = _create_metadata(model_set, field_names, claims, observed_at=observed_at)
+                preview_values = _preview_create_values(env, values=values, metadata=metadata)
+        except OrmToolError:
+            raise
+        except (AccessError, MissingError, ValidationError, KeyError):
+            raise OrmToolError("access_denied", 403) from None
+        references = sorted(
+            value["value"]["value"]
+            for value in values
+            if value["value"]["kind"] == "many2one" and value["value"]["value"] is not None
+        )
+        precondition = _create_precondition_fingerprint(proposal=parsed, references=references)
+        result: dict[str, JsonValue] = {
+            "ok": True,
+            "preview": {
+                "action_kind": "record_create",
+                "expires_at": iso_datetime(datetime.fromtimestamp(claims.expires_at, UTC)),
+                "observed_at": iso_datetime(observed_at),
+                "payload_fingerprint": fingerprint,
+                "policy_revision": parsed["policy_revision"],
+                "precondition_fingerprint": precondition,
+                "preview_id": str(uuid4()),
+                "schema_revision": parsed["schema_revision"],
+                "summary": {
+                    "proposal_id": parsed["proposal_id"],
+                    "target": target,
+                    "values": preview_values,
+                    "warnings": [_CREATE_PREVIEW_WARNING],
+                },
+            },
+        }
+        check_response_size(result)
+        return result
+
+    def preview_business_action(
+        self,
+        *,
+        delegation_token: str,
+        turn_id: object,
+        proposal: object,
+        payload_fingerprint: object,
+    ) -> dict[str, JsonValue]:
+        """Preview only the explicitly curated sale.order confirmation handler."""
+
+        parsed_turn = _turn_id(turn_id)
+        parsed = _proposal(proposal)
+        if parsed["action_kind"] != "business_action":
+            raise OrmToolError("invalid_action", 400)
+        fingerprint = _fingerprint(payload_fingerprint, prefix="action-payload")
+        if not hmac.compare_digest(fingerprint, _action_payload_fingerprint(parsed)):
+            raise OrmToolError("payload_fingerprint_mismatch", 403)
+        target = parsed["target"]
+        claims = self._authorize(
+            delegation_token,
+            turn_id=parsed_turn,
+            scope="action_preview",
+            model="sale.order",
+        )
+        _check_proposal_authority(parsed, claims)
+        self._replay_guard(claims, "action_preview")
+        observed_at = self._observed_at()
+        try:
+            with self._environment_provider(claims) as env:
+                records = env["sale.order"].browse([target["record_id"]])
+                records.check_access("read")
+                records.check_access("write")
+                rows = records.read(["name", "state"], load=None)
+                if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
+                    raise OrmToolError("access_denied", 403)
+                display_name, state = _sale_confirm_state(rows[0])
+        except OrmToolError:
+            raise
+        except (AccessError, MissingError, ValidationError, KeyError):
+            raise OrmToolError("access_denied", 403) from None
+        if state not in {"draft", "sent"}:
+            raise OrmToolError("invalid_action_state", 409)
+        precondition = _business_precondition_fingerprint(
+            action_id=SALE_ORDER_CONFIRM_ACTION_ID,
+            model="sale.order",
+            record_id=target["record_id"],
+            state=state,
+        )
+        result: dict[str, JsonValue] = {
+            "ok": True,
+            "preview": {
+                "action_id": SALE_ORDER_CONFIRM_ACTION_ID,
+                "action_kind": "business_action",
+                "action_spec_revision": SALE_ORDER_CONFIRM_SPEC_REVISION,
+                "expires_at": iso_datetime(datetime.fromtimestamp(claims.expires_at, UTC)),
+                "observed_at": iso_datetime(observed_at),
+                "payload_fingerprint": fingerprint,
+                "policy_revision": parsed["policy_revision"],
+                "precondition_fingerprint": precondition,
+                "preview_id": str(uuid4()),
+                "summary": {
+                    "action_id": SALE_ORDER_CONFIRM_ACTION_ID,
+                    "display_name": display_name,
+                    "expected_states": ["sale", "done"],
+                    "proposal_id": parsed["proposal_id"],
+                    "state_before": state,
+                    "target": target,
+                    "warnings": [_BUSINESS_ACTION_WARNING],
+                },
+            },
+        }
+        check_response_size(result)
+        return result
+
     def _authorize(
         self,
         token: str,
@@ -273,7 +431,8 @@ class ApprovedActionToolExecutor:
         self,
         *,
         codec: ActionAuthorityCodec,
-        environment_provider: Callable[[ActionAuthorityPayload], AbstractContextManager[object]] | None = None,
+        environment_provider: Callable[[ActionAuthorityPayload], AbstractContextManager[object]]
+        | None = None,
         replay_guard: Callable[[ActionAuthorityPayload, str], None] | None = None,
         observed_at: Callable[[], datetime] | None = None,
     ) -> None:
@@ -286,6 +445,8 @@ class ApprovedActionToolExecutor:
         self, *, authority_token: str, proposal: object
     ) -> dict[str, JsonValue]:
         parsed = _proposal(proposal)
+        if parsed["action_kind"] != "record_patch":
+            raise OrmToolError("invalid_action", 400)
         claims = self._authorize(authority_token, parsed, "action_commit")
         self._replay_guard(claims, "action_commit")
         target = parsed["target"]
@@ -310,10 +471,7 @@ class ApprovedActionToolExecutor:
                 )
                 if not hmac.compare_digest(current, claims.precondition_fingerprint):
                     raise OrmToolError("stale_precondition", 409)
-                values = {
-                    change["field"]: _orm_write_value(change["value"])
-                    for change in changes
-                }
+                values = {change["field"]: _orm_write_value(change["value"]) for change in changes}
                 records.write(values)
         except OrmToolError:
             raise
@@ -335,6 +493,8 @@ class ApprovedActionToolExecutor:
         self, *, authority_token: str, proposal: object
     ) -> dict[str, JsonValue]:
         parsed = _proposal(proposal)
+        if parsed["action_kind"] != "record_patch":
+            raise OrmToolError("invalid_action", 400)
         claims = self._authorize(authority_token, parsed, "action_verify")
         self._replay_guard(claims, "action_verify")
         target = parsed["target"]
@@ -349,9 +509,7 @@ class ApprovedActionToolExecutor:
                 rows = records.read(list(fields), load=None)
                 if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
                     raise OrmToolError("access_denied", 403)
-                observed = _preview_changes(
-                    env, changes=changes, metadata=metadata, row=rows[0]
-                )
+                observed = _preview_changes(env, changes=changes, metadata=metadata, row=rows[0])
                 after = {change["field"]: change["before"] for change in observed}
                 expected = {change["field"]: change["value"] for change in changes}
         except OrmToolError:
@@ -368,6 +526,229 @@ class ApprovedActionToolExecutor:
             "verified_at": iso_datetime(verified_at),
         }
 
+    def commit_record_create(
+        self, *, authority_token: str, proposal: object
+    ) -> dict[str, JsonValue]:
+        parsed = _proposal(proposal)
+        if parsed["action_kind"] != "record_create":
+            raise OrmToolError("invalid_action", 400)
+        claims = self._authorize(authority_token, parsed, "action_create_commit")
+        target = parsed["target"]
+        assignments = parsed["values"]
+        fields = tuple(value["field"] for value in assignments)
+        try:
+            with self._environment_provider(claims) as env:
+                model_set = env[target["model"]]
+                metadata = _create_metadata(
+                    model_set, fields, claims, observed_at=self._observed_at()
+                )
+                _preview_create_values(env, values=assignments, metadata=metadata)
+                references = sorted(
+                    value["value"]["value"]
+                    for value in assignments
+                    if value["value"]["kind"] == "many2one" and value["value"]["value"] is not None
+                )
+                current = _create_precondition_fingerprint(proposal=parsed, references=references)
+                if not hmac.compare_digest(current, claims.precondition_fingerprint):
+                    raise OrmToolError("stale_precondition", 409)
+                receipt, is_new = env["odoo.ai.action.execution"]._claim(
+                    jti=claims.jti,
+                    attempt_id=claims.attempt_id,
+                    proposal_id=claims.proposal_id,
+                    action_kind="record_create",
+                    payload_fingerprint=claims.payload_fingerprint,
+                    target_model=target["model"],
+                    expires_at=claims.expires_at,
+                )
+                if is_new:
+                    values = {
+                        value["field"]: _orm_write_value(value["value"]) for value in assignments
+                    }
+                    created = model_set.create(values)
+                    if len(created) != 1 or type(created.id) is not int or created.id <= 0:
+                        raise OrmToolError("invalid_action_result", 502)
+                    receipt._complete(record_id=created.id)
+                elif receipt.status != "completed" or receipt.target_record_id <= 0:
+                    raise OrmToolError("execution_in_progress", 409)
+                record_id = receipt.target_record_id
+        except OrmToolError:
+            raise
+        except (AccessError, MissingError, ValidationError, KeyError):
+            raise OrmToolError("access_denied", 403) from None
+        except ValueError:
+            raise OrmToolError("invalid_action", 400) from None
+        return {
+            "attempt_id": str(claims.attempt_id),
+            "committed_at": iso_datetime(self._observed_at()),
+            "ok": True,
+            "payload_fingerprint": claims.payload_fingerprint,
+            "precondition_fingerprint": claims.precondition_fingerprint,
+            "proposal_id": str(claims.proposal_id),
+            "record_id": record_id,
+        }
+
+    def verify_record_create(
+        self, *, authority_token: str, proposal: object
+    ) -> dict[str, JsonValue]:
+        parsed = _proposal(proposal)
+        if parsed["action_kind"] != "record_create":
+            raise OrmToolError("invalid_action", 400)
+        claims = self._authorize(authority_token, parsed, "action_create_verify")
+        self._replay_guard(claims, "action_create_verify")
+        target = parsed["target"]
+        assignments = parsed["values"]
+        fields = tuple(value["field"] for value in assignments)
+        try:
+            with self._environment_provider(claims) as env:
+                receipt = env["odoo.ai.action.execution"]._get_completed(
+                    attempt_id=claims.attempt_id,
+                    proposal_id=claims.proposal_id,
+                    action_kind="record_create",
+                    payload_fingerprint=claims.payload_fingerprint,
+                    target_model=target["model"],
+                )
+                if not receipt:
+                    raise OrmToolError("execution_receipt_not_found", 404)
+                record_id = receipt.target_record_id
+                model_set = env[target["model"]]
+                metadata = _create_metadata(
+                    model_set, fields, claims, observed_at=self._observed_at()
+                )
+                records = model_set.browse([record_id])
+                records.check_access("read")
+                rows = records.read(list(fields), load=None)
+                if len(rows) != 1 or rows[0].get("id") != record_id:
+                    raise OrmToolError("access_denied", 403)
+                observed = _preview_changes(
+                    env, changes=assignments, metadata=metadata, row=rows[0]
+                )
+                after = {value["field"]: value["before"] for value in observed}
+                expected = {value["field"]: value["value"] for value in assignments}
+        except OrmToolError:
+            raise
+        except (AccessError, MissingError, ValidationError, KeyError):
+            raise OrmToolError("access_denied", 403) from None
+        return {
+            "after": after,
+            "attempt_id": str(claims.attempt_id),
+            "matches": after == expected,
+            "ok": True,
+            "proposal_id": str(claims.proposal_id),
+            "record_id": record_id,
+            "verified_at": iso_datetime(self._observed_at()),
+        }
+
+    def commit_business_action(
+        self, *, authority_token: str, proposal: object
+    ) -> dict[str, JsonValue]:
+        parsed = _proposal(proposal)
+        if parsed["action_kind"] != "business_action":
+            raise OrmToolError("invalid_action", 400)
+        claims = self._authorize(authority_token, parsed, "business_action_commit")
+        target = parsed["target"]
+        try:
+            with self._environment_provider(claims) as env:
+                receipt, is_new = env["odoo.ai.action.execution"]._claim(
+                    jti=claims.jti,
+                    attempt_id=claims.attempt_id,
+                    proposal_id=claims.proposal_id,
+                    action_kind="business_action",
+                    payload_fingerprint=claims.payload_fingerprint,
+                    target_model="sale.order",
+                    expires_at=claims.expires_at,
+                )
+                if not is_new:
+                    if receipt.status != "completed" or receipt.target_record_id <= 0:
+                        raise OrmToolError("execution_in_progress", 409)
+                    record_id = receipt.target_record_id
+                else:
+                    records = env["sale.order"].browse([target["record_id"]])
+                    records.check_access("read")
+                    records.check_access("write")
+                    rows = records.read(["name", "state"], load=None)
+                    if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
+                        raise OrmToolError("access_denied", 403)
+                    _, state = _sale_confirm_state(rows[0])
+                    current = _business_precondition_fingerprint(
+                        action_id=SALE_ORDER_CONFIRM_ACTION_ID,
+                        model="sale.order",
+                        record_id=target["record_id"],
+                        state=state,
+                    )
+                    if not hmac.compare_digest(current, claims.precondition_fingerprint):
+                        raise OrmToolError("stale_precondition", 409)
+                    if state not in {"draft", "sent"}:
+                        raise OrmToolError("invalid_action_state", 409)
+                    records.action_confirm()
+                    after_rows = records.read(["state"], load=None)
+                    if (
+                        len(after_rows) != 1
+                        or after_rows[0].get("id") != target["record_id"]
+                        or after_rows[0].get("state") not in {"sale", "done"}
+                    ):
+                        raise OrmToolError("invalid_action_result", 502)
+                    receipt._complete(record_id=target["record_id"])
+                    record_id = target["record_id"]
+        except OrmToolError:
+            raise
+        except (AccessError, MissingError, KeyError):
+            raise OrmToolError("access_denied", 403) from None
+        except (UserError, ValidationError):
+            raise OrmToolError("business_rule_rejected", 409) from None
+        return {
+            "action_id": SALE_ORDER_CONFIRM_ACTION_ID,
+            "attempt_id": str(claims.attempt_id),
+            "committed_at": iso_datetime(self._observed_at()),
+            "ok": True,
+            "payload_fingerprint": claims.payload_fingerprint,
+            "precondition_fingerprint": claims.precondition_fingerprint,
+            "proposal_id": str(claims.proposal_id),
+            "record_id": record_id,
+        }
+
+    def verify_business_action(
+        self, *, authority_token: str, proposal: object
+    ) -> dict[str, JsonValue]:
+        parsed = _proposal(proposal)
+        if parsed["action_kind"] != "business_action":
+            raise OrmToolError("invalid_action", 400)
+        claims = self._authorize(authority_token, parsed, "business_action_verify")
+        self._replay_guard(claims, "business_action_verify")
+        target = parsed["target"]
+        try:
+            with self._environment_provider(claims) as env:
+                receipt = env["odoo.ai.action.execution"]._get_completed(
+                    attempt_id=claims.attempt_id,
+                    proposal_id=claims.proposal_id,
+                    action_kind="business_action",
+                    payload_fingerprint=claims.payload_fingerprint,
+                    target_model="sale.order",
+                )
+                if not receipt or receipt.target_record_id != target["record_id"]:
+                    raise OrmToolError("execution_receipt_not_found", 404)
+                records = env["sale.order"].browse([target["record_id"]])
+                records.check_access("read")
+                rows = records.read(["state"], load=None)
+                if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
+                    raise OrmToolError("access_denied", 403)
+                state = rows[0].get("state")
+                if state not in {"draft", "sent", "sale", "done", "cancel"}:
+                    raise OrmToolError("invalid_action_result", 502)
+        except OrmToolError:
+            raise
+        except (AccessError, MissingError, ValidationError, KeyError):
+            raise OrmToolError("access_denied", 403) from None
+        return {
+            "action_id": SALE_ORDER_CONFIRM_ACTION_ID,
+            "attempt_id": str(claims.attempt_id),
+            "matches": state in {"sale", "done"},
+            "ok": True,
+            "proposal_id": str(claims.proposal_id),
+            "record_id": target["record_id"],
+            "state": state,
+            "verified_at": iso_datetime(self._observed_at()),
+        }
+
     def _authorize(
         self, token: str, proposal: dict[str, object], scope: str
     ) -> ActionAuthorityPayload:
@@ -376,10 +757,18 @@ class ApprovedActionToolExecutor:
         except DelegationTokenError:
             raise OrmToolError("delegation_rejected", 403) from None
         target = proposal["target"]
-        fields = tuple(sorted(change["field"] for change in proposal["changes"]))
+        assignments = (
+            proposal["changes"]
+            if proposal["action_kind"] == "record_patch"
+            else proposal["values"]
+            if proposal["action_kind"] == "record_create"
+            else [{"field": "state"}]
+        )
+        fields = tuple(sorted(change["field"] for change in assignments))
         fingerprint = _action_payload_fingerprint(proposal)
         if (
             claims.scopes != (scope,)
+            or claims.action_kind != proposal["action_kind"]
             or str(claims.proposal_id) != proposal["proposal_id"]
             or claims.instance_id != proposal["instance_id"]
             or claims.database != proposal["database"]
@@ -387,11 +776,23 @@ class ApprovedActionToolExecutor:
             or claims.company_id != proposal["company_id"]
             or claims.allowed_company_ids != tuple(proposal["allowed_company_ids"])
             or claims.model != target["model"]
-            or claims.record_id != target["record_id"]
+            or claims.record_id
+            != (
+                target["record_id"]
+                if proposal["action_kind"] in {"record_patch", "business_action"}
+                else None
+            )
             or claims.fields != fields
             or claims.policy_revision != ACTION_POLICY_REVISION
             or claims.policy_revision != proposal["policy_revision"]
-            or claims.schema_revision != proposal["schema_revision"]
+            or claims.schema_revision
+            != (
+                proposal["action_spec_revision"]
+                if proposal["action_kind"] == "business_action"
+                else proposal["schema_revision"]
+            )
+            or claims.action_id
+            != (proposal["action_id"] if proposal["action_kind"] == "business_action" else None)
             or not hmac.compare_digest(claims.payload_fingerprint, fingerprint)
         ):
             raise OrmToolError("scope_denied", 403)
@@ -464,6 +865,16 @@ def _model_name(value: object) -> str:
 
 
 def _proposal(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise OrmToolError("invalid_action", 400)
+    if value.get("action_kind") == "record_create":
+        return _record_create_proposal(value)
+    if value.get("action_kind") == "business_action":
+        return _business_action_proposal(value)
+    return _record_patch_proposal(value)
+
+
+def _record_patch_proposal(value: object) -> dict[str, object]:
     raw = _exact_dict(
         value,
         {
@@ -518,6 +929,111 @@ def _proposal(value: object) -> dict[str, object]:
     }
     if not _model_permitted(target["model"]):
         raise OrmToolError("model_denied", 403)
+    if len(_canonical_bytes(parsed)) > MAX_ACTION_PAYLOAD_BYTES:
+        raise OrmToolError("payload_too_large", 413)
+    return parsed
+
+
+def _record_create_proposal(value: object) -> dict[str, object]:
+    raw = _exact_dict(
+        value,
+        {
+            "action_kind",
+            "allowed_company_ids",
+            "company_id",
+            "database",
+            "format_version",
+            "instance_id",
+            "policy_revision",
+            "proposal_id",
+            "schema_revision",
+            "target",
+            "turn_id",
+            "uid",
+            "values",
+        },
+    )
+    if raw["format_version"] != 1 or raw["action_kind"] != "record_create":
+        raise OrmToolError("invalid_action", 400)
+    allowed_company_ids = _positive_id_list(raw["allowed_company_ids"], maximum=16)
+    company_id = _positive_int(raw["company_id"])
+    if company_id not in allowed_company_ids or allowed_company_ids != sorted(allowed_company_ids):
+        raise OrmToolError("invalid_action", 400)
+    target_raw = _exact_dict(raw["target"], {"model"})
+    target = {"model": _model_name(target_raw["model"])}
+    parsed: dict[str, object] = {
+        "action_kind": "record_create",
+        "allowed_company_ids": allowed_company_ids,
+        "company_id": company_id,
+        "database": _bounded_text(raw["database"], maximum=128),
+        "format_version": 1,
+        "instance_id": _bounded_text(raw["instance_id"], maximum=255),
+        "policy_revision": _bounded_text(raw["policy_revision"], maximum=128),
+        "proposal_id": _canonical_uuid(raw["proposal_id"]),
+        "schema_revision": _bounded_text(raw["schema_revision"], maximum=128),
+        "target": target,
+        "turn_id": _canonical_uuid(raw["turn_id"]),
+        "uid": _positive_int(raw["uid"]),
+        "values": _changes(raw["values"]),
+    }
+    if not _model_permitted(target["model"]):
+        raise OrmToolError("model_denied", 403)
+    if len(_canonical_bytes(parsed)) > MAX_ACTION_PAYLOAD_BYTES:
+        raise OrmToolError("payload_too_large", 413)
+    return parsed
+
+
+def _business_action_proposal(value: object) -> dict[str, object]:
+    raw = _exact_dict(
+        value,
+        {
+            "action_id",
+            "action_kind",
+            "action_spec_revision",
+            "allowed_company_ids",
+            "company_id",
+            "database",
+            "format_version",
+            "instance_id",
+            "policy_revision",
+            "proposal_id",
+            "target",
+            "turn_id",
+            "uid",
+        },
+    )
+    if (
+        raw["format_version"] != 1
+        or raw["action_kind"] != "business_action"
+        or raw["action_id"] != SALE_ORDER_CONFIRM_ACTION_ID
+        or raw["action_spec_revision"] != SALE_ORDER_CONFIRM_SPEC_REVISION
+    ):
+        raise OrmToolError("business_action_denied", 403)
+    allowed_company_ids = _positive_id_list(raw["allowed_company_ids"], maximum=16)
+    company_id = _positive_int(raw["company_id"])
+    if company_id not in allowed_company_ids or allowed_company_ids != sorted(allowed_company_ids):
+        raise OrmToolError("invalid_action", 400)
+    target_raw = _exact_dict(raw["target"], {"model", "record_id"})
+    if target_raw["model"] != "sale.order":
+        raise OrmToolError("business_action_denied", 403)
+    parsed: dict[str, object] = {
+        "action_id": SALE_ORDER_CONFIRM_ACTION_ID,
+        "action_kind": "business_action",
+        "action_spec_revision": SALE_ORDER_CONFIRM_SPEC_REVISION,
+        "allowed_company_ids": allowed_company_ids,
+        "company_id": company_id,
+        "database": _bounded_text(raw["database"], maximum=128),
+        "format_version": 1,
+        "instance_id": _bounded_text(raw["instance_id"], maximum=255),
+        "policy_revision": _bounded_text(raw["policy_revision"], maximum=128),
+        "proposal_id": _canonical_uuid(raw["proposal_id"]),
+        "target": {
+            "model": "sale.order",
+            "record_id": _positive_int(target_raw["record_id"]),
+        },
+        "turn_id": _canonical_uuid(raw["turn_id"]),
+        "uid": _positive_int(raw["uid"]),
+    }
     if len(_canonical_bytes(parsed)) > MAX_ACTION_PAYLOAD_BYTES:
         raise OrmToolError("payload_too_large", 413)
     return parsed
@@ -591,18 +1107,29 @@ def _check_proposal_authority(
     proposal: dict[str, object], claims: ActionPreviewDelegationPayload
 ) -> None:
     target = proposal["target"]
-    changes = proposal["changes"]
-    fields = {change["field"] for change in changes}
+    assignments = (
+        proposal["changes"]
+        if proposal["action_kind"] == "record_patch"
+        else proposal["values"]
+        if proposal["action_kind"] == "record_create"
+        else []
+    )
+    fields = {change["field"] for change in assignments}
     if (
         proposal["turn_id"] != str(claims.turn_id)
         or proposal["database"] != claims.database
         or proposal["uid"] != claims.uid
         or proposal["company_id"] != claims.company_id
         or tuple(proposal["allowed_company_ids"]) != claims.allowed_company_ids
-        or target["record_id"] != claims.record_id
+        or (
+            proposal["action_kind"] in {"record_patch", "business_action"}
+            and target["record_id"] != claims.record_id
+        )
         or proposal["policy_revision"] != claims.policy_revision
-        or len(changes) > claims.max_fields
-        or not fields.issubset(claims.allowed_fields)
+        or (
+            proposal["action_kind"] != "business_action"
+            and (len(assignments) > claims.max_fields or not fields.issubset(claims.allowed_fields))
+        )
     ):
         raise OrmToolError("scope_denied", 403)
 
@@ -631,6 +1158,87 @@ def _preview_metadata(
     if not isinstance(descriptions, dict) or set(descriptions) != set(fields):
         raise OrmToolError("field_not_allowed", 403)
     return descriptions
+
+
+def _create_metadata(
+    model_set: object,
+    fields: tuple[str, ...],
+    claims: ActionPreviewDelegationPayload | ActionAuthorityPayload,
+    *,
+    observed_at: datetime,
+) -> dict[str, dict[str, JsonValue]]:
+    if tuple(sorted(fields)) != tuple(sorted(set(fields))):
+        raise OrmToolError("field_not_allowed", 403)
+    if isinstance(claims, ActionPreviewDelegationPayload):
+        if len(fields) > claims.max_fields or not set(fields).issubset(claims.allowed_fields):
+            raise OrmToolError("scope_denied", 403)
+    elif tuple(sorted(fields)) != claims.fields:
+        raise OrmToolError("scope_denied", 403)
+    model_set.browse().check_access("create")
+    model_set.check_field_access_rights("write", list(fields))
+    metadata = collect_model_metadata(
+        model_set.env,
+        model=claims.model,
+        max_fields=len(fields),
+        observed_at=observed_at,
+        allowed_fields=frozenset(fields),
+    )
+    descriptions = metadata.get("fields")
+    if not isinstance(descriptions, dict) or set(descriptions) != set(fields):
+        raise OrmToolError("field_not_allowed", 403)
+    return descriptions
+
+
+def _preview_create_values(
+    env: object,
+    *,
+    values: list[dict[str, object]],
+    metadata: dict[str, dict[str, JsonValue]],
+) -> list[JsonValue]:
+    result: list[JsonValue] = []
+    for assignment in values:
+        field = assignment["field"]
+        value = assignment["value"]
+        description = metadata[field]
+        field_type = description.get("type")
+        expected_kind = _VALUE_KIND_BY_FIELD_TYPE.get(field_type)
+        if (
+            expected_kind is None
+            or description.get("readonly") is not False
+            or description.get("required") not in {True, False}
+            or value["kind"] != expected_kind
+            or (
+                description["required"] is True
+                and (value["value"] is None or expected_kind == "text" and value["value"] == "")
+            )
+        ):
+            raise OrmToolError("field_not_allowed", 403)
+        if expected_kind == "selection":
+            options = description.get("selection")
+            allowed = (
+                {
+                    option[0]
+                    for option in options
+                    if isinstance(option, list) and len(option) == 2 and isinstance(option[0], str)
+                }
+                if isinstance(options, list)
+                else set()
+            )
+            if value["value"] is not None and value["value"] not in allowed:
+                raise OrmToolError("invalid_action", 400)
+        if expected_kind == "many2one" and value["value"] is not None:
+            relation = description.get("relation")
+            if not isinstance(relation, str) or not _MODEL_PATTERN.fullmatch(relation):
+                raise OrmToolError("field_not_allowed", 403)
+            related = env[relation].browse([value["value"]])
+            related.check_access("read")
+            if len(related.exists()) != 1:
+                raise OrmToolError("access_denied", 403)
+        label = description.get("string")
+        if label is not None and (not isinstance(label, str) or not 1 <= len(label) <= 256):
+            raise OrmToolError("invalid_metadata", 500)
+        result.append({"field": field, "label": label, "value": value})
+    return result
 
 
 def _action_metadata(
@@ -785,7 +1393,9 @@ def _orm_write_value(value: dict[str, object]) -> object:
 def _action_payload_fingerprint(proposal: dict[str, object]) -> str:
     body = dict(proposal)
     body["allowed_company_ids"] = sorted(body["allowed_company_ids"])
-    body["changes"] = sorted(body["changes"], key=lambda change: change["field"])
+    if proposal["action_kind"] != "business_action":
+        assignments = "changes" if proposal["action_kind"] == "record_patch" else "values"
+        body[assignments] = sorted(body[assignments], key=lambda change: change["field"])
     digest = hashlib.sha256(_canonical_bytes(body)).hexdigest()
     return f"action-payload:v1:sha256:{digest}"
 
@@ -802,6 +1412,56 @@ def _precondition_fingerprint(*, model: str, record_id: int, before: dict[str, o
         )
     ).hexdigest()
     return f"action-precondition:v1:sha256:{digest}"
+
+
+def _create_precondition_fingerprint(*, proposal: dict[str, object], references: list[int]) -> str:
+    digest = hashlib.sha256(
+        _canonical_bytes(
+            {
+                "action_kind": "record_create",
+                "allowed_company_ids": proposal["allowed_company_ids"],
+                "company_id": proposal["company_id"],
+                "database": proposal["database"],
+                "format_version": 1,
+                "model": proposal["target"]["model"],
+                "policy_revision": proposal["policy_revision"],
+                "references": references,
+                "schema_revision": proposal["schema_revision"],
+                "uid": proposal["uid"],
+            }
+        )
+    ).hexdigest()
+    return f"action-precondition:v1:sha256:{digest}"
+
+
+def _business_precondition_fingerprint(
+    *, action_id: str, model: str, record_id: int, state: str
+) -> str:
+    digest = hashlib.sha256(
+        _canonical_bytes(
+            {
+                "action_id": action_id,
+                "action_spec_revision": SALE_ORDER_CONFIRM_SPEC_REVISION,
+                "format_version": 1,
+                "model": model,
+                "record_id": record_id,
+                "state": state,
+            }
+        )
+    ).hexdigest()
+    return f"action-precondition:v1:sha256:{digest}"
+
+
+def _sale_confirm_state(row: dict[str, object]) -> tuple[str, str]:
+    display_name = row.get("name")
+    state = row.get("state")
+    if (
+        not isinstance(display_name, str)
+        or not 1 <= len(display_name) <= 256
+        or state not in {"draft", "sent", "sale", "done", "cancel"}
+    ):
+        raise OrmToolError("invalid_action_result", 502)
+    return display_name, state
 
 
 def _canonical_bytes(value: object) -> bytes:

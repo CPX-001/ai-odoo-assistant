@@ -100,6 +100,12 @@ class ActionProposalRecord(Base):
         CheckConstraint("workflow = 'ACTION'", name="ck_action_proposal_workflow"),
         CheckConstraint("format_version = 1", name="ck_action_proposal_format_version"),
         CheckConstraint(
+            "(action_kind = 'record_patch' AND target_record_id IS NOT NULL) OR "
+            "(action_kind = 'record_create' AND target_record_id IS NULL) OR "
+            "(action_kind = 'business_action' AND target_record_id IS NOT NULL)",
+            name="ck_action_proposal_target_shape",
+        ),
+        CheckConstraint(
             "state IN ('previewed', 'approved', 'rejected', 'expired', "
             "'executing', 'committed', 'verified', 'stale', 'failed', "
             "'execution_unknown', 'committed_unverified')",
@@ -110,8 +116,7 @@ class ActionProposalRecord(Base):
             name="ck_action_proposal_payload_fingerprint",
         ),
         CheckConstraint(
-            "precondition_fingerprint ~ "
-            "'^action-precondition:v1:sha256:[0-9a-f]{64}$'",
+            "precondition_fingerprint ~ '^action-precondition:v1:sha256:[0-9a-f]{64}$'",
             name="ck_action_proposal_precondition_fingerprint",
         ),
         CheckConstraint(
@@ -164,6 +169,7 @@ class ActionProposalRecord(Base):
 
     proposal_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     format_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    action_kind: Mapped[str] = mapped_column(String(32), nullable=False)
     turn_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     workflow: Mapped[str] = mapped_column(String(16), nullable=False, default="ACTION")
     instance_id: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -172,7 +178,7 @@ class ActionProposalRecord(Base):
     company_id: Mapped[int] = mapped_column(Integer, nullable=False)
     allowed_company_ids: Mapped[list[int]] = mapped_column(JSONB, nullable=False)
     target_model: Mapped[str] = mapped_column(String(128), nullable=False)
-    target_record_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_record_id: Mapped[int | None] = mapped_column(Integer)
     canonical_payload: Mapped[str] = mapped_column(Text, nullable=False)
     payload_fingerprint: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     policy_revision: Mapped[str] = mapped_column(String(128), nullable=False)

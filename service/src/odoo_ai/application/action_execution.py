@@ -10,8 +10,17 @@ from uuid import UUID, uuid4
 
 from odoo_ai.contracts import (
     ActionAuthorityClaims,
+    ActionCommitResult,
+    ActionCreateCommitResult,
+    ActionCreateVerificationResult,
     ActionExecutionReceipt,
+    ActionKind,
+    ActionProposalPayload,
     ActionProposalState,
+    ActionVerificationResult,
+    BusinessActionCommitResult,
+    BusinessActionProposalPayload,
+    BusinessActionVerificationResult,
     Evidence,
     EvidenceKind,
     EvidenceSensitivity,
@@ -80,15 +89,29 @@ class ActionExecutionService:
         proposal = claimed.proposal
 
         try:
+            commit: ActionCommitResult | ActionCreateCommitResult | BusinessActionCommitResult
             commit_gateway = self._gateway_factory.for_action(
                 authority_token=self._token(proposal, attempt_id, "action_commit")
             )
-            commit = await commit_gateway.commit_record_patch(proposal.payload)
+            if isinstance(proposal.payload, ActionProposalPayload):
+                commit = await commit_gateway.commit_record_patch(proposal.payload)
+            elif not isinstance(proposal.payload, BusinessActionProposalPayload):
+                commit = await commit_gateway.commit_record_create(proposal.payload)
+            else:
+                commit = await commit_gateway.commit_business_action(proposal.payload)
             if (
                 commit.proposal_id != proposal.payload.proposal_id
                 or commit.attempt_id != attempt_id
                 or commit.payload_fingerprint != proposal.payload_fingerprint
                 or commit.precondition_fingerprint != proposal.preview.precondition_fingerprint
+                or (
+                    isinstance(commit, BusinessActionCommitResult)
+                    and (
+                        not isinstance(proposal.payload, BusinessActionProposalPayload)
+                        or commit.action_id != proposal.payload.action_id
+                        or commit.record_id != proposal.payload.target.record_id
+                    )
+                )
             ):
                 raise OdooGatewayError("malformed_response")
         except (_ActionTokenError, OdooGatewayError) as error:
@@ -193,17 +216,44 @@ class ActionExecutionService:
             else ActionProposalState.EXECUTION_UNKNOWN
         )
         try:
+            verification: (
+                ActionVerificationResult
+                | ActionCreateVerificationResult
+                | BusinessActionVerificationResult
+            )
             gateway = self._gateway_factory.for_action(
                 authority_token=self._token(proposal, attempt_id, "action_verify")
             )
-            verification = await gateway.verify_record_patch(proposal.payload)
+            if isinstance(proposal.payload, ActionProposalPayload):
+                verification = await gateway.verify_record_patch(proposal.payload)
+                expected_after = {change.field: change.value for change in proposal.payload.changes}
+                record_id = proposal.payload.target.record_id
+            elif not isinstance(proposal.payload, BusinessActionProposalPayload):
+                verification = await gateway.verify_record_create(proposal.payload)
+                expected_after = {value.field: value.value for value in proposal.payload.values}
+                record_id = verification.record_id
+            else:
+                verification = await gateway.verify_business_action(proposal.payload)
+                expected_after = None
+                record_id = proposal.payload.target.record_id
             if (
                 verification.proposal_id != proposal.payload.proposal_id
                 or verification.attempt_id != attempt_id
+                or (
+                    isinstance(verification, BusinessActionVerificationResult)
+                    and (
+                        not isinstance(proposal.payload, BusinessActionProposalPayload)
+                        or verification.action_id != proposal.payload.action_id
+                        or verification.record_id != proposal.payload.target.record_id
+                    )
+                )
             ):
                 raise OdooGatewayError("malformed_response")
-            expected_after = {change.field: change.value for change in proposal.payload.changes}
-            exact_match = verification.after == expected_after
+            exact_match = (
+                verification.state in {"sale", "done"}
+                if isinstance(verification, BusinessActionVerificationResult)
+                else verification.after == expected_after
+            )
             if verification.matches is not exact_match:
                 raise OdooGatewayError("malformed_response")
             if exact_match:
@@ -213,15 +263,28 @@ class ActionExecutionService:
                     kind=EvidenceKind.RECORD,
                     status=EvidenceStatus.CHECKED,
                     title=f"Verified ACTION result: {proposal.payload.target.model}",
-                    summary="Affected fields were reread under the approving Odoo user.",
+                    summary=(
+                        "The curated action outcome was reread under the approving Odoo user."
+                        if isinstance(verification, BusinessActionVerificationResult)
+                        else "Affected fields were reread under the approving Odoo user."
+                    ),
                     payload={
-                        "after": verification.model_dump(mode="json")["after"],
+                        "after": (
+                            {"state": verification.state}
+                            if isinstance(verification, BusinessActionVerificationResult)
+                            else verification.model_dump(mode="json")["after"]
+                        ),
+                        "action_id": (
+                            proposal.payload.action_id
+                            if isinstance(proposal.payload, BusinessActionProposalPayload)
+                            else None
+                        ),
                         "model": proposal.payload.target.model,
-                        "record_id": proposal.payload.target.record_id,
+                        "record_id": record_id,
                     },
                     pointer={
                         "model": proposal.payload.target.model,
-                        "record_id": proposal.payload.target.record_id,
+                        "record_id": record_id,
                         "provider": "odoo_action_verify",
                     },
                     observed_at=verification.verified_at,
@@ -268,14 +331,48 @@ class ActionExecutionService:
         self,
         proposal: StoredActionProposal,
         attempt_id: UUID,
-        scope: Literal["action_commit", "action_verify"],
+        scope: Literal[
+            "action_commit",
+            "action_verify",
+            "action_create_commit",
+            "action_create_verify",
+            "business_action_commit",
+            "business_action_verify",
+        ],
     ) -> str:
         now = self._now()
         expires = min(now + timedelta(seconds=60), proposal.preview.expires_at)
         if expires <= now:
             raise _ActionTokenError
         payload = proposal.payload
+        if isinstance(payload, ActionProposalPayload):
+            action_kind = ActionKind.RECORD_PATCH
+            action_id = None
+            record_id: int | None = payload.target.record_id
+            fields = tuple(sorted(change.field for change in payload.changes))
+            effective_scope = scope
+            revision = payload.schema_revision
+        elif not isinstance(payload, BusinessActionProposalPayload):
+            action_kind = ActionKind.RECORD_CREATE
+            action_id = None
+            record_id = None
+            fields = tuple(sorted(value.field for value in payload.values))
+            effective_scope = (
+                "action_create_commit" if scope == "action_commit" else "action_create_verify"
+            )
+            revision = payload.schema_revision
+        else:
+            action_kind = ActionKind.BUSINESS_ACTION
+            action_id = payload.action_id
+            record_id = payload.target.record_id
+            fields = ("state",)
+            effective_scope = (
+                "business_action_commit" if scope == "action_commit" else "business_action_verify"
+            )
+            revision = payload.action_spec_revision
         claims = ActionAuthorityClaims(
+            action_kind=action_kind,
+            action_id=action_id,
             jti=secrets.token_urlsafe(18),
             proposal_id=payload.proposal_id,
             approval_id=cast(UUID, proposal.approval_id),
@@ -286,13 +383,13 @@ class ActionExecutionService:
             company_id=payload.company_id,
             allowed_company_ids=payload.allowed_company_ids,
             model=payload.target.model,
-            record_id=payload.target.record_id,
-            fields=tuple(sorted(change.field for change in payload.changes)),
+            record_id=record_id,
+            fields=fields,
             payload_fingerprint=proposal.payload_fingerprint,
             precondition_fingerprint=proposal.preview.precondition_fingerprint,
             policy_revision=payload.policy_revision,
-            schema_revision=payload.schema_revision,
-            scopes=(scope,),
+            schema_revision=revision,
+            scopes=(effective_scope,),
             issued_at=int(now.timestamp()),
             expires_at=int(expires.timestamp()),
         )

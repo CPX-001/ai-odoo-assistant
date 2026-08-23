@@ -1,5 +1,8 @@
 # M6-12 — Curated business action
 
+Estado: **implementada y verificada** (2026-08-23) con
+`sale.order.confirm.v1`, handler explícito, receipt idempotente y E2E real.
+
 ## Contexto
 
 - Requiere M6-11 verde.
@@ -232,5 +235,5 @@ El click de approval sólo envía proposal id + decisión mínima y Odoo deriva 
 ## Después
 
 1. Documenta la spec/handler y su semántica de idempotencia.
-2. No marques todavía M6 PASS: **M6-13 debe repetir el gate completo contra el Source of Truth**.
+2. M6-13 repitió el gate completo contra el Source of Truth y obtuvo PASS.
 3. No avances a M7.
