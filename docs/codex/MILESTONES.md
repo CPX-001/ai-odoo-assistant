@@ -2,7 +2,7 @@
 
 Este roadmap resume el Source of Truth. No autoriza por sí mismo la implementación de ningún milestone.
 
-Estado actual: **M0-M5 completados; gates PASS. No se ha iniciado M6.**
+Estado actual: **M0-M5 completados; gates PASS. M6 tiene task packets preparados; implementación no iniciada.**
 
 | Milestone | Objetivo observable |
 | --- | --- |
@@ -15,3 +15,5 @@ Estado actual: **M0-M5 completados; gates PASS. No se ha iniciado M6.**
 | M6 — ACTION segura | Realizar desde chat un cambio simple aprobado, ligado al payload, releído y auditado. |
 | M7 — Product hardening | Permitir que un técnico instale, actualice y opere el piloto sin consola diaria, con Diagnostics, Settings/overrides administrables y tests de seguridad. |
 | M8 — Odoo 19 | Superar la misma contract suite y workflows en Odoo 19 sin cambios en `application`. |
+
+El plan ejecutable de M6 está en [`tasks/M6/README.md`](tasks/M6/README.md). Sus packets siguen siendo independientes; el README también define la agrupación recomendada para Goal Mode.
