@@ -75,6 +75,21 @@ class AssistantServiceClient:
             "/v1/admin/status", headers={SHARED_SECRET_HEADER: secret}
         )
 
+    def configuration_snapshot(self) -> dict[str, Any]:
+        """Read the sanitized M7 configuration snapshot server-to-server."""
+
+        return self._admin_get("/v1/admin/configuration")
+
+    def configuration_validate(self, payload: dict[str, object]) -> dict[str, Any]:
+        """Validate only the closed ADMIN_MUTABLE configuration payload."""
+
+        return self._admin_post("/v1/admin/configuration/validate", payload)
+
+    def configuration_apply(self, payload: dict[str, object]) -> dict[str, Any]:
+        """Apply one revision-guarded ADMIN_MUTABLE configuration payload."""
+
+        return self._admin_post("/v1/admin/configuration/apply", payload)
+
     def source_status(self) -> dict[str, Any]:
         return self._admin_get("/v1/admin/source/status")
 
@@ -249,7 +264,11 @@ class AssistantServiceClient:
                 "proposal_not_found",
                 "record_context_required",
             }
-            if error_code in action_codes:
+            configuration_codes = {
+                "configuration_invalid",
+                "configuration_revision_conflict",
+            }
+            if error_code in action_codes | configuration_codes:
                 raise AssistantServiceError(error_code)
             if response.status == 404:
                 raise AssistantServiceError("diagnostic_not_found")
