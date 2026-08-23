@@ -3,41 +3,17 @@ name: M7 verification
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - docs/verification/M7_LATEST.md
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  service-static-and-contracts:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: service/pyproject.toml
-      - name: Install service dev dependencies
-        run: python -m pip install -e './service[dev]'
-      - name: Ruff
-        run: python -m ruff check service/src tests
-      - name: Mypy
-        run: python -m mypy service/src
-      - name: M7 unit and API contracts
-        run: >-
-          python -m pytest
-          tests/unit/test_configuration_contracts.py
-          tests/unit/test_m7_runtime_configuration.py
-          tests/unit/test_admin_diagnostics_matrix.py
-          tests/api/test_admin_configuration.py
-          tests/api/test_admin_diagnostics.py
-          -q
-
-  service-postgres-regression:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16
@@ -56,75 +32,84 @@ jobs:
       ODOO_AI_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/odoo_ai_test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: service/pyproject.toml
-      - name: Install service dev dependencies
-        run: python -m pip install -e './service[dev]'
-      - name: Migration and M7 PostgreSQL tests
-        run: >-
-          python -m pytest
-          tests/integration/test_migrations.py
-          tests/integration/test_m7_runtime_configuration.py
-          tests/api/test_admin_status.py
-          -q
-      - name: Service regression
-        run: >-
-          python -m pytest
-          tests/unit
-          tests/contracts
-          tests/api
-          tests/application
-          tests/adapters
-          tests/security
-          tests/integration
-          -q
 
-  odoo18-addon:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: odoo/odoo
-          ref: '18.0'
-          path: odoo-src
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install Odoo system dependencies
+      - name: Run service verification
+        id: service
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libldap2-dev libsasl2-dev libpq-dev libxml2-dev libxslt1-dev \
-            libjpeg-dev zlib1g-dev libffi-dev libssl-dev liblcms2-dev \
-            postgresql-client
-      - name: Install Odoo Python dependencies
-        run: |
-          python -m pip install --upgrade pip wheel setuptools
-          python -m pip install -r odoo-src/requirements.txt
-      - name: Create Odoo test database and config
+          set +e
+          mkdir -p .verification
+          python -m pip install -e './service[dev]' > .verification/install.log 2>&1
+          echo $? > .verification/install.code
+
+          if [ "$(cat .verification/install.code)" -eq 0 ]; then
+            python -m ruff check service/src tests > .verification/ruff.log 2>&1
+            echo $? > .verification/ruff.code
+            python -m mypy service/src > .verification/mypy.log 2>&1
+            echo $? > .verification/mypy.code
+            python -m pytest \
+              tests/unit/test_configuration_contracts.py \
+              tests/unit/test_m7_runtime_configuration.py \
+              tests/unit/test_admin_diagnostics_matrix.py \
+              tests/api/test_admin_configuration.py \
+              tests/api/test_admin_diagnostics.py \
+              -q > .verification/m7_contracts.log 2>&1
+            echo $? > .verification/m7_contracts.code
+            python -m pytest \
+              tests/integration/test_migrations.py \
+              tests/integration/test_m7_runtime_configuration.py \
+              tests/api/test_admin_status.py \
+              -q > .verification/postgres.log 2>&1
+            echo $? > .verification/postgres.code
+            python -m pytest \
+              tests/unit tests/contracts tests/api tests/application \
+              tests/adapters tests/security tests/integration \
+              -q > .verification/regression.log 2>&1
+            echo $? > .verification/regression.code
+          else
+            for name in ruff mypy m7_contracts postgres regression; do echo 99 > ".verification/$name.code"; done
+          fi
+          exit 0
+
+      - name: Run Odoo 18 addon verification
+        id: odoo
+        shell: bash
         env:
           PGPASSWORD: postgres
         run: |
-          createdb -h 127.0.0.1 -U postgres m7_odoo_test
-          cat > /tmp/odoo-m7.conf <<EOF
+          set +e
+          mkdir -p .verification
+          sudo apt-get update > .verification/odoo_setup.log 2>&1 && \
+          sudo apt-get install -y --no-install-recommends \
+            git libldap2-dev libsasl2-dev libpq-dev libxml2-dev libxslt1-dev \
+            libjpeg-dev zlib1g-dev libffi-dev libssl-dev liblcms2-dev \
+            postgresql-client >> .verification/odoo_setup.log 2>&1
+          setup_code=$?
+
+          if [ "$setup_code" -eq 0 ]; then
+            git clone --depth 1 --branch 18.0 https://github.com/odoo/odoo.git odoo-src >> .verification/odoo_setup.log 2>&1
+            setup_code=$?
+          fi
+          if [ "$setup_code" -eq 0 ]; then
+            python -m pip install -r odoo-src/requirements.txt >> .verification/odoo_setup.log 2>&1
+            setup_code=$?
+          fi
+          if [ "$setup_code" -eq 0 ]; then
+            dropdb -h 127.0.0.1 -U postgres --if-exists m7_odoo_test >> .verification/odoo_setup.log 2>&1
+            createdb -h 127.0.0.1 -U postgres m7_odoo_test >> .verification/odoo_setup.log 2>&1
+            setup_code=$?
+          fi
+          echo "$setup_code" > .verification/odoo_setup.code
+
+          if [ "$setup_code" -eq 0 ]; then
+            cat > /tmp/odoo-m7.conf <<EOF
           [options]
           admin_passwd = m7-local-only
           db_host = 127.0.0.1
@@ -134,19 +119,119 @@ jobs:
           addons_path = $GITHUB_WORKSPACE/addons,$GITHUB_WORKSPACE/odoo-src/addons
           without_demo = all
           EOF
-      - name: Install addon and run Odoo 18 tests
-        run: >-
-          python odoo-src/odoo-bin
-          -c /tmp/odoo-m7.conf
-          -d m7_odoo_test
-          -i odoo_ai_assistant
-          --test-enable
-          --stop-after-init
-          --test-tags /odoo_ai_assistant
-      - name: Update addon
-        run: >-
-          python odoo-src/odoo-bin
-          -c /tmp/odoo-m7.conf
-          -d m7_odoo_test
-          -u odoo_ai_assistant
-          --stop-after-init
+            python odoo-src/odoo-bin \
+              -c /tmp/odoo-m7.conf \
+              -d m7_odoo_test \
+              -i odoo_ai_assistant \
+              --test-enable \
+              --stop-after-init \
+              --test-tags /odoo_ai_assistant > .verification/odoo_install_test.log 2>&1
+            echo $? > .verification/odoo_install_test.code
+
+            python odoo-src/odoo-bin \
+              -c /tmp/odoo-m7.conf \
+              -d m7_odoo_test \
+              -u odoo_ai_assistant \
+              --stop-after-init > .verification/odoo_update.log 2>&1
+            echo $? > .verification/odoo_update.code
+          else
+            echo 99 > .verification/odoo_install_test.code
+            echo 99 > .verification/odoo_update.code
+          fi
+          exit 0
+
+      - name: Write verification report
+        shell: bash
+        run: |
+          mkdir -p docs/verification
+          code() { cat ".verification/$1.code" 2>/dev/null || echo 98; }
+          label() { if [ "$1" -eq 0 ]; then echo PASS; elif [ "$1" -eq 99 ]; then echo BLOCKED; else echo FAIL; fi; }
+          summary() {
+            file="$1"
+            if [ -f "$file" ]; then
+              grep -E '(^FAILED |^ERROR |[0-9]+ passed|[0-9]+ failed|[0-9]+ skipped|All checks passed|Success: no issues found)' "$file" | tail -n 30 || true
+            fi
+          }
+
+          install=$(code install); ruff=$(code ruff); mypy=$(code mypy)
+          contracts=$(code m7_contracts); pg=$(code postgres); regression=$(code regression)
+          odoo_setup=$(code odoo_setup); odoo_test=$(code odoo_install_test); odoo_update=$(code odoo_update)
+
+          cat > docs/verification/M7_LATEST.md <<EOF
+          # M7 verification — latest CI run
+
+          Source commit: \`$GITHUB_SHA\`
+
+          This file is generated by \`.github/workflows/m7-verification.yml\` from commands actually executed by GitHub Actions. A non-zero code is not a PASS.
+
+          | Check | Result | Exit code |
+          | --- | --- | ---: |
+          | Service dev install | $(label "$install") | $install |
+          | Ruff | $(label "$ruff") | $ruff |
+          | mypy | $(label "$mypy") | $mypy |
+          | M7 contract/API tests | $(label "$contracts") | $contracts |
+          | PostgreSQL migration/M7 tests | $(label "$pg") | $pg |
+          | Service regression | $(label "$regression") | $regression |
+          | Odoo 18 environment setup | $(label "$odoo_setup") | $odoo_setup |
+          | Odoo 18 addon install + tests | $(label "$odoo_test") | $odoo_test |
+          | Odoo 18 addon update | $(label "$odoo_update") | $odoo_update |
+
+          ## Sanitized summaries
+
+          ### Ruff
+          \`\`\`
+          $(summary .verification/ruff.log)
+          \`\`\`
+
+          ### mypy
+          \`\`\`
+          $(summary .verification/mypy.log)
+          \`\`\`
+
+          ### M7 contracts/API
+          \`\`\`
+          $(summary .verification/m7_contracts.log)
+          \`\`\`
+
+          ### PostgreSQL
+          \`\`\`
+          $(summary .verification/postgres.log)
+          \`\`\`
+
+          ### Service regression
+          \`\`\`
+          $(summary .verification/regression.log)
+          \`\`\`
+
+          ### Odoo 18 install/tests
+          \`\`\`
+          $(summary .verification/odoo_install_test.log)
+          \`\`\`
+
+          ### Odoo 18 update
+          \`\`\`
+          $(summary .verification/odoo_update.log)
+          \`\`\`
+          EOF
+
+      - name: Persist verification report
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/verification/M7_LATEST.md
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'ci: record M7 verification results'
+          git push origin HEAD:main
+
+      - name: Fail workflow if verification failed
+        shell: bash
+        run: |
+          failed=0
+          for name in install ruff mypy m7_contracts postgres regression odoo_setup odoo_install_test odoo_update; do
+            code=$(cat ".verification/$name.code" 2>/dev/null || echo 98)
+            if [ "$code" -ne 0 ]; then failed=1; fi
+          done
+          exit "$failed"
