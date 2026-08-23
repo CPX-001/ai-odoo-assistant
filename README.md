@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-**M0-M6 están completados y sus gates son PASS; M7 tiene task packets preparados pero todavía no se ha implementado.** El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon Odoo, el bootstrap instalable de host, delegación/lecturas ORM bajo el usuario real, source/log evidence, Codex App Server como `ReasoningEngine`, `ToolExecutor`, el vertical slice real `EXPLAIN` con citas, schemas efectivos runtime, metadata de navegación visible, QUERY acotado, HOW_TO con knowledge incremental/retrieval mediante PostgreSQL FTS y ACTION segura para update, create y `sale.order.confirm.v1` mediante preview, aprobación, commit y verificación.
+**M0-M6 están completados y sus gates son PASS; M7-01..04 están implementados y verificados en runtime, mientras M7-05..09 siguen pendientes.** El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon Odoo, el bootstrap instalable de host, delegación/lecturas ORM bajo el usuario real, source/log evidence, Codex App Server como `ReasoningEngine`, `ToolExecutor`, el vertical slice real `EXPLAIN` con citas, schemas efectivos runtime, metadata de navegación visible, QUERY acotado, HOW_TO con knowledge incremental/retrieval mediante PostgreSQL FTS y ACTION segura para update, create y `sale.order.confirm.v1` mediante preview, aprobación, commit y verificación.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 
@@ -122,7 +122,7 @@ La configuración y los logs no deben contener credenciales reales. La creación
 
 ## Estado administrativo
 
-`GET /v1/admin/status` comprueba el runtime y las capabilities del Assistant mediante el shared secret server-side. Con DB/migraciones, source, logs y reasoning realmente operativos, el estado puede llegar a `FULLY_READY`; si Codex no está disponible, el servicio degrada a `DEGRADED` sin detener Odoo y expone únicamente un error sanitizado. M5 añade capabilities diagnósticas separadas para schema/query, navegación y knowledge/HOW_TO sin alterar esa fórmula histórica de readiness. M6 añade ACTION transaccional con approval persistida, authorities one-shot, commit acotado y verificación para patch/create y una acción de negocio curada. M7 está únicamente planificado y no añade todavía ninguna superficie administrativa nueva.
+`GET /v1/admin/status` comprueba el runtime y las capabilities del Assistant mediante el shared secret server-side. Con DB/migraciones, source, logs y reasoning realmente operativos, el estado puede llegar a `FULLY_READY`; si Codex no está disponible, el servicio degrada a `DEGRADED` sin detener Odoo y expone únicamente un error sanitizado. M5 añade capabilities diagnósticas separadas para schema/query, navegación y knowledge/HOW_TO sin alterar esa fórmula histórica de readiness. M6 añade ACTION transaccional con approval persistida, authorities one-shot, commit acotado y verificación para patch/create y una acción de negocio curada. M7-01..04 añaden configuración administrable acotada y Diagnostics estructurado; M7-05..09 siguen pendientes.
 
 La base ACTION implementada y sus límites están documentados en [`docs/M6_ACTION_FOUNDATION.md`](docs/M6_ACTION_FOUNDATION.md).
 

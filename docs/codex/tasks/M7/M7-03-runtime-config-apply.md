@@ -100,3 +100,7 @@ Dos admins cambiando la config no deben pisarse silenciosamente: usa revision/pr
 1. Documenta endpoints y state transition final.
 2. Lista qué settings aplican hot y cuáles requieren setup/restart.
 3. Ejecuta regresión combinada M7-01..03 antes de cerrar Goal A.
+
+## Estado de implementación
+
+**Implemented / runtime verified.**

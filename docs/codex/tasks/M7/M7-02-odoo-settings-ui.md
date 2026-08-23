@@ -94,3 +94,7 @@ Un valor host-only puede aparecer de forma sanitizada para explicar estado, pero
 1. Lista todos los campos expuestos y su descriptor M7-01 asociado.
 2. Documenta qué sigue requiriendo setup/bootstrap.
 3. No avances a M7-03 si la UI puede persistir algo que el runtime no valida de nuevo.
+
+## Estado de implementación
+
+**Implemented / runtime verified.**

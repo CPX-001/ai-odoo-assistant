@@ -101,7 +101,7 @@ Los mensajes deben ser suficientemente específicos para que un técnico sepa qu
 
 ## Estado de implementación
 
-**Implemented / pending runtime verification.**
+**Implemented / runtime verified.**
 
 La implementación añade `GET /v1/admin/diagnostics`, protegido por la machine
 credential existente, y el contrato versionado `AdminDiagnosticsMatrix`. La

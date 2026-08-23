@@ -91,3 +91,7 @@ Crear una representación determinista del snapshot de configuración efectiva q
 1. Documenta la tabla final de settings/ownership/provenance que M7 pretende administrar.
 2. Señala qué valores siguen requiriendo bootstrap/setup.
 3. No avances a M7-02 si el boundary host/admin sigue ambiguo.
+
+## Estado de implementación
+
+**Implemented / runtime verified.**
