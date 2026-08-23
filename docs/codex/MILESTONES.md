@@ -2,7 +2,7 @@
 
 Este roadmap resume el Source of Truth. No autoriza por sí mismo la implementación de ningún milestone.
 
-Estado actual: **M0-M6 completados; gates PASS. M7 es el siguiente milestone y aún no se ha iniciado.**
+Estado actual: **M0-M6 completados; gates PASS. M7 tiene task packets preparados pero todavía no se ha implementado.**
 
 | Milestone | Objetivo observable |
 | --- | --- |
@@ -18,5 +18,6 @@ Estado actual: **M0-M6 completados; gates PASS. M7 es el siguiente milestone y a
 
 El plan y la evidencia del cierre M6 están en
 [`tasks/M6/README.md`](tasks/M6/README.md) y
-[`../M6_GATE_REPORT.md`](../M6_GATE_REPORT.md). M7 queda para una instrucción
-posterior.
+[`../M6_GATE_REPORT.md`](../M6_GATE_REPORT.md).
+
+El plan ejecutable de M7 está en [`tasks/M7/README.md`](tasks/M7/README.md). Sus nueve packets son independientes y el README define la agrupación recomendada 3+3+3 para Goal Mode.
