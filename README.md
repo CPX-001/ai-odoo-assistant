@@ -2,7 +2,7 @@
 
 Odoo AI Assistant será un agente integrado en Odoo que combinará contexto de la instalación, evidencia verificable y operaciones acotadas bajo los permisos reales del usuario.
 
-**M0-M6 están completados y sus gates son PASS; M7 es el siguiente milestone y aún no se ha iniciado.** El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon Odoo, el bootstrap instalable de host, delegación/lecturas ORM bajo el usuario real, source/log evidence, Codex App Server como `ReasoningEngine`, `ToolExecutor`, el vertical slice real `EXPLAIN` con citas, schemas efectivos runtime, metadata de navegación visible, QUERY acotado, HOW_TO con knowledge incremental/retrieval mediante PostgreSQL FTS y ACTION segura para update, create y `sale.order.confirm.v1` mediante preview, aprobación, commit y verificación.
+**M0-M6 están completados y sus gates son PASS; M7 tiene task packets preparados pero todavía no se ha implementado.** El repositorio contiene el package Python del Assistant Service, sus contratos y ports base, el runtime HTTP, el addon Odoo, el bootstrap instalable de host, delegación/lecturas ORM bajo el usuario real, source/log evidence, Codex App Server como `ReasoningEngine`, `ToolExecutor`, el vertical slice real `EXPLAIN` con citas, schemas efectivos runtime, metadata de navegación visible, QUERY acotado, HOW_TO con knowledge incremental/retrieval mediante PostgreSQL FTS y ACTION segura para update, create y `sale.order.confirm.v1` mediante preview, aprobación, commit y verificación.
 
 Baseline: Odoo 18 Community, Linux self-hosted y PostgreSQL, en un monorepo propio con esta separación general:
 
@@ -16,7 +16,7 @@ Evidence / Tools / Reasoning
 
 La especificación principal está en [`docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf`](docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf). La referencia operativa resumida está en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) y la política de deployments configurables en [`docs/DEPLOYMENT_CONFIG.md`](docs/DEPLOYMENT_CONFIG.md).
 
-El roadmap va de M0 (repo y contratos) a M8 (compatibilidad Odoo 19) y se resume en [`docs/codex/MILESTONES.md`](docs/codex/MILESTONES.md). El cierre de M6 está en [`docs/codex/tasks/M6/README.md`](docs/codex/tasks/M6/README.md) y su evidencia en [`docs/M6_GATE_REPORT.md`](docs/M6_GATE_REPORT.md).
+El roadmap va de M0 (repo y contratos) a M8 (compatibilidad Odoo 19) y se resume en [`docs/codex/MILESTONES.md`](docs/codex/MILESTONES.md). El cierre de M6 está en [`docs/codex/tasks/M6/README.md`](docs/codex/tasks/M6/README.md) y su evidencia en [`docs/M6_GATE_REPORT.md`](docs/M6_GATE_REPORT.md). El plan ejecutable de M7 está en [`docs/codex/tasks/M7/README.md`](docs/codex/tasks/M7/README.md), incluyendo la agrupación 3+3+3 recomendada para Goal Mode.
 
 ## Arranque DEV del Assistant Service
 
@@ -122,7 +122,7 @@ La configuración y los logs no deben contener credenciales reales. La creación
 
 ## Estado administrativo
 
-`GET /v1/admin/status` comprueba el runtime y las capabilities del Assistant mediante el shared secret server-side. Con DB/migraciones, source, logs y reasoning realmente operativos, el estado puede llegar a `FULLY_READY`; si Codex no está disponible, el servicio degrada a `DEGRADED` sin detener Odoo y expone únicamente un error sanitizado. M5 añade capabilities diagnósticas separadas para schema/query, navegación y knowledge/HOW_TO sin alterar esa fórmula histórica de readiness. M6 añade ACTION transaccional con approval persistida, authorities one-shot, commit acotado y verificación para patch/create y una acción de negocio curada.
+`GET /v1/admin/status` comprueba el runtime y las capabilities del Assistant mediante el shared secret server-side. Con DB/migraciones, source, logs y reasoning realmente operativos, el estado puede llegar a `FULLY_READY`; si Codex no está disponible, el servicio degrada a `DEGRADED` sin detener Odoo y expone únicamente un error sanitizado. M5 añade capabilities diagnósticas separadas para schema/query, navegación y knowledge/HOW_TO sin alterar esa fórmula histórica de readiness. M6 añade ACTION transaccional con approval persistida, authorities one-shot, commit acotado y verificación para patch/create y una acción de negocio curada. M7 está únicamente planificado y no añade todavía ninguna superficie administrativa nueva.
 
 La base ACTION implementada y sus límites están documentados en [`docs/M6_ACTION_FOUNDATION.md`](docs/M6_ACTION_FOUNDATION.md).
 
@@ -170,3 +170,4 @@ La evidencia y el veredicto de M2 están en [`docs/M2_GATE_REPORT.md`](docs/M2_G
 La evidencia y el veredicto de M3 están en [`docs/M3_GATE_REPORT.md`](docs/M3_GATE_REPORT.md).
 La evidencia y el veredicto de M4 están en [`docs/M4_GATE_REPORT.md`](docs/M4_GATE_REPORT.md); el E2E real está en [`docs/codex/M4_E2E_REPORT.md`](docs/codex/M4_E2E_REPORT.md).
 La evidencia y el veredicto de M5 están en [`docs/M5_GATE_REPORT.md`](docs/M5_GATE_REPORT.md).
+La evidencia y el veredicto de M6 están en [`docs/M6_GATE_REPORT.md`](docs/M6_GATE_REPORT.md).
