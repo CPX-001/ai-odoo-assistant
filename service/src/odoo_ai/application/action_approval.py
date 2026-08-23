@@ -20,6 +20,7 @@ from odoo_ai.contracts import (
     ActionDecisionReceipt,
     ActionDecisionRequest,
     ActionProposalState,
+    OdooActionActorContext,
     PersistActionPreviewRequest,
     PersistActionPreviewResponse,
 )
@@ -158,6 +159,33 @@ class ActionApprovalService:
         if proposal.state is not ActionProposalState.APPROVED:
             raise ActionApprovalError("approval_not_executable")
         return proposal
+
+    def bind_odoo_actor(
+        self, *, proposal_id: UUID, actor: OdooActionActorContext
+    ) -> ActionActorContext:
+        """Resolve instance binding from storage after matching Odoo-derived facts."""
+
+        try:
+            proposal = self._store.get_by_proposal_id(proposal_id)
+        except Exception:  # noqa: BLE001
+            raise ActionApprovalError("approval_store_unavailable", 503) from None
+        if proposal is None:
+            raise ActionApprovalError("proposal_not_found", 404)
+        payload = proposal.payload
+        if (
+            actor.database != payload.database
+            or actor.uid != payload.uid
+            or actor.company_id != payload.company_id
+            or actor.allowed_company_ids != payload.allowed_company_ids
+        ):
+            raise ActionApprovalError("approval_binding_mismatch", 403)
+        return ActionActorContext(
+            instance_id=payload.instance_id,
+            database=actor.database,
+            uid=actor.uid,
+            company_id=actor.company_id,
+            allowed_company_ids=actor.allowed_company_ids,
+        )
 
 
 def _validate_preview_binding(request: PersistActionPreviewRequest, fingerprint: str) -> None:

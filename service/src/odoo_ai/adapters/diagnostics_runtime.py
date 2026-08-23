@@ -9,11 +9,7 @@ from typing import Literal, cast
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from odoo_ai.adapters.odoo_http import (
-    OdooGatewayError,
-    OdooGatewayFactory,
-    OdooGatewaySettings,
-)
+from odoo_ai.adapters.odoo_http import OdooGatewayFactory, OdooGatewaySettings
 from odoo_ai.adapters.source_tools import (
     ensure_source_instance_profile,
     source_root_selection,
@@ -46,7 +42,7 @@ from odoo_ai.logs import (
     resolve_journal_unit,
     resolve_log_file,
 )
-from odoo_ai.ports import LogProvider, OdooInstanceGateway
+from odoo_ai.ports import LogProvider, OdooGatewayError, OdooInstanceGateway
 from odoo_ai.security import SharedSecretError, load_shared_secret
 from odoo_ai.source import (
     SourceEvidenceService,

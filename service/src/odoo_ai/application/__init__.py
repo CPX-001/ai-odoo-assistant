@@ -4,6 +4,7 @@ from odoo_ai.application.action_approval import (
     ActionApprovalError,
     ActionApprovalService,
 )
+from odoo_ai.application.action_command import ActionCommandService
 from odoo_ai.application.action_execution import (
     ActionExecutionError,
     ActionExecutionService,
@@ -20,6 +21,7 @@ from odoo_ai.application.action_preview import (
     ActionPreviewResult,
     ActionPreviewService,
 )
+from odoo_ai.application.action_workflow import ActionService, ActionTurnError
 from odoo_ai.application.context_read import (
     ContextReadError,
     ContextReadService,
@@ -56,6 +58,7 @@ __all__ = [
     "ACTION_POLICY_REVISION",
     "ActionApprovalError",
     "ActionApprovalService",
+    "ActionCommandService",
     "ActionExecutionError",
     "ActionExecutionService",
     "ActionPolicy",
@@ -63,6 +66,8 @@ __all__ = [
     "ActionPreviewError",
     "ActionPreviewResult",
     "ActionPreviewService",
+    "ActionService",
+    "ActionTurnError",
     "ContextReadError",
     "ContextReadService",
     "DiagnosticsError",

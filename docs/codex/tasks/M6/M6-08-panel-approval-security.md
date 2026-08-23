@@ -1,5 +1,7 @@
 # M6-08 — Panel ACTION, aprobación explícita y hardening
 
+Estado: **implementado y verificado de forma determinista el 2026-08-23.**
+
 ## Contexto
 
 - Requiere M6-07 verde.

@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
+
 from odoo_ai.application import ActionApprovalError, ActionApprovalService
 from odoo_ai.application.action_policy import (
     ACTION_POLICY_REVISION,
@@ -32,7 +34,6 @@ from odoo_ai.ports import (
     StoredActionProposal,
     StoredDecisionResult,
 )
-from pydantic import ValidationError
 
 NOW = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
 PROPOSAL_ID = UUID("11111111-1111-4111-8111-111111111111")

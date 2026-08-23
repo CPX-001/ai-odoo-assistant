@@ -1,5 +1,7 @@
 # M6-10 — Gate integral ACTION segura
 
+Estado: **gate ejecutado el 2026-08-23 con veredicto FAIL; ver `docs/M6_GATE_REPORT.md`.**
+
 ## Contexto
 
 - Requiere M6-01..M6-09 implementadas y verificadas.

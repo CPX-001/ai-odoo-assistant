@@ -1,5 +1,17 @@
 """Replaceable infrastructure adapters for stable service ports."""
 
+from odoo_ai.adapters.action_tools import (
+    ODOO_GET_EFFECTIVE_WRITE_SCHEMA,
+    ODOO_PREVIEW_RECORD_PATCH,
+    ActionPreviewToolData,
+    ActionToolBackend,
+    ActionToolExecutorFactory,
+    EffectiveWriteSchemaToolData,
+    GetEffectiveWriteSchemaRequest,
+    PreviewRecordPatchRequest,
+    action_tool_specs,
+    build_action_tool_registry,
+)
 from odoo_ai.adapters.codex_engine import (
     CodexAppServerEngine,
     CodexEngineError,
@@ -43,7 +55,6 @@ from odoo_ai.adapters.odoo_http import (
     HttpOdooActionGateway,
     HttpOdooGateway,
     HttpOdooInstanceGateway,
-    OdooGatewayError,
     OdooGatewayFactory,
     OdooGatewaySettings,
 )
@@ -71,9 +82,13 @@ from odoo_ai.adapters.source_tools import (
     build_source_tool_registry,
     source_tool_specs,
 )
+from odoo_ai.ports import OdooGatewayError
 
 __all__ = [
     "APP_SERVER_PROTOCOL",
+    "ActionPreviewToolData",
+    "ActionToolBackend",
+    "ActionToolExecutorFactory",
     "CodexAppServerClient",
     "CodexAppServerEngine",
     "CodexEngineError",
@@ -91,9 +106,11 @@ __all__ = [
     "CachedCodexReasoningStatus",
     "CodexServerInfo",
     "CodexThreadPolicy",
+    "EffectiveWriteSchemaToolData",
     "HttpOdooGateway",
     "HttpOdooActionGateway",
     "HttpOdooInstanceGateway",
+    "GetEffectiveWriteSchemaRequest",
     "KNOWLEDGE_READ_EXCERPT",
     "KNOWLEDGE_SEARCH",
     "KnowledgeReadExcerptToolData",
@@ -104,6 +121,8 @@ __all__ = [
     "OdooGatewaySettings",
     "ODOO_AGGREGATE_RECORDS",
     "ODOO_GET_EFFECTIVE_SCHEMA",
+    "ODOO_GET_EFFECTIVE_WRITE_SCHEMA",
+    "ODOO_PREVIEW_RECORD_PATCH",
     "ODOO_QUERY_RECORDS",
     "AggregateRecordsToolData",
     "EffectiveSchemaToolData",
@@ -111,6 +130,7 @@ __all__ = [
     "QueryRecordsToolData",
     "QueryToolBackend",
     "QueryToolExecutorFactory",
+    "PreviewRecordPatchRequest",
     "RuntimeDiagnosticsService",
     "RuntimeKnowledgeToolBackend",
     "RuntimeSourceToolBackend",
@@ -121,6 +141,7 @@ __all__ = [
     "SourceToolBackend",
     "SourceToolExecutorFactory",
     "build_source_tool_registry",
+    "build_action_tool_registry",
     "build_knowledge_tool_registry",
     "build_query_tool_registry",
     "codex_dynamic_tool_name",
@@ -131,6 +152,7 @@ __all__ = [
     "probe_codex_readiness",
     "probe_codex_runtime",
     "query_tool_specs",
+    "action_tool_specs",
     "serialize_codex_context",
     "source_tool_specs",
 ]

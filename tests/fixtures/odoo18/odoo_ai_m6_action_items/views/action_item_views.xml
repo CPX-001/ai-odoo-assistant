@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_m6_action_item_list" model="ir.ui.view">
+        <field name="name">odoo.ai.m6.action.item.list</field>
+        <field name="model">odoo.ai.m6.action.item</field>
+        <field name="arch" type="xml">
+            <list create="0" delete="0">
+                <field name="name"/>
+                <field name="reference"/>
+                <field name="note"/>
+                <field name="write_count"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_m6_action_item_form" model="ir.ui.view">
+        <field name="name">odoo.ai.m6.action.item.form</field>
+        <field name="model">odoo.ai.m6.action.item</field>
+        <field name="arch" type="xml">
+            <form create="0" delete="0">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="reference"/>
+                        <field name="note"/>
+                        <field name="write_count" readonly="1"/>
+                        <field name="owner_id" readonly="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_m6_action_items" model="ir.actions.act_window">
+        <field name="name">Action Items</field>
+        <field name="res_model">odoo.ai.m6.action.item</field>
+        <field name="view_mode">list,form</field>
+    </record>
+    <menuitem id="menu_m6_action_root" name="M6 Actions" sequence="96" groups="base.group_user"/>
+    <menuitem id="menu_m6_action_items" name="Action Items" parent="menu_m6_action_root" action="action_m6_action_items" sequence="10" groups="base.group_user"/>
+</odoo>

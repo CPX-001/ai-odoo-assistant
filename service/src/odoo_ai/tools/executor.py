@@ -17,7 +17,15 @@ from odoo_ai.contracts import Evidence, ToolExecutionEvent, ToolRisk, ToolSpec, 
 
 ToolHandler = Callable[[BaseModel], Awaitable["ToolHandlerOutput"]]
 Clock = Callable[[], float]
-_ALLOWED_RISKS = frozenset({ToolRisk.READ, ToolRisk.METADATA})
+_DEFAULT_ALLOWED_RISKS = frozenset({ToolRisk.READ, ToolRisk.METADATA})
+_REASONING_ALLOWED_RISKS = frozenset(
+    {
+        ToolRisk.READ,
+        ToolRisk.METADATA,
+        ToolRisk.WRITE_PREVIEW,
+        ToolRisk.ACTION_PREVIEW,
+    }
+)
 
 
 class ToolExecutorError(RuntimeError):
@@ -82,7 +90,7 @@ class RegisteredTool:
             raise ToolExecutorError("tool_executor_id_invalid")
         if self.spec.executor_id != self.executor_id:
             raise ToolExecutorError("tool_executor_id_mismatch")
-        if self.spec.risk not in _ALLOWED_RISKS:
+        if self.spec.risk not in _REASONING_ALLOWED_RISKS:
             raise ToolExecutorError("tool_risk_not_allowed")
         if not 1 <= self.max_calls <= 64:
             raise ToolExecutorError("tool_call_limit_invalid")
@@ -99,10 +107,22 @@ class RegisteredTool:
 class ToolRegistry:
     """Immutable explicit registry constructed for one turn."""
 
-    def __init__(self, bindings: Iterable[RegisteredTool]) -> None:
+    def __init__(
+        self,
+        bindings: Iterable[RegisteredTool],
+        *,
+        allowed_risks: Iterable[ToolRisk] | None = None,
+    ) -> None:
+        risks = frozenset(
+            _DEFAULT_ALLOWED_RISKS if allowed_risks is None else allowed_risks
+        )
+        if not risks or not risks.issubset(_REASONING_ALLOWED_RISKS):
+            raise ToolExecutorError("tool_risk_policy_invalid")
         by_name: dict[str, RegisteredTool] = {}
         executor_ids: set[str] = set()
         for binding in bindings:
+            if binding.spec.risk not in risks:
+                raise ToolExecutorError("tool_risk_not_allowed")
             if binding.spec.name in by_name:
                 raise ToolExecutorError("tool_name_duplicate")
             if binding.executor_id in executor_ids:
@@ -110,10 +130,18 @@ class ToolRegistry:
             by_name[binding.spec.name] = binding
             executor_ids.add(binding.executor_id)
         self._by_name = by_name
+        self._allowed_risks = risks
 
     @property
     def specs(self) -> tuple[ToolSpec, ...]:
         return tuple(binding.spec for binding in self._by_name.values())
+
+    @property
+    def allowed_risks(self) -> frozenset[ToolRisk]:
+        return self._allowed_risks
+
+    def allows_risk(self, risk: ToolRisk) -> bool:
+        return risk in self._allowed_risks
 
     def resolve(self, name: str) -> RegisteredTool:
         binding = self._by_name.get(name)
@@ -330,7 +358,7 @@ class ToolExecutor:
         if call.call_id in self._seen_call_ids:
             raise ToolExecutorError("tool_call_duplicate")
         binding = self._registry.resolve(call.tool_name)
-        if binding.spec.risk not in _ALLOWED_RISKS:
+        if not self._registry.allows_risk(binding.spec.risk):
             raise ToolExecutorError("tool_risk_not_allowed")
         _validate_nesting(call.arguments, self._limits.max_input_nesting)
         input_bytes = _canonical_bytes(call.arguments)
@@ -339,7 +367,10 @@ class ToolExecutor:
         if self._input_bytes + len(input_bytes) > self._limits.max_total_input_bytes:
             raise ToolExecutorError("tool_input_budget_exceeded")
         try:
-            validated_input = binding.input_model.model_validate(call.arguments)
+            # Validate through the canonical JSON representation. This preserves
+            # strict scalar semantics while allowing strict Enum/tuple contracts
+            # to consume their actual wire representation.
+            validated_input = binding.input_model.model_validate_json(input_bytes)
         except ValidationError:
             raise ToolExecutorError("tool_input_invalid") from None
         if self._clock() >= self._deadline:

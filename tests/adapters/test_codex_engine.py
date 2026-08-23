@@ -9,10 +9,12 @@ from uuid import UUID
 import pytest
 
 from odoo_ai.adapters import (
+    ActionToolExecutorFactory,
     CodexAppServerEngine,
     CodexEngineError,
     CodexEngineLimits,
     CodexRuntimeSettings,
+    action_tool_specs,
 )
 from odoo_ai.contracts import (
     AnswerEnvelope,
@@ -295,6 +297,79 @@ def test_proposed_action_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(CodexEngineError, match="codex_proposed_action_not_allowed"):
         _run(executable)
+
+
+def test_action_turn_allows_only_preview_presentation_schema(tmp_path: Path) -> None:
+    observed = tmp_path / "observed-action.json"
+    proposed = {
+        "action_type": "record_patch",
+        "summary": "Preview the bounded change",
+        "details": {
+            "proposal_id": "60000000-0000-4000-8000-000000000006",
+            "payload_fingerprint": "action-payload:v1:sha256:" + "a" * 64,
+        },
+    }
+    executable = _fake_codex(
+        tmp_path,
+        _server_body(
+            _answer(
+                workflow="ACTION",
+                evidence_refs=[],
+                proposed_action=proposed,
+            ),
+            observed_path=observed,
+        ),
+    )
+    context = _context().model_copy(
+        update={
+            "workflow_hint": Workflow.ACTION,
+            "limits": TurnLimits(max_tool_calls=2, max_evidence_items=4),
+        }
+    )
+
+    class UnusedGateway:
+        pass
+
+    class UnusedApprovals:
+        pass
+
+    factory = ActionToolExecutorFactory(
+        gateway=UnusedGateway(),  # type: ignore[arg-type]
+        approval_service=UnusedApprovals(),  # type: ignore[arg-type]
+        turn_id=UUID("50000000-0000-4000-8000-000000000005"),
+        database="fixture-db",
+        user_id=7,
+        company_id=1,
+        allowed_company_ids=(1,),
+        model="sale.order",
+        record_id=56,
+    )
+    engine = CodexAppServerEngine(
+        CodexRuntimeSettings(executable=executable, experimental_api=True),
+        tool_executor_factory=factory,
+    )
+
+    answer = asyncio.run(
+        engine.run_turn(context, list(action_tool_specs()), AnswerEnvelope.model_json_schema())
+    )
+
+    assert answer.workflow is Workflow.ACTION
+    assert answer.proposed_action is not None
+    captured = json.loads(observed.read_text(encoding="utf-8"))
+    instructions = captured["thread"]["params"]["baseInstructions"]
+    dynamic_names = {
+        item["name"] for item in captured["thread"]["params"]["dynamicTools"]
+    }
+    assert dynamic_names == {
+        "odoo_get_effective_write_schema",
+        "odoo_preview_record_patch",
+    }
+    assert "cannot\napprove, commit" in instructions
+    proposed_schema = captured["turn"]["params"]["outputSchema"]["properties"][
+        "proposed_action"
+    ]
+    assert proposed_schema != {"type": "null"}
+    assert "approval_id" not in json.dumps(proposed_schema)
 
 
 def test_nonempty_tools_require_executor_before_process_spawn(tmp_path: Path) -> None:

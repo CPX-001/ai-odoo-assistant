@@ -1,5 +1,7 @@
 # M6-06 — Verification receipt y auditoría
 
+Estado: **implementado y verificado de forma determinista el 2026-08-23.**
+
 ## Contexto
 
 - Requiere M6-05 verde.

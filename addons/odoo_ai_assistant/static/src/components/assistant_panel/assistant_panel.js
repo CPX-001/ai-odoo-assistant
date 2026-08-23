@@ -50,6 +50,15 @@ export class AssistantPanel extends Component {
             access_denied: _t(
                 "Odoo no permitió releer este registro con tus permisos actuales."
             ),
+            action_budget_exceeded: _t("La acción superó los límites seguros del turno."),
+            action_rejected: _t("La acción solicitada no está permitida."),
+            approval_binding_mismatch: _t(
+                "La propuesta pertenece a otro usuario, compañía o base de datos."
+            ),
+            approval_expired: _t(
+                "La preview ha caducado. Genera una nueva antes de aprobar."
+            ),
+            approval_not_found: _t("No se encontró una aprobación ejecutable."),
             authentication_failed: _t(
                 "La autenticación interna del Assistant Service ha fallado."
             ),
@@ -69,6 +78,9 @@ export class AssistantPanel extends Component {
             query_rejected: _t(
                 "La consulta solicitada no está permitida por el esquema efectivo."
             ),
+            proposal_already_decided: _t("Esta propuesta ya fue decidida."),
+            proposal_not_found: _t("No se encontró la propuesta."),
+            record_context_required: _t("Abre un registro guardado para usar ACTION."),
             service_unavailable: _t("El Assistant Service no está disponible."),
         };
         return messages[this.state.errorCode] || "";
@@ -92,6 +104,9 @@ export class AssistantPanel extends Component {
             HOW_TO: _t(
                 "Construye una guía con menús, schema y documentación comprobados."
             ),
+            ACTION: _t(
+                "Prepara un cambio acotado; sólo se escribe tras tu aprobación explícita."
+            ),
         };
         return descriptions[this.state.workflow] || "";
     }
@@ -101,6 +116,7 @@ export class AssistantPanel extends Component {
             EXPLAIN: _t("¿Por qué ocurre esto en el registro abierto?"),
             QUERY: _t("¿Cuántos registros abiertos puedo ver?"),
             HOW_TO: _t("¿Cómo realizo esta tarea en esta instalación?"),
+            ACTION: _t("Cambia el campo indicado al valor solicitado"),
         };
         return placeholders[this.state.workflow] || _t("Escribe una pregunta");
     }
@@ -109,9 +125,64 @@ export class AssistantPanel extends Component {
         this.panel.close();
     }
 
+    formatActionValue(value) {
+        if (!value || value.value === null) {
+            return _t("Vacío");
+        }
+        if (value.kind === "boolean") {
+            return value.value ? _t("Sí") : _t("No");
+        }
+        if (value.kind === "many2one") {
+            return `#${value.value}`;
+        }
+        return String(value.value);
+    }
+
+    get actionDecisionMessage() {
+        const messages = {
+            verified: _t("Cambio verificado mediante relectura de Odoo."),
+            rejected: _t("Propuesta cancelada. No se realizó ningún cambio."),
+            stale: _t("El registro cambió. Genera una nueva preview; no se forzó el cambio."),
+            failed: _t("El cambio falló y no se presenta como completado."),
+            execution_unknown: _t(
+                "El resultado de ejecución es desconocido. No se reintentará automáticamente."
+            ),
+            committed_unverified: _t(
+                "Odoo confirmó el commit, pero la relectura no pudo verificar el resultado."
+            ),
+        };
+        return messages[this.state.actionReceipt?.state] || "";
+    }
+
+    get actionDecisionClass() {
+        const actionState = this.state.actionReceipt?.state;
+        if (actionState === "verified") {
+            return "alert-success";
+        }
+        if (actionState === "rejected") {
+            return "alert-secondary";
+        }
+        if (
+            ["stale", "execution_unknown", "committed_unverified"].includes(
+                actionState
+            )
+        ) {
+            return "alert-warning";
+        }
+        return "alert-danger";
+    }
+
+    async approveAction() {
+        await this.panel.decide("approve");
+    }
+
+    async rejectAction() {
+        await this.panel.decide("reject");
+    }
+
     async submit() {
         const question = this.form.question.trim();
-        if (!question || this.state.loading) {
+        if (!question || this.state.loading || this.state.decisionLoading) {
             return;
         }
         await this.panel.submit(question);

@@ -44,6 +44,7 @@ class AssistantDiagnostics(models.TransientModel):
     navigation_capability_state = fields.Char(readonly=True)
     knowledge_capability_state = fields.Char(readonly=True)
     how_to_capability_state = fields.Char(readonly=True)
+    action_capability_state = fields.Char(readonly=True)
     source_result = fields.Text(readonly=True)
     log_result = fields.Text(readonly=True)
 
@@ -215,6 +216,7 @@ class AssistantDiagnostics(models.TransientModel):
             "navigation_capability_state": unknown,
             "knowledge_capability_state": unknown,
             "how_to_capability_state": unknown,
+            "action_capability_state": unknown,
             "source_result": False,
             "log_result": False,
         }
@@ -275,6 +277,7 @@ class AssistantDiagnostics(models.TransientModel):
                 workflows.get("knowledge")
             ),
             how_to_capability_state=self._capability_label(workflows.get("how_to")),
+            action_capability_state=self._capability_label(workflows.get("action")),
         )
         return values
 
@@ -287,6 +290,7 @@ class AssistantDiagnostics(models.TransientModel):
         allowed_states = {"ok", "pending", "error"}
         allowed_details = {
             "assistant_runtime_unavailable",
+            "action_authority_unavailable",
             "available",
             "instance_unknown",
             "knowledge_unavailable",

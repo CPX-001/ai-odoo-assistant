@@ -15,6 +15,7 @@ from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from odoo_ai.security import ActionAuthorityCodec, ActionAuthorityError
 from odoo_ai.storage import (
     DatabaseConfigurationError,
     DatabaseSettings,
@@ -70,7 +71,7 @@ class RuntimeComponents(BaseModel):
 
 
 class WorkflowCapabilities(BaseModel):
-    """M5 workflow diagnostics that do not redefine global readiness."""
+    """Workflow diagnostics that do not redefine global readiness."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -78,6 +79,7 @@ class WorkflowCapabilities(BaseModel):
     navigation: ComponentStatus
     knowledge: ComponentStatus
     how_to: ComponentStatus
+    action: ComponentStatus
 
 
 class AdminStatus(BaseModel):
@@ -164,6 +166,7 @@ class AdminStatusService:
             migrations=migrations,
             instance=instance,
             reasoning=reasoning_status,
+            action_authority_ready=_action_authority_ready(),
         )
         return AdminStatus(
             readiness="ERROR" if has_error else "FULLY_READY" if fully_ready else "DEGRADED",
@@ -255,6 +258,7 @@ class AdminStatusService:
         migrations: MigrationStatus,
         instance: InstanceStatus | None,
         reasoning: ReasoningComponentStatus,
+        action_authority_ready: bool,
     ) -> WorkflowCapabilities:
         if (
             database.state is not ComponentState.OK
@@ -269,6 +273,7 @@ class AdminStatusService:
                 navigation=unavailable,
                 knowledge=unavailable,
                 how_to=unavailable,
+                action=unavailable,
             )
 
         navigation = ComponentStatus(
@@ -295,7 +300,7 @@ class AdminStatusService:
                 else "reasoning_unavailable"
             ),
         )
-        how_to_ready = (
+        reasoning_with_instance_ready = (
             reasoning.state is ComponentState.OK
             and knowledge.state is ComponentState.OK
         )
@@ -306,16 +311,36 @@ class AdminStatusService:
             how_to=ComponentStatus(
                 state=(
                     ComponentState.OK
-                    if how_to_ready
+                    if reasoning_with_instance_ready
                     else ComponentState.PENDING
                 ),
                 detail=(
                     "validated_per_turn"
-                    if how_to_ready
+                    if reasoning_with_instance_ready
                     else (
                         "reasoning_unavailable"
                         if reasoning.state is not ComponentState.OK
                         else "knowledge_unavailable"
+                    )
+                ),
+            ),
+            action=ComponentStatus(
+                state=(
+                    ComponentState.OK
+                    if reasoning_with_instance_ready and action_authority_ready
+                    else ComponentState.PENDING
+                ),
+                detail=(
+                    "validated_per_turn"
+                    if reasoning_with_instance_ready and action_authority_ready
+                    else (
+                        "reasoning_unavailable"
+                        if reasoning.state is not ComponentState.OK
+                        else (
+                            "instance_unknown"
+                            if knowledge.state is not ComponentState.OK
+                            else "action_authority_unavailable"
+                        )
                     )
                 ),
             ),
@@ -350,6 +375,7 @@ def unavailable_admin_status() -> AdminStatus:
             navigation=unavailable,
             knowledge=unavailable,
             how_to=unavailable,
+            action=unavailable,
         ),
         pending_capabilities=AdminStatusService._PENDING_CAPABILITIES,
     )
@@ -364,6 +390,14 @@ def inspect_admin_status(
         return AdminStatusService.from_env().inspect(reasoning=reasoning)
     except DatabaseConfigurationError:
         return unavailable_admin_status()
+
+
+def _action_authority_ready() -> bool:
+    try:
+        ActionAuthorityCodec.from_env()
+    except ActionAuthorityError:
+        return False
+    return True
 
 
 def _reasoning_snapshot_state(reasoning: ReasoningComponentStatus) -> Literal[

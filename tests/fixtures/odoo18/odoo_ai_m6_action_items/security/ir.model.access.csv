@@ -1,0 +1,2 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_m6_action_item_user,m6.action.item.user,model_odoo_ai_m6_action_item,base.group_user,1,1,0,0

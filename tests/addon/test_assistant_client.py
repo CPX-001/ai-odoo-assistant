@@ -30,6 +30,7 @@ AssistantServiceError = client_module.AssistantServiceError
 class AssistantHandler(BaseHTTPRequestHandler):
     secret = "addon-test-secret-" + "s" * 48
     last_post: dict[str, object] | None = None
+    action_decision_response = (200, b'{"ok":true,"state":"verified"}')
 
     def do_GET(self) -> None:
         if self.path == "/health":
@@ -72,6 +73,10 @@ class AssistantHandler(BaseHTTPRequestHandler):
             self._json(200, b'{"ok":true,"turn_id":"query-example"}')
         elif self.path == "/v1/turns/how-to":
             self._json(200, b'{"ok":true,"turn_id":"how-to-example"}')
+        elif self.path == "/v1/turns/action":
+            self._json(200, b'{"ok":true,"turn_id":"action-example"}')
+        elif self.path == "/v1/actions/decision-execute":
+            self._json(*type(self).action_decision_response)
         elif self.path == "/v1/admin/source/rescan":
             self._json(200, b'{"state":"DETECTED","metrics":{}}')
         elif self.path == "/v1/admin/source/test":
@@ -96,6 +101,10 @@ class AssistantHandler(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def local_service():
+    AssistantHandler.action_decision_response = (
+        200,
+        b'{"ok":true,"state":"verified"}',
+    )
     server = ThreadingHTTPServer(("127.0.0.1", 0), AssistantHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -266,6 +275,71 @@ def test_how_to_posts_only_to_its_narrow_authenticated_route(
     assert AssistantHandler.last_post is not None
     assert AssistantHandler.last_post["path"] == "/v1/turns/how-to"
     assert AssistantHandler.last_post["payload"] == payload
+
+
+def test_action_turn_and_decision_use_only_fixed_authenticated_routes(
+    tmp_path: Path, local_service: ThreadingHTTPServer
+) -> None:
+    secret_file = tmp_path / "shared-secret"
+    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
+    secret_file.chmod(0o640)
+    client = AssistantServiceClient(
+        base_url=f"http://127.0.0.1:{local_service.server_port}",
+        shared_secret_file=str(secret_file),
+    )
+    turn_payload = {
+        "turn_id": "12345678-1234-5678-1234-567812345678",
+        "message": "preview",
+        "screen": {"model": "sale.order", "res_id": 42},
+    }
+
+    assert client.action(turn_payload) == {"ok": True, "turn_id": "action-example"}
+    assert AssistantHandler.last_post["path"] == "/v1/turns/action"
+    decision_payload = {
+        "proposal_id": "22345678-1234-5678-9234-567812345678",
+        "decision": "approve",
+        "actor": {
+            "database": "fixture-db",
+            "uid": 17,
+            "company_id": 3,
+            "allowed_company_ids": [3],
+        },
+    }
+    assert client.action_decision(decision_payload)["state"] == "verified"
+    assert AssistantHandler.last_post["path"] == "/v1/actions/decision-execute"
+    assert AssistantHandler.last_post["payload"] == decision_payload
+
+
+def test_action_decision_preserves_cross_actor_binding_error(
+    tmp_path: Path, local_service: ThreadingHTTPServer
+) -> None:
+    secret_file = tmp_path / "shared-secret"
+    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
+    secret_file.chmod(0o640)
+    client = AssistantServiceClient(
+        base_url=f"http://127.0.0.1:{local_service.server_port}",
+        shared_secret_file=str(secret_file),
+    )
+    AssistantHandler.action_decision_response = (
+        403,
+        b'{"error":{"code":"approval_binding_mismatch"},"ok":false}',
+    )
+
+    with pytest.raises(AssistantServiceError) as rejected:
+        client.action_decision(
+            {
+                "proposal_id": "22345678-1234-5678-9234-567812345678",
+                "decision": "approve",
+                "actor": {
+                    "database": "other-db",
+                    "uid": 99,
+                    "company_id": 9,
+                    "allowed_company_ids": [9],
+                },
+            }
+        )
+
+    assert rejected.value.code == "approval_binding_mismatch"
 
 
 def test_m3_admin_client_uses_only_fixed_server_side_routes(

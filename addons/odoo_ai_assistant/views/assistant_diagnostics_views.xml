@@ -48,6 +48,7 @@
                         <field name="navigation_capability_state"/>
                         <field name="knowledge_capability_state"/>
                         <field name="how_to_capability_state"/>
+                        <field name="action_capability_state"/>
                     </group>
                     <group string="Bounded Diagnostic Evidence" col="1">
                         <field name="source_result" nolabel="1"/>

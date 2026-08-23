@@ -213,6 +213,7 @@ class PreparedActionPreviewTurn:
     screen: ValidatedScreenContext
     user: EffectiveUserContext
     database: str
+    allowed_fields: tuple[str, ...]
     delegation_token: str = field(repr=False)
 
     def to_assistant_payload(self) -> dict[str, object]:
@@ -445,6 +446,7 @@ class ActionPreviewTurnContextPreparer:
             screen=screen,
             user=user,
             database=database,
+            allowed_fields=allowed_fields,
             delegation_token=token,
         )
 
@@ -667,6 +669,18 @@ def derive_user_execution_context(env: OdooEnvironment) -> EffectiveUserContext:
         allowed_company_ids=allowed_company_ids,
         lang=lang,
     )
+
+
+def derive_action_decision_actor(env: OdooEnvironment) -> dict[str, object]:
+    """Build the minimal decision actor exclusively from the authenticated env."""
+
+    user = derive_user_execution_context(env)
+    return {
+        "database": _database_binding(env),
+        "uid": user.uid,
+        "company_id": user.company_id,
+        "allowed_company_ids": list(sorted(user.allowed_company_ids)),
+    }
 
 
 def _message(value: object) -> str:

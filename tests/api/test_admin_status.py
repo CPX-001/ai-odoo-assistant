@@ -13,7 +13,9 @@ from odoo_ai.api import create_app
 from odoo_ai.runtime.status import (
     AdminStatusService,
     ComponentState,
+    ComponentStatus,
     InstanceStatus,
+    MigrationStatus,
     ReasoningComponentStatus,
 )
 from odoo_ai.storage import (
@@ -108,12 +110,19 @@ def test_admin_status_reports_runtime_db_migrations_and_profile(
         "navigation": {"state": "ok", "detail": "validated_per_turn"},
         "knowledge": {"state": "ok", "detail": "available"},
         "how_to": {"state": "pending", "detail": "reasoning_unavailable"},
+        "action": {"state": "pending", "detail": "reasoning_unavailable"},
     }
 
 
 def test_all_required_capabilities_produce_fully_ready_sanitized_snapshot(
     configured_engine: Engine,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    authority_file = tmp_path / "action-authority-secret"
+    authority_file.write_text("a" * 64, encoding="utf-8")
+    authority_file.chmod(0o600)
+    monkeypatch.setenv("ODOO_AI_ACTION_AUTHORITY_SECRET_FILE", str(authority_file))
     session_factory = create_session_factory(configured_engine)
     with session_scope(session_factory) as session:
         profile = create_instance_profile(
@@ -154,6 +163,7 @@ def test_all_required_capabilities_produce_fully_ready_sanitized_snapshot(
     assert status.workflow_capabilities.navigation.state is ComponentState.OK
     assert status.workflow_capabilities.knowledge.state is ComponentState.OK
     assert status.workflow_capabilities.how_to.state is ComponentState.OK
+    assert status.workflow_capabilities.action.state is ComponentState.OK
     assert "/srv/private" not in serialized
     assert "canary-secret" not in serialized
 
@@ -178,6 +188,26 @@ def test_admin_status_sanitizes_database_failure(monkeypatch: pytest.MonkeyPatch
     }
     assert secret not in response.text
     assert "postgresql" not in response.text
+
+
+def test_action_capability_is_degraded_without_action_authority_secret() -> None:
+    capabilities = AdminStatusService._workflow_capabilities(
+        database=ComponentStatus(state=ComponentState.OK, detail="available"),
+        migrations=MigrationStatus(state=ComponentState.OK, detail="at_head"),
+        instance=InstanceStatus(
+            instance_id="fixture",
+            fingerprint="sha256:fixture",
+            capabilities={},
+        ),
+        reasoning=ReasoningComponentStatus(
+            state=ComponentState.OK,
+            detail="operational",
+        ),
+        action_authority_ready=False,
+    )
+
+    assert capabilities.action.state is ComponentState.PENDING
+    assert capabilities.action.detail == "action_authority_unavailable"
 
 
 def test_admin_status_reports_migration_mismatch(configured_engine: Engine) -> None:

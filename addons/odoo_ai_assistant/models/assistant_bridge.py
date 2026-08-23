@@ -17,6 +17,8 @@ from ..services import (
     AssistantServiceError,
     ScreenContextValidationError,
     TurnContextError,
+    derive_action_decision_actor,
+    prepare_action_preview_turn,
     prepare_context_turn,
     prepare_how_to_turn,
     prepare_query_turn,
@@ -58,9 +60,34 @@ EXPECTED_EXPLAIN_RESPONSE_KEYS: Final = frozenset(
     }
 )
 ALLOWED_CONFIDENCE: Final = frozenset({"high", "medium", "low"})
-ALLOWED_WORKFLOWS: Final = frozenset({"EXPLAIN", "QUERY", "HOW_TO"})
+ALLOWED_WORKFLOWS: Final = frozenset({"EXPLAIN", "QUERY", "HOW_TO", "ACTION"})
 EXPECTED_QUERY_RESPONSE_KEYS: Final = EXPECTED_EXPLAIN_RESPONSE_KEYS
 EXPECTED_HOW_TO_RESPONSE_KEYS: Final = EXPECTED_EXPLAIN_RESPONSE_KEYS
+EXPECTED_ACTION_RESPONSE_KEYS: Final = frozenset(
+    {
+        "answer_markdown",
+        "completed_at",
+        "confidence",
+        "evidence_refs",
+        "limitations",
+        "proposal",
+        "status",
+        "turn_id",
+        "workflow",
+    }
+)
+EXPECTED_ACTION_DECISION_KEYS: Final = frozenset(
+    {
+        "approval_id",
+        "attempt_id",
+        "completed_at",
+        "error_code",
+        "evidence_id",
+        "payload_fingerprint",
+        "proposal_id",
+        "state",
+    }
+)
 
 
 class AssistantBridge(models.AbstractModel):
@@ -77,6 +104,7 @@ class AssistantBridge(models.AbstractModel):
             "EXPLAIN": self.submit_explain,
             "QUERY": self.submit_query,
             "HOW_TO": self.submit_how_to,
+            "ACTION": self.submit_action,
         }
         return handlers[workflow](message, screen)
 
@@ -174,6 +202,55 @@ class AssistantBridge(models.AbstractModel):
             return _browser_how_to_response(response, prepared)
         except ScreenContextValidationError:
             return _error("invalid_context")
+        except TurnContextError as error:
+            return _error(_turn_error_code(error.code))
+        except AssistantServiceError as error:
+            return _error(_client_error_code(error.code))
+        except Exception:  # noqa: BLE001 - sanitize the browser RPC boundary
+            return _error("service_unavailable")
+
+    @api.model
+    def submit_action(self, message, screen):
+        """Run preview-only ACTION with p1 authority retained server-side."""
+
+        if not self.env.user._is_internal():
+            return _error("access_denied")
+        if not isinstance(screen, Mapping):
+            return _error("invalid_context")
+        try:
+            prepared = prepare_action_preview_turn(
+                env=self.env,
+                screen_payload=screen,
+                message=message,
+            )
+            response = self._client().action(prepared.to_assistant_payload())
+            return _browser_action_response(response, prepared)
+        except ScreenContextValidationError:
+            return _error("invalid_context")
+        except TurnContextError as error:
+            return _error(_turn_error_code(error.code))
+        except AssistantServiceError as error:
+            return _error(_client_error_code(error.code))
+        except Exception:  # noqa: BLE001 - sanitize the browser RPC boundary
+            return _error("service_unavailable")
+
+    @api.model
+    def decide_action(self, proposal_id, decision):
+        """Derive the actor in Odoo and send no editable payload to Assistant."""
+
+        if not self.env.user._is_internal():
+            return _error("access_denied")
+        if not _uuid(proposal_id) or decision not in {"approve", "reject"}:
+            return _error("invalid_context")
+        try:
+            response = self._client().action_decision(
+                {
+                    "proposal_id": proposal_id,
+                    "decision": decision,
+                    "actor": derive_action_decision_actor(self.env),
+                }
+            )
+            return _browser_action_decision_response(response, proposal_id)
         except TurnContextError as error:
             return _error(_turn_error_code(error.code))
         except AssistantServiceError as error:
@@ -395,6 +472,200 @@ def _browser_query_citation(citation, prepared):
     return dict(citation)
 
 
+def _browser_action_response(response, prepared):
+    if not isinstance(response, dict) or set(response) != EXPECTED_ACTION_RESPONSE_KEYS:
+        raise AssistantServiceError("invalid_response")
+    answer = response.get("answer_markdown")
+    limitations = response.get("limitations")
+    references = response.get("evidence_refs")
+    proposal = response.get("proposal")
+    if (
+        response.get("status") != "ok"
+        or response.get("workflow") != "ACTION"
+        or response.get("turn_id") != str(prepared.turn_id)
+        or response.get("confidence") not in ALLOWED_CONFIDENCE
+        or not _bounded_text(answer, 16_384, require_nonempty=True)
+        or not isinstance(response.get("completed_at"), str)
+        or not isinstance(limitations, list)
+        or len(limitations) > 8
+        or any(
+            not _bounded_text(value, 1_024, require_nonempty=True)
+            for value in limitations
+        )
+        or not isinstance(references, list)
+        or len(references) > 8
+        or len(references) != len(set(references))
+        or any(not _uuid(value) for value in references)
+    ):
+        raise AssistantServiceError("invalid_response")
+    sanitized_proposal = (
+        None
+        if proposal is None
+        else _browser_action_proposal(proposal, prepared, references)
+    )
+    result = {
+        "ok": True,
+        "turn_id": str(prepared.turn_id),
+        "workflow": "ACTION",
+        "answer": answer,
+        "confidence": response["confidence"],
+        "limitations": list(limitations),
+        "proposal": sanitized_proposal,
+    }
+    serialized = json.dumps(
+        result,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    if prepared.delegation_token in serialized:
+        raise AssistantServiceError("invalid_response")
+    return result
+
+
+def _browser_action_proposal(proposal, prepared, references):
+    expected = {
+        "changes",
+        "evidence_id",
+        "expires_at",
+        "payload_fingerprint",
+        "precondition_fingerprint",
+        "proposal_id",
+        "target",
+        "turn_id",
+        "warnings",
+    }
+    if not isinstance(proposal, dict) or set(proposal) != expected:
+        raise AssistantServiceError("invalid_response")
+    target = proposal.get("target")
+    changes = proposal.get("changes")
+    warnings = proposal.get("warnings")
+    if (
+        not _uuid(proposal.get("proposal_id"))
+        or proposal.get("turn_id") != str(prepared.turn_id)
+        or not isinstance(proposal.get("payload_fingerprint"), str)
+        or _ACTION_FINGERPRINT.fullmatch(proposal["payload_fingerprint"]) is None
+        or not isinstance(proposal.get("precondition_fingerprint"), str)
+        or _ACTION_FINGERPRINT.fullmatch(proposal["precondition_fingerprint"])
+        is None
+        or not _uuid(proposal.get("evidence_id"))
+        or proposal["evidence_id"] not in references
+        or not isinstance(proposal.get("expires_at"), str)
+        or not isinstance(target, dict)
+        or set(target) != {"model", "record_id"}
+        or target.get("model") != prepared.screen.model
+        or target.get("record_id") != prepared.screen.res_id
+        or not isinstance(changes, list)
+        or not 1 <= len(changes) <= 4
+        or not isinstance(warnings, list)
+        or len(warnings) > 8
+        or any(
+            not _bounded_text(value, 512, require_nonempty=True)
+            for value in warnings
+        )
+    ):
+        raise AssistantServiceError("invalid_response")
+    sanitized_changes = [_browser_action_change(value) for value in changes]
+    fields = [value["field"] for value in sanitized_changes]
+    if (
+        len(fields) != len(set(fields))
+        or not set(fields).issubset(prepared.allowed_fields)
+    ):
+        raise AssistantServiceError("invalid_response")
+    return {
+        "proposal_id": proposal["proposal_id"],
+        "target": dict(target),
+        "changes": sanitized_changes,
+        "warnings": list(warnings),
+        "expires_at": proposal["expires_at"],
+    }
+
+
+def _browser_action_change(change):
+    if (
+        not isinstance(change, dict)
+        or set(change) != {"after", "before", "field", "label"}
+        or not _identifier(change.get("field"), 128)
+        or change.get("label") is not None
+        and not _identifier(change.get("label"), 256)
+    ):
+        raise AssistantServiceError("invalid_response")
+    return {
+        "field": change["field"],
+        "label": change["label"],
+        "before": _browser_action_value(change.get("before")),
+        "after": _browser_action_value(change.get("after")),
+    }
+
+
+def _browser_action_value(value):
+    if not isinstance(value, dict) or set(value) != {"kind", "value"}:
+        raise AssistantServiceError("invalid_response")
+    kind = value.get("kind")
+    item = value.get("value")
+    valid = item is None
+    if kind == "boolean":
+        valid = valid or isinstance(item, bool)
+    elif kind in {"integer", "many2one"}:
+        valid = valid or type(item) is int and (kind == "integer" or item > 0)
+    elif kind in {"date", "datetime", "decimal", "selection", "text"}:
+        valid = valid or _bounded_text(item, 4_000)
+    else:
+        valid = False
+    if not valid:
+        raise AssistantServiceError("invalid_response")
+    return {"kind": kind, "value": item}
+
+
+def _browser_action_decision_response(response, proposal_id):
+    if not isinstance(response, dict) or set(response) != EXPECTED_ACTION_DECISION_KEYS:
+        raise AssistantServiceError("invalid_response")
+    state = response.get("state")
+    allowed = {
+        "rejected",
+        "verified",
+        "stale",
+        "failed",
+        "execution_unknown",
+        "committed_unverified",
+    }
+    approval_id = response.get("approval_id")
+    attempt_id = response.get("attempt_id")
+    evidence_id = response.get("evidence_id")
+    error_code = response.get("error_code")
+    if (
+        response.get("proposal_id") != proposal_id
+        or state not in allowed
+        or not isinstance(response.get("payload_fingerprint"), str)
+        or _ACTION_FINGERPRINT.fullmatch(response["payload_fingerprint"]) is None
+        or not isinstance(response.get("completed_at"), str)
+        or (approval_id is not None and not _uuid(approval_id))
+        or (attempt_id is not None and not _uuid(attempt_id))
+        or (evidence_id is not None and not _uuid(evidence_id))
+        or (error_code is not None and not _identifier(error_code, 128))
+        or state == "rejected"
+        and (approval_id is not None or attempt_id is not None or evidence_id is not None)
+        or state != "rejected"
+        and (approval_id is None or attempt_id is None)
+        or state == "verified"
+        and (evidence_id is None or error_code is not None)
+        or state != "verified"
+        and evidence_id is not None
+    ):
+        raise AssistantServiceError("invalid_response")
+    return {
+        "ok": True,
+        "proposal_id": proposal_id,
+        "state": state,
+        "completed_at": response["completed_at"],
+        "approval_id": approval_id,
+        "attempt_id": attempt_id,
+        "evidence_id": evidence_id,
+        "error_code": error_code,
+    }
+
+
 def _browser_how_to_response(response, prepared):
     if not isinstance(response, dict) or set(response) != EXPECTED_HOW_TO_RESPONSE_KEYS:
         raise AssistantServiceError("invalid_response")
@@ -507,6 +778,9 @@ def _browser_how_to_citation(citation, prepared):
 
 
 _FINGERPRINT = re.compile(r"sha256:[0-9a-f]{64}")
+_ACTION_FINGERPRINT = re.compile(
+    r"[a-z][a-z0-9_-]{0,31}:v[0-9]+:sha256:[0-9a-f]{64}"
+)
 
 
 def _browser_schema_field(value):
@@ -594,6 +868,15 @@ def _identifier(value, max_length):
     )
 
 
+def _bounded_text(value, max_length, *, require_nonempty=False):
+    return (
+        isinstance(value, str)
+        and (len(value) >= 1 if require_nonempty else True)
+        and len(value) <= max_length
+        and all(ord(character) >= 32 or character in "\t\n\r" for character in value)
+    )
+
+
 def _logical_path(value):
     if not isinstance(value, str) or not 1 <= len(value) <= 1_024 or "\\" in value:
         return False
@@ -630,11 +913,19 @@ def _client_error_code(code: str) -> str:
     if code == "invalid_response":
         return "invalid_response"
     if code in {
+        "action_budget_exceeded",
+        "action_rejected",
+        "approval_binding_mismatch",
+        "approval_expired",
+        "approval_not_found",
         "engine_timeout",
         "engine_unavailable",
         "evidence_unavailable",
         "query_budget_exceeded",
         "query_rejected",
+        "proposal_already_decided",
+        "proposal_not_found",
+        "record_context_required",
     }:
         return code
     return "service_unavailable"

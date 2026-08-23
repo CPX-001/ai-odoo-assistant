@@ -1,5 +1,7 @@
 # M6-05 — Autoridad ACTION separada y commit ORM estrecho
 
+Estado: **implementado y verificado de forma determinista el 2026-08-23.**
+
 ## Contexto
 
 - Requiere M6-04 verde.

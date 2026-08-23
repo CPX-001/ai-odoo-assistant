@@ -10,6 +10,7 @@ BROWSER_EXPLAIN_ROUTE: Final = "/odoo_ai/v1/explain"
 BROWSER_QUERY_ROUTE: Final = "/odoo_ai/v1/query"
 BROWSER_HOW_TO_ROUTE: Final = "/odoo_ai/v1/how-to"
 BROWSER_TURN_ROUTE: Final = "/odoo_ai/v1/turn"
+BROWSER_ACTION_DECISION_ROUTE: Final = "/odoo_ai/v1/action-decision"
 
 
 class BrowserAssistantController(http.Controller):
@@ -73,3 +74,16 @@ class BrowserAssistantController(http.Controller):
         if unexpected:
             return {"error": {"code": "invalid_context"}, "ok": False}
         return request.env["odoo.ai.assistant.bridge"].submit_how_to(message, screen)
+
+    @http.route(
+        BROWSER_ACTION_DECISION_ROUTE,
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def action_decision(self, proposal_id=None, decision=None, **unexpected):
+        if unexpected:
+            return {"error": {"code": "invalid_context"}, "ok": False}
+        return request.env["odoo.ai.assistant.bridge"].decide_action(
+            proposal_id, decision
+        )

@@ -113,6 +113,16 @@ class AssistantServiceClient:
 
         return self._turn_post("/v1/turns/how-to", payload)
 
+    def action(self, payload: dict[str, object]) -> dict[str, Any]:
+        """Submit one p1-bound preview-only ACTION turn."""
+
+        return self._turn_post("/v1/turns/action", payload)
+
+    def action_decision(self, payload: dict[str, object]) -> dict[str, Any]:
+        """Submit one host-derived approve/reject command outside reasoning."""
+
+        return self._admin_post("/v1/actions/decision-execute", payload)
+
     def _turn_post(
         self, path: str, payload: dict[str, object]
     ) -> dict[str, Any]:
@@ -121,6 +131,7 @@ class AssistantServiceClient:
             "/v1/turns/explain",
             "/v1/turns/how-to",
             "/v1/turns/query",
+            "/v1/turns/action",
         }:
             raise AssistantServiceError("invalid_request")
 
@@ -223,11 +234,29 @@ class AssistantServiceClient:
         if response.status == 401:
             raise AssistantServiceError("authentication_rejected")
         if response.status == 403:
+            if _response_error_code(response_body) == "approval_binding_mismatch":
+                raise AssistantServiceError("approval_binding_mismatch")
             raise AssistantServiceError("access_denied")
-        if response.status == 404:
-            raise AssistantServiceError("diagnostic_not_found")
-        if response.status == 409:
-            raise AssistantServiceError("diagnostic_unavailable")
+        if response.status in {404, 409, 410, 422}:
+            error_code = _response_error_code(response_body)
+            action_codes = {
+                "action_budget_exceeded",
+                "action_rejected",
+                "approval_binding_mismatch",
+                "approval_expired",
+                "approval_not_found",
+                "proposal_already_decided",
+                "proposal_not_found",
+                "record_context_required",
+            }
+            if error_code in action_codes:
+                raise AssistantServiceError(error_code)
+            if response.status == 404:
+                raise AssistantServiceError("diagnostic_not_found")
+            if response.status == 409:
+                raise AssistantServiceError("diagnostic_unavailable")
+            if response.status == 410:
+                raise AssistantServiceError("action_rejected")
         if response.status == 413:
             raise AssistantServiceError("invalid_request")
         if response.status == 422:

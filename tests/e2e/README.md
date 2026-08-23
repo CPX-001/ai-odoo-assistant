@@ -94,3 +94,46 @@ M5_POSTGRES_ADMIN_DSN
 ```
 
 `M5_CODEX_MODEL` is optional; the reproducible gate default is `gpt-5.4`.
+
+## M6 real ACTION acceptance
+
+`run_m6_action_codex.py` owns a disposable ACTION vertical slice. It creates
+separate Odoo and Assistant roles/databases, installs and updates the addon plus
+the test-only `odoo.ai.m6.action.item` fixture, runs migrations, starts Odoo 18,
+the Assistant Service, a real Codex runtime and Chromium, and removes only its
+randomized resources afterward.
+
+The browser proves that preview does not write, approval is explicit, the exact
+stored patch is verified, reject does not write, another user/company cannot
+approve or read the target, extra browser payload is rejected, stale and expiry
+fail closed, XSS/instructions remain data, and Chromium never contacts the
+Assistant Service. A loopback fault proxy drops exactly one post-commit response
+for the ambiguous-result case; deterministic verification resolves it without a
+second write. The report includes sanitized correlation IDs, tool names,
+versions, states and expected write counts, never credentials or authority
+tokens.
+
+Required runtime variables are explicit deployment inputs:
+
+```text
+M6_ODOO_PYTHON M6_ODOO_BIN M6_ODOO_CORE_ADDONS
+M6_CODEX_EXECUTABLE M6_PLAYWRIGHT_ROOT M6_NODE
+M6_POSTGRES_ADMIN_DSN
+```
+
+Example:
+
+```text
+M6_ODOO_PYTHON=/path/to/odoo-python \
+M6_ODOO_BIN=/path/to/odoo-bin \
+M6_ODOO_CORE_ADDONS=/path/to/odoo/addons \
+M6_CODEX_EXECUTABLE=/path/to/codex \
+M6_PLAYWRIGHT_ROOT=/tmp/playwright-runtime \
+M6_NODE=/usr/bin/node \
+M6_POSTGRES_ADMIN_DSN=postgresql://gate-admin@127.0.0.1:5432/postgres \
+.venv/bin/python tests/e2e/run_m6_action_codex.py
+```
+
+The PostgreSQL identity must be limited to a disposable cluster where it may
+create/drop randomized roles and databases. `M6_CODEX_MODEL` is optional; the
+default is `gpt-5.4`.

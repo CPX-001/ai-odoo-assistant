@@ -7,7 +7,11 @@ from unittest.mock import patch
 from odoo import Command
 from odoo.tests import TransactionCase, tagged
 
-from ..security import DelegationCodec, QueryDelegationCodec
+from ..security import (
+    ActionPreviewDelegationCodec,
+    DelegationCodec,
+    QueryDelegationCodec,
+)
 from ..services import AssistantServiceError, prepare_context_turn
 
 SECRET = b"m2-bridge-delegation-secret-" + b"s" * 48
@@ -150,6 +154,41 @@ class FakeContextReadClient:
             "status": "ok",
             "turn_id": payload["turn_id"],
             "workflow": "HOW_TO",
+        }
+
+    def action(self, payload):
+        self.payload = payload
+        screen = payload["screen"]
+        return {
+            "answer_markdown": "La preview exacta está lista.\nRevísala antes de aprobar.",
+            "completed_at": datetime.now(UTC).isoformat(),
+            "confidence": "high",
+            "evidence_refs": ["77777777-7777-4777-8777-777777777777"],
+            "limitations": [],
+            "proposal": {
+                "changes": [
+                    {
+                        "after": {"kind": "text", "value": "Nuevo\nnombre"},
+                        "before": {"kind": "text", "value": "M2 Bridge User"},
+                        "field": "name",
+                        "label": "Name <script>alert(1)</script>",
+                    }
+                ],
+                "evidence_id": "77777777-7777-4777-8777-777777777777",
+                "expires_at": datetime.now(UTC).isoformat(),
+                "payload_fingerprint": "sha256:" + "d" * 64,
+                "precondition_fingerprint": "sha256:" + "e" * 64,
+                "proposal_id": "88888888-8888-4888-8888-888888888888",
+                "target": {
+                    "model": screen["model"],
+                    "record_id": screen["res_id"],
+                },
+                "turn_id": payload["turn_id"],
+                "warnings": ["Visible as data: <img src=x onerror=alert(1)>"],
+            },
+            "status": "ok",
+            "turn_id": payload["turn_id"],
+            "workflow": "ACTION",
         }
 
 
@@ -371,12 +410,45 @@ class TestAssistantBridge(TransactionCase):
             "_client",
             side_effect=AssertionError("client must not be constructed"),
         ):
-            result = bridge.submit_turn("Hazlo", self._screen(), "ACTION")
+            result = bridge.submit_turn("Hazlo", self._screen(), "DIAGNOSE")
 
         self.assertEqual(
             result,
             {"error": {"code": "invalid_workflow"}, "ok": False},
         )
+
+    def test_action_router_uses_preview_only_p1_and_returns_exact_safe_diff(self):
+        client = FakeContextReadClient()
+        user_env = self.env(
+            user=self.user.id,
+            su=False,
+            context={
+                **self.env.context,
+                "allowed_company_ids": [self.env.company.id],
+                "lang": "en_US",
+            },
+        )
+        bridge = user_env["odoo.ai.assistant.bridge"]
+        with (
+            patch.dict(
+                os.environ,
+                {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
+            ),
+            patch.object(type(bridge), "_client", return_value=client),
+        ):
+            result = bridge.submit_turn("Cambia el nombre", self._screen(), "ACTION")
+
+        claims = ActionPreviewDelegationCodec(SECRET).decode(
+            client.payload["delegation_token"]
+        )
+        self.assertEqual(claims.scopes, ("action_write_schema", "action_preview"))
+        self.assertEqual(claims.model, "res.partner")
+        self.assertEqual(claims.record_id, self.user.partner_id.id)
+        self.assertIn("name", claims.allowed_fields)
+        self.assertEqual(result["workflow"], "ACTION")
+        self.assertEqual(result["proposal"]["changes"][0]["after"]["value"], "Nuevo\nnombre")
+        self.assertNotIn("payload_fingerprint", repr(result))
+        self.assertNotIn(client.payload["delegation_token"], repr(result))
 
     def test_how_to_uses_metadata_only_authority_and_browser_safe_citations(self):
         client = FakeContextReadClient()

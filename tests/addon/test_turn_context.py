@@ -255,6 +255,17 @@ def test_action_preview_authority_is_record_bound_and_non_writing() -> None:
         _query_codec().decode(prepared.delegation_token)
 
 
+def test_action_decision_actor_is_derived_only_from_authenticated_env() -> None:
+    actor = turn_context.derive_action_decision_actor(QueryFakeEnv())
+
+    assert actor == {
+        "database": "customer-db",
+        "uid": 17,
+        "company_id": 3,
+        "allowed_company_ids": [3, 5],
+    }
+
+
 def test_query_turn_accepts_model_only_list_context() -> None:
     prepared = _query_preparer().prepare(
         env=QueryFakeEnv(),

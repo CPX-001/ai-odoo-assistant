@@ -1,5 +1,7 @@
 # M6-09 — E2E real ACTION con Codex/Odoo/Chromium
 
+Estado: **runner y fixture implementados el 2026-08-23; ejecución real pendiente por dependencias externas del host.**
+
 ## Contexto
 
 - Requiere M6-01..M6-08 verdes.

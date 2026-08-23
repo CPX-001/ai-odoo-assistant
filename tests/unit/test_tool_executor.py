@@ -187,15 +187,42 @@ def test_executor_id_and_input_schema_must_match_explicit_binding() -> None:
         _binding(handler, spec=manipulated)
 
 
-@pytest.mark.parametrize(
-    "risk", [ToolRisk.WRITE, ToolRisk.ACTION, ToolRisk.WRITE_PREVIEW]
-)
-def test_non_read_risks_are_rejected(risk: ToolRisk) -> None:
+@pytest.mark.parametrize("risk", [ToolRisk.WRITE, ToolRisk.ACTION])
+def test_commit_risks_are_always_rejected(risk: ToolRisk) -> None:
     async def handler(value: BaseModel) -> ToolHandlerOutput:
         return ToolHandlerOutput(data={"echoed": "unused"})
 
     with pytest.raises(ToolExecutorError, match="tool_risk_not_allowed"):
         _binding(handler, spec=_spec(risk=risk))
+
+
+def test_preview_risk_requires_an_explicit_registry_policy() -> None:
+    async def handler(value: BaseModel) -> ToolHandlerOutput:
+        validated = EchoInput.model_validate(value)
+        return ToolHandlerOutput(data={"echoed": validated.value})
+
+    binding = _binding(handler, spec=_spec(risk=ToolRisk.WRITE_PREVIEW))
+    with pytest.raises(ToolExecutorError, match="tool_risk_not_allowed"):
+        ToolRegistry([binding])
+
+    registry = ToolRegistry([binding], allowed_risks={ToolRisk.WRITE_PREVIEW})
+    executor = ToolExecutor(
+        registry=registry,
+        ledger=EvidenceLedger(max_items=8, max_payload_bytes=32 * 1024),
+        turn_limits=TurnLimits(max_tool_calls=1, max_evidence_items=8),
+    )
+    result = asyncio.run(
+        executor.execute(
+            ToolCall(
+                call_id="preview-1",
+                tool_name="fixture.echo",
+                arguments={"value": "ok"},
+            )
+        )
+    )
+
+    assert result.data == {"echoed": "ok"}
+    assert registry.allowed_risks == frozenset({ToolRisk.WRITE_PREVIEW})
 
 
 @pytest.mark.parametrize(

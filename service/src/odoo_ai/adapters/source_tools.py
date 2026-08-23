@@ -17,11 +17,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from odoo_ai.adapters.odoo_http import (
-    OdooGatewayError,
-    OdooGatewayFactory,
-    OdooGatewaySettings,
-)
+from odoo_ai.adapters.odoo_http import OdooGatewayFactory, OdooGatewaySettings
 from odoo_ai.contracts import (
     ContextPack,
     EvidenceKind,
@@ -40,7 +36,7 @@ from odoo_ai.contracts import (
     ToolRisk,
     ToolSpec,
 )
-from odoo_ai.ports import OdooInstanceGateway
+from odoo_ai.ports import OdooGatewayError, OdooInstanceGateway
 from odoo_ai.source import (
     RootSelection,
     SourceEvidenceService,

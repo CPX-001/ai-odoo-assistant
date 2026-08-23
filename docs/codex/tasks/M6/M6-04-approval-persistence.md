@@ -1,5 +1,7 @@
 # M6-04 — Persistencia y state machine de approvals
 
+Estado: **implementado y verificado de forma determinista el 2026-08-23.**
+
 ## Contexto
 
 - Requiere M6-01..M6-03 verdes.
