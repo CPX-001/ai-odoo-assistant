@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+
 from odoo_ai.adapters import (
     ODOO_AGGREGATE_RECORDS,
     ODOO_GET_EFFECTIVE_SCHEMA,

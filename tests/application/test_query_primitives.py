@@ -2,6 +2,7 @@ import asyncio
 from datetime import UTC, datetime
 
 import pytest
+
 from odoo_ai.application import QueryPrimitiveError, QueryPrimitiveService
 from odoo_ai.contracts import (
     AggregateGroup,

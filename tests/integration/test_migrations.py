@@ -25,7 +25,9 @@ def _configure_test_database(monkeypatch: pytest.MonkeyPatch) -> DatabaseSetting
     return DatabaseSettings.from_env()
 
 
-def test_connection_and_upgrade_head_are_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_connection_and_upgrade_head_are_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _configure_test_database(monkeypatch)
     config = Config(REPO_ROOT / "alembic.ini")
 
@@ -37,7 +39,9 @@ def test_connection_and_upgrade_head_are_idempotent(monkeypatch: pytest.MonkeyPa
     try:
         with engine.connect() as connection:
             current_database = connection.scalar(text("SELECT current_database()"))
-            current_revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
+            current_revision = connection.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
     finally:
         engine.dispose()
 
@@ -58,10 +62,7 @@ def test_upgrade_from_previous_revision_creates_source_index(
         with engine.connect() as connection:
             tables = set(
                 connection.execute(
-                    text(
-                        "SELECT tablename FROM pg_tables "
-                        "WHERE schemaname = 'public'"
-                    )
+                    text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
                 ).scalars()
             )
     finally:
@@ -81,8 +82,40 @@ def test_fresh_database_upgrade_reaches_current_head(
     engine = create_database_engine(settings)
     try:
         with engine.connect() as connection:
-            revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
+            revision = connection.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
     finally:
         engine.dispose()
 
     assert revision == ScriptDirectory.from_config(config).get_current_head()
+
+
+def test_upgrade_from_m4_head_creates_knowledge_fts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _configure_test_database(monkeypatch)
+    config = Config(REPO_ROOT / "alembic.ini")
+    command.downgrade(config, "0005_m3_05_xml_csv")
+    command.upgrade(config, "head")
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            tables = set(
+                connection.execute(
+                    text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+                ).scalars()
+            )
+            index_method = connection.scalar(
+                text(
+                    "SELECT am.amname FROM pg_class idx "
+                    "JOIN pg_am am ON am.oid = idx.relam "
+                    "WHERE idx.relname = 'ix_knowledge_chunk_search_vector'"
+                )
+            )
+    finally:
+        engine.dispose()
+
+    assert {"knowledge_document", "knowledge_chunk"} <= tables
+    assert index_method == "gin"

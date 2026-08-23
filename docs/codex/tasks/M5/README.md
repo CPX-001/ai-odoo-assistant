@@ -1,6 +1,6 @@
 # M5 — QUERY + HOW_TO + RAG
 
-Estado: **M5-01, M5-02, M5-03 y M5-04 implementadas y verificadas; M5-05 es la siguiente task.**
+Estado: **M5-01 a M5-05 implementadas y verificadas; M5-06 es la siguiente task.**
 
 M5 empieza únicamente después de **M4 GATE: PASS**. Su objetivo es ampliar el vertical slice de sólo lectura para que el asistente pueda:
 

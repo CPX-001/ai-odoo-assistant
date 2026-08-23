@@ -53,6 +53,16 @@ from odoo_ai.contracts.explain import (
     RecordCitation,
     SourceCitation,
 )
+from odoo_ai.contracts.knowledge import (
+    KnowledgeChunk,
+    KnowledgeDocument,
+    KnowledgeDocumentStatus,
+    KnowledgeMediaType,
+    KnowledgeProviderIssue,
+    KnowledgeProviderResult,
+    KnowledgeScanMetrics,
+    KnowledgeScanResult,
+)
 from odoo_ai.contracts.logs import (
     LogCapabilityState,
     LogCorrelation,
@@ -151,6 +161,14 @@ __all__ = [
     "FindSymbolResult",
     "InstanceInventory",
     "InstanceProfileSummary",
+    "KnowledgeChunk",
+    "KnowledgeDocument",
+    "KnowledgeDocumentStatus",
+    "KnowledgeMediaType",
+    "KnowledgeProviderIssue",
+    "KnowledgeProviderResult",
+    "KnowledgeScanMetrics",
+    "KnowledgeScanResult",
     "LogCorrelation",
     "LogCapabilityState",
     "LogEvidence",

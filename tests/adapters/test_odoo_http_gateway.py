@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+
 from odoo_ai.adapters import (
     HttpOdooGateway,
     HttpOdooInstanceGateway,
