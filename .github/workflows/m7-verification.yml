@@ -40,6 +40,25 @@ jobs:
           cache: pip
           cache-dependency-path: service/pyproject.toml
 
+      - name: Mark verification started
+        shell: bash
+        run: |
+          mkdir -p docs/verification
+          cat > docs/verification/M7_LATEST.md <<EOF
+          # M7 verification — running
+
+          Source commit: \`$GITHUB_SHA\`
+
+          Status: **RUNNING**
+
+          This marker is written by GitHub Actions before executing the verification commands.
+          EOF
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/verification/M7_LATEST.md
+          git commit -m 'ci: mark M7 verification running'
+          git push origin HEAD:main
+
       - name: Run service verification
         id: service
         shell: bash
@@ -143,7 +162,6 @@ jobs:
       - name: Write verification report
         shell: bash
         run: |
-          mkdir -p docs/verification
           code() { cat ".verification/$1.code" 2>/dev/null || echo 98; }
           label() { if [ "$1" -eq 0 ]; then echo PASS; elif [ "$1" -eq 99 ]; then echo BLOCKED; else echo FAIL; fi; }
           summary() {
@@ -217,8 +235,6 @@ jobs:
       - name: Persist verification report
         shell: bash
         run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add docs/verification/M7_LATEST.md
           if git diff --cached --quiet; then
             exit 0
