@@ -1,5 +1,7 @@
 # M6-01 — Contratos ACTION, payload canónico y policy base
 
+Estado: **implementado y verificado el 2026-08-23.**
+
 ## Contexto
 
 - Requiere M5 GATE PASS.

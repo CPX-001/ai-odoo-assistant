@@ -4,6 +4,7 @@ from odoo_ai.ports.knowledge import KnowledgeProvider
 from odoo_ai.ports.logs import LogProvider
 from odoo_ai.ports.odoo import (
     ModelMetadataGateway,
+    OdooActionPreviewGateway,
     OdooGateway,
     OdooInstanceGateway,
     OdooQueryGateway,
@@ -15,6 +16,7 @@ __all__ = [
     "LogProvider",
     "ModelMetadataGateway",
     "OdooGateway",
+    "OdooActionPreviewGateway",
     "OdooInstanceGateway",
     "OdooQueryGateway",
     "ReasoningEngine",

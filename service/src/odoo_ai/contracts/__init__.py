@@ -1,5 +1,19 @@
 """Stable, transport-independent contracts for the Assistant Service."""
 
+from odoo_ai.contracts.action import (
+    ACTION_PAYLOAD_FORMAT_VERSION,
+    ActionFieldChange,
+    ActionKind,
+    ActionPreview,
+    ActionPreviewChange,
+    ActionPreviewSummary,
+    ActionProposalPayload,
+    ActionTarget,
+    ActionValue,
+    ActionValueKind,
+    EffectiveWriteFieldSchema,
+    EffectiveWriteSchema,
+)
 from odoo_ai.contracts.agent import (
     AnswerConfidence,
     AnswerEnvelope,
@@ -17,7 +31,10 @@ from odoo_ai.contracts.context import (
     Workflow,
 )
 from odoo_ai.contracts.delegation import (
+    ACTION_PREVIEW_DELEGATION_FORMAT_VERSION,
     DELEGATION_FORMAT_VERSION,
+    ActionPreviewDelegationClaims,
+    ActionPreviewDelegationScope,
     ContextReadTurnRequest,
     ContextReadTurnResponse,
     DelegationClaims,
@@ -148,6 +165,21 @@ from odoo_ai.contracts.source import (
 from odoo_ai.contracts.tool_execution import ToolExecutionEvent, ToolExecutionReport
 
 __all__ = [
+    "ACTION_PREVIEW_DELEGATION_FORMAT_VERSION",
+    "ACTION_PAYLOAD_FORMAT_VERSION",
+    "ActionFieldChange",
+    "ActionKind",
+    "ActionPreview",
+    "ActionPreviewChange",
+    "ActionPreviewSummary",
+    "ActionProposalPayload",
+    "ActionTarget",
+    "ActionValue",
+    "ActionValueKind",
+    "ActionPreviewDelegationClaims",
+    "ActionPreviewDelegationScope",
+    "EffectiveWriteFieldSchema",
+    "EffectiveWriteSchema",
     "AnswerConfidence",
     "AnswerEnvelope",
     "AggregateGroup",

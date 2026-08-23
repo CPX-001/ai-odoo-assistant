@@ -1,5 +1,7 @@
 # M6-02 — Schema efectivo de escritura
 
+Estado: **implementado y verificado el 2026-08-23.**
+
 ## Contexto
 
 - Requiere M6-01 verde.

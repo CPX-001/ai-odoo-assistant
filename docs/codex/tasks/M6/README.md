@@ -1,6 +1,6 @@
 # M6 — ACTION segura
 
-Estado: **task packets preparados; implementación no iniciada.**
+Estado: **en progreso; M6-01, M6-02 y M6-03 implementados. M6-04 es el siguiente packet y no se ha iniciado.**
 
 M6 empieza únicamente después de **M5 GATE: PASS**. Su objetivo es permitir que el usuario solicite desde el chat un cambio simple y acotado, vea exactamente qué se va a modificar, lo apruebe explícitamente y obtenga después una verificación y auditoría del resultado real.
 

@@ -12,6 +12,8 @@ from typing import Final, Protocol
 from uuid import UUID, uuid4
 
 from ..security import (
+    ActionPreviewDelegationCodec,
+    ActionPreviewDelegationPayload,
     DelegationCodec,
     DelegationPayload,
     DelegationTokenError,
@@ -29,10 +31,13 @@ from .screen_context import (
 DELEGATION_SECRET_FILE_ENV: Final = "ODOO_AI_DELEGATION_SECRET_FILE"
 DELEGATION_TTL_SECONDS: Final = 60
 QUERY_DELEGATION_TTL_SECONDS: Final = 120
+ACTION_PREVIEW_DELEGATION_TTL_SECONDS: Final = 120
 MAX_ACTIVE_COMPANIES: Final = 16
 MAX_MESSAGE_LENGTH: Final = 4_000
 DELEGATED_MAX_FIELDS: Final = 32
 QUERY_POLICY_REVISION: Final = "m5-query-read-v1"
+ACTION_POLICY_REVISION: Final = "m6-record-patch-v1"
+ACTION_MAX_FIELDS: Final = 4
 QUERY_MAX_RECORDS: Final = 50
 QUERY_MAX_FIELDS: Final = 16
 QUERY_MAX_CONDITIONS: Final = 8
@@ -52,6 +57,43 @@ QUERY_ALLOWED_FIELD_TYPES: Final = frozenset(
         "selection",
         "text",
     }
+)
+ACTION_PREVIEW_ALLOWED_FIELD_TYPES: Final = frozenset(
+    {
+        "boolean",
+        "char",
+        "date",
+        "datetime",
+        "float",
+        "integer",
+        "many2one",
+        "monetary",
+        "selection",
+        "text",
+    }
+)
+ACTION_PREVIEW_BLOCKED_FIELDS: Final = frozenset(
+    {
+        "__last_update",
+        "company_id",
+        "company_ids",
+        "create_date",
+        "create_uid",
+        "groups_id",
+        "id",
+        "password",
+        "password_crypt",
+        "share",
+        "write_date",
+        "write_uid",
+    }
+)
+ACTION_PREVIEW_SENSITIVE_FIELD_PARTS: Final = (
+    "api_key",
+    "credential",
+    "password",
+    "secret",
+    "token",
 )
 
 
@@ -140,6 +182,31 @@ class PreparedContextTurn:
 @dataclass(frozen=True, slots=True)
 class PreparedQueryTurn:
     """Server-only QUERY material carrying only the separate q1 authority."""
+
+    turn_id: UUID
+    message: str
+    screen: ValidatedScreenContext
+    user: EffectiveUserContext
+    database: str
+    delegation_token: str = field(repr=False)
+
+    def to_assistant_payload(self) -> dict[str, object]:
+        return {
+            "delegation_token": self.delegation_token,
+            "gateway": {"database": self.database},
+            "message": self.message,
+            "screen": self.screen.to_mapping(),
+            "turn_id": str(self.turn_id),
+            "user": self.user.to_mapping(),
+        }
+
+    def to_browser_payload(self) -> dict[str, str]:
+        return {"turn_id": str(self.turn_id)}
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedActionPreviewTurn:
+    """Server-only ACTION material carrying non-writing p1 authority."""
 
     turn_id: UUID
     message: str
@@ -296,6 +363,83 @@ class QueryTurnContextPreparer:
         except DelegationTokenError as error:
             raise TurnContextError("delegation_unavailable") from error
         return PreparedQueryTurn(
+            turn_id=turn_id,
+            message=normalized_message,
+            screen=screen,
+            user=user,
+            database=database,
+            delegation_token=token,
+        )
+
+
+class ActionPreviewTurnContextPreparer:
+    """Create p1 schema/preview authority for the exact current record."""
+
+    def __init__(
+        self,
+        *,
+        codec: ActionPreviewDelegationCodec,
+        clock: Callable[[], int] | None = None,
+        turn_id_factory: Callable[[], UUID] | None = None,
+        nonce_factory: Callable[[], str] | None = None,
+    ) -> None:
+        self._codec = codec
+        self._clock = clock or _unix_time
+        self._turn_id_factory = turn_id_factory or uuid4
+        self._nonce_factory = nonce_factory or (lambda: secrets.token_urlsafe(18))
+
+    def prepare(
+        self,
+        *,
+        env: OdooEnvironment,
+        screen_payload: Mapping[str, object],
+        message: str,
+    ) -> PreparedActionPreviewTurn:
+        now = self._clock()
+        if type(now) is not int:
+            raise TurnContextError("clock_unavailable")
+        screen = validate_context_read_screen(
+            screen_payload,
+            clock=lambda: datetime.fromtimestamp(now, UTC),
+        )
+        if screen.model not in env or screen.res_id is None:
+            raise TurnContextError("model_unavailable")
+        normalized_message = _message(message)
+        derived_user = derive_user_execution_context(env)
+        user = EffectiveUserContext(
+            uid=derived_user.uid,
+            company_id=derived_user.company_id,
+            allowed_company_ids=tuple(sorted(derived_user.allowed_company_ids)),
+            lang=derived_user.lang,
+        )
+        database = _database_binding(env)
+        allowed_fields = _visible_action_preview_fields(env, screen.model)
+        turn_id = self._turn_id_factory()
+        if not isinstance(turn_id, UUID):
+            raise TurnContextError("turn_id_unavailable")
+        try:
+            payload = ActionPreviewDelegationPayload(
+                format_version=1,
+                jti=self._nonce_factory(),
+                turn_id=turn_id,
+                database=database,
+                uid=user.uid,
+                company_id=user.company_id,
+                allowed_company_ids=user.allowed_company_ids,
+                lang=user.lang,
+                model=screen.model,
+                record_id=screen.res_id,
+                allowed_fields=allowed_fields,
+                scopes=("action_write_schema", "action_preview"),
+                issued_at=now,
+                expires_at=now + ACTION_PREVIEW_DELEGATION_TTL_SECONDS,
+                max_fields=min(ACTION_MAX_FIELDS, len(allowed_fields)),
+                policy_revision=ACTION_POLICY_REVISION,
+            )
+            token = self._codec.encode(payload)
+        except DelegationTokenError as error:
+            raise TurnContextError("delegation_unavailable") from error
+        return PreparedActionPreviewTurn(
             turn_id=turn_id,
             message=normalized_message,
             screen=screen,
@@ -466,6 +610,33 @@ def prepare_how_to_turn(
     )
 
 
+def prepare_action_preview_turn(
+    *,
+    env: OdooEnvironment,
+    screen_payload: Mapping[str, object],
+    message: str,
+    secret_file: str | None = None,
+    clock: Callable[[], int] | None = None,
+) -> PreparedActionPreviewTurn:
+    """Configured p1 entrypoint; the signing root remains inside Odoo."""
+
+    resolved_secret_file = (
+        secret_file or os.environ.get(DELEGATION_SECRET_FILE_ENV, "")
+    ).strip()
+    if not resolved_secret_file:
+        raise TurnContextError("delegation_unconfigured")
+    effective_clock = clock or _unix_time
+    try:
+        codec = ActionPreviewDelegationCodec.from_secret_file(
+            resolved_secret_file, clock=effective_clock
+        )
+    except DelegationTokenError:
+        raise TurnContextError("delegation_unavailable") from None
+    return ActionPreviewTurnContextPreparer(codec=codec, clock=effective_clock).prepare(
+        env=env, screen_payload=screen_payload, message=message
+    )
+
+
 def derive_user_execution_context(env: OdooEnvironment) -> EffectiveUserContext:
     """Map Odoo 18 env identity/active companies/lang without browser claims."""
 
@@ -545,6 +716,44 @@ def _visible_query_fields(env: OdooEnvironment, model: str) -> tuple[str, ...]:
     if not ordered:
         raise TurnContextError("access_denied")
     return ordered
+
+
+def _visible_action_preview_fields(env: OdooEnvironment, model: str) -> tuple[str, ...]:
+    try:
+        model_set = env[model]
+        model_set.browse().check_access("read")
+        descriptions = model_set.fields_get(attributes=["readonly", "type"])
+    except Exception:  # noqa: BLE001 - sanitize runtime ACL/schema discovery
+        raise TurnContextError("access_denied") from None
+    if not isinstance(descriptions, dict):
+        raise TurnContextError("identity_unavailable")
+    candidates = sorted(
+        name
+        for name, description in descriptions.items()
+        if isinstance(name, str)
+        and isinstance(description, dict)
+        and description.get("readonly") is False
+        and description.get("type") in ACTION_PREVIEW_ALLOWED_FIELD_TYPES
+        and _action_preview_field_permitted(name)
+    )[:64]
+    allowed_values: list[str] = []
+    for name in candidates:
+        try:
+            model_set.check_field_access_rights("write", [name])
+        except Exception:  # noqa: BLE001 - inaccessible fields are omitted
+            continue
+        allowed_values.append(name)
+    allowed = tuple(allowed_values)
+    if not allowed:
+        raise TurnContextError("access_denied")
+    return allowed
+
+
+def _action_preview_field_permitted(field: str) -> bool:
+    normalized = field.casefold()
+    return field not in ACTION_PREVIEW_BLOCKED_FIELDS and not any(
+        part in normalized for part in ACTION_PREVIEW_SENSITIVE_FIELD_PARTS
+    )
 
 
 def _positive_id(value: object) -> int:

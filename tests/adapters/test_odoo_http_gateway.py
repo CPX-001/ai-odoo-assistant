@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from odoo_ai.adapters import (
     OdooGatewaySettings,
 )
 from odoo_ai.adapters.odoo_http import (
+    ACTION_PREVIEW_ROUTE,
     AGGREGATE_RECORDS_ROUTE,
     DELEGATION_HEADER,
     INVENTORY_ROUTE,
@@ -30,8 +32,17 @@ from odoo_ai.adapters.odoo_http import (
     QUERY_RECORDS_ROUTE,
     QUERY_SCHEMA_ROUTE,
     READ_ROUTE,
+    WRITE_SCHEMA_ROUTE,
 )
 from odoo_ai.contracts import (
+    ActionFieldChange,
+    ActionPreview,
+    ActionPreviewChange,
+    ActionPreviewSummary,
+    ActionProposalPayload,
+    ActionTarget,
+    ActionValue,
+    ActionValueKind,
     AggregateRecordsRequest,
     EvidenceKind,
     EvidenceStatus,
@@ -299,6 +310,110 @@ def test_query_schema_uses_the_separate_narrow_route() -> None:
         "model": "sale.order",
         "provider": "odoo_query_http",
     }
+
+
+def test_action_write_schema_uses_separate_p1_route_and_write_access_flag() -> None:
+    def responder(request: CapturedRequest) -> ResponseSpec:
+        assert request.path == WRITE_SCHEMA_ROUTE
+        assert json.loads(request.body) == {
+            "model": "sale.order",
+            "turn_id": str(TURN_ID),
+        }
+        return _json_response(
+            {
+                "captured_at": "2026-08-23T10:30:00Z",
+                "fields": {
+                    "client_order_ref": {
+                        "readonly": False,
+                        "required": False,
+                        "string": "Customer Reference",
+                        "type": "char",
+                    }
+                },
+                "label": "Sales Order",
+                "model": "sale.order",
+                "ok": True,
+                "write_access": True,
+            }
+        )
+
+    with fake_odoo_server(responder) as server:
+        evidence = asyncio.run(
+            _gateway(f"http://127.0.0.1:{server.server_port}").get_write_model_metadata(
+                "sale.order"
+            )
+        )
+
+    assert evidence.status is EvidenceStatus.CHECKED
+    assert evidence.payload["write_access"] is True
+    assert evidence.pointer == {
+        "model": "sale.order",
+        "provider": "odoo_action_preview_http",
+    }
+
+
+def test_action_preview_sends_only_canonical_proposal_and_maps_strict_diff() -> None:
+    proposal_id = UUID("11111111-1111-4111-8111-111111111111")
+    proposal = ActionProposalPayload(
+        proposal_id=proposal_id,
+        turn_id=TURN_ID,
+        instance_id="odoo-production",
+        database="acme",
+        uid=17,
+        company_id=1,
+        allowed_company_ids=(1,),
+        target=ActionTarget(model="sale.order", record_id=42),
+        changes=(
+            ActionFieldChange(
+                field="client_order_ref",
+                value=ActionValue(kind=ActionValueKind.TEXT, value="PO-43"),
+            ),
+        ),
+        policy_revision="m6-record-patch-v1",
+        schema_revision="action-schema:v1:sha256:" + "a" * 64,
+    )
+    payload_fingerprint = "action-payload:v1:sha256:" + "b" * 64
+    now = datetime(2026, 8, 23, 10, 30, tzinfo=UTC)
+    expected = ActionPreview(
+        preview_id=UUID("33333333-3333-4333-8333-333333333333"),
+        summary=ActionPreviewSummary(
+            proposal_id=proposal_id,
+            target=proposal.target,
+            changes=(
+                ActionPreviewChange(
+                    field="client_order_ref",
+                    label="Customer Reference",
+                    before=ActionValue(kind=ActionValueKind.TEXT, value="PO-42"),
+                    after=proposal.changes[0].value,
+                ),
+            ),
+            warnings=("Preview only.",),
+        ),
+        payload_fingerprint=payload_fingerprint,
+        precondition_fingerprint="action-precondition:v1:sha256:" + "c" * 64,
+        policy_revision="m6-record-patch-v1",
+        schema_revision=proposal.schema_revision,
+        observed_at=now,
+        expires_at=now + timedelta(seconds=120),
+    )
+
+    def responder(request: CapturedRequest) -> ResponseSpec:
+        assert request.path == ACTION_PREVIEW_ROUTE
+        assert json.loads(request.body) == {
+            "payload_fingerprint": payload_fingerprint,
+            "proposal": proposal.model_dump(mode="json"),
+            "turn_id": str(TURN_ID),
+        }
+        return _json_response({"ok": True, "preview": expected.model_dump(mode="json")})
+
+    with fake_odoo_server(responder) as server:
+        actual = asyncio.run(
+            _gateway(f"http://127.0.0.1:{server.server_port}").preview_record_patch(
+                proposal, payload_fingerprint=payload_fingerprint
+            )
+        )
+
+    assert actual == expected
 
 
 def test_query_records_sends_only_structured_ast_and_validates_response() -> None:

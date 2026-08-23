@@ -45,6 +45,8 @@ def _load_addon_services() -> tuple[ModuleType, ModuleType, ModuleType]:
     security_package.DelegationTokenError = delegation.DelegationTokenError
     security_package.QueryDelegationCodec = delegation.QueryDelegationCodec
     security_package.QueryDelegationPayload = delegation.QueryDelegationPayload
+    security_package.ActionPreviewDelegationCodec = delegation.ActionPreviewDelegationCodec
+    security_package.ActionPreviewDelegationPayload = delegation.ActionPreviewDelegationPayload
     screen = _load_module(
         f"{root_name}.services.screen_context", addon / "services/screen_context.py"
     )
@@ -90,14 +92,22 @@ class FakeModel:
     def check_access(self, operation: str) -> None:
         assert operation == "read"
 
-    def fields_get(self, *, attributes: list[str]) -> dict[str, dict[str, str]]:
-        assert attributes == ["type"]
-        return {
+    def fields_get(self, *, attributes: list[str]) -> dict[str, dict[str, object]]:
+        assert attributes in (["type"], ["readonly", "type"])
+        values = {
             "amount_total": {"type": "monetary"},
             "display_name": {"type": "char"},
             "id": {"type": "integer"},
             "message_ids": {"type": "one2many"},
         }
+        if "readonly" in attributes:
+            for description in values.values():
+                description["readonly"] = False
+        return values
+
+    def check_field_access_rights(self, operation: str, fields: list[str]) -> None:
+        assert operation == "write"
+        assert len(fields) == 1
 
 
 class QueryFakeEnv(FakeEnv):
@@ -160,6 +170,19 @@ def _how_to_preparer():
     )
 
 
+def _action_preview_codec():
+    return delegation.ActionPreviewDelegationCodec(SECRET, clock=lambda: NOW)
+
+
+def _action_preview_preparer():
+    return turn_context.ActionPreviewTurnContextPreparer(
+        codec=_action_preview_codec(),
+        clock=lambda: NOW,
+        turn_id_factory=lambda: TURN_ID,
+        nonce_factory=lambda: "jti_0123456789abcdefghij",
+    )
+
+
 def test_server_env_identity_and_current_record_are_signed() -> None:
     prepared = _preparer().prepare(
         env=FakeEnv(), screen_payload=_screen(), message="¿Qué estado tiene?"
@@ -206,6 +229,30 @@ def test_query_authority_is_runtime_field_bounded_and_separate_from_m2() -> None
     assert claims.expires_at - claims.issued_at == 120
     with pytest.raises(delegation.DelegationTokenError):
         _codec().decode(prepared.delegation_token)
+
+
+def test_action_preview_authority_is_record_bound_and_non_writing() -> None:
+    prepared = _action_preview_preparer().prepare(
+        env=QueryFakeEnv(), screen_payload=_screen(), message="Change reference"
+    )
+    claims = _action_preview_codec().decode(prepared.delegation_token)
+
+    assert claims.uid == 17
+    assert claims.company_id == 3
+    assert claims.allowed_company_ids == (3, 5)
+    assert claims.model == "sale.order"
+    assert claims.record_id == 4832
+    assert claims.allowed_fields == ("amount_total", "display_name")
+    assert claims.scopes == ("action_write_schema", "action_preview")
+    assert claims.policy_revision == "m6-record-patch-v1"
+    assert claims.max_fields == 2
+    assert claims.expires_at - claims.issued_at == 120
+    assert prepared.to_browser_payload() == {"turn_id": str(TURN_ID)}
+    assert prepared.delegation_token not in repr(prepared)
+    with pytest.raises(delegation.DelegationTokenError):
+        _codec().decode(prepared.delegation_token)
+    with pytest.raises(delegation.DelegationTokenError):
+        _query_codec().decode(prepared.delegation_token)
 
 
 def test_query_turn_accepts_model_only_list_context() -> None:

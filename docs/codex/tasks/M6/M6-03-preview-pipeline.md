@@ -1,5 +1,7 @@
 # M6-03 — Pipeline de preview sin efectos
 
+Estado: **implementado y verificado el 2026-08-23.**
+
 ## Contexto
 
 - Requiere M6-01 y M6-02 verdes.

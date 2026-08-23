@@ -27,6 +27,9 @@ KEY_PURPOSE: Final = b"odoo-ai-assistant/delegation/v1"
 QUERY_FORMAT_VERSION: Final = 1
 QUERY_TOKEN_PREFIX: Final = "q1"
 QUERY_KEY_PURPOSE: Final = b"odoo-ai-assistant/query-delegation/v1"
+ACTION_PREVIEW_FORMAT_VERSION: Final = 1
+ACTION_PREVIEW_TOKEN_PREFIX: Final = "p1"
+ACTION_PREVIEW_KEY_PURPOSE: Final = b"odoo-ai-assistant/action-preview-delegation/v1"
 MAX_ALLOWED_COMPANY_IDS: Final = 16
 MAX_DELEGATED_RECORD_IDS: Final = 8
 MAX_DELEGATION_SCOPES: Final = 2
@@ -40,6 +43,9 @@ ALLOWED_SCOPES: Final = frozenset({"fields_get", "navigation", "read_records"})
 ALLOWED_QUERY_SCOPES: Final = frozenset(
     {"aggregate_records", "query_records", "query_schema"}
 )
+ALLOWED_ACTION_PREVIEW_SCOPES: Final = frozenset(
+    {"action_preview", "action_write_schema"}
+)
 MAX_QUERY_FIELDS: Final = 64
 MAX_QUERY_RECORDS: Final = 50
 MAX_QUERY_RESULT_FIELDS: Final = 16
@@ -49,6 +55,7 @@ MAX_QUERY_AGGREGATES: Final = 8
 
 DelegationScope = Literal["fields_get", "navigation", "read_records"]
 QueryDelegationScope = Literal["aggregate_records", "query_records", "query_schema"]
+ActionPreviewDelegationScope = Literal["action_preview", "action_write_schema"]
 JsonValue = str | int | list["JsonValue"] | dict[str, "JsonValue"] | None
 
 _JTI_PATTERN = re.compile(r"^[A-Za-z0-9_-]{22,64}$")
@@ -386,6 +393,154 @@ class QueryDelegationPayload:
             raise DelegationTokenError("invalid_query_claims") from error
 
 
+@dataclass(frozen=True, slots=True)
+class ActionPreviewDelegationPayload:
+    """Separate p1 authority for write schema and a single effect-free preview."""
+
+    format_version: int
+    jti: str
+    turn_id: UUID
+    database: str
+    uid: int
+    company_id: int
+    allowed_company_ids: tuple[int, ...]
+    lang: str | None
+    model: str
+    record_id: int
+    allowed_fields: tuple[str, ...]
+    scopes: tuple[ActionPreviewDelegationScope, ...]
+    issued_at: int
+    expires_at: int
+    max_fields: int
+    policy_revision: str
+
+    def __post_init__(self) -> None:
+        try:
+            self._validate()
+        except (TypeError, ValueError) as error:
+            raise DelegationTokenError("invalid_action_preview_claims") from error
+
+    def _validate(self) -> None:
+        if self.format_version != ACTION_PREVIEW_FORMAT_VERSION:
+            raise ValueError
+        if not _JTI_PATTERN.fullmatch(self.jti) or not isinstance(self.turn_id, UUID):
+            raise ValueError
+        _validate_text(self.database, maximum=128)
+        _validate_positive_int(self.uid)
+        _validate_positive_int(self.company_id)
+        _validate_positive_ids(
+            self.allowed_company_ids, maximum=MAX_ALLOWED_COMPANY_IDS
+        )
+        if (
+            self.company_id not in self.allowed_company_ids
+            or self.allowed_company_ids != tuple(sorted(self.allowed_company_ids))
+        ):
+            raise ValueError
+        if self.lang is not None:
+            _validate_text(self.lang, minimum=2, maximum=35)
+        if not _MODEL_PATTERN.fullmatch(self.model):
+            raise ValueError
+        _validate_positive_int(self.record_id)
+        if (
+            not isinstance(self.allowed_fields, tuple)
+            or not 1 <= len(self.allowed_fields) <= MAX_DELEGATED_FIELDS
+            or len(self.allowed_fields) != len(set(self.allowed_fields))
+            or self.allowed_fields != tuple(sorted(self.allowed_fields))
+            or any(not _FIELD_PATTERN.fullmatch(item) for item in self.allowed_fields)
+        ):
+            raise ValueError
+        if not 1 <= len(self.scopes) <= len(ALLOWED_ACTION_PREVIEW_SCOPES):
+            raise ValueError
+        if len(self.scopes) != len(set(self.scopes)) or any(
+            scope not in ALLOWED_ACTION_PREVIEW_SCOPES for scope in self.scopes
+        ):
+            raise ValueError
+        if type(self.issued_at) is not int or self.issued_at < 0:
+            raise ValueError
+        if type(self.expires_at) is not int or self.expires_at < 0:
+            raise ValueError
+        if not 0 < self.expires_at - self.issued_at <= MAX_DELEGATION_TTL_SECONDS:
+            raise ValueError
+        _validate_bounded_int(self.max_fields, minimum=1, maximum=MAX_DELEGATED_FIELDS)
+        if self.max_fields > len(self.allowed_fields):
+            raise ValueError
+        _validate_text(self.policy_revision, maximum=128)
+
+    def to_mapping(self) -> dict[str, JsonValue]:
+        return {
+            "allowed_company_ids": list(self.allowed_company_ids),
+            "allowed_fields": list(self.allowed_fields),
+            "company_id": self.company_id,
+            "database": self.database,
+            "expires_at": self.expires_at,
+            "format_version": self.format_version,
+            "issued_at": self.issued_at,
+            "jti": self.jti,
+            "lang": self.lang,
+            "max_fields": self.max_fields,
+            "model": self.model,
+            "policy_revision": self.policy_revision,
+            "record_id": self.record_id,
+            "scopes": list(self.scopes),
+            "turn_id": str(self.turn_id),
+            "uid": self.uid,
+        }
+
+    @classmethod
+    def from_mapping(cls, raw: Mapping[str, object]) -> ActionPreviewDelegationPayload:
+        expected = {
+            "allowed_company_ids",
+            "allowed_fields",
+            "company_id",
+            "database",
+            "expires_at",
+            "format_version",
+            "issued_at",
+            "jti",
+            "lang",
+            "max_fields",
+            "model",
+            "policy_revision",
+            "record_id",
+            "scopes",
+            "turn_id",
+            "uid",
+        }
+        if set(raw) != expected:
+            raise DelegationTokenError("invalid_action_preview_claims")
+        try:
+            version = _require_int(raw["format_version"])
+            if version != ACTION_PREVIEW_FORMAT_VERSION:
+                raise DelegationTokenError("unknown_version")
+            return cls(
+                format_version=version,
+                jti=_require_string(raw["jti"]),
+                turn_id=UUID(_require_string(raw["turn_id"])),
+                database=_require_string(raw["database"]),
+                uid=_require_int(raw["uid"]),
+                company_id=_require_int(raw["company_id"]),
+                allowed_company_ids=tuple(
+                    _require_int_list(raw["allowed_company_ids"])
+                ),
+                lang=_require_optional_string(raw["lang"]),
+                model=_require_string(raw["model"]),
+                record_id=_require_int(raw["record_id"]),
+                allowed_fields=tuple(_require_string_list(raw["allowed_fields"])),
+                scopes=tuple(
+                    cast(ActionPreviewDelegationScope, scope)
+                    for scope in _require_string_list(raw["scopes"])
+                ),
+                issued_at=_require_int(raw["issued_at"]),
+                expires_at=_require_int(raw["expires_at"]),
+                max_fields=_require_int(raw["max_fields"]),
+                policy_revision=_require_string(raw["policy_revision"]),
+            )
+        except DelegationTokenError:
+            raise
+        except (TypeError, ValueError) as error:
+            raise DelegationTokenError("invalid_action_preview_claims") from error
+
+
 class DelegationCodec:
     """Canonical HMAC-SHA256 codec with an injectable wall clock."""
 
@@ -540,6 +695,92 @@ class QueryDelegationCodec:
             raise DelegationTokenError("expired")
 
 
+class ActionPreviewDelegationCodec:
+    """Canonical HMAC codec isolated from both v1 reads and q1 queries."""
+
+    __slots__ = ("_clock", "_signing_key")
+
+    def __init__(
+        self,
+        root_secret: bytes,
+        *,
+        clock: Callable[[], int] | None = None,
+    ) -> None:
+        if len(root_secret) < MIN_SECRET_BYTES:
+            raise DelegationTokenError("signing_key_unavailable")
+        self._signing_key = hmac.digest(
+            root_secret, ACTION_PREVIEW_KEY_PURPOSE, hashlib.sha256
+        )
+        self._clock = clock or _unix_time
+
+    @classmethod
+    def from_secret_file(
+        cls,
+        path: str | Path,
+        *,
+        clock: Callable[[], int] | None = None,
+    ) -> ActionPreviewDelegationCodec:
+        return cls(_read_secret_file(Path(path)), clock=clock)
+
+    def encode(self, payload: ActionPreviewDelegationPayload) -> str:
+        self._validate_time(payload)
+        encoded_payload = _base64url_encode(_canonical_action_preview_payload(payload))
+        signed = f"{ACTION_PREVIEW_TOKEN_PREFIX}.{encoded_payload}".encode("ascii")
+        signature = hmac.digest(self._signing_key, signed, hashlib.sha256)
+        return (
+            f"{ACTION_PREVIEW_TOKEN_PREFIX}.{encoded_payload}."
+            f"{_base64url_encode(signature)}"
+        )
+
+    def decode(self, token: str) -> ActionPreviewDelegationPayload:
+        try:
+            encoded = token.encode("ascii")
+        except (AttributeError, UnicodeEncodeError) as error:
+            raise DelegationTokenError("malformed_token") from error
+        if not encoded or len(encoded) > MAX_QUERY_TOKEN_BYTES:
+            raise DelegationTokenError("malformed_token")
+        parts = token.split(".")
+        if len(parts) != 3:
+            raise DelegationTokenError("malformed_token")
+        prefix, encoded_payload, encoded_signature = parts
+        if prefix != ACTION_PREVIEW_TOKEN_PREFIX:
+            raise DelegationTokenError("unknown_version")
+        signed = f"{prefix}.{encoded_payload}".encode("ascii")
+        signature = _base64url_decode(encoded_signature)
+        if len(signature) != hashlib.sha256().digest_size:
+            raise DelegationTokenError("malformed_token")
+        expected = hmac.digest(self._signing_key, signed, hashlib.sha256)
+        if not hmac.compare_digest(signature, expected):
+            raise DelegationTokenError("invalid_signature")
+        payload_bytes = _base64url_decode(encoded_payload)
+        try:
+            loaded: object = json.loads(payload_bytes)
+        except (UnicodeError, json.JSONDecodeError) as error:
+            raise DelegationTokenError("malformed_token") from error
+        if not isinstance(loaded, dict) or not all(
+            isinstance(key, str) for key in loaded
+        ):
+            raise DelegationTokenError("invalid_action_preview_claims")
+        payload = ActionPreviewDelegationPayload.from_mapping(
+            cast(dict[str, object], loaded)
+        )
+        if not hmac.compare_digest(
+            _canonical_action_preview_payload(payload), payload_bytes
+        ):
+            raise DelegationTokenError("noncanonical_payload")
+        self._validate_time(payload)
+        return payload
+
+    def _validate_time(self, payload: ActionPreviewDelegationPayload) -> None:
+        now = self._clock()
+        if type(now) is not int:
+            raise DelegationTokenError("clock_unavailable")
+        if payload.issued_at > now + MAX_CLOCK_SKEW_SECONDS:
+            raise DelegationTokenError("not_yet_valid")
+        if now >= payload.expires_at:
+            raise DelegationTokenError("expired")
+
+
 def _read_secret_file(path: Path) -> bytes:
     try:
         metadata = path.stat()
@@ -568,6 +809,16 @@ def _canonical_payload(payload: DelegationPayload) -> bytes:
 
 
 def _canonical_query_payload(payload: QueryDelegationPayload) -> bytes:
+    return json.dumps(
+        payload.to_mapping(),
+        allow_nan=False,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+
+
+def _canonical_action_preview_payload(payload: ActionPreviewDelegationPayload) -> bytes:
     return json.dumps(
         payload.to_mapping(),
         allow_nan=False,

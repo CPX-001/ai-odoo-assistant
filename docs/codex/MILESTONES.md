@@ -2,7 +2,7 @@
 
 Este roadmap resume el Source of Truth. No autoriza por sí mismo la implementación de ningún milestone.
 
-Estado actual: **M0-M5 completados; gates PASS. M6 tiene task packets preparados; implementación no iniciada.**
+Estado actual: **M0-M5 completados; gates PASS. M6 en progreso: M6-01..03 implementados y M6-04 es el siguiente packet.**
 
 | Milestone | Objetivo observable |
 | --- | --- |

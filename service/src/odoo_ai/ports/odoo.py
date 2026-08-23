@@ -3,6 +3,8 @@
 from typing import Protocol
 
 from odoo_ai.contracts import (
+    ActionPreview,
+    ActionProposalPayload,
     AggregateRecordsRequest,
     AggregateRecordsResult,
     Evidence,
@@ -49,3 +51,16 @@ class OdooQueryGateway(Protocol):
     async def aggregate_records(
         self, request: AggregateRecordsRequest
     ) -> AggregateRecordsResult: ...
+
+
+class OdooActionPreviewGateway(Protocol):
+    """Separate p1 boundary for write metadata and effect-free preview only."""
+
+    async def get_write_model_metadata(self, model: str) -> Evidence: ...
+
+    async def preview_record_patch(
+        self,
+        payload: ActionProposalPayload,
+        *,
+        payload_fingerprint: str,
+    ) -> ActionPreview: ...

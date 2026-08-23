@@ -9,6 +9,9 @@ from uuid import UUID
 import pytest
 
 from odoo_ai.contracts import (
+    ActionPreviewDelegationClaims as TransportActionPreviewDelegationClaims,
+)
+from odoo_ai.contracts import (
     DelegationClaims as TransportDelegationClaims,
 )
 from odoo_ai.contracts import (
@@ -32,6 +35,8 @@ DelegationPayload = delegation.DelegationPayload
 DelegationTokenError = delegation.DelegationTokenError
 QueryDelegationCodec = delegation.QueryDelegationCodec
 QueryDelegationPayload = delegation.QueryDelegationPayload
+ActionPreviewDelegationCodec = delegation.ActionPreviewDelegationCodec
+ActionPreviewDelegationPayload = delegation.ActionPreviewDelegationPayload
 
 NOW = 1_787_337_600
 SECRET = b"addon-only-delegation-secret-" + b"s" * 48
@@ -92,6 +97,33 @@ def _query_payload(**overrides: object):
 
 def _query_codec(secret: bytes = SECRET, *, now: int = NOW):
     return QueryDelegationCodec(secret, clock=lambda: now)
+
+
+def _action_preview_payload(**overrides: object):
+    values = {
+        "format_version": 1,
+        "jti": "preview_0123456789abcdefg",
+        "turn_id": UUID("12345678-1234-5678-1234-567812345678"),
+        "database": "customer-db",
+        "uid": 17,
+        "company_id": 3,
+        "allowed_company_ids": (3, 5),
+        "lang": "es_ES",
+        "model": "sale.order",
+        "record_id": 4832,
+        "allowed_fields": ("client_order_ref", "partner_id"),
+        "scopes": ("action_write_schema", "action_preview"),
+        "issued_at": NOW,
+        "expires_at": NOW + 60,
+        "max_fields": 2,
+        "policy_revision": "m6-record-patch-v1",
+    }
+    values.update(overrides)
+    return ActionPreviewDelegationPayload(**values)
+
+
+def _action_preview_codec(secret: bytes = SECRET, *, now: int = NOW):
+    return ActionPreviewDelegationCodec(secret, clock=lambda: now)
 
 
 def _resign_payload(token: str, payload: dict[str, object]) -> str:
@@ -159,6 +191,39 @@ def test_query_authority_is_a_separate_transport_compatible_token_family() -> No
         _codec().decode(token)
     with pytest.raises(DelegationTokenError, match="unknown_version"):
         _query_codec().decode(_codec().encode(_payload()))
+
+
+def test_action_preview_authority_is_a_third_transport_compatible_family() -> None:
+    payload = _action_preview_payload()
+    token = _action_preview_codec().encode(payload)
+    claims = TransportActionPreviewDelegationClaims.model_validate_json(
+        json.dumps(_action_preview_codec().decode(token).to_mapping(), sort_keys=True)
+    )
+
+    assert token.startswith("p1.")
+    assert claims.record_id == 4832
+    assert claims.allowed_fields == ["client_order_ref", "partner_id"]
+    assert claims.scopes == ["action_write_schema", "action_preview"]
+    with pytest.raises(DelegationTokenError, match="unknown_version"):
+        _codec().decode(token)
+    with pytest.raises(DelegationTokenError, match="unknown_version"):
+        _query_codec().decode(token)
+
+
+@pytest.mark.parametrize(
+    ("claim", "value"),
+    [
+        ("allowed_fields", ("partner_id", "client_order_ref")),
+        ("allowed_fields", ("partner_id", "partner_id")),
+        ("record_id", 0),
+        ("scopes", ("action_preview", "read_records")),
+        ("max_fields", 3),
+        ("policy_revision", ""),
+    ],
+)
+def test_action_preview_authority_limits_fail_closed(claim: str, value: object) -> None:
+    with pytest.raises(DelegationTokenError, match="invalid_action_preview_claims"):
+        _action_preview_payload(**{claim: value})
 
 
 @pytest.mark.parametrize(

@@ -9,6 +9,7 @@ from odoo.http import request
 
 from ..security import (
     SHARED_SECRET_HEADER,
+    ActionPreviewDelegationCodec,
     DelegationCodec,
     DelegationTokenError,
     MachineAuthenticationError,
@@ -16,6 +17,7 @@ from ..security import (
     require_machine_secret,
 )
 from ..services import InstanceInventoryError, collect_instance_inventory
+from ..services.action_tools import DelegatedActionPreviewToolExecutor
 from ..services.orm_tools import DelegatedOrmToolExecutor, OrmToolError
 from ..services.query_tools import DelegatedQueryToolExecutor
 from ..services.turn_context import DELEGATION_SECRET_FILE_ENV
@@ -29,9 +31,33 @@ NAVIGATION_ROUTE: Final = "/odoo_ai/internal/v1/navigation"
 QUERY_SCHEMA_ROUTE: Final = "/odoo_ai/internal/v1/query-schema"
 QUERY_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/query-records"
 AGGREGATE_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/aggregate-records"
+WRITE_SCHEMA_ROUTE: Final = "/odoo_ai/internal/v1/action-write-schema"
+ACTION_PREVIEW_ROUTE: Final = "/odoo_ai/internal/v1/action-preview"
 
 
 class InternalOdooToolsController(http.Controller):
+    @http.route(
+        ACTION_PREVIEW_ROUTE,
+        type="http",
+        auth="none",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    def action_preview(self):
+        return self._dispatch("action_preview")
+
+    @http.route(
+        WRITE_SCHEMA_ROUTE,
+        type="http",
+        auth="none",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    def action_write_schema(self):
+        return self._dispatch("action_write_schema")
+
     @http.route(
         METADATA_ROUTE,
         type="http",
@@ -122,6 +148,29 @@ class InternalOdooToolsController(http.Controller):
             token = request.httprequest.headers.get(DELEGATION_HEADER)
             if not token or len(token) > 8192:
                 raise OrmToolError("delegation_rejected", 403)
+            if operation == "action_write_schema":
+                _require_keys(payload, {"model", "turn_id"})
+                action_executor = DelegatedActionPreviewToolExecutor(
+                    codec=_action_preview_delegation_codec()
+                )
+                result = action_executor.get_write_model_metadata(
+                    delegation_token=token,
+                    turn_id=payload["turn_id"],
+                    model=payload["model"],
+                )
+                return request.make_json_response(result, status=200)
+            if operation == "action_preview":
+                _require_keys(payload, {"payload_fingerprint", "proposal", "turn_id"})
+                action_executor = DelegatedActionPreviewToolExecutor(
+                    codec=_action_preview_delegation_codec()
+                )
+                result = action_executor.preview_record_patch(
+                    delegation_token=token,
+                    turn_id=payload["turn_id"],
+                    proposal=payload["proposal"],
+                    payload_fingerprint=payload["payload_fingerprint"],
+                )
+                return request.make_json_response(result, status=200)
             if operation in {"aggregate_records", "query_records", "query_schema"}:
                 query_executor = DelegatedQueryToolExecutor(
                     codec=_query_delegation_codec()
@@ -203,6 +252,16 @@ def _query_delegation_codec() -> QueryDelegationCodec:
         raise OrmToolError("delegation_unconfigured", 503)
     try:
         return QueryDelegationCodec.from_secret_file(path)
+    except DelegationTokenError:
+        raise OrmToolError("delegation_unavailable", 503) from None
+
+
+def _action_preview_delegation_codec() -> ActionPreviewDelegationCodec:
+    path = os.environ.get(DELEGATION_SECRET_FILE_ENV, "").strip()
+    if not path:
+        raise OrmToolError("delegation_unconfigured", 503)
+    try:
+        return ActionPreviewDelegationCodec.from_secret_file(path)
     except DelegationTokenError:
         raise OrmToolError("delegation_unavailable", 503) from None
 

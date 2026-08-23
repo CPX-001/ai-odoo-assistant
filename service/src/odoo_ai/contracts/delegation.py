@@ -22,6 +22,7 @@ from odoo_ai.contracts.screen_context import ScreenContext
 
 DELEGATION_FORMAT_VERSION: Final = 1
 QUERY_DELEGATION_FORMAT_VERSION: Final = 1
+ACTION_PREVIEW_DELEGATION_FORMAT_VERSION: Final = 1
 MAX_ALLOWED_COMPANY_IDS: Final = 16
 MAX_DELEGATED_RECORD_IDS: Final = 8
 MAX_DELEGATION_SCOPES: Final = 2
@@ -52,6 +53,13 @@ class QueryDelegationScope(StrEnum):
     SCHEMA = "query_schema"
     RECORDS = "query_records"
     AGGREGATE = "aggregate_records"
+
+
+class ActionPreviewDelegationScope(StrEnum):
+    """Non-writing p1 authority used only for schema and preview."""
+
+    WRITE_SCHEMA = "action_write_schema"
+    PREVIEW = "action_preview"
 
 
 class DelegationClaims(BaseModel):
@@ -180,6 +188,74 @@ class QueryDelegationClaims(BaseModel):
             raise ValueError("delegation TTL is invalid")
         if self.max_fields > len(self.allowed_fields):
             raise ValueError("query field limit exceeds delegated fields")
+        return self
+
+
+class ActionPreviewDelegationClaims(BaseModel):
+    """Strict transport mirror of Odoo's separate p1 preview authority."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    format_version: Literal[1] = ACTION_PREVIEW_DELEGATION_FORMAT_VERSION
+    jti: str = Field(min_length=22, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    turn_id: UUID
+    database: str = Field(min_length=1, max_length=128)
+    uid: PositiveId
+    company_id: PositiveId
+    allowed_company_ids: list[PositiveId] = Field(min_length=1, max_length=MAX_ALLOWED_COMPANY_IDS)
+    lang: str | None = Field(default=None, min_length=2, max_length=35)
+    model: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_.]*$",
+    )
+    record_id: PositiveId
+    allowed_fields: list[str] = Field(min_length=1, max_length=MAX_DELEGATED_FIELDS)
+    scopes: list[ActionPreviewDelegationScope] = Field(min_length=1, max_length=2)
+    issued_at: int = Field(strict=True, ge=0)
+    expires_at: int = Field(strict=True, ge=0)
+    max_fields: int = Field(strict=True, ge=1, le=MAX_DELEGATED_FIELDS)
+    policy_revision: str = Field(min_length=1, max_length=128)
+
+    @field_validator("database")
+    @classmethod
+    def validate_action_database_binding(cls, value: str) -> str:
+        if value != value.strip() or any(ord(character) < 32 for character in value):
+            raise ValueError("database binding is invalid")
+        return value
+
+    @field_validator("allowed_fields")
+    @classmethod
+    def validate_action_fields(cls, value: list[str]) -> list[str]:
+        if (
+            len(value) != len(set(value))
+            or tuple(value) != tuple(sorted(value))
+            or any(
+                not item or len(item) > 128 or QUERY_FIELD_PATTERN.fullmatch(item) is None
+                for item in value
+            )
+        ):
+            raise ValueError("action preview field authority is invalid")
+        return value
+
+    @field_validator("allowed_company_ids", "scopes")
+    @classmethod
+    def validate_action_unique_list(cls, value: list[object]) -> list[object]:
+        if len(value) != len(set(value)):
+            raise ValueError("delegation list values must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_action_preview_authority(self) -> Self:
+        if self.company_id not in self.allowed_company_ids:
+            raise ValueError("effective company must be allowed")
+        if self.allowed_company_ids != sorted(self.allowed_company_ids):
+            raise ValueError("allowed companies must be canonically ordered")
+        ttl = self.expires_at - self.issued_at
+        if not 0 < ttl <= MAX_DELEGATION_TTL_SECONDS:
+            raise ValueError("delegation TTL is invalid")
+        if self.max_fields > len(self.allowed_fields):
+            raise ValueError("action field limit exceeds delegated fields")
         return self
 
 

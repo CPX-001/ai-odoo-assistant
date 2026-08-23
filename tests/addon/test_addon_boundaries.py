@@ -51,11 +51,14 @@ def test_internal_tool_routes_have_double_auth_and_no_generic_execution() -> Non
     assert "/odoo_ai/internal/v1/query-schema" in controller
     assert "/odoo_ai/internal/v1/query-records" in controller
     assert "/odoo_ai/internal/v1/aggregate-records" in controller
+    assert "/odoo_ai/internal/v1/action-write-schema" in controller
+    assert "/odoo_ai/internal/v1/action-preview" in controller
     assert 'auth="none"' in controller
     assert "require_machine_secret(" in controller
     assert "DELEGATION_HEADER" in controller
     assert "DelegatedOrmToolExecutor" in controller
     assert "DelegatedQueryToolExecutor" in controller
+    assert "DelegatedActionPreviewToolExecutor" in controller
     assert "execute_kw" not in controller
     assert "execute_method" not in controller
 

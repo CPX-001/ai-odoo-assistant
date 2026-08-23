@@ -4,6 +4,17 @@ from typing import cast
 
 from pydantic import BaseModel, JsonValue
 
+from odoo_ai.contracts.action import (
+    ActionFieldChange,
+    ActionPreview,
+    ActionPreviewChange,
+    ActionPreviewSummary,
+    ActionProposalPayload,
+    ActionTarget,
+    ActionValue,
+    EffectiveWriteFieldSchema,
+    EffectiveWriteSchema,
+)
 from odoo_ai.contracts.agent import AnswerEnvelope, ProposedAction, ToolSpec
 from odoo_ai.contracts.context import (
     ContextPack,
@@ -14,6 +25,7 @@ from odoo_ai.contracts.context import (
     UserRequest,
 )
 from odoo_ai.contracts.delegation import (
+    ActionPreviewDelegationClaims,
     ContextReadTurnRequest,
     ContextReadTurnResponse,
     DelegationClaims,
@@ -80,6 +92,16 @@ from odoo_ai.contracts.source import (
 type JsonSchema = dict[str, JsonValue]
 
 PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
+    ActionPreviewDelegationClaims,
+    ActionFieldChange,
+    ActionPreview,
+    ActionPreviewChange,
+    ActionPreviewSummary,
+    ActionProposalPayload,
+    ActionTarget,
+    ActionValue,
+    EffectiveWriteFieldSchema,
+    EffectiveWriteSchema,
     AnswerEnvelope,
     ContextPack,
     ContextReadTurnRequest,

@@ -25,6 +25,8 @@ from pydantic import (
 )
 
 from odoo_ai.contracts import (
+    ActionPreview,
+    ActionProposalPayload,
     AggregateGroup,
     AggregateRecordsRequest,
     AggregateRecordsResult,
@@ -51,6 +53,8 @@ NAVIGATION_ROUTE: Final = "/odoo_ai/internal/v1/navigation"
 QUERY_SCHEMA_ROUTE: Final = "/odoo_ai/internal/v1/query-schema"
 QUERY_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/query-records"
 AGGREGATE_RECORDS_ROUTE: Final = "/odoo_ai/internal/v1/aggregate-records"
+WRITE_SCHEMA_ROUTE: Final = "/odoo_ai/internal/v1/action-write-schema"
+ACTION_PREVIEW_ROUTE: Final = "/odoo_ai/internal/v1/action-preview"
 DEFAULT_TIMEOUT_SECONDS: Final = 2.0
 MAX_REQUEST_BYTES: Final = 32 * 1024
 MAX_RESPONSE_BYTES: Final = 128 * 1024
@@ -405,6 +409,61 @@ class HttpOdooGateway:
             sensitivity=EvidenceSensitivity.TECHNICAL,
         )
 
+    async def get_write_model_metadata(self, model: str) -> Evidence:
+        """Read p1-bound write metadata without granting commit authority."""
+
+        parsed_model = _model_name(model)
+        raw = await asyncio.to_thread(
+            self._post_json,
+            WRITE_SCHEMA_ROUTE,
+            {"model": parsed_model, "turn_id": str(self._turn_id)},
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            response = _WriteMetadataResponse.model_validate_json(raw)
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+        if response.model != parsed_model:
+            raise OdooGatewayError("malformed_response")
+        return Evidence(
+            evidence_id=uuid4(),
+            kind=EvidenceKind.METADATA,
+            status=EvidenceStatus.CHECKED,
+            title=f"Odoo ACTION write metadata: {parsed_model}",
+            summary="Write metadata checked under the separately delegated Odoo user.",
+            payload={
+                "fields": cast(JsonValue, response.fields),
+                "label": response.label,
+                "model": response.model,
+                "write_access": response.write_access,
+            },
+            pointer={"model": parsed_model, "provider": "odoo_action_preview_http"},
+            observed_at=response.captured_at,
+            sensitivity=EvidenceSensitivity.TECHNICAL,
+        )
+
+    async def preview_record_patch(
+        self,
+        payload: ActionProposalPayload,
+        *,
+        payload_fingerprint: str,
+    ) -> ActionPreview:
+        raw = await asyncio.to_thread(
+            self._post_json,
+            ACTION_PREVIEW_ROUTE,
+            {
+                "payload_fingerprint": payload_fingerprint,
+                "proposal": payload.model_dump(mode="json"),
+                "turn_id": str(self._turn_id),
+            },
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            response = _ActionPreviewResponse.model_validate_json(raw)
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+        return response.preview
+
     async def query_records(self, request: QueryRecordsRequest) -> QueryRecordsResult:
         raw = await asyncio.to_thread(
             self._post_json,
@@ -531,6 +590,19 @@ class _MetadataResponse(BaseModel):
                 raise ValueError("invalid metadata field")
             _validate_metadata_description(description)
         return value
+
+
+class _WriteMetadataResponse(_MetadataResponse):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    write_access: bool
+
+
+class _ActionPreviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+    preview: ActionPreview
 
 
 class _InventoryResponse(BaseModel):
