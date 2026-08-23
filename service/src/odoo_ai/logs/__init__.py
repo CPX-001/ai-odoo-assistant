@@ -1,6 +1,10 @@
 """Bounded log providers and deployment resolution."""
 
 from odoo_ai.logs.common import LogProviderError, LogRedactor
+from odoo_ai.logs.configured import (
+    journal_unit_override_from_env,
+    log_file_override_from_env,
+)
 from odoo_ai.logs.file import FileLogLimits, FileLogProvider
 from odoo_ai.logs.journal import (
     JOURNAL_UNIT_ENV,
@@ -11,7 +15,6 @@ from odoo_ai.logs.journal import (
     JournalUnitSelection,
     ResolvedJournalUnit,
     SubprocessJournalRunner,
-    journal_unit_override_from_env,
     resolve_journal_unit,
 )
 from odoo_ai.logs.resolution import (
@@ -20,7 +23,6 @@ from odoo_ai.logs.resolution import (
     LogFileResolution,
     LogFileSelection,
     ResolvedLogFile,
-    log_file_override_from_env,
     resolve_log_file,
 )
 

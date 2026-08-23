@@ -15,6 +15,7 @@ from sqlalchemy import Connection, Engine, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from odoo_ai.runtime.configuration import runtime_configuration_is_valid
 from odoo_ai.security import ActionAuthorityCodec, ActionAuthorityError
 from odoo_ai.storage import (
     DatabaseConfigurationError,
@@ -65,6 +66,7 @@ class RuntimeComponents(BaseModel):
     runtime: ComponentStatus
     assistant_database: ComponentStatus
     migrations: MigrationStatus
+    configuration: ComponentStatus
     source: ComponentStatus
     logs: ComponentStatus
     reasoning_engine: ReasoningComponentStatus
@@ -119,6 +121,7 @@ class AdminStatusService:
     ) -> AdminStatus:
         database = ComponentStatus(state=ComponentState.ERROR, detail="unavailable")
         migrations = MigrationStatus(state=ComponentState.ERROR, detail="unavailable")
+        configuration = ComponentStatus(state=ComponentState.ERROR, detail="invalid")
         instance: InstanceStatus | None = None
         engine: Engine | None = None
         reasoning_status = reasoning or ReasoningComponentStatus(
@@ -133,7 +136,9 @@ class AdminStatusService:
                 database = ComponentStatus(state=ComponentState.OK, detail="available")
                 migrations = self._inspect_migrations(connection)
                 if migrations.state is ComponentState.OK:
-                    instance = self._read_instance(connection, reasoning_status)
+                    configuration = self._configuration_status()
+                    if configuration.state is ComponentState.OK:
+                        instance = self._read_instance(connection, reasoning_status)
         except (CommandError, SQLAlchemyError, OSError, ValueError):
             pass
         finally:
@@ -141,7 +146,9 @@ class AdminStatusService:
                 engine.dispose()
 
         has_error = (
-            database.state is ComponentState.ERROR or migrations.state is ComponentState.ERROR
+            database.state is ComponentState.ERROR
+            or migrations.state is ComponentState.ERROR
+            or configuration.state is ComponentState.ERROR
         )
         source = self._source_status(instance)
         logs = self._log_status(instance)
@@ -164,6 +171,7 @@ class AdminStatusService:
         workflow_capabilities = self._workflow_capabilities(
             database=database,
             migrations=migrations,
+            configuration=configuration,
             instance=instance,
             reasoning=reasoning_status,
             action_authority_ready=_action_authority_ready(),
@@ -175,6 +183,7 @@ class AdminStatusService:
                 runtime=ComponentStatus(state=ComponentState.OK, detail="running"),
                 assistant_database=database,
                 migrations=migrations,
+                configuration=configuration,
                 source=source,
                 logs=logs,
                 reasoning_engine=reasoning_status,
@@ -195,6 +204,12 @@ class AdminStatusService:
             current_revision=current,
             expected_revision=expected,
         )
+
+    @staticmethod
+    def _configuration_status() -> ComponentStatus:
+        if runtime_configuration_is_valid():
+            return ComponentStatus(state=ComponentState.OK, detail="valid")
+        return ComponentStatus(state=ComponentState.ERROR, detail="invalid")
 
     @staticmethod
     def _read_instance(
@@ -256,6 +271,7 @@ class AdminStatusService:
         *,
         database: ComponentStatus,
         migrations: MigrationStatus,
+        configuration: ComponentStatus,
         instance: InstanceStatus | None,
         reasoning: ReasoningComponentStatus,
         action_authority_ready: bool,
@@ -263,6 +279,7 @@ class AdminStatusService:
         if (
             database.state is not ComponentState.OK
             or migrations.state is not ComponentState.OK
+            or configuration.state is not ComponentState.OK
         ):
             unavailable = ComponentStatus(
                 state=ComponentState.ERROR,
@@ -281,11 +298,7 @@ class AdminStatusService:
             detail="validated_per_turn",
         )
         knowledge = ComponentStatus(
-            state=(
-                ComponentState.OK
-                if instance is not None
-                else ComponentState.PENDING
-            ),
+            state=(ComponentState.OK if instance is not None else ComponentState.PENDING),
             detail="available" if instance is not None else "instance_unknown",
         )
         query = ComponentStatus(
@@ -363,6 +376,7 @@ def unavailable_admin_status() -> AdminStatus:
                 state=ComponentState.ERROR, detail="configuration_invalid"
             ),
             migrations=MigrationStatus(state=ComponentState.ERROR, detail="unavailable"),
+            configuration=ComponentStatus(state=ComponentState.ERROR, detail="invalid"),
             source=ComponentStatus(state=ComponentState.PENDING, detail="unknown"),
             logs=ComponentStatus(state=ComponentState.PENDING, detail="unknown"),
             reasoning_engine=ReasoningComponentStatus(

@@ -35,7 +35,6 @@ from odoo_ai.adapters.codex_runtime import (
     CodexRuntimeNotFoundError,
     CodexRuntimeProbe,
     CodexRuntimeProcessError,
-    CodexRuntimeSettings,
     CodexRuntimeTimeoutError,
     CodexServerInfo,
     CodexThreadPolicy,
@@ -43,8 +42,13 @@ from odoo_ai.adapters.codex_runtime import (
     probe_codex_runtime,
 )
 from odoo_ai.adapters.codex_status import CachedCodexReasoningStatus
+from odoo_ai.adapters.configured_codex import (
+    ConfiguredCodexRuntimeSettings as CodexRuntimeSettings,
+)
+from odoo_ai.adapters.configured_diagnostics import (
+    ConfiguredRuntimeDiagnosticsService as RuntimeDiagnosticsService,
+)
 from odoo_ai.adapters.context_runtime import load_instance_summary, persist_trace_events
-from odoo_ai.adapters.diagnostics_runtime import RuntimeDiagnosticsService
 from odoo_ai.adapters.knowledge_tools import (
     KNOWLEDGE_READ_EXCERPT,
     KNOWLEDGE_SEARCH,

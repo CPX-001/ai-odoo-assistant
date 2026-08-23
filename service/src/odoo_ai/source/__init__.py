@@ -1,5 +1,6 @@
 """Bounded source discovery, scanning, and static extraction adapters."""
 
+from odoo_ai.source.configured import source_root_overrides_from_env
 from odoo_ai.source.extractors import (
     ManifestExtractor,
     ParserLimits,
@@ -31,7 +32,6 @@ from odoo_ai.source.scanner import (
     StoredSourceFile,
     locate_installed_modules,
     resolve_source_roots,
-    source_root_overrides_from_env,
 )
 from odoo_ai.source.sqlalchemy_store import SqlAlchemySourceScanStore
 

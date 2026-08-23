@@ -95,6 +95,7 @@ def test_admin_status_reports_runtime_db_migrations_and_profile(
     }
     assert payload["components"]["migrations"]["state"] == "ok"
     assert payload["components"]["migrations"]["detail"] == "at_head"
+    assert payload["components"]["configuration"] == {"state": "ok", "detail": "valid"}
     assert payload["instance"]["instance_id"] == instance_id
     assert payload["pending_capabilities"] == ["source", "logs", "reasoning_engine"]
     assert payload["components"]["reasoning_engine"] == {
@@ -155,6 +156,7 @@ def test_all_required_capabilities_produce_fully_ready_sanitized_snapshot(
     serialized = status.model_dump_json()
 
     assert status.readiness == "FULLY_READY"
+    assert status.components.configuration.state is ComponentState.OK
     assert status.pending_capabilities == ()
     assert status.instance is not None
     assert status.instance.reported_readiness == "FULLY_READY"
@@ -194,6 +196,7 @@ def test_action_capability_is_degraded_without_action_authority_secret() -> None
     capabilities = AdminStatusService._workflow_capabilities(
         database=ComponentStatus(state=ComponentState.OK, detail="available"),
         migrations=MigrationStatus(state=ComponentState.OK, detail="at_head"),
+        configuration=ComponentStatus(state=ComponentState.OK, detail="valid"),
         instance=InstanceStatus(
             instance_id="fixture",
             fingerprint="sha256:fixture",
@@ -210,6 +213,21 @@ def test_action_capability_is_degraded_without_action_authority_secret() -> None
     assert capabilities.action.detail == "action_authority_unavailable"
 
 
+def test_invalid_configuration_blocks_workflow_readiness() -> None:
+    capabilities = AdminStatusService._workflow_capabilities(
+        database=ComponentStatus(state=ComponentState.OK, detail="available"),
+        migrations=MigrationStatus(state=ComponentState.OK, detail="at_head"),
+        configuration=ComponentStatus(state=ComponentState.ERROR, detail="invalid"),
+        instance=None,
+        reasoning=ReasoningComponentStatus(state=ComponentState.OK, detail="operational"),
+        action_authority_ready=True,
+    )
+
+    assert capabilities.query.state is ComponentState.ERROR
+    assert capabilities.action.state is ComponentState.ERROR
+    assert capabilities.action.detail == "assistant_runtime_unavailable"
+
+
 def test_admin_status_reports_migration_mismatch(configured_engine: Engine) -> None:
     config = Config(ALEMBIC_CONFIG)
     with configured_engine.begin() as connection:
@@ -222,7 +240,9 @@ def test_admin_status_reports_migration_mismatch(configured_engine: Engine) -> N
         assert payload["readiness"] == "ERROR"
         assert payload["components"]["migrations"]["state"] == "error"
         assert payload["components"]["migrations"]["detail"] == "revision_mismatch"
-        assert payload["components"]["migrations"]["current_revision"] == ("0001_m1_02_baseline")
+        assert payload["components"]["migrations"]["current_revision"] == (
+            "0001_m1_02_baseline"
+        )
         assert payload["instance"] is None
     finally:
         command.stamp(config, "head")
