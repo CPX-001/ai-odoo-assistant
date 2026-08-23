@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
-from odoo_ai.adapters.codex_runtime import CodexRuntimeSettings as HostCodexRuntimeSettings
 from odoo_ai.adapters.codex_runtime import CodexRuntimeConfigurationError
+from odoo_ai.adapters.codex_runtime import CodexRuntimeSettings as HostCodexRuntimeSettings
 from odoo_ai.runtime.configuration import load_runtime_admin_overrides
 
 _MODEL = re.compile(r"^[A-Za-z0-9_.:/-]+$")

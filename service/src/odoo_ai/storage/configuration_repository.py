@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import Any, cast
 
 from pydantic import JsonValue
 from sqlalchemy import (
@@ -21,6 +21,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 _metadata = MetaData()
@@ -151,16 +152,19 @@ def persist_runtime_configuration(
             overrides=serialized_overrides,
         )
     )
-    result = session.execute(
-        update(_runtime_config_state)
-        .where(
-            _runtime_config_state.c.id == 1,
-            _runtime_config_state.c.current_revision == locked.revision,
-        )
-        .values(
-            current_revision=next_revision,
-            current_fingerprint=fingerprint,
-            updated_at=func.clock_timestamp(),
+    result = cast(
+        CursorResult[Any],
+        session.execute(
+            update(_runtime_config_state)
+            .where(
+                _runtime_config_state.c.id == 1,
+                _runtime_config_state.c.current_revision == locked.revision,
+            )
+            .values(
+                current_revision=next_revision,
+                current_fingerprint=fingerprint,
+                updated_at=func.clock_timestamp(),
+            )
         )
     )
     if result.rowcount != 1:

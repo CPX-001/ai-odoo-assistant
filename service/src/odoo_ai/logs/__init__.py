@@ -1,10 +1,8 @@
 """Bounded log providers and deployment resolution."""
 
+from collections.abc import Mapping
+
 from odoo_ai.logs.common import LogProviderError, LogRedactor
-from odoo_ai.logs.configured import (
-    journal_unit_override_from_env,
-    log_file_override_from_env,
-)
 from odoo_ai.logs.file import FileLogLimits, FileLogProvider
 from odoo_ai.logs.journal import (
     JOURNAL_UNIT_ENV,
@@ -25,6 +23,20 @@ from odoo_ai.logs.resolution import (
     ResolvedLogFile,
     resolve_log_file,
 )
+
+
+def log_file_override_from_env(
+    environ: Mapping[str, str] | None = None,
+) -> tuple[str, ...]:
+    from odoo_ai.logs.configured import log_file_override_from_env as configured_override
+
+    return configured_override(environ)
+
+
+def journal_unit_override_from_env(environment: Mapping[str, str]) -> tuple[str, ...]:
+    from odoo_ai.logs.configured import journal_unit_override_from_env as configured_override
+
+    return configured_override(environment)
 
 __all__ = [
     "LOG_FILE_ENV",
