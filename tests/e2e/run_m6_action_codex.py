@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import urllib.parse
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -20,7 +21,7 @@ import psycopg
 from psycopg import sql
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_m4_sale_order_codex import (  # noqa: E402
+from run_m4_sale_order_codex import (
     GateError,
     _database_uri,
     _free_port,
@@ -68,10 +69,10 @@ class _DropCommitProxy(ThreadingHTTPServer):
 class _ProxyHandler(BaseHTTPRequestHandler):
     server: _DropCommitProxy
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         self._forward()
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         self._forward()
 
     def log_message(self, _format: str, *_args: object) -> None:
@@ -189,11 +190,16 @@ def _action_evidence(dsn: str) -> dict[str, Any]:
 
 
 def _expire(dsn: str, proposal_id: str) -> None:
+    expired_at = datetime.now(UTC) - timedelta(seconds=1)
+    serialized = expired_at.isoformat().replace("+00:00", "Z")
     with psycopg.connect(dsn) as connection:
         result = connection.execute(
-            "UPDATE action_proposal SET expires_at = clock_timestamp() - interval '1 second' "
+            "UPDATE action_proposal SET expires_at = %s, "
+            "preview_payload = jsonb_set("
+            "preview_payload, '{expires_at}', to_jsonb(%s::text), false"
+            ") "
             "WHERE proposal_id = %s AND state = 'previewed'",
-            (proposal_id,),
+            (expired_at, serialized, proposal_id),
         )
         if result.rowcount != 1:
             raise GateError("expiry fixture proposal was not previewed")
@@ -543,15 +549,21 @@ def main() -> None:
             )
             evidence = _action_evidence(assistant_dsn)
             states = {item["state"] for item in evidence["proposals"]}
-            if not {"verified", "rejected", "stale", "previewed"}.issubset(states):
+            if not {"verified", "rejected", "stale", "expired"}.issubset(states):
                 raise GateError(f"required durable ACTION states missing: {sorted(states)}")
             serialized = json.dumps((positive, expired, evidence), ensure_ascii=False)
             for forbidden in (*secret_values, str(fixture_addons), "FORBIDDEN M6 COMPANY-B RECORD"):
                 if forbidden in serialized:
                     raise GateError("secret, path, or ACL-hidden record leaked")
 
-            odoo_version = _run([str(odoo_python), str(odoo_bin), "--version"], timeout=60).strip()
-            codex_version = _run([str(codex), "--version"], timeout=60).strip()
+            odoo_version = _run(
+                [str(odoo_python), str(odoo_bin), "--version"],
+                env=common_env,
+                timeout=60,
+            ).strip()
+            codex_version = _run(
+                [str(codex), "--version"], env=service_env, timeout=60
+            ).strip()
             print(
                 "M6_E2E_RESULT="
                 + json.dumps(

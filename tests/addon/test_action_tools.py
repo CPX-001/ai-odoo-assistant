@@ -437,3 +437,59 @@ def test_a1_stale_or_wrong_token_family_never_writes() -> None:
         )
 
     assert env.models["sale.order"].write_calls == []
+
+
+def test_a1_runtime_environment_does_not_require_preview_language(monkeypatch) -> None:
+    proposal = _proposal()
+    token = _authority_token(
+        proposal,
+        "action-precondition:v1:sha256:" + "0" * 64,
+        scope="action_commit",
+    )
+    claims = action_authority.ActionAuthorityCodec(
+        SECRET, clock=lambda: NOW
+    ).decode(token)
+    captured: dict[str, object] = {}
+
+    class Cursor:
+        dbname = proposal.database
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    class RuntimeEnvironment:
+        su = False
+
+        def __init__(
+            self,
+            cursor: Cursor,
+            uid: int,
+            context: dict[str, object],
+            *,
+            su: bool,
+        ) -> None:
+            assert su is False
+            self.cr = cursor
+            self.company = type("Company", (), {"id": proposal.company_id})()
+            self.companies = type(
+                "Companies", (), {"ids": list(proposal.allowed_company_ids)}
+            )()
+            captured.update({"context": context, "uid": uid})
+
+    class RuntimeRegistry:
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    monkeypatch.setattr(action_tools, "Registry", lambda database: RuntimeRegistry())
+    monkeypatch.setattr(action_tools.api, "Environment", RuntimeEnvironment, raising=False)
+
+    with action_tools._runtime_action_environment(claims):
+        pass
+
+    assert captured == {
+        "context": {"allowed_company_ids": list(proposal.allowed_company_ids)},
+        "uid": proposal.uid,
+    }

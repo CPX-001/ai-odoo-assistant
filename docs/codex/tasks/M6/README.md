@@ -1,6 +1,6 @@
 # M6 — ACTION segura
 
-Estado: **M6-01..M6-10 implementados; milestone abierto porque M6 GATE está en FAIL.** La suite determinista está verde, pero falta el E2E externo real y existe una desviación no resuelta entre el alcance `record_patch` de estos packets y el requisito create/business-action del Source of Truth. Ver [`docs/M6_GATE_REPORT.md`](../../../M6_GATE_REPORT.md).
+Estado: **M6-01..M6-10 implementados; milestone abierto porque M6 GATE está en FAIL.** La suite determinista y el E2E real Odoo 18 + Codex + Chromium están verdes. Sólo permanece la desviación no resuelta entre el alcance `record_patch` de estos packets y el requisito create/business-action del Source of Truth. Ver [`docs/M6_GATE_REPORT.md`](../../../M6_GATE_REPORT.md).
 
 M6 empieza únicamente después de **M5 GATE: PASS**. Su objetivo es permitir que el usuario solicite desde el chat un cambio simple y acotado, vea exactamente qué se va a modificar, lo apruebe explícitamente y obtenga después una verificación y auditoría del resultado real.
 

@@ -400,14 +400,14 @@ class ApprovedActionToolExecutor:
 
 @contextmanager
 def _runtime_action_environment(
-    claims: ActionPreviewDelegationPayload,
+    claims: ActionPreviewDelegationPayload | ActionAuthorityPayload,
 ) -> Iterator[object]:
     runtime_company_ids = [
         claims.company_id,
         *(item for item in claims.allowed_company_ids if item != claims.company_id),
     ]
     context: dict[str, object] = {"allowed_company_ids": runtime_company_ids}
-    if claims.lang is not None:
+    if isinstance(claims, ActionPreviewDelegationPayload) and claims.lang is not None:
         context["lang"] = claims.lang
     try:
         database_registry = Registry(claims.database)

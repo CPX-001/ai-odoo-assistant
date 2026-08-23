@@ -6,44 +6,43 @@ Fecha: 2026-08-23.
 
 **M6 GATE: FAIL**
 
-Los packets M6-07..M6-10 están implementados y la evidencia determinista está
-verde, pero M6 no puede cerrarse por dos motivos independientes:
+Los packets M6-01..M6-10 están implementados y el gate técnico completo está
+verde, incluido el E2E real Odoo 18 + Assistant PostgreSQL + Codex + Chromium.
+El milestone no puede declararse cerrado por una única desviación formal:
 
-1. El Source of Truth exige para M6 `create/update` genérico seguro y al menos
-   una business action curada. El plan de packets M6 acotó el primer slice a un
-   `record_patch` update de un solo registro y excluyó create/business actions.
-   No existe ADR ni actualización explícita del Source of Truth que resuelva
-   esa desviación. Por ser un requirement no implementado y no un recurso
-   externo, el veredicto no puede ser `CONDITIONAL`.
-2. El E2E obligatorio Odoo 18 + Assistant PostgreSQL + Codex real + Chromium no
-   pudo ejecutarse en este host: no existe `M6_POSTGRES_ADMIN_DSN` para un
-   cluster desechable y el ejecutable Codex detectado por la app no es invocable
-   desde WSL. El runner falla antes de crear recursos y no toca la instancia DEV.
+- el Source of Truth exige para M6 `create/update` genérico seguro y al menos
+  una business action curada;
+- el plan de packets M6 define deliberadamente un primer slice de update
+  `record_patch` de un solo registro y excluye create/business actions;
+- no existe ADR aceptado ni actualización explícita del Source of Truth que
+  autorice esa reducción.
 
-M6 permanece abierto. No se inicia M7.
+No se rebaja el veredicto a `CONDITIONAL`, porque ya no falta infraestructura
+externa: falta resolver un requirement de producto. M6 permanece abierto y no
+se inicia M7.
 
 ## Matriz del gate
 
 | Check | Resultado | Evidencia |
 | --- | --- | --- |
-| quality / lint / mypy | PASS | `ruff check src ../tests ../addons/odoo_ai_assistant`; mypy: 94 source files sin issues; pytest: 447 passed, 35 skipped opt-in |
-| migrations / addon | NOT RUN | Los 6 tests de migrations y los tests Odoo/install/update reales requieren PostgreSQL/entorno desechable no configurado; el runner M6 contiene fresh install + update pero se detuvo antes de crear recursos |
-| M1-M5 regressions | PASS determinista | Suite completa verde; los reportes M1-M5 versionados conservan `PASS`. No se repitieron sus gates externos en este host |
-| contracts / canonicalization | PASS | `record_patch` v1, 1-4 fields tipados, extra-forbid/strict, serialización canónica y fingerprint ligados a actor/target/schema/policy; tests de coerción y tampering incluidos |
-| effective write schema / policy | PASS determinista | Schema runtime bajo uid/companies, tipos escalares allowlisted, fields/modelos sensibles bloqueados, revision/fingerprint revalidados; QUERY no cambia de registry |
-| preview / no side effects | PASS determinista | Preview relee before real, valida after tipado, produce precondition + Evidence checked y no escribe; target/field/schema/payload mismatch fallan cerrado |
-| approval / state machine | PASS determinista | Proposal durable, approve/reject/expiry/concurrency/replay/cross-actor ligados a payload, DB, uid, companies y expiry; reject no ejecuta |
-| ACTION authority / commit | PASS determinista | `a1` separado de v1/q1/p1, TTL/bindings/replay, `su=False`, revalidación ACL/rules/field/policy/precondition, commit one-shot sin método genérico |
-| verification / audit | PASS determinista | Success sólo tras reread exacta; stale/failed/unknown/unverified explícitos; resultado ambiguo se verifica sin retry ciego; audit sanitizado y correlacionable |
-| Codex ACTION tools | PASS determinista | Registry ACTION exacta: `odoo.get_effective_write_schema` + `odoo.preview_record_patch`; el ToolExecutor default sigue READ/METADATA; no existe tool de approval/commit |
-| browser / UI / security | PASS determinista | ACTION seleccionable, diff/target/warnings/expiry escapados, decisión mínima `proposal_id` + `decision`, actor derivado en Odoo, doble click bloqueado, estados no optimistas, sin browser -> Assistant |
-| real ACTION E2E | NOT RUN | Runner reproducible implementado con happy/reject/ACL+record rule/multi-company/tampering/stale/expiry/injection/XSS/replay/fallo post-commit; ejecución bloqueada por dependencias externas indicadas arriba |
-| Source of Truth scope | FAIL | Falta resolver create + business action curada frente al scope reducido de los packets M6 |
-| scope containment M6 packets | PASS | No create/delete, bulk write, shell/SQL/Python, `execute_method`/`execute_kw`, approval autónoma, commit tool, Settings M7 ni checks Odoo 19 en application |
+| quality / lint / mypy | PASS | Ruff verde; mypy: 94 source files sin issues; suite con PostgreSQL: 473 passed, 10 skipped opt-in |
+| migrations / addon | PASS | Tests de migrations/persistencia activos sobre PostgreSQL desechable; runner real hizo fresh install + update de addon y fixture |
+| M1-M5 regressions | PASS | Suite combinada verde; los reportes M1-M5 versionados conservan PASS |
+| contracts / canonicalization | PASS | `record_patch` v1 bounded, strict/extra-forbid, payload canónico y fingerprint ligados a actor/target/schema/policy |
+| effective write schema / policy | PASS | Schema runtime bajo uid/companies, campos/tipos sensibles bloqueados y revisions revalidadas |
+| preview / no side effects | PASS | Before/after reales, precondition + Evidence checked y cero write antes de aprobación |
+| approval / state machine | PASS | Persistencia durable; approve/reject/expired/stale/replay/concurrencia/cross-actor ligados al payload |
+| ACTION authority / commit | PASS | `a1` separado, TTL/bindings/replay, `su=False`, revalidación ACL/rules/field/policy/precondition y write estrecho |
+| verification / audit | PASS | Success sólo tras reread exacta; fallo ambiguo verificado sin retry; 20 eventos de audit sanitizados |
+| Codex ACTION tools | PASS | Registry exacta: schema + preview; sin tool de approval/commit |
+| browser / UI / security | PASS | Diff escapado, decisión mínima, actor derivado en Odoo, doble click protegido y cero browser -> Assistant |
+| real ACTION E2E | PASS | Odoo 18 + Codex 0.149.0 + Chromium: happy/reject/ACL/rule/tampering/stale/expiry/XSS/replay/fallo post-commit |
+| Source of Truth scope | FAIL | No están implementados create seguro + una business action curada y no hay ADR/SOT que cambie ese requirement |
+| scope containment M6 packets | PASS | Sin delete/bulk/shell/SQL/Python, método genérico, approval autónoma, commit tool ni trabajo M7/M8 |
 
 ## Comandos y resultados reproducibles
 
-Desde `service/`:
+Calidad y suite desde `service/`:
 
 ```text
 ../.venv/bin/ruff check src ../tests ../addons/odoo_ai_assistant
@@ -52,84 +51,96 @@ Desde `service/`:
 ../.venv/bin/mypy
 # Success: no issues found in 94 source files
 
-../.venv/bin/pytest -q
-# 447 passed, 35 skipped in 29.55s
+ODOO_AI_TEST_DATABASE_URL=postgresql+psycopg://<role>@127.0.0.1:<port>/<disposable-db> \
+  ../.venv/bin/pytest -q
+# 473 passed, 10 skipped in 34.31s
 ```
 
-Los 35 skips son explícitos: PostgreSQL real no configurado (incluidas seis
-pruebas de migrations/persistencia), cinco smokes Codex opt-in y smokes de
-bootstrap/runtime/Odoo que requieren un host desechable o privilegios
-específicos. No son fallos ocultos ni se convirtieron en PASS.
+Los 10 skips restantes son smokes opt-in de otros runtimes/bootstraps: cinco
+smokes Codex independientes y cinco pruebas que requieren instalación runtime,
+PostgreSQL bootstrap, systemd o root. Las pruebas de migrations y persistencia
+sí se ejecutaron. El gate M6 real cubrió por separado Codex, Odoo y Chromium.
 
-Validaciones adicionales:
-
-```text
-node --check tests/e2e/m6_action_browser.mjs
-python3 -m py_compile tests/e2e/run_m6_action_codex.py \
-  tests/e2e/m6_action_fixture.py
-# OK
-
-python3 -c "import xml.etree.ElementTree as E; ..."
-# 4 XML files parsed
-```
-
-Intento del runner con los runtimes detectados y sin credenciales inventadas:
+Runner real desde la raíz, con dependencias externas explícitas:
 
 ```text
-M6_ODOO_PYTHON=<detected> M6_ODOO_BIN=<detected> \
-M6_ODOO_CORE_ADDONS=<detected> M6_CODEX_EXECUTABLE=<detected> \
-M6_PLAYWRIGHT_ROOT=<bundled> M6_NODE=<detected> \
+PLAYWRIGHT_BROWSERS_PATH=<browser-cache> \
+M6_ODOO_PYTHON=<odoo-python> M6_ODOO_BIN=<odoo-bin> \
+M6_ODOO_CORE_ADDONS=<odoo-addons-root> \
+M6_CODEX_EXECUTABLE=<linux-codex> M6_PLAYWRIGHT_ROOT=<node-root> \
+M6_NODE=<node> M6_POSTGRES_ADMIN_DSN=<disposable-admin-dsn> \
+ODOO_AI_CODEX_HOME=<authenticated-profile> \
 .venv/bin/python tests/e2e/run_m6_action_codex.py
-# M6_E2E_ERROR=M6_POSTGRES_ADMIN_DSN must be a PostgreSQL URI
 ```
 
-El runner exige overrides explícitos para Python/bin/addons de Odoo, Codex,
-Playwright/Node y el DSN administrador del cluster desechable. No contiene rutas,
-usuarios, bases, puertos ni credenciales del cliente como contratos de producto.
+Resultado sanitizado observado:
 
-## Runner M6-09 implementado
+```text
+M6_E2E_RESULT={
+  "ambiguous_response_drops": 1,
+  "audit_events": 20,
+  "browser_to_assistant_requests": 0,
+  "codex_version": "codex-cli 0.149.0",
+  "expiry_error": "approval_expired",
+  "full_readiness": "FULLY_READY",
+  "odoo_version": "Odoo Server 18.0",
+  "proposal_states": ["expired", "rejected", "stale", "verified"],
+  "writes_expected": {
+    "ambiguous": 1,
+    "happy": 1,
+    "reject": 0,
+    "stale_action": 0,
+    "xss": 0
+  }
+}
+```
+
+También pasaron `node --check tests/e2e/m6_action_browser.mjs`, el smoke real
+del protocolo Codex App Server y las verificaciones Python/XML del packet.
+
+## Evidencia del runner M6-09
 
 `tests/e2e/run_m6_action_codex.py` crea roles y bases Odoo/Assistant separados,
-verifica que el rol Assistant no puede conectar a Odoo, instala y actualiza el
-addon más el fixture test-only, aplica Alembic, arranca servicios en puertos
-libres y ejecuta Chromium. El cleanup elimina únicamente nombres aleatorios
-creados por esa ejecución.
+impide que el rol Assistant conecte a Odoo, instala/actualiza addon + fixture,
+aplica Alembic, arranca servicios en puertos libres y elimina únicamente sus
+recursos aleatorios.
 
-La suite Chromium comprueba:
+La suite Chromium demostró:
 
-- preview exacta y ausencia de write antes de aprobación;
-- commit aprobado y receipt `verified` con un write observado;
-- cancelación terminal sin write;
-- usuario/compañía B y record rule sin acceso ni leak;
-- browser extra payload y approval cruzada rechazados;
+- preview exacta sin write y commit aprobado con receipt `verified`;
+- reject terminal sin write;
+- usuario/compañía B y record rule sin aprobación, lectura ni leak;
+- payload browser extra y approval cruzada rechazados;
 - stale, expiry y replay sin write ACTION adicional;
-- instrucciones de shell/SQL/Python/`odoo.write` tratadas como texto;
-- HTML/script visible como datos sin ejecución;
-- proxy loopback que entrega el commit real y corta una única respuesta; el
-  Assistant relee y verifica antes de responder, sin segundo write;
-- tools Codex exactas de schema + preview y cero requests Chromium -> Assistant;
-- correlaciones proposal/approval/attempt/evidence y audit sin canaries/secrets.
+- instrucciones shell/SQL/Python y HTML/script tratadas como datos;
+- un proxy entrega el commit y corta exactamente una respuesta; el Assistant
+  relee y verifica, sin segundo write;
+- tools Codex exactas de schema + preview;
+- cero requests Chromium -> Assistant y ninguna credencial en la evidencia.
+
+Durante el gate se detectó y corrigió una regresión real: el entorno de commit
+intentaba leer el atributo de idioma propio de la autoridad preview, aunque la
+autoridad `a1` no lo contiene por diseño. La regresión ahora tiene test unitario
+y el commit real queda demostrado por el E2E.
 
 ## Versiones observadas
 
 - Odoo Server 18.0.
 - Python Odoo/service 3.12.3.
-- PostgreSQL client 16.15; servidor local responde, pero el usuario actual no
-  dispone de un DSN administrador desechable autorizado.
-- Node.js 18.19.1.
-- El runtime Codex está presente dentro de la aplicación de escritorio, pero su
-  CLI no es ejecutable desde WSL; versión/handshake real M6 no verificados.
+- PostgreSQL 16 en cluster temporal loopback aislado.
+- Node.js 18.19.1 y Playwright 1.51.1 con Chromium temporal.
+- Codex CLI Linux 0.149.0 autenticado; App Server y turns ACTION reales verdes.
 
-## Desviación pendiente y salida del gate
+## Desviación pendiente
 
-Para volver a ejecutar M6-10 hacen falta ambas cosas:
+Para convertir el veredicto global en PASS hace falta una decisión de producto
+explícita, no otro ajuste del runner:
 
-1. una decisión arquitectónica explícita: implementar y paquetizar create + una
-   business action allowlisted, o aprobar un ADR y actualizar el Source of Truth
-   para que el milestone M6 quede definido por el `record_patch` actual;
-2. proporcionar un PostgreSQL admin DSN de un cluster desechable, un Codex CLI
-   Linux autenticado/invocable y Playwright con Chromium, y ejecutar el runner
-   hasta obtener `M6_E2E_RESULT` verde.
+1. implementar y paquetizar create seguro + una business action explícitamente
+   allowlisted, con sus contratos, preview, authority, idempotencia, E2E y gate;
+   o
+2. aceptar un ADR y actualizar el Source of Truth para redefinir M6 al slice
+   `record_patch` implementado.
 
-Hasta entonces no se cambia el roadmap a M6 completado ni se presenta el flujo
-como listo para piloto.
+Hasta entonces los diez packets están implementados, pero el milestone M6 no se
+marca completado ni listo para piloto.

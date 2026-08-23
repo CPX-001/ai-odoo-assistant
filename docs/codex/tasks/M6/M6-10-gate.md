@@ -1,6 +1,6 @@
 # M6-10 — Gate integral ACTION segura
 
-Estado: **gate ejecutado el 2026-08-23 con veredicto FAIL; ver `docs/M6_GATE_REPORT.md`.**
+Estado: **implementado; gate técnico real verde el 2026-08-23, con veredicto global FAIL por la desviación formal de scope documentada en `docs/M6_GATE_REPORT.md`.**
 
 ## Contexto
 

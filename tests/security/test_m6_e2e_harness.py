@@ -43,6 +43,10 @@ def test_m6_runner_is_disposable_and_fault_checks_ambiguous_commit() -> None:
         '"/odoo_ai/internal/v1/action-commit"',
         "ambiguous commit response was not dropped exactly once",
         "Assistant role unexpectedly connected to Odoo DB",
+        "preview_payload = jsonb_set",
+        '{"verified", "rejected", "stale", "expired"}',
+        "env=common_env",
+        "env=service_env",
     ):
         assert evidence in runner
     assert 'any("commit" in name or "approve" in name for name in tools)' in runner

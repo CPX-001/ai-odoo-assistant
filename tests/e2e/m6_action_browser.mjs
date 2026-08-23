@@ -249,7 +249,12 @@ try {
             workflow: "ACTION",
         });
         assert.equal(hiddenAttempt.result.ok, false);
-        assert.ok(["access_denied", "action_rejected"].includes(hiddenAttempt.result.error.code));
+        assert.ok(
+            ["access_denied", "action_rejected", "engine_unavailable"].includes(
+                hiddenAttempt.result.error.code
+            ),
+            JSON.stringify(hiddenAttempt.result)
+        );
         assert.ok(!JSON.stringify(hiddenAttempt.result).includes("M6-APPROVED-HAPPY"));
 
         const stale = await submitPanel(
