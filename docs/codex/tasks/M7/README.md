@@ -1,6 +1,6 @@
 # M7 — Product hardening
 
-Estado: **Goal A (M7-01 + M7-02 + M7-03) y M7-04 implementados y verificados en runtime. M7-05 está implementado / pending runtime verification. M7 no es PASS y M7-06+ no se han iniciado.**
+Estado: **M7-01..05 implementados y verificados en runtime. M7 no es PASS y M7-06+ no se han iniciado.**
 
 M7 empieza únicamente después de **M6 GATE: PASS**. Su objetivo no es añadir otra familia de capacidades al agente, sino convertir el estado M0-M6 en un piloto operable: un técnico debe poder instalarlo, configurarlo, diagnosticarlo, actualizarlo y mantenerlo sin depender de una consola para la operación diaria.
 
@@ -42,7 +42,7 @@ M7 **no** convierte Odoo en root ni en un panel genérico de administración del
 8. [`M7-08-security-hardening.md`](M7-08-security-hardening.md) — revisión adversarial integral de las nuevas superficies administrativas.
 9. [`M7-09-real-pilot-gate.md`](M7-09-real-pilot-gate.md) — E2E real de piloto y gate final M7.
 
-Cada packet es independiente y debe quedar verificado antes de considerarse cerrado. Goal A y M7-04 están **runtime verified**; M7-05 está implementado pero pendiente de verificación runtime; M7-06..09 siguen pendientes.
+Cada packet es independiente y debe quedar verificado antes de considerarse cerrado. M7-01..05 están **runtime verified**; M7-06..09 siguen pendientes.
 
 ## Agrupación recomendada para Goal Mode
 
@@ -60,7 +60,7 @@ Ejecutar juntos: **M7-04 + M7-05 + M7-06**.
 
 Cadena conceptual: entender el estado → poder ejecutar mantenimiento seguro → conservar visibilidad/auditoría sin crecimiento o exposición indefinidos.
 
-Estado actual: **M7-04 implemented / runtime verified; M7-05 implemented / pending runtime verification; M7-06 not started**.
+Estado actual: **M7-04 y M7-05 implemented / runtime verified; M7-06 not started**.
 
 ### Goal C — lifecycle, seguridad y gate
 

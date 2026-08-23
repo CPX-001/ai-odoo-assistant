@@ -2,7 +2,7 @@
 
 Este roadmap resume el Source of Truth. No autoriza por sí mismo la implementación de ningún milestone.
 
-Estado actual: **M0-M6 completados; gates PASS. M7-01..04 implementados y verificados en runtime; M7-05 implementado / pending runtime verification; M7-06..09 pendientes. M7 no es PASS.**
+Estado actual: **M0-M6 completados; gates PASS. M7-01..05 implementados y verificados en runtime; M7-06..09 pendientes. M7 no es PASS.**
 
 | Milestone | Objetivo observable |
 | --- | --- |

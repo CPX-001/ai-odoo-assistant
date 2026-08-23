@@ -98,7 +98,7 @@ Diagnostics/Settings debe ofrecer sólo botones correspondientes a operations al
 
 ## Estado de implementación
 
-**Implemented / pending runtime verification.**
+**Implemented / runtime verified.**
 
 El catálogo final tiene ocho endpoints POST explícitos: readiness, source rescan,
 source test, logs test, knowledge reindex, reasoning test, ACTION self-test y
@@ -121,6 +121,6 @@ existentes para evitar duplicados y renderiza resultados desde una allowlist
 local. El detalle del diseño y las operaciones que siguen siendo setup-only están
 en `docs/M7_MAINTENANCE.md`.
 
-Tests unitarios/API/PostgreSQL/addon están escritos, pero su ejecución real,
-Ruff, mypy, regresión del service y addon Odoo 18 install/update siguen
-pendientes. Por tanto M7-05 todavía no se considera cerrado ni habilita M7-06.
+Tests unitarios/API/PostgreSQL/addon, Ruff, mypy, regresión del service y addon
+Odoo 18 install/update se han ejecutado correctamente. M7-05 queda cerrado sin
+iniciar ni ampliar el alcance de M7-06.
