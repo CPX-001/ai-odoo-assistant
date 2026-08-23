@@ -42,7 +42,7 @@
                     string="Revalidate Configuration"
                 />
             </xpath>
-            <xpath expr="//group[@string='Healthy checks']" position="after">
+            <xpath expr="//field[@name='diagnostic_ok']/.." position="after">
                 <group string="Maintenance operations" col="1">
                     <field name="maintenance_last_result" nolabel="1"/>
                     <field

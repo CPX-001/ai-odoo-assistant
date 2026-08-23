@@ -104,13 +104,17 @@ class RuntimeMaintenanceService:
         return cls(database_settings=DatabaseSettings.from_env())
 
     async def readiness_test(self, actor: MaintenanceActor) -> MaintenanceResult:
+        code: MaintenanceResultCode
         try:
             matrix = await self._admin_diagnostics_factory().inspect()
-            code: MaintenanceResultCode = {
-                "FULLY_READY": "readiness_ok",
-                "DEGRADED": "readiness_degraded",
-                "ERROR": "readiness_error",
-            }[matrix.readiness]
+            code = cast(
+                MaintenanceResultCode,
+                {
+                    "FULLY_READY": "readiness_ok",
+                    "DEGRADED": "readiness_degraded",
+                    "ERROR": "readiness_error",
+                }[matrix.readiness],
+            )
             metrics = MaintenanceMetrics(config_revision=matrix.config_revision)
             succeeded = True
         except Exception:  # noqa: BLE001 - fixed code only; no exception text escapes

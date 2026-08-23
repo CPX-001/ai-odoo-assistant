@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast
+from typing import cast
 from uuid import UUID, uuid4
 
 from pydantic import JsonValue
@@ -23,7 +23,10 @@ from sqlalchemy import (
     text,
     update,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID, insert as pg_insert
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
 from odoo_ai.contracts.maintenance import MaintenanceMetrics
@@ -339,7 +342,7 @@ def _metrics(
     return cast(dict[str, JsonValue], model.model_dump(mode="json", exclude_none=True))
 
 
-def _job_record(row: Mapping[str, Any]) -> MaintenanceJobRecord:
+def _job_record(row: RowMapping) -> MaintenanceJobRecord:
     operation = cast(str, row["operation"])
     state = cast(str, row["state"])
     _validate_job_operation(operation)
@@ -359,7 +362,7 @@ def _job_record(row: Mapping[str, Any]) -> MaintenanceJobRecord:
     )
 
 
-def _event_record(row: Mapping[str, Any]) -> MaintenanceEventRecord:
+def _event_record(row: RowMapping) -> MaintenanceEventRecord:
     operation = cast(str, row["operation"])
     state = cast(str, row["state"])
     _validate_operation(operation)
