@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="odoo_ai_assistant.AssistantPanelDocking"
+        t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
+        <xpath expr="//aside" position="before">
+            <div t-if="dock and dock.previewTarget" t-portal="'body'"
+                t-att-class="'o_ai_assistant_dock_preview o_ai_assistant_dock_preview_' + dock.previewTarget"
+                t-att-style="dockPreviewStyle" aria-hidden="true">
+                <div class="o_ai_assistant_dock_preview_inner"/>
+            </div>
+        </xpath>
+
+        <xpath expr="//button[@t-on-click='toggleMinimized']" position="before">
+            <button t-if="dock and dock.docked" type="button"
+                class="btn btn-sm btn-link text-body o_ai_assistant_undock_button"
+                title="Volver a ventana flotante" aria-label="Desanclar AI Assistant"
+                t-on-click="undockPanel">
+                <i class="fa fa-external-link" aria-hidden="true"/>
+            </button>
+        </xpath>
+
+        <xpath expr="//aside" position="inside">
+            <t t-if="!ui.isMinimized and dock and !dock.docked">
+                <div t-foreach="['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']"
+                    t-as="resizeDirection" t-key="resizeDirection"
+                    t-att-class="'o_ai_assistant_resize_handle o_ai_assistant_resize_' + resizeDirection"
+                    t-att-data-direction="resizeDirection" aria-hidden="true"
+                    t-on-pointerdown="startResize" t-on-pointermove="resizePanel"
+                    t-on-pointerup="endResize" t-on-pointercancel="endResize"/>
+            </t>
+            <div t-if="!ui.isMinimized and dock and dock.docked"
+                t-att-class="'o_ai_assistant_resize_handle o_ai_assistant_dock_resize o_ai_assistant_resize_' + dockResizeDirection"
+                t-att-data-direction="dockResizeDirection" aria-hidden="true"
+                t-on-pointerdown="startResize" t-on-pointermove="resizePanel"
+                t-on-pointerup="endResize" t-on-pointercancel="endResize"/>
+        </xpath>
+    </t>
+</templates>
