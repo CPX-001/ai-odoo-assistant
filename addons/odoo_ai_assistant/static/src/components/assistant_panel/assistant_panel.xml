@@ -140,7 +140,7 @@
 
                     <ul t-if="state.result.proposal.warnings.length" class="small mt-2 mb-0">
                         <li t-foreach="state.result.proposal.warnings" t-as="warning"
-                            t-key="limitation_index" t-esc="warning"/>
+                            t-key="warning_index" t-esc="warning"/>
                     </ul>
                     <div class="small text-muted mt-2">
                         Caduca: <t t-esc="state.result.proposal.expires_at"/>
