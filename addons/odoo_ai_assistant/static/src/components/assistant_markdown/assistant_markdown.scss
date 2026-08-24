@@ -1,0 +1,102 @@
+.o_ai_assistant_markdown {
+    white-space: normal;
+    overflow-wrap: anywhere;
+
+    > :last-child {
+        margin-bottom: 0 !important;
+    }
+
+    .o_ai_markdown_paragraph {
+        margin: 0 0 0.65rem;
+    }
+
+    .o_ai_markdown_heading {
+        margin: 0.85rem 0 0.4rem;
+        font-weight: 600;
+        line-height: 1.25;
+    }
+
+    .o_ai_markdown_h1 {
+        font-size: 1.2rem;
+    }
+
+    .o_ai_markdown_h2 {
+        font-size: 1.1rem;
+    }
+
+    .o_ai_markdown_h3,
+    .o_ai_markdown_h4 {
+        font-size: 1rem;
+    }
+
+    .o_ai_markdown_list {
+        margin: 0 0 0.65rem;
+        padding-left: 1.35rem;
+
+        li + li {
+            margin-top: 0.2rem;
+        }
+    }
+
+    .o_ai_markdown_inline_code {
+        padding: 0.08rem 0.3rem;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        border-radius: 0.25rem;
+        background-color: var(--o-gray-100, #f8f9fa);
+        font-size: 0.9em;
+        white-space: break-spaces;
+    }
+
+    .o_ai_markdown_code_block {
+        margin: 0.65rem 0;
+        overflow: hidden;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        border-radius: 0.4rem;
+        background-color: var(--o-gray-100, #f8f9fa);
+
+        pre {
+            max-width: 100%;
+            overflow: auto;
+            padding: 0.75rem;
+            background-color: inherit;
+            color: inherit;
+            white-space: pre;
+        }
+    }
+
+    .o_ai_markdown_code_language {
+        padding: 0.3rem 0.75rem;
+        border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+        color: var(--bs-secondary-color, #6c757d);
+        font-size: 0.75rem;
+        font-family: var(--bs-font-monospace, monospace);
+    }
+
+    .o_ai_markdown_quote {
+        margin: 0.65rem 0;
+        padding: 0.25rem 0 0.25rem 0.75rem;
+        border-left: 3px solid var(--bs-border-color, #dee2e6);
+        color: var(--bs-secondary-color, #6c757d);
+    }
+
+    .o_ai_markdown_table_wrap {
+        margin: 0.65rem 0;
+        border-radius: 0.3rem;
+
+        table {
+            width: 100%;
+            white-space: normal;
+        }
+
+        th,
+        td {
+            min-width: 6rem;
+            overflow-wrap: anywhere;
+        }
+    }
+
+    .o_ai_markdown_hr {
+        margin: 0.8rem 0;
+        opacity: 0.35;
+    }
+}
