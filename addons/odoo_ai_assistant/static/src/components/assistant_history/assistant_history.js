@@ -35,8 +35,9 @@ export class AssistantHistory extends Component {
         }
     }
 
-    async selectConversation(conversationId) {
-        if (!this.isBusy) {
+    async selectConversation(event) {
+        const conversationId = event.currentTarget.dataset.conversationId;
+        if (!this.isBusy && conversationId) {
             await this.panel.selectConversation(conversationId);
         }
     }
