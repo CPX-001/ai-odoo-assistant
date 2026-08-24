@@ -22,6 +22,7 @@ from .delegation import DelegationTokenError
 _PREFIX: Final = "b1"
 _PURPOSE: Final = b"odoo-ai-assistant/batch-authority/v1"
 _MODEL = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
+_FIELD = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _JTI = re.compile(r"^[A-Za-z0-9_-]{22,64}$")
 _JOB_FINGERPRINT = re.compile(r"^batch-job:v1:sha256:[0-9a-f]{64}$")
 _CHUNK_FINGERPRINT = re.compile(r"^batch-chunk:v1:sha256:[0-9a-f]{64}$")
@@ -45,6 +46,7 @@ class BatchAuthorityPayload:
     operation: str
     model: str
     schema_id: str | None
+    fields: tuple[str, ...]
     failure_mode: str
     policy_revision: str
     row_count: int
@@ -63,6 +65,7 @@ class BatchAuthorityPayload:
             "database",
             "expires_at",
             "failure_mode",
+            "fields",
             "format_version",
             "instance_id",
             "issued_at",
@@ -96,6 +99,7 @@ class BatchAuthorityPayload:
                 operation=_text(raw["operation"]),
                 model=_text(raw["model"]),
                 schema_id=_optional_text(raw["schema_id"]),
+                fields=tuple(_texts(raw["fields"])),
                 failure_mode=_text(raw["failure_mode"]),
                 policy_revision=_text(raw["policy_revision"]),
                 row_count=_integer(raw["row_count"]),
@@ -109,6 +113,7 @@ class BatchAuthorityPayload:
             raise DelegationTokenError("invalid_batch_authority") from None
 
     def _validate(self) -> None:
+        write = self.operation in {"create", "patch"}
         if (
             self.format_version != 1
             or not _JTI.fullmatch(self.jti)
@@ -127,18 +132,22 @@ class BatchAuthorityPayload:
             or self.allowed_company_ids != tuple(sorted(set(self.allowed_company_ids)))
             or self.company_id not in self.allowed_company_ids
             or self.operation not in {"create", "patch", "delete"}
+            or self.fields != tuple(sorted(set(self.fields)))
+            or len(self.fields) > 16
+            or any(not _FIELD.fullmatch(field) for field in self.fields)
             or self.failure_mode not in {"continue_on_error", "atomic_chunk"}
             or not 1 <= self.row_count <= 200
             or self.scopes != ("batch_commit",)
             or not 1 <= len(self.policy_revision) <= 128
             or (
-                self.operation in {"create", "patch"}
+                write
                 and (
                     self.schema_id is None
                     or not _SCHEMA_FINGERPRINT.fullmatch(self.schema_id)
+                    or not self.fields
                 )
             )
-            or (self.operation == "delete" and self.schema_id is not None)
+            or (self.operation == "delete" and (self.schema_id is not None or self.fields))
             or not 0 < self.expires_at - self.issued_at <= 120
         ):
             raise ValueError
