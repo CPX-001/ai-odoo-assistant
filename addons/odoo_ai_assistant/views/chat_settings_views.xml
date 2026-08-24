@@ -17,11 +17,12 @@
                         </div>
                     </setting>
                     <setting
-                        string="Agent write confirmations"
-                        help="Defines the maximum autonomy the administrator allows. User and conversation policy can only make it stricter."
+                        string="Assistant autonomy"
+                        help="Each user chooses a simple autonomy profile directly in the chat. Odoo access rights and record rules always remain in force."
                     >
-                        <field name="assistant_agent_confirmation_mode"/>
-                        <field name="assistant_agent_max_auto_risk" class="ms-2"/>
+                        <div class="text-muted">
+                            Available profiles: Strict, Balanced, Autonomous and Full access.
+                        </div>
                     </setting>
                     <setting
                         string="Test data"
