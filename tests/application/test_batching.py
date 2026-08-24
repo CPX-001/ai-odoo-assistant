@@ -13,6 +13,7 @@ from odoo_ai.contracts.action import ActionFieldChange, ActionValue, ActionValue
 from odoo_ai.contracts.batch import (
     BatchCreateItem,
     BatchDeleteItem,
+    BatchFailureMode,
     BatchMutationKind,
     BatchMutationRequest,
     BatchPatchItem,
@@ -33,6 +34,16 @@ def _integer(field: str, value: int) -> ActionFieldChange:
         field=field,
         value=ActionValue(kind=ActionValueKind.INTEGER, value=value),
     )
+
+
+def test_batch_defaults_to_continue_on_error() -> None:
+    request = BatchMutationRequest(
+        operation=BatchMutationKind.DELETE,
+        model="sale.order",
+        items=(BatchDeleteItem(source_ref="row:1", record_id=1),),
+    )
+
+    assert request.failure_mode is BatchFailureMode.CONTINUE_ON_ERROR
 
 
 def test_create_batches_use_conservative_multi_create_chunks() -> None:
