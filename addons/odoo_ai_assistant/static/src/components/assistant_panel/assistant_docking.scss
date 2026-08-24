@@ -13,7 +13,9 @@
         box-shadow: $box-shadow-lg;
         transition:
             left 180ms ease,
+            right 180ms ease,
             top 180ms ease,
+            bottom 180ms ease,
             width 180ms ease,
             height 180ms ease,
             border-color 180ms ease,
@@ -25,24 +27,44 @@
     }
 
     &.o_ai_assistant_panel_docked_left {
+        left: 0 !important;
+        right: auto !important;
+        top: var(--o-navbar-height, 46px) !important;
+        bottom: 0 !important;
+        height: auto !important;
         border-top: 0;
         border-bottom: 0;
         border-left: 0;
     }
 
     &.o_ai_assistant_panel_docked_right {
+        left: auto !important;
+        right: 0 !important;
+        top: var(--o-navbar-height, 46px) !important;
+        bottom: 0 !important;
+        height: auto !important;
         border-top: 0;
         border-right: 0;
         border-bottom: 0;
     }
 
     &.o_ai_assistant_panel_docked_top {
+        left: 0 !important;
+        right: 0 !important;
+        top: var(--o-navbar-height, 46px) !important;
+        bottom: auto !important;
+        width: auto !important;
         border-top: 0;
         border-right: 0;
         border-left: 0;
     }
 
     &.o_ai_assistant_panel_docked_bottom {
+        left: 0 !important;
+        right: 0 !important;
+        top: auto !important;
+        bottom: 0 !important;
+        width: auto !important;
         border-right: 0;
         border-bottom: 0;
         border-left: 0;
