@@ -52,15 +52,11 @@ class AssistantChatBridge(models.AbstractModel):
         if not isinstance(conversations, list):
             return payload
 
-        limit = _recent_chat_limit(self.env)
-        ordered = sorted(
-            conversations,
-            key=lambda item: item.get("updated_at", "") if isinstance(item, dict) else "",
-            reverse=True,
-        )
         result = dict(payload)
-        result["conversations"] = ordered[:limit]
-        result["recent_chat_limit"] = limit
+        result["conversations"] = _bounded_recent_conversations(
+            conversations,
+            _recent_chat_limit(self.env),
+        )
         return result
 
 
@@ -71,3 +67,12 @@ def _recent_chat_limit(env) -> int:
     except (TypeError, ValueError):
         return DEFAULT_RECENT_CHAT_LIMIT
     return min(max(value, MIN_RECENT_CHAT_LIMIT), MAX_RECENT_CHAT_LIMIT)
+
+
+def _bounded_recent_conversations(conversations, limit):
+    ordered = sorted(
+        conversations,
+        key=lambda item: item.get("updated_at", "") if isinstance(item, dict) else "",
+        reverse=True,
+    )
+    return ordered[:limit]
