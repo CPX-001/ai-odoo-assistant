@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="odoo_ai_assistant.AssistantMarkdownInline">
+        <t t-foreach="props.tokens" t-as="token" t-key="token.key">
+            <strong t-if="token.type === 'strong'" t-esc="token.text"/>
+            <em t-elif="token.type === 'em'" t-esc="token.text"/>
+            <s t-elif="token.type === 'strike'" t-esc="token.text"/>
+            <code t-elif="token.type === 'code'" class="o_ai_markdown_inline_code" t-esc="token.text"/>
+            <a t-elif="token.type === 'link'" t-att-href="token.href" target="_blank"
+                rel="noopener noreferrer" t-esc="token.text"/>
+            <t t-else="" t-esc="token.text"/>
+        </t>
+    </t>
+
+    <t t-name="odoo_ai_assistant.AssistantMarkdown">
+        <div class="o_ai_assistant_markdown">
+            <t t-foreach="blocks" t-as="block" t-key="block.key">
+                <p t-if="block.type === 'paragraph'" class="o_ai_markdown_paragraph">
+                    <AssistantMarkdownInline tokens="block.tokens"/>
+                </p>
+                <div t-elif="block.type === 'heading'"
+                    t-att-class="'o_ai_markdown_heading o_ai_markdown_h' + block.level">
+                    <AssistantMarkdownInline tokens="block.tokens"/>
+                </div>
+                <ol t-elif="block.type === 'list' and block.ordered"
+                    class="o_ai_markdown_list" t-att-start="block.start">
+                    <li t-foreach="block.items" t-as="item" t-key="item_index">
+                        <AssistantMarkdownInline tokens="item"/>
+                    </li>
+                </ol>
+                <ul t-elif="block.type === 'list'" class="o_ai_markdown_list">
+                    <li t-foreach="block.items" t-as="item" t-key="item_index">
+                        <AssistantMarkdownInline tokens="item"/>
+                    </li>
+                </ul>
+                <blockquote t-elif="block.type === 'blockquote'" class="o_ai_markdown_quote">
+                    <AssistantMarkdownInline tokens="block.tokens"/>
+                </blockquote>
+                <div t-elif="block.type === 'code'" class="o_ai_markdown_code_block">
+                    <div t-if="block.language" class="o_ai_markdown_code_language" t-esc="block.language"/>
+                    <pre class="mb-0"><code t-esc="block.content"/></pre>
+                </div>
+                <div t-elif="block.type === 'table'" class="table-responsive o_ai_markdown_table_wrap">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th t-foreach="block.header" t-as="cell" t-key="cell_index"
+                                    t-att-class="block.alignments[cell_index] ? 'text-' + block.alignments[cell_index] : ''">
+                                    <AssistantMarkdownInline tokens="cell"/>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="block.rows" t-as="row" t-key="row_index">
+                                <td t-foreach="row" t-as="cell" t-key="cell_index"
+                                    t-att-class="block.alignments[cell_index] ? 'text-' + block.alignments[cell_index] : ''">
+                                    <AssistantMarkdownInline tokens="cell"/>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <hr t-elif="block.type === 'hr'" class="o_ai_markdown_hr"/>
+            </t>
+        </div>
+    </t>
+
+    <t t-name="odoo_ai_assistant.AssistantPanelMarkdown"
+        t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
+        <xpath expr="//div[contains(@class, 'o_ai_assistant_message_content')]" position="replace">
+            <div class="o_ai_assistant_message_content text-break">
+                <AssistantMarkdown t-if="message.role === 'assistant'" content="message.content"/>
+                <t t-else="" t-esc="message.content"/>
+            </div>
+        </xpath>
+    </t>
+</templates>
