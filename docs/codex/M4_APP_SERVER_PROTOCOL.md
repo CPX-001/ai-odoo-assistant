@@ -10,8 +10,10 @@ Fecha de verificación: 2026-08-22.
   temporalmente fuera del repositorio; el probe devolvió
   `compatible/app-server-jsonl-v2/0.149.0`.
 - Transporte elegido para el producto Linux: `codex app-server --stdio
-  --strict-config --config mcp_servers={}`. El último override impide que MCPs
-  del perfil personal del usuario entren en un product turn.
+  --strict-config --config mcp_servers={}` dentro de un `CODEX_HOME` temporal
+  que contiene únicamente las credenciales necesarias. El aislamiento del home
+  es la barrera efectiva que impide que MCPs, plugins o configuración personal
+  entren en un product turn; el override se conserva como defensa adicional.
 - El comando `codex app-server generate-json-schema --experimental` confirmó
   el protocolo JSONL actual y sus schemas v2.
 - Secuencia mínima probada: request `initialize`, response con el mismo `id` y
@@ -31,8 +33,10 @@ de ellos.
 
 - `ODOO_AI_CODEX_EXECUTABLE`: path absoluto al runtime seleccionado; no existe
   un path DEV como default de producto.
-- `ODOO_AI_CODEX_HOME`: override explícito opcional. Si se omite, Codex resuelve
-  su auth bajo el usuario efectivo del Assistant Service.
+- `ODOO_AI_CODEX_HOME`: origen explícito opcional de `auth.json`. El proceso
+  hijo nunca usa ese home directamente: recibe una copia temporal acotada de
+  las credenciales y no hereda su `config.toml`, MCPs, plugins ni skills. Si se
+  omite, el runtime arranca con un home temporal vacío.
 - `ODOO_AI_CODEX_MODEL`: modelo opcional; ningún nombre de modelo es contrato.
 - `ODOO_AI_CODEX_ISOLATED_CWD`: cwd aislado opcional. Si se omite se crea uno
   temporal por proceso.
@@ -43,8 +47,9 @@ de ellos.
   `runtimeWorkspaceRoots`; M4-02 falla cerrado si no está activo.
 
 El child recibe un allowlist mínimo de variables de proceso, no el DSN,
-shared secret, delegation secret ni configuración Odoo. El adapter nunca copia
-ni parsea `auth.json`.
+shared secret, delegation secret ni configuración Odoo. El adapter copia
+`auth.json` como bytes, con tamaño acotado y permisos `0600`, sin parsearlo; la
+copia se elimina al cerrar el proceso.
 
 ## Lifecycle y aislamiento preparados
 

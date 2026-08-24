@@ -400,7 +400,7 @@ class UnifiedAgentToolExecutorFactory:
                     input_model=AgentModelSearchRequest,
                     output_model=AgentModelSearchToolData,
                     handler=search_handler,
-                    max_calls=4,
+                    max_calls=8,
                     max_input_bytes=2 * 1024,
                     max_output_bytes=32 * 1024,
                 )
@@ -458,7 +458,7 @@ def _ordered_preview_traces(
     action_traces: tuple[ActionProposalTrace, ...],
     batch_traces: tuple[BatchProposalTrace, ...],
 ):
-    ordered = []
+    ordered: list[ActionProposalTrace | BatchProposalTrace] = []
     action_index = 0
     batch_index = 0
     for event in events:
@@ -468,19 +468,19 @@ def _ordered_preview_traces(
         if tool_name in _ACTION_PREVIEW_TOOL_NAMES:
             if action_index >= len(action_traces):
                 raise ToolExecutorError("agent_preview_report_corrupt")
-            trace = action_traces[action_index]
+            action_trace = action_traces[action_index]
             action_index += 1
-            if trace.tool_name != tool_name:
+            if action_trace.tool_name != tool_name:
                 raise ToolExecutorError("agent_preview_report_corrupt")
-            ordered.append(trace)
+            ordered.append(action_trace)
         elif tool_name == ODOO_PREVIEW_BATCH_MUTATION:
             # A completely rejected batch preflight produces no sealed proposal and
             # therefore no executable plan step. It is still a successful tool call.
             if batch_index < len(batch_traces):
-                trace = batch_traces[batch_index]
-                if trace.tool_name == tool_name:
+                batch_trace = batch_traces[batch_index]
+                if batch_trace.tool_name == tool_name:
                     batch_index += 1
-                    ordered.append(trace)
+                    ordered.append(batch_trace)
     if action_index != len(action_traces) or batch_index != len(batch_traces):
         raise ToolExecutorError("agent_preview_report_corrupt")
     return tuple(ordered)

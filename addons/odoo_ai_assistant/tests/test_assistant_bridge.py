@@ -8,6 +8,7 @@ from odoo import Command
 from odoo.tests import TransactionCase, tagged
 
 from ..controllers.internal_tools import _derived_validity
+from ..models.assistant_bridge import _client_error_code
 from ..security import (
     AgentDelegationCodec,
     DelegationCodec,
@@ -250,6 +251,12 @@ class FakeAgentChatClient:
 
 @tagged("post_install", "-at_install")
 class TestAssistantBridge(TransactionCase):
+    def test_tool_budget_error_is_not_reported_as_service_unavailable(self):
+        self.assertEqual(
+            _client_error_code("tool_per_name_budget_exceeded"),
+            "agent_budget_exceeded",
+        )
+
     def test_unified_capability_derives_bounded_legacy_validity(self):
         now = int(datetime.now(UTC).timestamp())
 

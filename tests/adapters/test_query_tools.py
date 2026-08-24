@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters import (
     ODOO_AGGREGATE_RECORDS,
     ODOO_GET_EFFECTIVE_SCHEMA,
@@ -289,6 +288,42 @@ def test_unified_agent_can_use_a_runtime_discovered_oca_model_only_after_search(
                 )
             )
             assert schema.data["effective_schema"]["model"] == "oca.custom.asset"
+
+    asyncio.run(run())
+
+
+def test_unified_agent_allows_bounded_distinct_model_searches() -> None:
+    async def run() -> None:
+        gateway = FakeQueryGateway()
+        context = _context(max_tool_calls=9).model_copy(update={"workflow_hint": None})
+        factory = UnifiedAgentToolExecutorFactory(
+            query_gateway=gateway,
+            action_gateway=gateway,  # type: ignore[arg-type]
+            approval_service=object(),  # type: ignore[arg-type]
+            turn_id=TURN_ID,
+            database="customer-db",
+            user_id=17,
+            company_id=3,
+            allowed_company_ids=(3,),
+            allowed_models=("sale.order",),
+        )
+        async with factory(context, agent_tool_specs()) as executor:
+            for index in range(8):
+                await executor.execute(
+                    ToolCall(
+                        call_id=f"model-search-{index}",
+                        tool_name=ODOO_SEARCH_MODELS,
+                        arguments={"query": f"concepto {index}", "limit": 10},
+                    )
+                )
+            with pytest.raises(ToolExecutorError, match="tool_per_name_budget_exceeded"):
+                await executor.execute(
+                    ToolCall(
+                        call_id="model-search-over-limit",
+                        tool_name=ODOO_SEARCH_MODELS,
+                        arguments={"query": "concepto adicional", "limit": 10},
+                    )
+                )
 
     asyncio.run(run())
 

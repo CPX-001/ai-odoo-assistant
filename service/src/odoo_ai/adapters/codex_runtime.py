@@ -31,6 +31,7 @@ DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 2.0
 DEFAULT_MAX_FRAME_BYTES = 256 * 1024
 DEFAULT_MAX_STDOUT_BYTES = 4 * 1024 * 1024
 DEFAULT_MAX_STDERR_BYTES = 64 * 1024
+MAX_AUTH_FILE_BYTES = 1024 * 1024
 
 _SAFE_ENVIRONMENT = frozenset(
     {
@@ -205,11 +206,13 @@ class CodexAppServerClient:
         process: asyncio.subprocess.Process,
         cwd: Path,
         temporary_cwd: tempfile.TemporaryDirectory[str] | None,
+        temporary_home: tempfile.TemporaryDirectory[str],
     ) -> None:
         self._settings = settings
         self._process = process
         self._cwd = cwd
         self._temporary_cwd = temporary_cwd
+        self._temporary_home = temporary_home
         self._next_request_id = 1
         self._stdout_bytes = 0
         self._stderr_tail = bytearray()
@@ -231,6 +234,7 @@ class CodexAppServerClient:
             cwd = settings.isolated_cwd.resolve()
             if not cwd.is_dir():
                 raise CodexRuntimeConfigurationError("codex_isolated_cwd_invalid")
+        temporary_home = _isolated_codex_home(settings.codex_home)
         argv = (
             str(executable),
             "app-server",
@@ -243,7 +247,7 @@ class CodexAppServerClient:
             process = await asyncio.create_subprocess_exec(
                 *argv,
                 cwd=cwd,
-                env=_codex_environment(settings),
+                env=_codex_environment(codex_home=Path(temporary_home.name)),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -253,16 +257,19 @@ class CodexAppServerClient:
         except FileNotFoundError:
             if temporary_cwd is not None:
                 temporary_cwd.cleanup()
+            temporary_home.cleanup()
             raise CodexRuntimeNotFoundError("codex_runtime_not_found") from None
         except (OSError, PermissionError):
             if temporary_cwd is not None:
                 temporary_cwd.cleanup()
+            temporary_home.cleanup()
             raise CodexRuntimeProcessError("codex_runtime_start_failed") from None
         client = cls(
             settings=settings,
             process=process,
             cwd=cwd,
             temporary_cwd=temporary_cwd,
+            temporary_home=temporary_home,
         )
         try:
             await client._initialize()
@@ -384,6 +391,7 @@ class CodexAppServerClient:
             await asyncio.gather(self._stderr_task, return_exceptions=True)
         if self._temporary_cwd is not None:
             self._temporary_cwd.cleanup()
+        self._temporary_home.cleanup()
 
     async def __aenter__(self) -> Self:
         return self
@@ -607,17 +615,42 @@ def _resolved_executable(executable: Path | None) -> Path:
     return resolved
 
 
-def _codex_environment(settings: CodexRuntimeSettings) -> dict[str, str]:
+def _codex_environment(
+    *,
+    codex_home: Path,
+) -> dict[str, str]:
     environment = {
         name: value
         for name, value in os.environ.items()
         if name in _SAFE_ENVIRONMENT or name.startswith("LC_")
     }
-    if settings.codex_home is not None:
-        environment["CODEX_HOME"] = str(settings.codex_home.resolve())
-    else:
-        environment.pop("CODEX_HOME", None)
+    environment["CODEX_HOME"] = str(codex_home.resolve())
     return environment
+
+
+def _isolated_codex_home(
+    source_home: Path | None,
+) -> tempfile.TemporaryDirectory[str]:
+    """Create a credential-only home that cannot inherit host MCPs or plugins."""
+
+    temporary_home = tempfile.TemporaryDirectory(prefix="odoo-ai-codex-home-")
+    if source_home is None:
+        return temporary_home
+    try:
+        auth_file = source_home.resolve() / "auth.json"
+        if not auth_file.exists():
+            return temporary_home
+        if not auth_file.is_file() or auth_file.stat().st_size > MAX_AUTH_FILE_BYTES:
+            temporary_home.cleanup()
+            raise CodexRuntimeConfigurationError("codex_auth_file_invalid")
+        auth_payload = auth_file.read_bytes()
+        target = Path(temporary_home.name) / "auth.json"
+        target.write_bytes(auth_payload)
+        target.chmod(0o600)
+    except OSError:
+        temporary_home.cleanup()
+        raise CodexRuntimeConfigurationError("codex_auth_file_invalid") from None
+    return temporary_home
 
 
 def _optional_path(raw: str | None) -> Path | None:

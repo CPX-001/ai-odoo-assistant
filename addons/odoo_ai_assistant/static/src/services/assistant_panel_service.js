@@ -7,6 +7,7 @@ import { reactive } from "@odoo/owl";
 const CHAT_WORKFLOWS = new Set(["AGENT"]);
 const KNOWN_ERROR_CODES = new Set([
     "access_denied",
+    "agent_budget_exceeded",
     "action_budget_exceeded",
     "action_rejected",
     "approval_binding_mismatch",

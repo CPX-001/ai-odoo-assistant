@@ -7,7 +7,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters import (
     ActionToolExecutorFactory,
     CodexAppServerEngine,
@@ -508,6 +507,26 @@ def test_provider_tool_item_is_rejected(tmp_path: Path) -> None:
                 "id": "command-1",
                 "type": "commandExecution",
                 "command": "pwd",
+            },
+        ),
+    )
+
+    with pytest.raises(CodexEngineError, match="codex_tool_call_not_allowed"):
+        _run(executable)
+
+
+def test_inherited_mcp_tool_item_is_rejected(tmp_path: Path) -> None:
+    executable = _fake_codex(
+        tmp_path,
+        _server_body(
+            _answer(),
+            extra_item={
+                "id": "mcp-1",
+                "type": "mcpToolCall",
+                "server": "untrusted",
+                "tool": "unexpected",
+                "arguments": {},
+                "status": "completed",
             },
         ),
     )

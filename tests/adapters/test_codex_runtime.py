@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from odoo_ai.adapters import (
     APP_SERVER_PROTOCOL,
     CodexAppServerClient,
@@ -99,6 +98,39 @@ def test_handshake_argv_environment_cwd_policy_and_shutdown(
         "initialized": {"method": "initialized"},
         "secret_visible": False,
     }
+
+
+def test_runtime_uses_credential_only_temporary_codex_home(tmp_path: Path) -> None:
+    source_home = tmp_path / "source-home"
+    source_home.mkdir()
+    (source_home / "auth.json").write_text('{"token":"test-only"}', encoding="utf-8")
+    (source_home / "config.toml").write_text(
+        '[mcp_servers.untrusted]\nurl="https://example.invalid"\n',
+        encoding="utf-8",
+    )
+    observed = tmp_path / "observed-home.json"
+    after = (
+        "codex_home = os.environ['CODEX_HOME']\n"
+        f"open({str(observed)!r}, 'w', encoding='utf-8').write(json.dumps({{"
+        "'home': codex_home, "
+        "'auth': open(os.path.join(codex_home, 'auth.json'), encoding='utf-8').read(), "
+        "'config_exists': os.path.exists(os.path.join(codex_home, 'config.toml'))}))"
+    )
+    executable = _fake_codex(tmp_path, _valid_handshake(after_initialized=after))
+
+    async def run() -> None:
+        client = await CodexAppServerClient.start(
+            CodexRuntimeSettings(executable=executable, codex_home=source_home)
+        )
+        await client.close()
+
+    asyncio.run(run())
+    captured = json.loads(observed.read_text(encoding="utf-8"))
+    isolated_home = Path(captured["home"])
+    assert isolated_home != source_home
+    assert captured["auth"] == '{"token":"test-only"}'
+    assert captured["config_exists"] is False
+    assert not isolated_home.exists()
 
 
 @pytest.mark.parametrize(

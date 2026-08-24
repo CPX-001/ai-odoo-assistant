@@ -206,6 +206,9 @@ export class AssistantPanel extends Component {
     get errorMessage() {
         const messages = {
             access_denied: _t("No tienes permisos para acceder a los datos necesarios."),
+            agent_budget_exceeded: _t(
+                "El agente alcanzó el límite seguro de herramientas. Inténtalo con una petición más concreta."
+            ),
             action_budget_exceeded: _t("La acción superó los límites seguros del turno."),
             action_rejected: _t("La acción solicitada no está permitida."),
             approval_binding_mismatch: _t("La propuesta pertenece a otro contexto de usuario."),

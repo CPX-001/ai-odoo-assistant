@@ -1097,6 +1097,7 @@ def _client_error_code(code: str) -> str:
     if code == "invalid_response":
         return "invalid_response"
     if code in {
+        "agent_budget_exceeded",
         "action_budget_exceeded",
         "action_rejected",
         "approval_binding_mismatch",
@@ -1112,6 +1113,10 @@ def _client_error_code(code: str) -> str:
         "record_context_required",
     }:
         return code
+    if code.startswith("tool_") and any(
+        marker in code for marker in ("budget", "limit", "repeated")
+    ):
+        return "agent_budget_exceeded"
     return "service_unavailable"
 
 
