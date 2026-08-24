@@ -32,7 +32,7 @@ class BatchMutationKind(StrEnum):
 
 
 class BatchFailureMode(StrEnum):
-    """Future executor semantics; never inferred from individual row content."""
+    """Executor semantics selected by the host, never inferred from row content."""
 
     ATOMIC_CHUNK = "atomic_chunk"
     CONTINUE_ON_ERROR = "continue_on_error"
@@ -99,7 +99,8 @@ class BatchMutationRequest(BaseModel):
 
     Large imports are expected to persist normalized rows and feed multiple requests;
     this object is intentionally bounded so neither Codex nor one HTTP payload needs
-    to carry an entire workbook.
+    to carry an entire workbook. Independent row failures continue by default so a
+    single bad spreadsheet row does not roll back unrelated valid rows.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
@@ -107,7 +108,7 @@ class BatchMutationRequest(BaseModel):
     operation: BatchMutationKind
     model: ModelName
     schema_id: Fingerprint | None = None
-    failure_mode: BatchFailureMode = BatchFailureMode.ATOMIC_CHUNK
+    failure_mode: BatchFailureMode = BatchFailureMode.CONTINUE_ON_ERROR
     items: tuple[BatchMutationItem, ...] = Field(min_length=1, max_length=MAX_BATCH_ITEMS)
 
     @model_validator(mode="after")
