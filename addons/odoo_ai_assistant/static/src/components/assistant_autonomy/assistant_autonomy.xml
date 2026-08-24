@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="odoo_ai_assistant.AssistantPanelAutonomyPicker"
+        t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
+        <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//button[@type='submit']" position="before">
+            <details class="o_ai_assistant_autonomy_picker">
+                <summary class="o_ai_assistant_autonomy_summary d-flex align-items-center gap-1"
+                    title="Nivel de autonomía del Assistant">
+                    <i t-if="state.autonomyLoading or state.autonomySaving"
+                        class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                    <i t-else="" class="fa fa-shield" aria-hidden="true"/>
+                    <span class="o_ai_assistant_autonomy_label text-truncate"
+                        t-esc="autonomyProfileLabel"/>
+                    <i class="fa fa-angle-up opacity-50" aria-hidden="true"/>
+                </summary>
+                <div class="o_ai_assistant_autonomy_menu" role="menu"
+                    aria-label="Nivel de autonomía">
+                    <div class="o_ai_assistant_autonomy_menu_title small text-muted px-3 pt-2 pb-1">
+                        ¿Cuándo debe pedir aprobación?
+                    </div>
+                    <button type="button" role="menuitem" data-profile="strict"
+                        class="o_ai_assistant_autonomy_option"
+                        t-on-click="selectAutonomyProfile">
+                        <span class="o_ai_assistant_autonomy_option_icon"><i class="fa fa-hand-paper-o" aria-hidden="true"/></span>
+                        <span class="min-w-0 flex-grow-1">
+                            <span class="d-block fw-semibold">Estricto</span>
+                            <span class="d-block small text-muted">Pide confirmación antes de cualquier cambio.</span>
+                        </span>
+                        <i t-if="state.autonomyProfile === 'strict'" class="fa fa-check" aria-hidden="true"/>
+                    </button>
+                    <button type="button" role="menuitem" data-profile="balanced"
+                        class="o_ai_assistant_autonomy_option"
+                        t-on-click="selectAutonomyProfile">
+                        <span class="o_ai_assistant_autonomy_option_icon"><i class="fa fa-balance-scale" aria-hidden="true"/></span>
+                        <span class="min-w-0 flex-grow-1">
+                            <span class="d-block fw-semibold">Equilibrado</span>
+                            <span class="d-block small text-muted">Trabaja solo; confirma operaciones de riesgo alto.</span>
+                        </span>
+                        <i t-if="state.autonomyProfile === 'balanced'" class="fa fa-check" aria-hidden="true"/>
+                    </button>
+                    <button type="button" role="menuitem" data-profile="autonomous"
+                        class="o_ai_assistant_autonomy_option"
+                        t-on-click="selectAutonomyProfile">
+                        <span class="o_ai_assistant_autonomy_option_icon"><i class="fa fa-bolt" aria-hidden="true"/></span>
+                        <span class="min-w-0 flex-grow-1">
+                            <span class="d-block fw-semibold">Autónomo</span>
+                            <span class="d-block small text-muted">Sólo detiene operaciones protegidas o irreversibles.</span>
+                        </span>
+                        <i t-if="state.autonomyProfile === 'autonomous'" class="fa fa-check" aria-hidden="true"/>
+                    </button>
+                    <button type="button" role="menuitem" data-profile="full_access"
+                        class="o_ai_assistant_autonomy_option o_ai_assistant_autonomy_option_full"
+                        t-on-click="selectAutonomyProfile">
+                        <span class="o_ai_assistant_autonomy_option_icon"><i class="fa fa-unlock-alt" aria-hidden="true"/></span>
+                        <span class="min-w-0 flex-grow-1">
+                            <span class="d-block fw-semibold">Acceso completo</span>
+                            <span class="d-block small text-muted">Sin confirmaciones adicionales del Assistant. Se mantienen los permisos de Odoo.</span>
+                        </span>
+                        <i t-if="state.autonomyProfile === 'full_access'" class="fa fa-check" aria-hidden="true"/>
+                    </button>
+                </div>
+            </details>
+        </xpath>
+    </t>
+</templates>
