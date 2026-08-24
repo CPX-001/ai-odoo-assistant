@@ -31,6 +31,7 @@ from .assistant_bridge import (
     _error,
     _turn_timeout,
 )
+from .chat_preferences import recent_chat_limit
 
 _CHAT_WORKFLOWS = frozenset({"GENERAL", "EXPLAIN", "QUERY", "HOW_TO", "ACTION"})
 _MAX_ROUTE_MODELS = 128
@@ -107,6 +108,7 @@ class AssistantChatBridge(models.AbstractModel):
                 {
                     "actor": self._chat_actor(),
                     "conversation_id": parsed_id,
+                    "max_conversations": recent_chat_limit(self.env),
                     "max_messages": 40,
                 }
             )
