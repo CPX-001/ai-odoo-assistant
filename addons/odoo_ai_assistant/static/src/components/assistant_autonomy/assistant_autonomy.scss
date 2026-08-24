@@ -44,7 +44,8 @@
         z-index: 20;
         right: 0;
         bottom: calc(100% + 0.5rem);
-        width: min(23rem, calc(100vw - 2rem));
+        width: calc(100vw - 2rem);
+        max-width: 23rem;
         overflow: hidden;
         border: 1px solid var(--bs-border-color, #dee2e6);
         border-radius: 0.75rem;
