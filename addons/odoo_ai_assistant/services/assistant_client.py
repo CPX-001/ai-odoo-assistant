@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import ipaddress
 import json
+import re
 import stat
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ from urllib.parse import urlsplit
 MAX_REQUEST_BYTES = 16 * 1024
 MAX_RESPONSE_BYTES = 128 * 1024
 SHARED_SECRET_HEADER = "X-Odoo-AI-Shared-Secret"
+_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 
 
 class AssistantServiceError(RuntimeError):
@@ -62,6 +64,25 @@ class AssistantServiceClient:
         self._port = port
         self._shared_secret_file = shared_secret_file
         self._timeout = timeout
+        self._reasoning_model: str | None = None
+
+    def bind_reasoning_model(self, model: str | None):
+        if model is not None and not _MODEL_PATTERN.fullmatch(model):
+            raise AssistantServiceError("configuration_invalid")
+        self._reasoning_model = model
+        return self
+
+    def _with_reasoning_model(self, payload: dict[str, object]) -> dict[str, object]:
+        if self._reasoning_model is None:
+            return payload
+        user = payload.get("user")
+        if not isinstance(user, dict):
+            return payload
+        result = dict(payload)
+        bound_user = dict(user)
+        bound_user["reasoning_model"] = self._reasoning_model
+        result["user"] = bound_user
+        return result
 
     def health(self) -> dict[str, Any]:
         payload = self._get_json("/health")
@@ -76,8 +97,6 @@ class AssistantServiceClient:
         )
 
     def diagnostics_matrix(self) -> dict[str, Any]:
-        """Read the versioned M7 administrator diagnostics matrix."""
-
         return self._admin_get("/v1/admin/diagnostics")
 
     def maintenance_status(self) -> dict[str, Any]:
@@ -113,18 +132,12 @@ class AssistantServiceClient:
         )
 
     def configuration_snapshot(self) -> dict[str, Any]:
-        """Read the sanitized M7 configuration snapshot server-to-server."""
-
         return self._admin_get("/v1/admin/configuration")
 
     def configuration_validate(self, payload: dict[str, object]) -> dict[str, Any]:
-        """Validate only the closed ADMIN_MUTABLE configuration payload."""
-
         return self._admin_post("/v1/admin/configuration/validate", payload)
 
     def configuration_apply(self, payload: dict[str, object]) -> dict[str, Any]:
-        """Apply one revision-guarded ADMIN_MUTABLE configuration payload."""
-
         return self._admin_post("/v1/admin/configuration/apply", payload)
 
     def source_status(self) -> dict[str, Any]:
@@ -146,33 +159,21 @@ class AssistantServiceClient:
         )
 
     def context_read(self, payload: dict[str, object]) -> dict[str, Any]:
-        """Submit one bounded server-to-server M2 contextual read turn."""
-
         return self._turn_post("/v1/turns/context-read", payload)
 
     def explain(self, payload: dict[str, object]) -> dict[str, Any]:
-        """Submit one bounded server-to-server M4 EXPLAIN turn."""
-
         return self._turn_post("/v1/turns/explain", payload)
 
     def query(self, payload: dict[str, object]) -> dict[str, Any]:
-        """Submit one bounded server-to-server M5 QUERY turn."""
-
         return self._turn_post("/v1/turns/query", payload)
 
     def how_to(self, payload: dict[str, object]) -> dict[str, Any]:
-        """Submit one bounded server-to-server M5 HOW_TO turn."""
-
         return self._turn_post("/v1/turns/how-to", payload)
 
     def action(self, payload: dict[str, object]) -> dict[str, Any]:
-        """Submit one p1-bound preview-only ACTION turn."""
-
         return self._turn_post("/v1/turns/action", payload)
 
     def action_decision(self, payload: dict[str, object]) -> dict[str, Any]:
-        """Submit one host-derived approve/reject command outside reasoning."""
-
         return self._admin_post("/v1/actions/decision-execute", payload)
 
     def _turn_post(
@@ -190,7 +191,7 @@ class AssistantServiceClient:
         secret = self._read_shared_secret()
         try:
             body = json.dumps(
-                payload,
+                self._with_reasoning_model(payload),
                 allow_nan=False,
                 ensure_ascii=False,
                 separators=(",", ":"),
