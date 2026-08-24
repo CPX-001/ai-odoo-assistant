@@ -8,9 +8,9 @@ import re
 from sqlalchemy.exc import SQLAlchemyError
 
 from odoo_ai.adapters.chat_routing import CodexChatRoutingInterpreter
-from odoo_ai.adapters.codex_engine import CodexAppServerEngine
 from odoo_ai.adapters.codex_runtime import CodexRuntimeSettings
 from odoo_ai.adapters.source_tools import SourceToolExecutorFactory, source_tool_specs
+from odoo_ai.adapters.user_model_engine import UserSelectableCodexAppServerEngine as CodexAppServerEngine
 from odoo_ai.application.chat_routing import ChatRoutingService
 from odoo_ai.application.general_chat import GeneralChatService
 from odoo_ai.contracts import (
@@ -284,7 +284,7 @@ def create_runtime_chat_routing_service() -> ChatRoutingService:
     database_settings = DatabaseSettings.from_env()
     codex_settings = CodexRuntimeSettings.from_env()
     context = RuntimeChatRoutingContext(database_settings=database_settings)
-    interpreter = CodexChatRoutingInterpreter(CodexAppServerEngine(codex_settings))
+    interpreter = CodexChatRoutingInterpreter(BaseCodexAppServerEngine(codex_settings))
     return ChatRoutingService(
         interpreter=interpreter,
         history_loader=context.history,
