@@ -11,11 +11,13 @@
     </t>
 
     <t t-name="odoo_ai_assistant.AssistantPanel">
-        <aside t-if="state.isOpen"
-            class="o_ai_assistant_panel position-fixed end-0 bottom-0 border-start shadow d-flex flex-column"
+        <aside t-if="state.isOpen" t-ref="panel"
+            t-att-class="panelClass" t-att-style="panelStyle"
             aria-label="AI Assistant">
             <header class="o_ai_assistant_header border-bottom px-3 py-2">
-                <div class="d-flex align-items-center justify-content-between gap-2">
+                <div class="o_ai_assistant_drag_handle d-flex align-items-center justify-content-between gap-2"
+                    t-on-pointerdown="startDrag" t-on-pointermove="dragPanel"
+                    t-on-pointerup="endDrag" t-on-pointercancel="endDrag">
                     <div class="min-w-0">
                         <h2 class="h5 mb-0">AI Assistant</h2>
                         <small class="text-muted text-truncate d-block" t-esc="contextLabel"/>
@@ -26,12 +28,19 @@
                             <i class="fa fa-plus" aria-hidden="true"/>
                         </button>
                         <button type="button" class="btn btn-sm btn-link text-body"
+                            t-att-title="ui.isMinimized ? 'Restaurar' : 'Minimizar'"
+                            t-att-aria-label="ui.isMinimized ? 'Restaurar AI Assistant' : 'Minimizar AI Assistant'"
+                            t-on-click="toggleMinimized">
+                            <i t-att-class="'fa ' + (ui.isMinimized ? 'fa-window-maximize' : 'fa-minus')"
+                                aria-hidden="true"/>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-link text-body"
                             aria-label="Cerrar AI Assistant" title="Cerrar" t-on-click="closePanel">
                             <i class="fa fa-times" aria-hidden="true"/>
                         </button>
                     </div>
                 </div>
-                <div class="mt-2">
+                <div t-if="!ui.isMinimized" class="mt-2">
                     <select class="form-select form-select-sm" aria-label="Historial de chats"
                         t-att-disabled="state.loading or state.historyLoading or state.decisionLoading"
                         t-on-change="selectConversation">
@@ -45,7 +54,8 @@
                 </div>
             </header>
 
-            <div class="o_ai_assistant_messages flex-grow-1 overflow-auto p-3" aria-live="polite">
+            <div t-if="!ui.isMinimized"
+                class="o_ai_assistant_messages flex-grow-1 overflow-auto p-3" aria-live="polite">
                 <div t-if="state.historyLoading and !state.messages.length"
                     class="text-center text-muted py-5">
                     <i class="fa fa-spinner fa-spin me-1" aria-hidden="true"/> Cargando historial…
@@ -130,7 +140,7 @@
 
                     <ul t-if="state.result.proposal.warnings.length" class="small mt-2 mb-0">
                         <li t-foreach="state.result.proposal.warnings" t-as="warning"
-                            t-key="warning_index" t-esc="warning"/>
+                            t-key="limitation_index" t-esc="warning"/>
                     </ul>
                     <div class="small text-muted mt-2">
                         Caduca: <t t-esc="state.result.proposal.expires_at"/>
@@ -160,7 +170,8 @@
                 </details>
             </div>
 
-            <form class="o_ai_assistant_composer border-top p-3" t-on-submit.prevent="submit">
+            <form t-if="!ui.isMinimized"
+                class="o_ai_assistant_composer border-top p-3" t-on-submit.prevent="submit">
                 <textarea id="o_ai_assistant_question" class="form-control mb-2"
                     rows="3" maxlength="4000"
                     placeholder="Pregunta o pide una operación en Odoo…"
