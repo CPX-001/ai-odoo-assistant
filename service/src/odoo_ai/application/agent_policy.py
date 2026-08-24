@@ -22,7 +22,7 @@ from odoo_ai.contracts.agent_turn import (
     RiskLevel,
 )
 
-POLICY_REVISION = "agent-policy-v1"
+POLICY_REVISION = "agent-policy-v2"
 _MODE_ORDER = {
     ConfirmationMode.ALWAYS_CONFIRM: 0,
     ConfirmationMode.RISK_BASED: 1,
@@ -245,12 +245,8 @@ def _requires_confirmation(
 ) -> bool:
     if not has_writes:
         return False
-    if risk is RiskLevel.PROTECTED:
-        return True
     if policy.confirmation_mode is ConfirmationMode.ALWAYS_CONFIRM:
         return True
-    if policy.confirmation_mode is ConfirmationMode.PROTECTED_ONLY:
-        return False
     return _RISK_ORDER[risk] > _RISK_ORDER[policy.max_auto_risk]
 
 
