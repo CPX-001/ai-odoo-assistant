@@ -3,16 +3,14 @@
         min-height: 0;
         overscroll-behavior: contain;
         scrollbar-gutter: stable;
-        background: linear-gradient(
-            180deg,
-            color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 96%, var(--o-ai-accent) 4%),
-            var(--o-view-background-color, var(--bs-body-bg)) 14rem
-        );
+        background: var(--o-ai-surface);
+        background-color: var(--o-ai-surface);
         animation: o-ai-history-enter 160ms ease-out both;
     }
 
     .o_ai_assistant_history_intro {
-        padding: var(--o-ai-space-1, 0.25rem) var(--o-ai-space-1, 0.25rem) 0;
+        min-height: 1.75rem;
+        padding-inline: var(--o-ai-space-1, 0.25rem);
     }
 
     .o_ai_assistant_history_search {
@@ -31,7 +29,7 @@
             min-height: 2.25rem;
             padding-left: 2rem;
             border-radius: var(--o-ai-control-radius, 0.55rem);
-            background-color: var(--o-view-background-color, var(--bs-body-bg));
+            background-color: var(--o-ai-surface);
         }
     }
 
@@ -44,9 +42,9 @@
         gap: var(--o-ai-space-3, 0.75rem);
         padding: var(--o-ai-space-3, 0.75rem) 0.85rem;
         overflow: hidden;
-        border-color: var(--bs-border-color) !important;
+        border-color: var(--bs-border-color, #dee2e6) !important;
         border-radius: 0.7rem;
-        background-color: var(--o-view-background-color, var(--bs-body-bg));
+        background-color: var(--o-ai-surface);
         color: inherit;
         box-shadow: $box-shadow-sm;
         transition:
@@ -58,8 +56,8 @@
         &:not(:disabled):hover,
         &:not(:disabled):focus-visible {
             transform: translateY(-1px);
-            border-color: color-mix(in srgb, var(--o-ai-accent) 45%, var(--bs-border-color)) !important;
-            background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 96%, var(--o-ai-accent) 4%);
+            border-color: color-mix(in srgb, var(--o-ai-accent) 45%, var(--bs-border-color, #dee2e6)) !important;
+            background-color: color-mix(in srgb, var(--o-ai-surface) 96%, var(--o-ai-accent) 4%);
             box-shadow: $box-shadow;
             outline: none;
         }
@@ -77,8 +75,8 @@
 
     .o_ai_assistant_history_item_new {
         min-height: 4.6rem;
-        border-color: color-mix(in srgb, var(--o-ai-accent) 62%, var(--bs-border-color)) !important;
-        background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 92%, var(--o-ai-accent) 8%);
+        border-color: color-mix(in srgb, var(--o-ai-accent) 62%, var(--bs-border-color, #dee2e6)) !important;
+        background-color: color-mix(in srgb, var(--o-ai-surface) 92%, var(--o-ai-accent) 8%);
 
         .o_ai_assistant_history_icon {
             background-color: var(--o-ai-accent);
@@ -87,8 +85,8 @@
     }
 
     .o_ai_assistant_history_item_active {
-        border-color: color-mix(in srgb, var(--o-ai-accent) 50%, var(--bs-border-color)) !important;
-        background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 94%, var(--o-ai-accent) 6%);
+        border-color: color-mix(in srgb, var(--o-ai-accent) 50%, var(--bs-border-color, #dee2e6)) !important;
+        background-color: color-mix(in srgb, var(--o-ai-surface) 94%, var(--o-ai-accent) 6%);
 
         &::before {
             position: absolute;
@@ -108,7 +106,7 @@
         height: 2.15rem;
         border-radius: 0.6rem;
         background-color: var(--o-ai-gray-100);
-        color: var(--bs-secondary-color);
+        color: var(--bs-secondary-color, #6c757d);
         transition: transform 140ms ease;
     }
 
@@ -121,9 +119,9 @@
     }
 
     .o_ai_assistant_history_empty {
-        border: 1px dashed var(--bs-border-color);
+        border: 1px dashed var(--bs-border-color, #dee2e6);
         border-radius: 0.7rem;
-        background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 97%, var(--o-ai-gray-200) 3%);
+        background-color: color-mix(in srgb, var(--o-ai-surface) 97%, var(--o-ai-gray-200) 3%);
     }
 
     .o_ai_assistant_history_button {
