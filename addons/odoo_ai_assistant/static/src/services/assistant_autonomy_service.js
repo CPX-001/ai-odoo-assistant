@@ -78,22 +78,12 @@ patch(assistantPanelService, {
             }
         };
 
-        const baseOpen = panel.open.bind(panel);
-        const baseToggle = panel.toggle.bind(panel);
+        // Load once when the web client service starts. This avoids depending on the
+        // order in which other frontend patches wrap open()/toggle().
+        void loadAutonomyProfile();
 
         return {
             ...panel,
-            open() {
-                baseOpen();
-                void loadAutonomyProfile();
-            },
-            toggle() {
-                const wasOpen = panel.state.isOpen;
-                baseToggle();
-                if (!wasOpen && panel.state.isOpen) {
-                    void loadAutonomyProfile();
-                }
-            },
             loadAutonomyProfile,
             setAutonomyProfile,
         };
