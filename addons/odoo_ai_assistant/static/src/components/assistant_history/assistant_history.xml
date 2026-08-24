@@ -71,23 +71,23 @@
 
     <t t-name="odoo_ai_assistant.AssistantPanelHistoryUX"
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
-        <xpath expr="//button[@title='Nuevo chat']" position="before">
-            <button type="button"
-                t-att-class="'btn btn-sm btn-link text-body o_ai_assistant_history_button' + (state.historyView ? ' active' : '')"
-                title="Historial de chats" aria-label="Abrir historial de chats"
-                t-att-aria-pressed="state.historyView ? 'true' : 'false'"
-                t-att-disabled="state.loading or state.historyLoading or state.decisionLoading"
-                t-on-click="showHistory">
-                <i class="fa fa-history" aria-hidden="true"/>
-            </button>
-        </xpath>
-
         <xpath expr="//button[@title='Nuevo chat']" position="attributes">
             <attribute name="t-if">!state.historyView</attribute>
             <attribute name="t-att-disabled">state.loading or state.historyLoading or state.decisionLoading</attribute>
         </xpath>
 
-        <xpath expr="//div[select[@aria-label='Historial de chats']]" position="replace"/>
+        <xpath expr="//div[select[@aria-label='Historial de chats']]" position="replace">
+            <div t-if="!ui.isMinimized and !state.historyView"
+                class="o_ai_assistant_context_nav d-flex align-items-center">
+                <button type="button"
+                    class="btn btn-sm btn-link text-body o_ai_assistant_history_button px-1"
+                    title="Volver al historial" aria-label="Volver al historial"
+                    t-att-disabled="state.loading or state.historyLoading or state.decisionLoading"
+                    t-on-click="showHistory">
+                    <i class="fa fa-arrow-left" aria-hidden="true"/>
+                </button>
+            </div>
+        </xpath>
 
         <xpath expr="//div[contains(@class, 'o_ai_assistant_messages')]" position="before">
             <AssistantHistory t-if="!ui.isMinimized and state.historyView"/>
