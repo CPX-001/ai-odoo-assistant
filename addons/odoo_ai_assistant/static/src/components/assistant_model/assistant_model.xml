@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="odoo_ai_assistant.AssistantPanelModelPicker"
+        t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
+        <xpath expr="//div[contains(@class, 'o_ai_assistant_drag_handle')]" position="after">
+            <div t-if="!ui.isMinimized"
+                class="o_ai_assistant_model_picker d-flex align-items-center gap-2 mt-2">
+                <span class="o_ai_assistant_model_picker_label small text-muted d-flex align-items-center gap-1">
+                    <i class="fa fa-code" aria-hidden="true"/>
+                    <span>Modelo</span>
+                </span>
+                <select class="form-select form-select-sm flex-grow-1"
+                    aria-label="Modelo de Codex"
+                    t-att-disabled="state.modelLoading or state.modelSaving or state.loading or !state.modelOptions.length"
+                    t-on-change="selectReasoningModel">
+                    <option value="" t-att-selected="!state.selectedReasoningModel">
+                        Predeterminado<t t-if="state.defaultReasoningModel"> · <t t-esc="state.defaultReasoningModel"/></t>
+                    </option>
+                    <option t-foreach="state.modelOptions" t-as="modelOption"
+                        t-key="modelOption.model" t-att-value="modelOption.model"
+                        t-att-selected="modelOption.model === state.selectedReasoningModel">
+                        <t t-esc="modelOption.display_name"/>
+                    </option>
+                </select>
+                <i t-if="state.modelLoading or state.modelSaving"
+                    class="fa fa-spinner fa-spin text-muted" aria-hidden="true"/>
+            </div>
+        </xpath>
+
+        <xpath expr="//button[@aria-label='Cerrar AI Assistant']" position="before">
+            <button t-if="state.canManageAssistantSettings" type="button"
+                class="btn btn-sm btn-link text-body o_ai_assistant_settings_shortcut"
+                aria-label="Abrir configuración de AI Assistant"
+                title="Configuración de AI Assistant"
+                t-on-click="openAssistantSettings">
+                <i class="fa fa-cog" aria-hidden="true"/>
+            </button>
+        </xpath>
+    </t>
+</templates>
