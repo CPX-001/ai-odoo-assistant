@@ -43,6 +43,7 @@ class ChatHistoryRequest(BaseModel):
 
     actor: ChatActor
     conversation_id: UUID | None = None
+    max_conversations: int = Field(default=15, ge=5, le=50)
     max_messages: int = Field(default=40, ge=1, le=80)
 
 
