@@ -1,7 +1,14 @@
 import { expect, test } from "@odoo/hoot";
-import "@odoo_ai_assistant/services/assistant_history_service";
+import {
+    ACTIVE_CHAT_TTL_MS,
+    activeChatStorageKey,
+    clearRecentActiveChat,
+    loadRecentActiveChat,
+    saveRecentActiveChat,
+} from "@odoo_ai_assistant/services/assistant_history_service";
 import { assistantPanelService } from "@odoo_ai_assistant/services/assistant_panel_service";
 
+const CONVERSATION_ID = "22345678-1234-4678-9234-567812345678";
 const SCREEN_CONTEXT = {
     capture() {
         return {
@@ -17,7 +24,17 @@ const SCREEN_CONTEXT = {
     },
 };
 
-test("history is the initial view until the user explicitly starts a chat", () => {
+function memoryStorage() {
+    const values = new Map();
+    return {
+        getItem: (key) => values.get(key) ?? null,
+        setItem: (key, value) => values.set(key, value),
+        removeItem: (key) => values.delete(key),
+    };
+}
+
+test("history is the initial view without a recent same-tab conversation", () => {
+    clearRecentActiveChat(globalThis.sessionStorage);
     const panel = assistantPanelService.start({}, { odoo_ai_screen_context: SCREEN_CONTEXT });
 
     expect(panel.state.historyView).toBe(true);
@@ -26,7 +43,25 @@ test("history is the initial view until the user explicitly starts a chat", () =
     panel.newConversation();
     expect(panel.state.historyView).toBe(false);
     expect(panel.state.conversationId).toBe(null);
+});
 
-    panel.showHistory();
-    expect(panel.state.historyView).toBe(true);
+test("recent active chat cache is restored only while fresh", () => {
+    const storage = memoryStorage();
+    const now = 1_000_000;
+
+    expect(saveRecentActiveChat(storage, CONVERSATION_ID, now)).toBe(true);
+    expect(loadRecentActiveChat(storage, now + ACTIVE_CHAT_TTL_MS - 1)).toBe(CONVERSATION_ID);
+    expect(loadRecentActiveChat(storage, now + ACTIVE_CHAT_TTL_MS + 1)).toBe(null);
+    expect(storage.getItem(activeChatStorageKey())).toBe(null);
+});
+
+test("a recent conversation in this tab starts as active", () => {
+    clearRecentActiveChat(globalThis.sessionStorage);
+    saveRecentActiveChat(globalThis.sessionStorage, CONVERSATION_ID);
+
+    const panel = assistantPanelService.start({}, { odoo_ai_screen_context: SCREEN_CONTEXT });
+
+    expect(panel.state.historyView).toBe(false);
+    expect(panel.state.conversationId).toBe(CONVERSATION_ID);
+    clearRecentActiveChat(globalThis.sessionStorage);
 });
