@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="odoo_ai_assistant.AssistantHistory">
+        <section class="o_ai_assistant_history flex-grow-1 overflow-auto p-3" aria-label="Historial de chats">
+            <div class="o_ai_assistant_history_intro mb-3">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="fa fa-history text-muted" aria-hidden="true"/>
+                    <h3 class="h6 mb-0">Chats recientes</h3>
+                </div>
+                <p class="small text-muted mb-0">
+                    Abre una conversación anterior o empieza una nueva.
+                </p>
+            </div>
+
+            <div class="o_ai_assistant_history_list d-flex flex-column gap-2">
+                <button type="button"
+                    class="o_ai_assistant_history_item o_ai_assistant_history_item_new text-start border"
+                    t-att-disabled="isBusy" t-on-click="newConversation">
+                    <span class="o_ai_assistant_history_icon d-inline-flex align-items-center justify-content-center">
+                        <i class="fa fa-plus" aria-hidden="true"/>
+                    </span>
+                    <span class="min-w-0 flex-grow-1">
+                        <span class="d-block fw-semibold">Nuevo chat</span>
+                        <span class="d-block small opacity-75">Inicia una conversación limpia</span>
+                    </span>
+                    <i class="fa fa-chevron-right opacity-50" aria-hidden="true"/>
+                </button>
+
+                <div t-if="state.historyLoading" class="o_ai_assistant_history_loading text-center text-muted py-4">
+                    <i class="fa fa-spinner fa-spin me-1" aria-hidden="true"/> Cargando conversaciones…
+                </div>
+
+                <div t-elif="!conversations.length" class="o_ai_assistant_history_empty text-center px-3 py-4">
+                    <i class="fa fa-comments-o fa-2x text-muted mb-2" aria-hidden="true"/>
+                    <div class="fw-semibold">Todavía no hay conversaciones</div>
+                    <div class="small text-muted">El historial aparecerá aquí después de tu primer chat.</div>
+                </div>
+
+                <button t-else="" t-foreach="conversations" t-as="conversation"
+                    t-key="conversation.conversation_id" type="button"
+                    t-att-class="'o_ai_assistant_history_item text-start border' + (conversation.conversation_id === state.conversationId ? ' o_ai_assistant_history_item_active' : '')"
+                    t-att-disabled="isBusy"
+                    t-on-click="() => this.selectConversation(conversation.conversation_id)">
+                    <span class="o_ai_assistant_history_icon d-inline-flex align-items-center justify-content-center">
+                        <i class="fa fa-comment-o" aria-hidden="true"/>
+                    </span>
+                    <span class="min-w-0 flex-grow-1">
+                        <span class="o_ai_assistant_history_title d-block fw-semibold text-truncate"
+                            t-esc="conversation.title"/>
+                        <span class="d-block small text-muted">
+                            <t t-esc="formatUpdatedAt(conversation.updated_at)"/>
+                        </span>
+                    </span>
+                    <i class="fa fa-chevron-right opacity-25" aria-hidden="true"/>
+                </button>
+            </div>
+        </section>
+    </t>
+
+    <t t-name="odoo_ai_assistant.AssistantPanelHistoryUX"
+        t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
+        <xpath expr="//header[contains(@class, 'o_ai_assistant_header')]/div[2]" position="replace">
+            <div t-if="!ui.isMinimized" class="o_ai_assistant_history_toolbar mt-2">
+                <button t-if="!state.historyView" type="button"
+                    class="btn btn-sm btn-outline-secondary o_ai_assistant_history_button"
+                    t-on-click="showHistory">
+                    <i class="fa fa-history me-1" aria-hidden="true"/> Historial
+                </button>
+                <div t-else="" class="small text-muted d-flex align-items-center gap-1">
+                    <i class="fa fa-history" aria-hidden="true"/>
+                    <span>Conversaciones recientes</span>
+                </div>
+            </div>
+        </xpath>
+
+        <xpath expr="//div[contains(@class, 'o_ai_assistant_messages')]" position="before">
+            <AssistantHistory t-if="!ui.isMinimized and state.historyView"/>
+        </xpath>
+        <xpath expr="//div[contains(@class, 'o_ai_assistant_messages')]" position="attributes">
+            <attribute name="t-if">!ui.isMinimized and !state.historyView</attribute>
+        </xpath>
+        <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]" position="attributes">
+            <attribute name="t-if">!ui.isMinimized and !state.historyView</attribute>
+        </xpath>
+    </t>
+</templates>
