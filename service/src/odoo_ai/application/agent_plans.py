@@ -187,7 +187,7 @@ class AgentPlanService:
         *,
         plan_id: UUID,
         step_id: str,
-        state: Literal["completed", "failed", "skipped"],
+        state: Literal["completed", "partial", "failed", "skipped"],
         receipt: dict[str, object] | None = None,
         error_code: str | None = None,
     ) -> None:
