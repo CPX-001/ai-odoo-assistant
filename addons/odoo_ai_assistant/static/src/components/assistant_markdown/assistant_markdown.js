@@ -1,6 +1,7 @@
 /** @odoo-module **/
 
 import { Component } from "@odoo/owl";
+import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
 import { parseMarkdown } from "@odoo_ai_assistant/components/assistant_markdown/assistant_markdown_parser";
 
@@ -14,12 +15,23 @@ export class AssistantMarkdown extends Component {
     static props = { content: String };
     static components = { AssistantMarkdownInline };
 
+    setup() {
+        this._cachedContent = null;
+        this._cachedBlocks = [];
+    }
+
     get blocks() {
-        return parseMarkdown(this.props.content);
+        if (this._cachedContent !== this.props.content) {
+            this._cachedContent = this.props.content;
+            this._cachedBlocks = parseMarkdown(this.props.content);
+        }
+        return this._cachedBlocks;
     }
 }
 
-AssistantPanel.components = {
-    ...(AssistantPanel.components || {}),
-    AssistantMarkdown,
-};
+patch(AssistantPanel, {
+    components: {
+        ...(AssistantPanel.components || {}),
+        AssistantMarkdown,
+    },
+});
