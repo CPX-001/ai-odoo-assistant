@@ -17,6 +17,8 @@ _AUTONOMY_PROFILES = {
     "autonomous": ("protected_only", "high"),
     "full_access": ("protected_only", "protected"),
 }
+_LEGACY_MODES = {"always_confirm", "risk_based", "protected_only"}
+_LEGACY_RISKS = {"low", "moderate", "high"}
 
 
 class AssistantUserPreference(models.Model):
@@ -262,19 +264,26 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
 
     @api.model
     def agent_policy_preferences(self):
+        """Compatibility response for cached pre-profile frontend assets."""
         if not self.env.user._is_internal():
             return _error("access_denied")
         policy = self.env["odoo.ai.user.preference"].current_agent_policy()
+        legacy_risk = policy["max_auto_risk"]
+        if legacy_risk == "protected":
+            legacy_risk = "high"
         return {
             "ok": True,
             "confirmation_mode": policy["confirmation_mode"],
-            "max_auto_risk": policy["max_auto_risk"],
+            "max_auto_risk": legacy_risk,
         }
 
     @api.model
     def set_agent_policy_preferences(self, confirmation_mode, max_auto_risk):
+        """Compatibility write path for cached pre-profile frontend assets."""
         if not self.env.user._is_internal():
             return _error("access_denied")
+        if confirmation_mode not in _LEGACY_MODES or max_auto_risk not in _LEGACY_RISKS:
+            return _error("invalid_context")
         profile = _profile_from_legacy(confirmation_mode, max_auto_risk)
         try:
             selected = self.env["odoo.ai.user.preference"].set_current_agent_profile(profile)
@@ -284,7 +293,7 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
         return {
             "ok": True,
             "confirmation_mode": mode,
-            "max_auto_risk": risk,
+            "max_auto_risk": "high" if risk == "protected" else risk,
         }
 
 
