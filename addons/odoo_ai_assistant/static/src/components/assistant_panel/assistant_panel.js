@@ -3,7 +3,107 @@
 import { _t } from "@web/core/l10n/translation";
 import { registry } from "@web/core/registry";
 import { useBus, useService } from "@web/core/utils/hooks";
-import { Component, useState } from "@odoo/owl";
+import { Component, onMounted, onPatched, onWillUnmount, useRef, useState } from "@odoo/owl";
+
+const PANEL_MARGIN = 12;
+const PANEL_MIN_WIDTH = 320;
+const PANEL_MIN_HEIGHT = 320;
+const PANEL_STORAGE_VERSION = 1;
+
+function browserStorage() {
+    try {
+        return globalThis.localStorage || null;
+    } catch {
+        return null;
+    }
+}
+
+function panelGeometryStorageKey() {
+    const host = globalThis.location?.host || "odoo";
+    const uid =
+        globalThis.odoo?.session_info?.uid ??
+        globalThis.odoo?.__session_info__?.uid;
+    const userScope = Number.isSafeInteger(uid) && uid > 0 ? String(uid) : "session";
+    return `odoo_ai_assistant:panel_geometry:${host}:${userScope}`;
+}
+
+function finiteNumber(value) {
+    return typeof value === "number" && Number.isFinite(value);
+}
+
+function loadPanelGeometry(storage) {
+    try {
+        const raw = storage?.getItem(panelGeometryStorageKey());
+        if (!raw) {
+            return null;
+        }
+        const parsed = JSON.parse(raw);
+        if (
+            parsed?.version !== PANEL_STORAGE_VERSION ||
+            !finiteNumber(parsed.x) ||
+            !finiteNumber(parsed.y) ||
+            !finiteNumber(parsed.width) ||
+            !finiteNumber(parsed.height)
+        ) {
+            return null;
+        }
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function savePanelGeometry(storage, layout) {
+    if (
+        !layout.initialized ||
+        !finiteNumber(layout.x) ||
+        !finiteNumber(layout.y) ||
+        !finiteNumber(layout.width) ||
+        !finiteNumber(layout.height)
+    ) {
+        return;
+    }
+    try {
+        storage?.setItem(
+            panelGeometryStorageKey(),
+            JSON.stringify({
+                version: PANEL_STORAGE_VERSION,
+                x: Math.round(layout.x),
+                y: Math.round(layout.y),
+                width: Math.round(layout.width),
+                height: Math.round(layout.height),
+            })
+        );
+    } catch {
+        // Browser storage is an optional UX enhancement.
+    }
+}
+
+function clamp(value, minimum, maximum) {
+    if (maximum <= minimum) {
+        return maximum;
+    }
+    return Math.min(Math.max(value, minimum), maximum);
+}
+
+function viewportSize() {
+    return {
+        width: Math.max(
+            0,
+            globalThis.innerWidth || globalThis.document?.documentElement?.clientWidth || 0
+        ),
+        height: Math.max(
+            0,
+            globalThis.innerHeight || globalThis.document?.documentElement?.clientHeight || 0
+        ),
+    };
+}
+
+function navbarBottom() {
+    const navbar = globalThis.document?.querySelector?.(".o_main_navbar");
+    const bottom = navbar?.getBoundingClientRect?.().bottom;
+    return finiteNumber(bottom) && bottom >= 0 ? bottom : 46;
+}
 
 export class AssistantSystray extends Component {
     static template = "odoo_ai_assistant.AssistantSystray";
@@ -26,11 +126,66 @@ export class AssistantPanel extends Component {
     setup() {
         this.panel = useService("odoo_ai_assistant_panel");
         this.state = useState(this.panel.state);
+        this.panelRef = useRef("panel");
+        this.ui = useState({ isMinimized: false });
+        this.layout = useState({
+            initialized: false,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+        });
+        this.storage = browserStorage();
+        this._drag = null;
+        this._resizeObserver = null;
+        this._observedPanel = null;
+        this._wasOpen = false;
+        this._onViewportResize = () => this.constrainPanelToViewport();
+
         useBus(this.env.bus, "ACTION_MANAGER:UI-UPDATED", () => {
             if (this.state.isOpen) {
                 this.panel.refreshContext();
             }
         });
+
+        onMounted(() => {
+            globalThis.addEventListener?.("resize", this._onViewportResize);
+            this.syncPanelElement();
+        });
+        onPatched(() => this.syncPanelElement());
+        onWillUnmount(() => {
+            globalThis.removeEventListener?.("resize", this._onViewportResize);
+            this.disconnectResizeObserver();
+        });
+    }
+
+    get panelClass() {
+        const classes = [
+            "o_ai_assistant_panel",
+            "position-fixed",
+            "shadow",
+            "d-flex",
+            "flex-column",
+        ];
+        if (this.layout.initialized) {
+            classes.push("o_ai_assistant_panel_positioned");
+        }
+        if (this.ui.isMinimized) {
+            classes.push("o_ai_assistant_panel_minimized");
+        }
+        return classes.join(" ");
+    }
+
+    get panelStyle() {
+        if (!this.layout.initialized) {
+            return "";
+        }
+        return [
+            `left:${Math.round(this.layout.x)}px`,
+            `top:${Math.round(this.layout.y)}px`,
+            `width:${Math.round(this.layout.width)}px`,
+            `height:${Math.round(this.layout.height)}px`,
+        ].join(";");
     }
 
     get contextLabel() {
@@ -104,7 +259,175 @@ export class AssistantPanel extends Component {
         return "alert-danger";
     }
 
+    syncPanelElement() {
+        const panel = this.panelRef.el;
+        if (!panel) {
+            if (this._wasOpen) {
+                this.ui.isMinimized = false;
+            }
+            this._wasOpen = false;
+            this.disconnectResizeObserver();
+            return;
+        }
+        this._wasOpen = true;
+        if (!this.layout.initialized) {
+            this.initializePanelGeometry(panel);
+        }
+        this.observePanelResize(panel);
+        this.constrainPanelToViewport();
+    }
+
+    initializePanelGeometry(panel) {
+        const rect = panel.getBoundingClientRect();
+        const stored = loadPanelGeometry(this.storage);
+        const { width: viewportWidth, height: viewportHeight } = viewportSize();
+        const topMinimum = navbarBottom() + PANEL_MARGIN;
+        const maxWidth = Math.max(0, viewportWidth - PANEL_MARGIN * 2);
+        const maxHeight = Math.max(0, viewportHeight - topMinimum - PANEL_MARGIN);
+        const minWidth = Math.min(PANEL_MIN_WIDTH, maxWidth);
+        const minHeight = Math.min(PANEL_MIN_HEIGHT, maxHeight);
+        const width = clamp(stored?.width ?? rect.width, minWidth, maxWidth);
+        const height = clamp(stored?.height ?? rect.height, minHeight, maxHeight);
+        const maxX = Math.max(PANEL_MARGIN, viewportWidth - width - PANEL_MARGIN);
+        const maxY = Math.max(topMinimum, viewportHeight - height - PANEL_MARGIN);
+        const defaultX = maxX;
+        const defaultY = maxY;
+
+        this.layout.x = clamp(stored?.x ?? defaultX, PANEL_MARGIN, maxX);
+        this.layout.y = clamp(stored?.y ?? defaultY, topMinimum, maxY);
+        this.layout.width = width;
+        this.layout.height = height;
+        this.layout.initialized = true;
+        savePanelGeometry(this.storage, this.layout);
+    }
+
+    constrainPanelToViewport() {
+        const panel = this.panelRef.el;
+        if (!panel || !this.layout.initialized) {
+            return;
+        }
+        const { width: viewportWidth, height: viewportHeight } = viewportSize();
+        if (!viewportWidth || !viewportHeight) {
+            return;
+        }
+
+        const topMinimum = navbarBottom() + PANEL_MARGIN;
+        const maxWidth = Math.max(0, viewportWidth - PANEL_MARGIN * 2);
+        const maxHeight = Math.max(0, viewportHeight - topMinimum - PANEL_MARGIN);
+        const minWidth = Math.min(PANEL_MIN_WIDTH, maxWidth);
+        const minHeight = Math.min(PANEL_MIN_HEIGHT, maxHeight);
+
+        if (!this.ui.isMinimized) {
+            this.layout.width = clamp(this.layout.width, minWidth, maxWidth);
+            this.layout.height = clamp(this.layout.height, minHeight, maxHeight);
+        }
+
+        const rect = panel.getBoundingClientRect();
+        const panelWidth = this.ui.isMinimized ? rect.width : this.layout.width;
+        const panelHeight = this.ui.isMinimized ? rect.height : this.layout.height;
+        const maxX = Math.max(PANEL_MARGIN, viewportWidth - panelWidth - PANEL_MARGIN);
+        const maxY = Math.max(topMinimum, viewportHeight - panelHeight - PANEL_MARGIN);
+        this.layout.x = clamp(this.layout.x, PANEL_MARGIN, maxX);
+        this.layout.y = clamp(this.layout.y, topMinimum, maxY);
+        savePanelGeometry(this.storage, this.layout);
+    }
+
+    observePanelResize(panel) {
+        if (this._observedPanel === panel || typeof globalThis.ResizeObserver !== "function") {
+            return;
+        }
+        this.disconnectResizeObserver();
+        this._observedPanel = panel;
+        this._resizeObserver = new globalThis.ResizeObserver(() => {
+            if (this.ui.isMinimized || !this.layout.initialized) {
+                return;
+            }
+            const rect = panel.getBoundingClientRect();
+            const { width: viewportWidth, height: viewportHeight } = viewportSize();
+            const maxWidth = Math.max(0, viewportWidth - this.layout.x - PANEL_MARGIN);
+            const maxHeight = Math.max(0, viewportHeight - this.layout.y - PANEL_MARGIN);
+            const minWidth = Math.min(PANEL_MIN_WIDTH, maxWidth);
+            const minHeight = Math.min(PANEL_MIN_HEIGHT, maxHeight);
+            const width = clamp(rect.width, minWidth, maxWidth);
+            const height = clamp(rect.height, minHeight, maxHeight);
+            if (Math.abs(width - this.layout.width) >= 1) {
+                this.layout.width = width;
+            }
+            if (Math.abs(height - this.layout.height) >= 1) {
+                this.layout.height = height;
+            }
+            savePanelGeometry(this.storage, this.layout);
+        });
+        this._resizeObserver.observe(panel);
+    }
+
+    disconnectResizeObserver() {
+        this._resizeObserver?.disconnect();
+        this._resizeObserver = null;
+        this._observedPanel = null;
+    }
+
+    startDrag(event) {
+        if (
+            event.button !== 0 ||
+            event.target.closest("button, select, input, textarea, a")
+        ) {
+            return;
+        }
+        const panel = this.panelRef.el;
+        if (!panel || !this.layout.initialized) {
+            return;
+        }
+        const rect = panel.getBoundingClientRect();
+        this._drag = {
+            pointerId: event.pointerId,
+            offsetX: event.clientX - rect.left,
+            offsetY: event.clientY - rect.top,
+        };
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+    }
+
+    dragPanel(event) {
+        if (!this._drag || this._drag.pointerId !== event.pointerId) {
+            return;
+        }
+        const panel = this.panelRef.el;
+        if (!panel) {
+            return;
+        }
+        const rect = panel.getBoundingClientRect();
+        const { width: viewportWidth, height: viewportHeight } = viewportSize();
+        const topMinimum = navbarBottom() + PANEL_MARGIN;
+        const maxX = Math.max(PANEL_MARGIN, viewportWidth - rect.width - PANEL_MARGIN);
+        const maxY = Math.max(topMinimum, viewportHeight - rect.height - PANEL_MARGIN);
+        this.layout.x = clamp(
+            event.clientX - this._drag.offsetX,
+            PANEL_MARGIN,
+            maxX
+        );
+        this.layout.y = clamp(
+            event.clientY - this._drag.offsetY,
+            topMinimum,
+            maxY
+        );
+    }
+
+    endDrag(event) {
+        if (!this._drag || this._drag.pointerId !== event.pointerId) {
+            return;
+        }
+        event.currentTarget.releasePointerCapture?.(event.pointerId);
+        this._drag = null;
+        savePanelGeometry(this.storage, this.layout);
+    }
+
+    toggleMinimized() {
+        this.ui.isMinimized = !this.ui.isMinimized;
+    }
+
     closePanel() {
+        this.ui.isMinimized = false;
         this.panel.close();
     }
 
