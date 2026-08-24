@@ -27,6 +27,7 @@ def test_history_landing_lists_conversations_without_loading_messages() -> None:
         session,
         actor=ChatActor(database="customer", uid=7),
         conversation_id=None,
+        max_conversations=15,
         max_messages=40,
     )
 
@@ -51,6 +52,7 @@ def test_selected_conversation_loads_only_its_bounded_messages() -> None:
         session,
         actor=ChatActor(database="customer", uid=7),
         conversation_id=CONVERSATION_ID,
+        max_conversations=15,
         max_messages=20,
     )
 
