@@ -342,7 +342,15 @@ def _valid_plan_step(value):
         or not isinstance(value.get("title"), str)
         or not value["title"]
         or value.get("state")
-        not in {"planned", "previewed", "executing", "completed", "failed", "skipped"}
+        not in {
+            "planned",
+            "previewed",
+            "executing",
+            "completed",
+            "partial",
+            "failed",
+            "skipped",
+        }
         or value.get("risk") not in {"low", "moderate", "high", "protected"}
         or value.get("effect_scope")
         not in {"read_only", "internal_reversible", "internal_irreversible", "external"}
