@@ -4,7 +4,7 @@ import { rpc } from "@web/core/network/rpc";
 import { patch } from "@web/core/utils/patch";
 import { assistantPanelService } from "@odoo_ai_assistant/services/assistant_panel_service";
 
-const MODEL_PATTERN = /^[A-Za-z0-9_.:/-]{1,128}$/;
+const MODEL_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 const MODEL_CATALOG_TTL_MS = 5 * 60 * 1000;
 
 export function normalizeModelPreferences(response) {
