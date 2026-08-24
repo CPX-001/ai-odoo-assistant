@@ -12,7 +12,7 @@ from enum import StrEnum
 from typing import Annotated, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from odoo_ai.contracts.action import Fingerprint, Revision
 from odoo_ai.contracts.batch import (
@@ -165,6 +165,17 @@ class BatchProposalHandle(BaseModel):
     failure_mode: BatchFailureMode
     source_provider: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,63}$")
     source_display_name: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class BatchProposalTrace(BaseModel):
+    """Host-only binding between one successful preview tool call and its sealed job."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    tool_name: str = Field(min_length=1, max_length=128)
+    arguments: dict[str, JsonValue] = Field(max_length=32)
+    job_id: UUID
+    job_fingerprint: Fingerprint
 
 
 class BatchExecutionContext(BaseModel):
