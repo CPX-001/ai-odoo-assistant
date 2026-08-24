@@ -86,7 +86,7 @@ class AgentPlanStepRecord(Base):
     __table_args__ = (
         CheckConstraint("position >= 0 AND position < 12", name="ck_agent_plan_step_position"),
         CheckConstraint(
-            "state IN ('planned','previewed','executing','completed','failed','skipped')",
+            "state IN ('planned','previewed','executing','completed','partial','failed','skipped')",
             name="ck_agent_plan_step_state",
         ),
         CheckConstraint(
