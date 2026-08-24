@@ -55,6 +55,15 @@ class BatchMutationJobStore(Protocol):
         started_at: datetime,
     ) -> BatchJobTransitionResult: ...
 
+    def mark_execution_unknown(
+        self,
+        *,
+        job_id: UUID,
+        attempt_id: UUID,
+        occurred_at: datetime,
+        error_code: str,
+    ) -> StoredBatchMutationJob: ...
+
     def finish_execution(
         self,
         *,
