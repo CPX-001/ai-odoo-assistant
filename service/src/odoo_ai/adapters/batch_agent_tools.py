@@ -88,6 +88,7 @@ class BatchToolBackend:
         self._allowed_models = set(allowed_models)
         self._proposals: list[BatchProposalHandle] = []
         self._traces: list[BatchProposalTrace] = []
+        self._trace_slots: list[BatchProposalTrace | None] = []
 
     @property
     def proposals(self) -> tuple[BatchProposalHandle, ...]:
@@ -96,6 +97,12 @@ class BatchToolBackend:
     @property
     def traces(self) -> tuple[BatchProposalTrace, ...]:
         return tuple(self._traces)
+
+    @property
+    def trace_slots(self) -> tuple[BatchProposalTrace | None, ...]:
+        """One slot per successful batch tool call, including all-rejected previews."""
+
+        return tuple(self._trace_slots)
 
     def allow_models(self, models: Sequence[str]) -> None:
         self._allowed_models.update(models)
@@ -113,6 +120,7 @@ class BatchToolBackend:
             raise ToolExecutorError(code) from None
 
         handle = None
+        trace = None
         if accepted is not None:
             spec = BatchMutationJobSpec(
                 turn_id=self._turn_id,
@@ -147,17 +155,20 @@ class BatchToolBackend:
                 job_id=handle.job_id,
                 job_fingerprint=handle.job_fingerprint,
             )
-            self._proposals.append(handle)
-            self._traces.append(trace)
 
         issue_preview = result.issues[:MAX_BATCH_ISSUE_PREVIEW]
-        return BatchPreviewToolData(
+        output = BatchPreviewToolData(
             proposal=handle,
             accepted_count=len(result.accepted_source_refs),
             rejected_count=len(result.issues),
             issues=issue_preview,
             issues_truncated=len(issue_preview) < len(result.issues),
         )
+        self._trace_slots.append(trace)
+        if trace is not None and handle is not None:
+            self._proposals.append(handle)
+            self._traces.append(trace)
+        return output
 
 
 def batch_tool_spec() -> ToolSpec:
