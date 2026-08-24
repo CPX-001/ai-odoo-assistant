@@ -20,6 +20,12 @@ from odoo_ai.adapters.action_tools import (
     action_tool_specs,
     build_action_tool_registry,
 )
+from odoo_ai.adapters.batch_agent_tools import (
+    ODOO_PREVIEW_BATCH_MUTATION,
+    BatchToolBackend,
+    batch_tool_spec,
+    build_batch_tool_binding,
+)
 from odoo_ai.adapters.query_tools import (
     ODOO_AGGREGATE_RECORDS,
     ODOO_GET_EFFECTIVE_SCHEMA,
@@ -29,8 +35,11 @@ from odoo_ai.adapters.query_tools import (
     query_tool_specs,
 )
 from odoo_ai.application.action_approval import ActionApprovalService
+from odoo_ai.application.batch_jobs import BatchMutationJobService
+from odoo_ai.application.batch_preflight import BatchPreflightService
 from odoo_ai.application.query_primitives import QueryPrimitiveService
 from odoo_ai.contracts import (
+    ActionProposalTrace,
     ActionToolReport,
     AgentModelSearchRequest,
     AgentModelSearchResult,
@@ -42,7 +51,10 @@ from odoo_ai.contracts import (
     ToolRisk,
     ToolSpec,
 )
+from odoo_ai.contracts.batch_job import BatchProposalTrace
+from odoo_ai.contracts.chat import ChatActor
 from odoo_ai.ports import OdooActionPreviewGateway, OdooQueryGateway
+from odoo_ai.ports.batch_preflight import BatchPreflightGateway
 from odoo_ai.tools import (
     EvidenceLedger,
     RegisteredTool,
@@ -58,6 +70,16 @@ _AGENT_TOOL_RISKS = frozenset(
 )
 ODOO_SEARCH_MODELS = "odoo.search_models"
 _SEARCH_MODELS_EXECUTOR_ID = "odoo.search_models.v1"
+_ACTION_PREVIEW_TOOL_NAMES = frozenset(
+    {
+        ODOO_PREVIEW_RECORD_CREATE,
+        ODOO_PREVIEW_RECORD_PATCH,
+        ODOO_PREVIEW_BUSINESS_ACTION,
+        ODOO_PREVIEW_RECORD_ARCHIVE,
+        ODOO_PREVIEW_RECORD_DELETE,
+        ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW,
+    }
+)
 
 
 class AgentModelSearchToolData(BaseModel):
@@ -66,8 +88,8 @@ class AgentModelSearchToolData(BaseModel):
     result: AgentModelSearchResult
 
 
-def agent_tool_specs() -> tuple[ToolSpec, ...]:
-    return (
+def agent_tool_specs(*, batch_enabled: bool = False) -> tuple[ToolSpec, ...]:
+    base = (
         ToolSpec(
             name=ODOO_SEARCH_MODELS,
             description=(
@@ -82,11 +104,16 @@ def agent_tool_specs() -> tuple[ToolSpec, ...]:
         *query_tool_specs(),
         *action_tool_specs(),
     )
+    return (*base, batch_tool_spec()) if batch_enabled else base
 
 
-def agent_tool_policy_specs(allowed_models: Sequence[str]) -> tuple[HostToolPolicySpec, ...]:
+def agent_tool_policy_specs(
+    allowed_models: Sequence[str],
+    *,
+    batch_enabled: bool = False,
+) -> tuple[HostToolPolicySpec, ...]:
     models = tuple(dict.fromkeys(allowed_models))
-    return (
+    base = (
         HostToolPolicySpec(
             tool_name=ODOO_SEARCH_MODELS,
             is_write=False,
@@ -196,6 +223,21 @@ def agent_tool_policy_specs(allowed_models: Sequence[str]) -> tuple[HostToolPoli
             allowed_models=(),
         ),
     )
+    if not batch_enabled:
+        return base
+    return (
+        *base,
+        HostToolPolicySpec(
+            tool_name=ODOO_PREVIEW_BATCH_MUTATION,
+            is_write=True,
+            needs_schema=True,
+            effect_scope=EffectScope.INTERNAL_REVERSIBLE,
+            risk_floor=RiskLevel.LOW,
+            atomic=False,
+            max_records=500,
+            allowed_models=models,
+        ),
+    )
 
 
 class UnifiedAgentToolExecutorFactory:
@@ -214,6 +256,10 @@ class UnifiedAgentToolExecutorFactory:
         allowed_company_ids: tuple[int, ...],
         allowed_models: Sequence[str],
         synthetic_data_authorized: bool = False,
+        batch_preflight_gateway: BatchPreflightGateway | None = None,
+        batch_job_service: BatchMutationJobService | None = None,
+        conversation_id: UUID | None = None,
+        policy_revision: str | None = None,
         limits: ToolExecutionLimits | None = None,
     ) -> None:
         self._query_gateway = query_gateway
@@ -226,11 +272,24 @@ class UnifiedAgentToolExecutorFactory:
         self._allowed_company_ids = allowed_company_ids
         self._allowed_models = tuple(dict.fromkeys(allowed_models))
         self._synthetic_data_authorized = synthetic_data_authorized
+        self._batch_preflight_gateway = batch_preflight_gateway
+        self._batch_job_service = batch_job_service
+        self._conversation_id = conversation_id
+        self._policy_revision = policy_revision
         self._limits = limits or ToolExecutionLimits(
             max_calls=32,
             max_consecutive_failures=3,
         )
         self._last_report = ActionToolReport()
+
+    @property
+    def batch_enabled(self) -> bool:
+        return (
+            self._batch_preflight_gateway is not None
+            and self._batch_job_service is not None
+            and isinstance(self._policy_revision, str)
+            and bool(self._policy_revision)
+        )
 
     @asynccontextmanager
     async def __call__(
@@ -248,6 +307,9 @@ class UnifiedAgentToolExecutorFactory:
         ):
             raise ToolExecutorError("agent_context_mismatch")
         advertised = {spec.name: spec for spec in advertised_specs}
+        batch_advertised = ODOO_PREVIEW_BATCH_MUTATION in advertised
+        if batch_advertised != self.batch_enabled:
+            raise ToolExecutorError("agent_batch_runtime_mismatch")
         query_specs = tuple(
             advertised[name]
             for name in (ODOO_GET_EFFECTIVE_SCHEMA, ODOO_QUERY_RECORDS, ODOO_AGGREGATE_RECORDS)
@@ -287,10 +349,34 @@ class UnifiedAgentToolExecutorFactory:
             restrict_record_target=False,
             synthetic_data_authorized=self._synthetic_data_authorized,
         )
+        batch_backend = None
+        batch_bindings: list[RegisteredTool] = []
+        if self.batch_enabled:
+            assert self._batch_preflight_gateway is not None
+            assert self._batch_job_service is not None
+            assert self._policy_revision is not None
+            batch_backend = BatchToolBackend(
+                preflight=BatchPreflightService(self._batch_preflight_gateway),
+                jobs=self._batch_job_service,
+                turn_id=self._turn_id,
+                conversation_id=self._conversation_id,
+                actor=ChatActor(database=self._database, uid=self._user_id),
+                instance_id=context.instance.instance_id,
+                company_id=self._company_id,
+                allowed_company_ids=self._allowed_company_ids,
+                policy_revision=self._policy_revision,
+                allowed_models=self._allowed_models,
+            )
+            batch_bindings.append(
+                build_batch_tool_binding(
+                    batch_backend,
+                    advertised[ODOO_PREVIEW_BATCH_MUTATION],
+                )
+            )
         search_spec = advertised.get(ODOO_SEARCH_MODELS)
         search_bindings: list[RegisteredTool] = []
         if search_spec is not None:
-            canonical_search = agent_tool_specs()[0]
+            canonical_search = agent_tool_specs(batch_enabled=self.batch_enabled)[0]
             if search_spec.model_dump(mode="json") != canonical_search.model_dump(mode="json"):
                 raise ToolExecutorError("agent_tool_spec_mismatch")
 
@@ -300,6 +386,8 @@ class UnifiedAgentToolExecutorFactory:
                 discovered = tuple(item.model for item in result.models)
                 query_backend.allow_models(discovered)
                 action_backend.allow_models(discovered)
+                if batch_backend is not None:
+                    batch_backend.allow_models(discovered)
                 return ToolHandlerOutput(
                     data=AgentModelSearchToolData(result=result),
                     changes_preconditions=bool(discovered),
@@ -321,6 +409,7 @@ class UnifiedAgentToolExecutorFactory:
             *search_bindings,
             *build_query_tool_registry(query_backend, query_specs).bindings,
             *build_action_tool_registry(action_backend, action_specs).bindings,
+            *batch_bindings,
         ]
         registry = ToolRegistry(bindings, allowed_risks=_AGENT_TOOL_RISKS)
         if registry.specs != tuple(advertised_specs):
@@ -340,16 +429,58 @@ class UnifiedAgentToolExecutorFactory:
         try:
             yield executor
         finally:
+            action_traces = action_backend.proposal_traces
+            batch_traces = batch_backend.traces if batch_backend is not None else ()
+            preview_traces = _ordered_preview_traces(
+                executor.execution_events,
+                action_traces,
+                batch_traces,
+            )
             self._last_report = ActionToolReport(
                 tool_report=ToolExecutionReport(
                     events=executor.execution_events,
                     retrieved_evidence=executor.ledger.retrieved_evidence,
                 ),
                 proposals=action_backend.proposals,
-                proposal_traces=action_backend.proposal_traces,
+                proposal_traces=action_traces,
+                batch_traces=batch_traces,
+                preview_traces=preview_traces,
             )
 
     def take_report(self) -> ActionToolReport:
         report = self._last_report
         self._last_report = ActionToolReport()
         return report
+
+
+def _ordered_preview_traces(
+    events,
+    action_traces: tuple[ActionProposalTrace, ...],
+    batch_traces: tuple[BatchProposalTrace, ...],
+):
+    ordered = []
+    action_index = 0
+    batch_index = 0
+    for event in events:
+        if event.event_name != "tool.completed" or event.status != "ok":
+            continue
+        tool_name = event.attributes.get("tool_name")
+        if tool_name in _ACTION_PREVIEW_TOOL_NAMES:
+            if action_index >= len(action_traces):
+                raise ToolExecutorError("agent_preview_report_corrupt")
+            trace = action_traces[action_index]
+            action_index += 1
+            if trace.tool_name != tool_name:
+                raise ToolExecutorError("agent_preview_report_corrupt")
+            ordered.append(trace)
+        elif tool_name == ODOO_PREVIEW_BATCH_MUTATION:
+            # A completely rejected batch preflight produces no sealed proposal and
+            # therefore no executable plan step. It is still a successful tool call.
+            if batch_index < len(batch_traces):
+                trace = batch_traces[batch_index]
+                if trace.tool_name == tool_name:
+                    batch_index += 1
+                    ordered.append(trace)
+    if action_index != len(action_traces) or batch_index != len(batch_traces):
+        raise ToolExecutorError("agent_preview_report_corrupt")
+    return tuple(ordered)
