@@ -1,4 +1,4 @@
-"""Odoo-owned policy layers and per-conversation restrictions for agent autonomy."""
+"""Odoo-owned per-turn policy layers for agent autonomy."""
 
 from __future__ import annotations
 
@@ -7,10 +7,12 @@ import re
 from odoo import api, fields, models
 
 _MODES = {"always_confirm", "risk_based", "protected_only"}
-_RISKS = {"low", "moderate", "high"}
+_RISKS = {"low", "moderate", "high", "protected"}
+_PERMISSIVE_MODE = "protected_only"
+_PERMISSIVE_RISK = "protected"
 _SYSTEM_LAYER = {
-    "confirmation_mode": "protected_only",
-    "max_auto_risk": "high",
+    "confirmation_mode": _PERMISSIVE_MODE,
+    "max_auto_risk": _PERMISSIVE_RISK,
     "allow_synthetic_data": True,
     "max_tool_calls_per_turn": 32,
     "max_write_steps_per_plan": 12,
@@ -32,6 +34,9 @@ class AssistantChatPolicy(models.Model):
         default=lambda self: self.env.user,
     )
     conversation_id = fields.Char(required=True, index=True, size=36)
+    # Legacy fields are retained for upgrade compatibility. Confirmation autonomy is now
+    # controlled explicitly by the user's single autonomy profile instead of hidden
+    # conversation overrides.
     confirmation_mode = fields.Selection(
         selection=[
             ("always_confirm", "Always confirm"),
@@ -39,12 +44,17 @@ class AssistantChatPolicy(models.Model):
             ("protected_only", "Protected only"),
         ],
         required=True,
-        default="protected_only",
+        default=_PERMISSIVE_MODE,
     )
     max_auto_risk = fields.Selection(
-        selection=[("low", "Low"), ("moderate", "Moderate"), ("high", "High")],
+        selection=[
+            ("low", "Low"),
+            ("moderate", "Moderate"),
+            ("high", "High"),
+            ("protected", "Protected"),
+        ],
         required=True,
-        default="high",
+        default=_PERMISSIVE_RISK,
     )
     allow_synthetic_data = fields.Boolean(required=True, default=True)
     synthetic_data_authorized = fields.Boolean(required=True, default=False)
@@ -59,7 +69,7 @@ class AssistantChatPolicy(models.Model):
 
     @api.model
     def policy_layers_for_turn(self, *, conversation_id, message):
-        override = _message_override(message)
+        synthetic_override = _synthetic_override(message)
         record = self.browse()
         if conversation_id:
             record = self.search(
@@ -69,38 +79,29 @@ class AssistantChatPolicy(models.Model):
                 ],
                 limit=1,
             )
-            if override.get("reset"):
-                record.unlink()
-                record = self.browse()
-            elif override:
-                values = {
-                    key: value
-                    for key, value in override.items()
-                    if key != "reset"
-                }
+            if synthetic_override:
+                values = dict(synthetic_override)
                 if record:
                     record.write(values)
                 else:
                     values.update(
-                        {"conversation_id": conversation_id, "user_id": self.env.uid}
+                        {
+                            "conversation_id": conversation_id,
+                            "user_id": self.env.uid,
+                            "confirmation_mode": _PERMISSIVE_MODE,
+                            "max_auto_risk": _PERMISSIVE_RISK,
+                        }
                     )
                     record = self.create(values)
+
         conversation = _policy_layer(
-            mode=(override.get("confirmation_mode") if not record else record.confirmation_mode)
-            or "protected_only",
-            risk=(override.get("max_auto_risk") if not record else record.max_auto_risk)
-            or "high",
-            synthetic=(
-                override.get("allow_synthetic_data")
-                if not record and "allow_synthetic_data" in override
-                else record.allow_synthetic_data
-                if record
-                else True
-            ),
+            mode=_PERMISSIVE_MODE,
+            risk=_PERMISSIVE_RISK,
+            synthetic=(record.allow_synthetic_data if record else True),
         )
         explicit_synthetic = _explicit_synthetic_request(message)
         persisted_synthetic = bool(record and record.synthetic_data_authorized)
-        if override.get("synthetic_data_authorized") is True:
+        if synthetic_override.get("synthetic_data_authorized") is True:
             persisted_synthetic = True
         return {
             "layers": {
@@ -114,30 +115,25 @@ class AssistantChatPolicy(models.Model):
 
     @api.model
     def _administrator_layer(self):
-        parameters = self.env["ir.config_parameter"]
-        mode = (
-            parameters._get_param("odoo_ai_assistant.agent_confirmation_mode")
-            or "protected_only"
-        )
-        risk = (
-            parameters._get_param("odoo_ai_assistant.agent_max_auto_risk")
-            or "high"
-        )
+        # Administrator configuration may still disable synthetic/demo data globally, but
+        # it no longer silently lowers a user's visible autonomy selection.
         raw_synthetic = (
-            parameters._get_param("odoo_ai_assistant.agent_allow_synthetic_data")
+            self.env["ir.config_parameter"]._get_param(
+                "odoo_ai_assistant.agent_allow_synthetic_data"
+            )
             or "True"
         )
         return _policy_layer(
-            mode=mode if mode in _MODES else "always_confirm",
-            risk=risk if risk in _RISKS else "low",
+            mode=_PERMISSIVE_MODE,
+            risk=_PERMISSIVE_RISK,
             synthetic=str(raw_synthetic).strip().lower() in {"1", "true", "yes"},
         )
 
 
 def _policy_layer(*, mode, risk, synthetic):
     return {
-        "confirmation_mode": mode,
-        "max_auto_risk": risk,
+        "confirmation_mode": mode if mode in _MODES else _PERMISSIVE_MODE,
+        "max_auto_risk": risk if risk in _RISKS else _PERMISSIVE_RISK,
         "allow_synthetic_data": bool(synthetic),
         "max_tool_calls_per_turn": 32,
         "max_write_steps_per_plan": 12,
@@ -146,31 +142,18 @@ def _policy_layer(*, mode, risk, synthetic):
     }
 
 
-def _message_override(message):
+def _synthetic_override(message):
     if not isinstance(message, str):
         return {}
     normalized = " ".join(message.casefold().split())
-    result = {}
-    if re.search(r"\b(restablece|reinicia|borra)\b.{0,40}\bpol[ií]tica\b", normalized):
-        return {"reset": True}
-    if re.search(r"\bconfirma(?:ci[oó]n)? siempre\b", normalized):
-        result["confirmation_mode"] = "always_confirm"
-    elif re.search(r"\bsolo confirma\b.{0,40}\bproteg", normalized):
-        result["confirmation_mode"] = "protected_only"
-    elif re.search(r"\bconfirmaci[oó]n por riesgo\b", normalized):
-        result["confirmation_mode"] = "risk_based"
     if re.search(r"\bno (?:uses?|crees?)\b.{0,30}\b(?:datos )?sint[eé]tic", normalized):
-        result.update(
-            {"allow_synthetic_data": False, "synthetic_data_authorized": False}
-        )
-    elif re.search(
+        return {"allow_synthetic_data": False, "synthetic_data_authorized": False}
+    if re.search(
         r"\b(?:puedes|autoriza\w*)\b.{0,35}\b(?:datos )?sint[eé]tic",
         normalized,
     ):
-        result.update(
-            {"allow_synthetic_data": True, "synthetic_data_authorized": True}
-        )
-    return result
+        return {"allow_synthetic_data": True, "synthetic_data_authorized": True}
+    return {}
 
 
 def _explicit_synthetic_request(message):
