@@ -106,6 +106,16 @@ class BatchCommandService:
                 result=result,
             )
         except BatchJobError:
+            # Another recovery of the same Odoo-idempotent attempt may have persisted
+            # the terminal row receipts first. Prefer that durable terminal truth over
+            # incorrectly degrading a successful batch to "unknown".
+            terminal = self._terminal_receipt_best_effort(
+                job_id=job_id,
+                actor=actor,
+                expected_fingerprint=expected_fingerprint,
+            )
+            if terminal is not None:
+                return terminal
             # Odoo returned row outcomes but Assistant persistence did not complete.
             # Preserve the same attempt for a later idempotent recovery instead of
             # authorizing a fresh attempt that could duplicate creates.
@@ -114,6 +124,22 @@ class BatchCommandService:
                 attempt_id=attempt_id,
             )
             raise BatchCommandError("batch_execution_outcome_unknown", 503) from None
+
+    def _terminal_receipt_best_effort(
+        self,
+        *,
+        job_id: UUID,
+        actor: ChatActor,
+        expected_fingerprint: str,
+    ) -> BatchCommandReceipt | None:
+        try:
+            return self._jobs.terminal_receipt(
+                job_id,
+                actor=actor,
+                expected_fingerprint=expected_fingerprint,
+            )
+        except BatchJobError:
+            return None
 
     def _mark_unknown_best_effort(self, *, job_id: UUID, attempt_id: UUID) -> None:
         try:
