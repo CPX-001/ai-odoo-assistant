@@ -22,6 +22,7 @@ from odoo_ai.contracts.action import (
 )
 from odoo_ai.contracts.action_approval import ActionDecision, ActionProposalState
 from odoo_ai.contracts.agent import AnswerConfidence
+from odoo_ai.contracts.batch_job import BatchProposalTrace
 from odoo_ai.contracts.context import Workflow
 from odoo_ai.contracts.delegation import ContextReadTurnRequest
 from odoo_ai.contracts.tool_execution import ToolExecutionReport
@@ -111,6 +112,9 @@ class ActionProposalTrace(BaseModel):
     payload_fingerprint: Fingerprint
 
 
+AgentPreviewTrace = ActionProposalTrace | BatchProposalTrace
+
+
 class ActionTurnResponse(BaseModel):
     """Sanitized ACTION presentation returned to Odoo; it grants no authority."""
 
@@ -130,13 +134,15 @@ class ActionTurnResponse(BaseModel):
 
 
 class ActionToolReport(BaseModel):
-    """Host-only report proving which proposal was produced by this exact turn."""
+    """Host-only report proving which immutable previews were produced by this turn."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     tool_report: ToolExecutionReport = Field(default_factory=ToolExecutionReport)
     proposals: tuple[ActionProposalPresentation, ...] = Field(default=(), max_length=12)
     proposal_traces: tuple[ActionProposalTrace, ...] = Field(default=(), max_length=12)
+    batch_traces: tuple[BatchProposalTrace, ...] = Field(default=(), max_length=12)
+    preview_traces: tuple[AgentPreviewTrace, ...] = Field(default=(), max_length=12)
 
 
 class OdooActionActorContext(BaseModel):
