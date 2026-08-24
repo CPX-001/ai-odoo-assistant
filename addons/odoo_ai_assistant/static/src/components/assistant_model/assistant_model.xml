@@ -2,14 +2,14 @@
 <templates xml:space="preserve">
     <t t-name="odoo_ai_assistant.AssistantPanelModelPicker"
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
-        <xpath expr="//div[contains(@class, 'o_ai_assistant_drag_handle')]" position="after">
-            <div t-if="!ui.isMinimized"
-                class="o_ai_assistant_model_picker d-flex align-items-center gap-2 mt-2">
-                <span class="o_ai_assistant_model_picker_label small text-muted d-flex align-items-center gap-1">
-                    <i class="fa fa-code" aria-hidden="true"/>
-                    <span>Modelo</span>
+        <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//button[@type='submit']" position="before">
+            <div class="o_ai_assistant_model_picker d-flex align-items-center gap-1"
+                title="Modelo de Codex">
+                <span class="o_ai_assistant_model_picker_label text-muted d-inline-flex align-items-center justify-content-center"
+                    aria-hidden="true">
+                    <i class="fa fa-code"/>
                 </span>
-                <select class="form-select form-select-sm flex-grow-1"
+                <select class="form-select form-select-sm"
                     aria-label="Modelo de Codex"
                     t-att-disabled="state.modelLoading or state.modelSaving or state.loading or !state.modelOptions.length"
                     t-on-change="selectReasoningModel">
