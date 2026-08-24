@@ -68,7 +68,7 @@ Primero retrieval estructural y lexical: símbolos/relaciones para source, Postg
 
 Los scanners/providers reciben roots, units y paths resueltos/validados. No contienen paths de cliente como constantes y nunca escanean todo el host para compensar una detección incompleta.
 
-## Writes, política y riesgo
+## Writes, autonomía y riesgo
 
 Los efectos siguen el flujo:
 
@@ -76,13 +76,38 @@ Los efectos siguen el flujo:
 proposal → preview → autorización host-side → commit → verification → audit
 ```
 
-La política efectiva es `system ceiling ∩ administrator policy ∩ user preference ∩ conversation override`, con modos `always_confirm`, `risk_based` y `protected_only`. El host calcula riesgo agregado por máximo, blast radius, efecto empresarial y atomicidad; no suma ingenuamente cada write ni confía en una etiqueta del modelo.
+Odoo sigue siendo la autoridad real: ACL, record rules, field access, compañías y reglas de negocio. Encima de esa autoridad el usuario elige un perfil simple de autonomía del Assistant:
 
-Los cambios pequeños pueden autoejecutarse cuando la política lo permite. Los planes superiores muestran una confirmación agrupada y los efectos protegidos se detienen siempre. La autorización se liga al plan ordenado, payloads, previews, dependencias, actor, base, compañías, revisiones y snapshot de policy. Los business actions usan handlers allowlisted; nunca métodos arbitrarios.
+- `strict`: confirma cualquier escritura;
+- `balanced`: autoejecuta hasta riesgo moderado;
+- `autonomous`: autoejecuta hasta riesgo alto y confirma efectos protegidos;
+- `full_access`: no añade confirmaciones del Assistant.
+
+`full_access` no implica `sudo()`, métodos arbitrarios ni eliminación de límites host-side. Sólo retira la capa adicional de confirmación del Assistant. El host sigue calculando riesgo para trazabilidad y UI, pero el riesgo no se convierte por sí mismo en una pregunta conversacional. Si el usuario expresó un alcance inequívoco, Codex debe preparar la acción y dejar que el perfil decida si corresponde confirmar.
+
+La autorización se liga al plan ordenado, payloads, previews, dependencias, actor, base, compañías, revisiones y snapshot de policy. Los business actions usan handlers allowlisted; nunca métodos arbitrarios.
 
 Antes de preguntar se resuelve `mensaje → conversación → contexto Odoo → búsqueda de registros → defaults/schema → inferencia segura → preguntar`. Datos sintéticos sólo en prueba/demo explícita o con autorización, siempre marcados `AI TEST`.
 
-Los límites máximos host-side son 32 tool calls, 12 writes por plan, dos replans y tres fallos consecutivos. Una llamada canónica no se repite sin cambio de precondición y un write incierto nunca se reintenta automáticamente.
+Los límites máximos host-side actuales son 32 tool calls, 12 write steps por plan, dos replans y tres fallos consecutivos. Una llamada canónica no se repite sin cambio de precondición y un write incierto nunca se reintenta automáticamente.
+
+### Mutaciones masivas e importaciones
+
+ADR-015 separa semántica de volumen. El camino objetivo es:
+
+```text
+archivo/datos
+  → parsing determinista
+  → mapping semántico asistido
+  → schema/ACL validation
+  → filas normalizadas persistidas
+  → chunks batch
+  → preview/autorización
+  → ORM optimizado
+  → receipts por origen
+```
+
+Codex interpreta headers, muestras y ambigüedades; no procesa miles de filas dentro del prompt. El planner batch ya existe como capa independiente. Create aprovechará multi-create, delete recordsets y patch agrupará valores idénticos antes de ejecutar. La integración del batch con proposals/approval/execution se realiza como fase separada para no mezclar responsabilidades.
 
 ## Prohibiciones principales
 
