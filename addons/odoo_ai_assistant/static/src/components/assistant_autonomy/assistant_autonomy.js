@@ -26,10 +26,7 @@ patch(AssistantPanel.prototype, {
         return messages[this.state.actionReceipt?.state] || "";
     },
 
-    async selectAutonomyProfile(event) {
-        const profile = event.currentTarget?.dataset?.profile;
-        const details = event.currentTarget?.closest?.("details");
-        details?.removeAttribute?.("open");
+    async selectAutonomyProfile(profile) {
         await this.panel.setAutonomyProfile(profile);
     },
 });

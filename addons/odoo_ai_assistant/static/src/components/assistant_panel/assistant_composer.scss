@@ -22,28 +22,13 @@
         overflow-y: auto;
     }
 
-    .o_ai_assistant_composer .o_ai_assistant_model_picker {
-        flex: 0 1 10rem;
+    .o_ai_assistant_composer .o_ai_assistant_model_picker,
+    .o_ai_assistant_composer .o_ai_assistant_autonomy_picker {
+        flex: 0 0 2.65rem;
         width: auto;
-        min-width: 7rem;
-        max-width: 10rem;
+        min-width: 2.65rem;
+        max-width: 2.65rem;
         min-height: 2.65rem;
-        padding: 0.2rem 0.35rem;
-        background-color: var(--o-ai-surface);
-    }
-
-    .o_ai_assistant_composer .o_ai_assistant_model_picker_label {
-        width: 1.35rem;
-        height: 1.35rem;
-        flex: 0 0 1.35rem;
-    }
-
-    .o_ai_assistant_composer .o_ai_assistant_model_picker .form-select {
-        width: 100%;
-        min-width: 0;
-        padding-left: 0.15rem;
-        padding-right: 1.4rem;
-        text-overflow: ellipsis;
     }
 
     .o_ai_assistant_send_button {
@@ -58,12 +43,6 @@
     .o_ai_assistant_panel {
         .o_ai_assistant_composer {
             padding: var(--o-ai-space-2, 0.5rem) !important;
-        }
-
-        .o_ai_assistant_composer .o_ai_assistant_model_picker {
-            flex-basis: 7.5rem;
-            min-width: 6.5rem;
-            max-width: 7.5rem;
         }
 
         .o_ai_assistant_send_button {

@@ -32,6 +32,14 @@ function modelName(value) {
         : null;
 }
 
+function viewName(value) {
+    if (typeof value !== "string") {
+        return null;
+    }
+    const normalized = value.trim();
+    return normalized && normalized.length <= 256 ? normalized : null;
+}
+
 function selectedIds(value) {
     if (!Array.isArray(value)) {
         return [];
@@ -82,6 +90,23 @@ export function currentViewId(actionService, routerState = {}) {
 }
 
 /**
+ * Resolve the stable technical key of an Odoo view for developer-facing UI.
+ * Custom views without an XML key fall back to their Odoo view name, never to a numeric id.
+ */
+export async function viewTechnicalName(orm, viewId) {
+    const resolvedViewId = viewIdHint(viewId);
+    if (resolvedViewId === null) {
+        return null;
+    }
+    try {
+        const [view] = await orm.read("ir.ui.view", [resolvedViewId], ["key", "name"]);
+        return viewName(view?.key) || viewName(view?.name);
+    } catch {
+        return null;
+    }
+}
+
+/**
  * Build an untrusted navigation hint from Odoo 18 action/menu/router state.
  * Identity, companies, sessions and credentials are deliberately absent.
  */
@@ -125,14 +150,25 @@ export function buildScreenContext(
 }
 
 export const screenContextService = {
-    dependencies: ["action", "menu"],
-    start(env, { action, menu }) {
+    dependencies: ["action", "menu", "orm"],
+    start(env, { action, menu, orm }) {
+        const technicalNames = new Map();
         return {
             capture() {
                 return buildScreenContext(action, menu, router.current);
             },
             currentViewId() {
                 return currentViewId(action, router.current);
+            },
+            currentViewTechnicalName() {
+                const viewId = currentViewId(action, router.current);
+                if (viewId === null) {
+                    return Promise.resolve(null);
+                }
+                if (!technicalNames.has(viewId)) {
+                    technicalNames.set(viewId, viewTechnicalName(orm, viewId));
+                }
+                return technicalNames.get(viewId);
             },
         };
     },

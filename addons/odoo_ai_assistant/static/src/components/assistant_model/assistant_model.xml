@@ -3,27 +3,51 @@
     <t t-name="odoo_ai_assistant.AssistantPanelModelPicker"
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
         <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//button[@type='submit']" position="before">
-            <div class="o_ai_assistant_model_picker d-flex align-items-center gap-1"
-                title="Modelo de Codex">
-                <span class="o_ai_assistant_model_picker_label text-muted d-inline-flex align-items-center justify-content-center"
-                    aria-hidden="true">
-                    <i class="fa fa-code"/>
-                </span>
-                <select class="form-select form-select-sm"
-                    aria-label="Modelo de Codex"
-                    t-att-disabled="state.modelLoading or state.modelSaving or state.loading or !state.modelOptions.length"
-                    t-on-change="selectReasoningModel">
-                    <option value="" t-att-selected="!state.selectedReasoningModel">
-                        Predeterminado<t t-if="state.defaultReasoningModel"> · <t t-esc="state.defaultReasoningModel"/></t>
-                    </option>
-                    <option t-foreach="state.modelOptions" t-as="modelOption"
-                        t-key="modelOption.model" t-att-value="modelOption.model"
-                        t-att-selected="modelOption.model === state.selectedReasoningModel">
-                        <t t-esc="modelOption.display_name"/>
-                    </option>
-                </select>
-                <i t-if="state.modelLoading or state.modelSaving"
-                    class="fa fa-spinner fa-spin text-muted" aria-hidden="true"/>
+            <div class="o_ai_assistant_model_picker">
+                <Dropdown position="'top-end'" menuClass="'o_ai_assistant_picker_menu'"
+                    disabled="state.modelLoading or state.modelSaving or state.loading or !state.modelOptions.length">
+                    <button type="button" class="o_ai_assistant_picker_button"
+                        aria-label="Modelo de Codex"
+                        t-att-title="'Modelo: ' + reasoningModelLabel">
+                        <i t-if="state.modelLoading or state.modelSaving"
+                            class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                        <i t-else="" class="fa fa-code" aria-hidden="true"/>
+                    </button>
+                    <t t-set-slot="content">
+                        <div class="o_ai_assistant_picker_menu_title small text-muted">
+                            Modelo de Codex
+                        </div>
+                        <DropdownItem class="'o_ai_assistant_picker_option'"
+                            onSelected="() => this.selectReasoningModel(null)">
+                            <span class="o_ai_assistant_picker_option_icon">
+                                <i class="fa fa-magic" aria-hidden="true"/>
+                            </span>
+                            <span class="min-w-0 flex-grow-1">
+                                <span class="d-block fw-semibold">Predeterminado</span>
+                                <span t-if="state.defaultReasoningModel"
+                                    class="d-block small text-muted text-truncate"
+                                    t-esc="state.defaultReasoningModel"/>
+                            </span>
+                            <i t-if="!state.selectedReasoningModel" class="fa fa-check"
+                                aria-hidden="true"/>
+                        </DropdownItem>
+                        <DropdownItem t-foreach="state.modelOptions" t-as="modelOption"
+                            t-key="modelOption.model" class="'o_ai_assistant_picker_option'"
+                            onSelected="() => this.selectReasoningModel(modelOption.model)">
+                            <span class="o_ai_assistant_picker_option_icon">
+                                <i class="fa fa-code" aria-hidden="true"/>
+                            </span>
+                            <span class="min-w-0 flex-grow-1">
+                                <span class="d-block fw-semibold text-truncate"
+                                    t-esc="modelOption.display_name"/>
+                                <span class="d-block small text-muted text-truncate"
+                                    t-esc="modelOption.model"/>
+                            </span>
+                            <i t-if="modelOption.model === state.selectedReasoningModel"
+                                class="fa fa-check" aria-hidden="true"/>
+                        </DropdownItem>
+                    </t>
+                </Dropdown>
             </div>
         </xpath>
 

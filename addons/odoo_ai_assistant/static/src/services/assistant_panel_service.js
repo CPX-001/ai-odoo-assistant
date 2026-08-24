@@ -392,6 +392,17 @@ export function saveDraft(storage, conversationId, value) {
     }
 }
 
+export function resetForNewConversation(state, storage) {
+    saveDraft(storage, state.conversationId, state.draft);
+    state.conversationId = null;
+    state.messages = [];
+    state.draft = "";
+    state.result = null;
+    state.actionReceipt = null;
+    state.errorCode = null;
+    saveDraft(storage, null, "");
+}
+
 export async function submitAssistantRequest({ state, screenContext, rpcCall, message }) {
     if (state.loading || state.decisionLoading) {
         return false;
@@ -648,13 +659,7 @@ export const assistantPanelService = {
             refreshContext,
             loadHistory,
             newConversation() {
-                saveDraft(storage, state.conversationId, state.draft);
-                state.conversationId = null;
-                state.messages = [];
-                state.result = null;
-                state.actionReceipt = null;
-                state.errorCode = null;
-                syncDraft();
+                resetForNewConversation(state, storage);
             },
             async selectConversation(conversationId) {
                 if (state.loading || state.decisionLoading || !conversationId) {

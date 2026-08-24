@@ -4,8 +4,15 @@ import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
 
 patch(AssistantPanel.prototype, {
-    async selectReasoningModel(event) {
-        await this.panel.setReasoningModel(event.target.value || null);
+    get reasoningModelLabel() {
+        const selected = this.state.modelOptions.find(
+            (item) => item.model === this.state.selectedReasoningModel
+        );
+        return selected?.display_name || this.state.defaultReasoningModel || "Predeterminado";
+    },
+
+    async selectReasoningModel(model) {
+        await this.panel.setReasoningModel(model || null);
     },
 
     async openAssistantSettings() {

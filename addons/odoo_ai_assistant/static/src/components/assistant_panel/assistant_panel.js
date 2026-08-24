@@ -1,6 +1,8 @@
 /** @odoo-module **/
 
 import { _t } from "@web/core/l10n/translation";
+import { Dropdown } from "@web/core/dropdown/dropdown";
+import { DropdownItem } from "@web/core/dropdown/dropdown_item";
 import { registry } from "@web/core/registry";
 import { useBus, useService } from "@web/core/utils/hooks";
 import { Component, onMounted, onPatched, onWillUnmount, useRef, useState } from "@odoo/owl";
@@ -122,6 +124,7 @@ export class AssistantSystray extends Component {
 
 export class AssistantPanel extends Component {
     static template = "odoo_ai_assistant.AssistantPanel";
+    static components = { Dropdown, DropdownItem };
     static props = {};
 
     setup() {

@@ -2,6 +2,7 @@ import { expect, test } from "@odoo/hoot";
 import {
     buildScreenContext,
     currentViewId,
+    viewTechnicalName,
 } from "@odoo_ai_assistant/services/screen_context_service";
 
 const ACTION_ID = 42;
@@ -98,4 +99,17 @@ test("current view id is resolved for developer UI without entering screen conte
     expect(currentViewId(fallback)).toBe(271);
     expect(currentViewId({ currentController: {} }, { view_id: "512" })).toBe(512);
     expect(currentViewId({ currentController: {} })).toBe(null);
+});
+
+test("technical view name prefers the XML key and never exposes the numeric id", async () => {
+    const keyedOrm = {
+        read: async () => [{ id: 314, key: "sale.view_order_form", name: "Sales Order" }],
+    };
+    expect(await viewTechnicalName(keyedOrm, 314)).toBe("sale.view_order_form");
+
+    const customOrm = {
+        read: async () => [{ id: 512, key: false, name: "AI TEST custom order view" }],
+    };
+    expect(await viewTechnicalName(customOrm, 512)).toBe("AI TEST custom order view");
+    expect(await viewTechnicalName(customOrm, null)).toBe(null);
 });

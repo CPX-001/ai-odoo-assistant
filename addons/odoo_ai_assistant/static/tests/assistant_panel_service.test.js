@@ -3,6 +3,7 @@ import {
     loadChatHistory,
     loadDraft,
     normalizeChatResponse,
+    resetForNewConversation,
     saveDraft,
     submitActionDecision,
     submitAssistantRequest,
@@ -125,6 +126,29 @@ test("draft survives save and reload per conversation", () => {
     expect(saveDraft(storage, conversationId, "texto sin enviar")).toBe(true);
     expect(loadDraft(storage, conversationId)).toBe("texto sin enviar");
     expect(loadDraft(storage, null)).toBe("");
+});
+
+test("new conversation clears the composer and its new-chat draft", () => {
+    const values = new Map();
+    const storage = {
+        getItem: (key) => values.get(key) ?? null,
+        setItem: (key, value) => values.set(key, value),
+    };
+    const panelState = state();
+    panelState.conversationId = "22345678-1234-5678-9234-567812345678";
+    panelState.draft = "texto pendiente";
+    panelState.messages = [{ role: "user", content: "anterior" }];
+    saveDraft(storage, null, "borrador antiguo de chat nuevo");
+
+    resetForNewConversation(panelState, storage);
+
+    expect(panelState.conversationId).toBe(null);
+    expect(panelState.messages).toEqual([]);
+    expect(panelState.draft).toBe("");
+    expect(loadDraft(storage, null)).toBe("");
+    expect(loadDraft(storage, "22345678-1234-5678-9234-567812345678")).toBe(
+        "texto pendiente"
+    );
 });
 
 test("history hydrates conversations and messages", async () => {

@@ -3,9 +3,9 @@
     <t t-name="odoo_ai_assistant.AssistantPanelViewContext"
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
         <xpath expr="//small[@t-esc='contextLabel']" position="after">
-            <small t-if="currentViewId"
-                class="o_ai_assistant_view_id text-muted d-block font-monospace">
-                Vista #<t t-esc="currentViewId"/>
+            <small t-if="currentViewTechnicalName"
+                class="o_ai_assistant_view_name text-muted d-block font-monospace">
+                <t t-esc="currentViewTechnicalName"/>
             </small>
         </xpath>
     </t>
