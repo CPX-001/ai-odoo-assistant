@@ -5,7 +5,7 @@
         scrollbar-gutter: stable;
         background: linear-gradient(
             180deg,
-            color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 96%, var(--o-brand-primary) 4%),
+            color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 96%, var(--o-ai-accent) 4%),
             var(--o-view-background-color, var(--bs-body-bg)) 14rem
         );
         animation: o-ai-history-enter 160ms ease-out both;
@@ -58,8 +58,8 @@
         &:not(:disabled):hover,
         &:not(:disabled):focus-visible {
             transform: translateY(-1px);
-            border-color: color-mix(in srgb, var(--o-brand-primary) 45%, var(--bs-border-color)) !important;
-            background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 96%, var(--o-brand-primary) 4%);
+            border-color: color-mix(in srgb, var(--o-ai-accent) 45%, var(--bs-border-color)) !important;
+            background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 96%, var(--o-ai-accent) 4%);
             box-shadow: $box-shadow;
             outline: none;
         }
@@ -77,18 +77,18 @@
 
     .o_ai_assistant_history_item_new {
         min-height: 4.6rem;
-        border-color: color-mix(in srgb, var(--o-brand-primary) 62%, var(--bs-border-color)) !important;
-        background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 92%, var(--o-brand-primary) 8%);
+        border-color: color-mix(in srgb, var(--o-ai-accent) 62%, var(--bs-border-color)) !important;
+        background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 92%, var(--o-ai-accent) 8%);
 
         .o_ai_assistant_history_icon {
-            background-color: var(--o-brand-primary);
-            color: var(--o-white, var(--bs-white));
+            background-color: var(--o-ai-accent);
+            color: var(--bs-white);
         }
     }
 
     .o_ai_assistant_history_item_active {
-        border-color: color-mix(in srgb, var(--o-brand-primary) 50%, var(--bs-border-color)) !important;
-        background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 94%, var(--o-brand-primary) 6%);
+        border-color: color-mix(in srgb, var(--o-ai-accent) 50%, var(--bs-border-color)) !important;
+        background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 94%, var(--o-ai-accent) 6%);
 
         &::before {
             position: absolute;
@@ -97,7 +97,7 @@
             left: 0;
             width: 3px;
             border-radius: 0 2px 2px 0;
-            background-color: var(--o-brand-primary);
+            background-color: var(--o-ai-accent);
             content: "";
         }
     }
@@ -107,7 +107,7 @@
         width: 2.15rem;
         height: 2.15rem;
         border-radius: 0.6rem;
-        background-color: var(--o-gray-100);
+        background-color: var(--o-ai-gray-100);
         color: var(--bs-secondary-color);
         transition: transform 140ms ease;
     }
@@ -123,19 +123,24 @@
     .o_ai_assistant_history_empty {
         border: 1px dashed var(--bs-border-color);
         border-radius: 0.7rem;
-        background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 97%, var(--o-gray-200) 3%);
+        background-color: color-mix(in srgb, var(--o-view-background-color, var(--bs-body-bg)) 97%, var(--o-ai-gray-200) 3%);
     }
 
     .o_ai_assistant_history_button {
-        min-height: 2.1rem;
-        border-radius: var(--o-ai-control-radius, 0.55rem);
-        transition:
-            background-color 140ms ease,
-            border-color 140ms ease,
-            transform 140ms ease;
+        min-width: 2rem;
+        min-height: 2rem;
+        border-radius: 0.45rem;
+        transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
 
-        &:hover {
-            transform: translateY(-1px);
+        &:hover,
+        &:focus-visible,
+        &.active {
+            background-color: var(--o-ai-surface-subtle);
+            color: var(--o-ai-accent) !important;
+        }
+
+        &:active:not(:disabled) {
+            transform: scale(0.94);
         }
     }
 }
