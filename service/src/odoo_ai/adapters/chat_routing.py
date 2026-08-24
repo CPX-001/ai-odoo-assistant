@@ -32,8 +32,13 @@ host-controlled operation.
 
 Also return resolved_message in the user's original language. It must be a self-contained,
 faithful version of the current request: resolve pronouns and references only when recent_history
-or current_model provides evidence, preserve every constraint, and add no new request or fact. If
-nothing needs resolving, copy the normalized current message."""
+or current_model provides evidence, preserve every constraint, and add no new request or fact.
+Preserve scope words exactly in meaning: all/every/team/mine/my/assigned/created-by are business
+constraints, not permission hints. Never narrow a broad request to records owned by, assigned to,
+or created by the current user unless the user's request explicitly asks for that scope. Never
+infer an ownership restriction from Odoo permissions; downstream Odoo tools enforce the effective
+user's ACLs, record rules, field access and company context themselves. If nothing needs resolving,
+copy the normalized current message."""
 
 
 class CodexChatRoutingInterpreter:
