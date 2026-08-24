@@ -28,12 +28,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # A partial row contains truthful execution history and must not be silently
-    # coerced to failed/completed during downgrade.
+    # A partial row is execution history, not a schema detail. Refuse an incompatible
+    # downgrade rather than silently rewriting truthful outcomes as failed/completed.
     op.execute(
-        "UPDATE agent_plan_step SET state = 'failed', "
-        "error_code = COALESCE(error_code, 'downgraded_partial_step') "
-        "WHERE state = 'partial'"
+        "DO $$ BEGIN "
+        "IF EXISTS (SELECT 1 FROM agent_plan_step WHERE state = 'partial') THEN "
+        "RAISE EXCEPTION 'cannot downgrade while partial agent steps exist'; "
+        "END IF; END $$;"
     )
     op.drop_constraint(
         "ck_agent_plan_step_state",
