@@ -19,6 +19,13 @@ function positiveId(value) {
     return Number.isSafeInteger(value) && value > 0 && value <= MAX_ODOO_ID ? value : null;
 }
 
+function viewIdHint(value) {
+    if (typeof value === "string" && /^[1-9][0-9]{0,9}$/.test(value)) {
+        return positiveId(Number(value));
+    }
+    return positiveId(value);
+}
+
 function modelName(value) {
     return typeof value === "string" && /^[A-Za-z_][A-Za-z0-9_.]{0,127}$/.test(value)
         ? value
@@ -53,7 +60,7 @@ export function currentViewId(actionService, routerState = {}) {
         routerState.view_id,
     ];
     for (const candidate of directCandidates) {
-        const resolved = positiveId(candidate);
+        const resolved = viewIdHint(candidate);
         if (resolved !== null) {
             return resolved;
         }
@@ -65,7 +72,7 @@ export function currentViewId(actionService, routerState = {}) {
             if (!Array.isArray(entry) || entry.length < 2 || entry[1] !== viewType) {
                 continue;
             }
-            const resolved = positiveId(entry[0]);
+            const resolved = viewIdHint(entry[0]);
             if (resolved !== null) {
                 return resolved;
             }
