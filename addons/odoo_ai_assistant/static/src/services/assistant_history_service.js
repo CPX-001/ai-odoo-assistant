@@ -86,7 +86,13 @@ patch(assistantPanelService, {
         }
         panel.state.historyView = !cachedConversationId;
 
+        const isBusy = () =>
+            panel.state.loading || panel.state.historyLoading || panel.state.decisionLoading;
+
         const showHistory = async () => {
+            if (isBusy()) {
+                return false;
+            }
             clearRecentActiveChat(sessionStorage);
             panel.newConversation();
             panel.state.historyView = true;
@@ -134,11 +140,17 @@ patch(assistantPanelService, {
                 void showHistory();
             },
             newConversation() {
+                if (isBusy()) {
+                    return;
+                }
                 clearRecentActiveChat(sessionStorage);
                 panel.newConversation();
                 panel.state.historyView = false;
             },
             async selectConversation(conversationId) {
+                if (isBusy()) {
+                    return false;
+                }
                 const loaded = await panel.selectConversation(conversationId);
                 if (loaded) {
                     panel.state.historyView = false;
