@@ -48,6 +48,14 @@ def load_chat_history(
     if conversation_id is not None:
         selected = next((item for item in conversations if item.id == conversation_id), None)
         if selected is None:
+            selected = session.scalar(
+                select(ChatConversation).where(
+                    ChatConversation.id == conversation_id,
+                    ChatConversation.database == actor.database,
+                    ChatConversation.uid == actor.uid,
+                )
+            )
+        if selected is None:
             raise ChatStoreError("conversation_not_found")
 
     messages: tuple[ChatMessage, ...] = ()
