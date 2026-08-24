@@ -8,14 +8,15 @@ from uuid import UUID
 from odoo_ai.application.action_approval import ActionApprovalError
 from odoo_ai.application.action_command import ActionCommandService
 from odoo_ai.application.action_execution import ActionExecutionError
+from odoo_ai.application.agent_effect_execution import (
+    AgentEffectExecutionError,
+    AgentWriteStepDispatcher,
+)
 from odoo_ai.application.agent_plans import AgentPlanError, AgentPlanService
+from odoo_ai.application.batch_command import BatchCommandService
 from odoo_ai.contracts import (
-    ActionDecision,
-    ActionDecisionCommandRequest,
-    ActionProposalState,
     AgentPlanExecutionRequest,
     AgentPlanStatusResponse,
-    OdooActionActorContext,
     PlanState,
 )
 
@@ -28,16 +29,17 @@ class AgentExecutionError(RuntimeError):
 
 
 class AgentPlanExecutionService:
-    """Translate one grouped host authorization into exact proposal executions."""
+    """Translate one grouped host authorization into exact effect executions."""
 
     def __init__(
         self,
         *,
         plans: AgentPlanService,
         actions: ActionCommandService,
+        batches: BatchCommandService | None = None,
     ) -> None:
         self._plans = plans
-        self._actions = actions
+        self._effects = AgentWriteStepDispatcher(actions=actions, batches=batches)
 
     async def execute(
         self,
@@ -45,60 +47,51 @@ class AgentPlanExecutionService:
     ) -> AgentPlanStatusResponse:
         try:
             plan = await asyncio.to_thread(self._plans.claim_execution, request)
-            actor = OdooActionActorContext(
-                database=plan.actor.database,
-                uid=plan.actor.uid,
-                company_id=plan.company_id,
-                allowed_company_ids=plan.allowed_company_ids,
-            )
+            if plan.authorization_id is None:
+                raise AgentExecutionError("agent_plan_authorization_missing", 503)
             completed = 0
             for position, step in enumerate(plan.steps):
                 if not step.is_write:
                     continue
-                if step.proposal_id is None or step.proposal_fingerprint is None:
-                    raise AgentExecutionError("agent_step_proposal_missing", 503)
-                receipt = await self._actions.decide_and_execute(
-                    ActionDecisionCommandRequest(
-                        proposal_id=step.proposal_id,
-                        decision=ActionDecision.APPROVE,
-                        actor=actor,
-                    )
+                result = await self._effects.execute(
+                    step,
+                    actor=plan.actor,
+                    company_id=plan.company_id,
+                    allowed_company_ids=plan.allowed_company_ids,
+                    authorization_id=plan.authorization_id,
                 )
-                if receipt.payload_fingerprint != step.proposal_fingerprint:
-                    raise AgentExecutionError("agent_step_receipt_mismatch", 503)
-                successful = receipt.state is ActionProposalState.VERIFIED
                 await asyncio.to_thread(
                     self._plans.record_step_result,
                     plan_id=plan.plan_id,
                     step_id=step.step_id,
-                    state="completed" if successful else "failed",
-                    receipt=receipt.model_dump(mode="json"),
-                    error_code=receipt.error_code,
+                    state=result.state,
+                    receipt=result.receipt,
+                    error_code=result.error_code,
                 )
-                if not successful:
-                    for skipped in plan.steps[position + 1 :]:
-                        if skipped.is_write:
-                            await asyncio.to_thread(
-                                self._plans.record_step_result,
-                                plan_id=plan.plan_id,
-                                step_id=skipped.step_id,
-                                state="skipped",
-                                error_code="dependency_failed",
-                            )
+                if result.state == "completed":
+                    completed += 1
+                    continue
+
+                await self._skip_later_writes(plan, position)
+                if result.state == "partial":
+                    terminal = PlanState.PARTIAL
+                    terminal_error = result.error_code or "agent_step_partial"
+                else:
                     terminal = PlanState.PARTIAL if completed else PlanState.FAILED
-                    await asyncio.to_thread(
-                        self._plans.complete,
-                        plan_id=plan.plan_id,
-                        state=terminal,
-                        error_code=receipt.error_code or "agent_step_failed",
-                    )
-                    return await asyncio.to_thread(
-                        self._plans.get_status,
-                        plan.plan_id,
-                        plan.actor.database,
-                        plan.actor.uid,
-                    )
-                completed += 1
+                    terminal_error = result.error_code or "agent_step_failed"
+                await asyncio.to_thread(
+                    self._plans.complete,
+                    plan_id=plan.plan_id,
+                    state=terminal,
+                    error_code=terminal_error,
+                )
+                return await asyncio.to_thread(
+                    self._plans.get_status,
+                    plan.plan_id,
+                    plan.actor.database,
+                    plan.actor.uid,
+                )
+
             await asyncio.to_thread(
                 self._plans.complete,
                 plan_id=plan.plan_id,
@@ -114,6 +107,9 @@ class AgentPlanExecutionService:
             raise
         except AgentPlanError as error:
             raise AgentExecutionError(error.code, error.status_code) from None
+        except AgentEffectExecutionError as error:
+            await self._fail_claimed_plan(request.plan_id, error.code)
+            raise AgentExecutionError(error.code, error.status_code) from None
         except ActionApprovalError as error:
             await self._fail_claimed_plan(request.plan_id, error.code)
             raise AgentExecutionError(error.code, error.status_code) from None
@@ -123,6 +119,17 @@ class AgentPlanExecutionService:
         except Exception:
             await self._fail_claimed_plan(request.plan_id, "agent_execution_unavailable")
             raise AgentExecutionError("agent_execution_unavailable", 503) from None
+
+    async def _skip_later_writes(self, plan, position: int) -> None:
+        for skipped in plan.steps[position + 1 :]:
+            if skipped.is_write:
+                await asyncio.to_thread(
+                    self._plans.record_step_result,
+                    plan_id=plan.plan_id,
+                    step_id=skipped.step_id,
+                    state="skipped",
+                    error_code="dependency_failed",
+                )
 
     async def _fail_claimed_plan(self, plan_id: UUID, error_code: str) -> None:
         try:
