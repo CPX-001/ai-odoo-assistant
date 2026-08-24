@@ -24,6 +24,7 @@ from odoo_ai.contracts.batch import (
     BatchMutationResult,
     BatchPatchItem,
 )
+from odoo_ai.contracts.batch_job import BatchExecutionContext
 from odoo_ai.ports.batch import BatchMutationGateway
 
 
@@ -46,7 +47,12 @@ class BatchMutationExecutionService:
         self._gateway = gateway
         self._limits = limits
 
-    async def execute(self, request: BatchMutationRequest) -> BatchMutationResult:
+    async def execute(
+        self,
+        request: BatchMutationRequest,
+        *,
+        context: BatchExecutionContext,
+    ) -> BatchMutationResult:
         try:
             plan = plan_batch_mutation(request, limits=self._limits)
         except BatchPlanningError as error:
@@ -56,7 +62,11 @@ class BatchMutationExecutionService:
         for chunk in plan.chunks:
             raw_items = chunk_items(request, chunk)
             try:
-                chunk_results = await self._execute_chunk(request, raw_items)
+                chunk_results = await self._execute_chunk(
+                    request,
+                    raw_items,
+                    context=context,
+                )
             except BatchExecutionError:
                 raise
             except Exception:
@@ -84,6 +94,8 @@ class BatchMutationExecutionService:
         self,
         request: BatchMutationRequest,
         raw_items: Sequence[BatchCreateItem | BatchPatchItem | BatchDeleteItem],
+        *,
+        context: BatchExecutionContext,
     ) -> tuple[BatchItemResult, ...]:
         if request.operation is BatchMutationKind.CREATE:
             if request.schema_id is None or not all(
@@ -91,6 +103,7 @@ class BatchMutationExecutionService:
             ):
                 raise BatchExecutionError("invalid_batch_chunk", 422)
             return await self._gateway.create_many(
+                context=context,
                 model=request.model,
                 schema_id=request.schema_id,
                 items=tuple(item for item in raw_items if isinstance(item, BatchCreateItem)),
@@ -102,6 +115,7 @@ class BatchMutationExecutionService:
             ):
                 raise BatchExecutionError("invalid_batch_chunk", 422)
             return await self._gateway.patch_many(
+                context=context,
                 model=request.model,
                 schema_id=request.schema_id,
                 items=tuple(item for item in raw_items if isinstance(item, BatchPatchItem)),
@@ -110,6 +124,7 @@ class BatchMutationExecutionService:
         if not all(isinstance(item, BatchDeleteItem) for item in raw_items):
             raise BatchExecutionError("invalid_batch_chunk", 422)
         return await self._gateway.delete_many(
+            context=context,
             model=request.model,
             items=tuple(item for item in raw_items if isinstance(item, BatchDeleteItem)),
             failure_mode=request.failure_mode,
