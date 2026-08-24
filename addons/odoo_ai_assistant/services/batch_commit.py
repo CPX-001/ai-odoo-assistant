@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 from collections.abc import Callable
 from contextlib import AbstractContextManager, contextmanager
 from datetime import date, datetime
@@ -38,13 +39,13 @@ from .batch_tools import (
 from .orm_tools import OrmToolError
 
 MAX_BATCH_ROWS: Final = 200
-MAX_ACTION_FIELDS: Final = 16
+MAX_BATCH_FIELDS: Final = 64
 MAX_ACTION_VALUE_TEXT: Final = 4_000
-_DECIMAL_PATTERN: Final = __import__("re").compile(
+_DECIMAL_PATTERN: Final = re.compile(
     r"^-?(?:0|[1-9][0-9]{0,15})(?:\.[0-9]{1,6})?$"
 )
-_DATE_PATTERN: Final = __import__("re").compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
-_DATETIME_PATTERN: Final = __import__("re").compile(
+_DATE_PATTERN: Final = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+_DATETIME_PATTERN: Final = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
 )
 
@@ -136,10 +137,7 @@ def _execute_with_receipts(env, batch: dict[str, object], claims: BatchAuthority
                 failure_mode=batch["failure_mode"],
             )
         elif batch["operation"] == "patch":
-            signatures = {
-                _canonical_json(item["changes"])
-                for item in new_rows
-            }
+            signatures = {_canonical_json(item["changes"]) for item in new_rows}
             if len(signatures) != 1:
                 raise OrmToolError("batch_patch_not_uniform", 422)
             raw_results = execute_uniform_patch_chunk(
@@ -178,7 +176,9 @@ def _execute_with_receipts(env, batch: dict[str, object], claims: BatchAuthority
 
 def _validate_runtime_fields(env, batch: dict[str, object], claims: BatchAuthorityPayload) -> None:
     model = batch["model"]
-    if model in _BLOCKED_MODELS or any(model.startswith(prefix) for prefix in _BLOCKED_MODEL_PREFIXES):
+    if model in _BLOCKED_MODELS or any(
+        model.startswith(prefix) for prefix in _BLOCKED_MODEL_PREFIXES
+    ):
         raise OrmToolError("action_target_not_allowed", 403)
     model_set = env[model]
     if batch["operation"] == "delete":
@@ -199,9 +199,8 @@ def _validate_runtime_fields(env, batch: dict[str, object], claims: BatchAuthori
     if not isinstance(descriptions, dict) or set(descriptions) != set(fields):
         raise OrmToolError("field_not_allowed", 403)
     for field in fields:
-        if (
-            field in _BLOCKED_FIELDS
-            or any(part in field.lower() for part in _SENSITIVE_FIELD_PARTS)
+        if field in _BLOCKED_FIELDS or any(
+            part in field.lower() for part in _SENSITIVE_FIELD_PARTS
         ):
             raise OrmToolError("field_not_allowed", 403)
         description = descriptions[field]
@@ -240,7 +239,11 @@ def _validate_runtime_fields(env, batch: dict[str, object], claims: BatchAuthori
 def _values_for_field(items, field):
     values = []
     for item in items:
-        assignments = item.get("values") if item["operation"] == "create" else item.get("changes", [])
+        assignments = (
+            item.get("values")
+            if item["operation"] == "create"
+            else item.get("changes", [])
+        )
         for assignment in assignments:
             if assignment["field"] == field:
                 values.append(assignment["value"])
@@ -306,7 +309,10 @@ def _batch_item(value: object, operation: str) -> dict[str, object]:
     result = dict(raw)
     if assignments_name is not None:
         assignments = raw[assignments_name]
-        if not isinstance(assignments, list) or not 1 <= len(assignments) <= MAX_ACTION_FIELDS:
+        if (
+            not isinstance(assignments, list)
+            or not 1 <= len(assignments) <= MAX_BATCH_FIELDS
+        ):
             raise OrmToolError("invalid_request", 422)
         parsed = [_assignment(item) for item in assignments]
         fields = tuple(item["field"] for item in parsed)
