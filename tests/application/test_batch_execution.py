@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from uuid import UUID
 
 import pytest
 
@@ -20,8 +21,22 @@ from odoo_ai.contracts.batch import (
     BatchMutationRequest,
     BatchPatchItem,
 )
+from odoo_ai.contracts.batch_job import BatchExecutionContext
 
 SCHEMA_ID = "schema:v1:sha256:" + "b" * 64
+JOB_FINGERPRINT = "batch-job:v1:sha256:" + "c" * 64
+CONTEXT = BatchExecutionContext(
+    job_id=UUID(int=10),
+    attempt_id=UUID(int=11),
+    authorization_id=UUID(int=12),
+    job_fingerprint=JOB_FINGERPRINT,
+    instance_id="instance-test",
+    database="odoo-test",
+    uid=7,
+    company_id=1,
+    allowed_company_ids=(1,),
+    policy_revision="agent-policy-v3",
+)
 
 
 def _text(field: str, value: str) -> ActionFieldChange:
@@ -62,16 +77,16 @@ class FakeBatchGateway:
             )
         return tuple(results)
 
-    async def create_many(self, *, model, schema_id, items, failure_mode):
-        self.calls.append(("create", model, schema_id, len(items), failure_mode))
+    async def create_many(self, *, context, model, schema_id, items, failure_mode):
+        self.calls.append(("create", model, schema_id, len(items), failure_mode, context))
         return self._results(items, created=True)
 
-    async def patch_many(self, *, model, schema_id, items, failure_mode):
-        self.calls.append(("patch", model, schema_id, len(items), failure_mode))
+    async def patch_many(self, *, context, model, schema_id, items, failure_mode):
+        self.calls.append(("patch", model, schema_id, len(items), failure_mode, context))
         return self._results(items)
 
-    async def delete_many(self, *, model, items, failure_mode):
-        self.calls.append(("delete", model, None, len(items), failure_mode))
+    async def delete_many(self, *, context, model, items, failure_mode):
+        self.calls.append(("delete", model, None, len(items), failure_mode, context))
         return self._results(items)
 
 
@@ -90,7 +105,7 @@ def test_one_failed_row_does_not_stop_later_chunks() -> None:
         ),
     )
 
-    result = asyncio.run(service.execute(request))
+    result = asyncio.run(service.execute(request, context=CONTEXT))
 
     assert result.total_items == 25
     assert result.applied_items == 24
@@ -99,6 +114,7 @@ def test_one_failed_row_does_not_stop_later_chunks() -> None:
     assert result.results[18].state is BatchItemState.APPLIED
     assert [call[3] for call in gateway.calls] == [10, 10, 5]
     assert all(call[4] is BatchFailureMode.CONTINUE_ON_ERROR for call in gateway.calls)
+    assert all(call[5] == CONTEXT for call in gateway.calls)
 
 
 def test_create_results_keep_source_row_to_created_record_mapping() -> None:
@@ -115,7 +131,7 @@ def test_create_results_keep_source_row_to_created_record_mapping() -> None:
         ),
     )
 
-    result = asyncio.run(service.execute(request))
+    result = asyncio.run(service.execute(request, context=CONTEXT))
 
     assert tuple(item.source_ref for item in result.results) == (
         "sheet1:2",
@@ -153,15 +169,15 @@ def test_patch_planner_grouping_is_used_by_execution_service() -> None:
         ),
     )
 
-    result = asyncio.run(service.execute(request))
+    result = asyncio.run(service.execute(request, context=CONTEXT))
 
     assert result.applied_items == 3
     assert [call[3] for call in gateway.calls] == [2, 1]
 
 
 class CorruptBatchGateway(FakeBatchGateway):
-    async def delete_many(self, *, model, items, failure_mode):
-        del model, failure_mode
+    async def delete_many(self, *, context, model, items, failure_mode):
+        del context, model, failure_mode
         return (
             BatchItemResult(
                 source_ref=items[0].source_ref,
@@ -183,4 +199,4 @@ def test_gateway_must_return_exactly_one_result_per_row() -> None:
     )
 
     with pytest.raises(BatchExecutionError, match="batch_gateway_result_corrupt"):
-        asyncio.run(service.execute(request))
+        asyncio.run(service.execute(request, context=CONTEXT))
