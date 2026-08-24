@@ -11,10 +11,23 @@ patch(assistantPanelService, {
         return {
             ...panel,
             open() {
-                panel.open();
-                if (!panel.state.conversationId) {
-                    panel.state.historyView = true;
+                panel.state.isOpen = true;
+                panel.refreshContext();
+                const requestedConversationId = panel.state.conversationId;
+                if (requestedConversationId) {
+                    void panel.loadHistory(requestedConversationId);
+                    return;
                 }
+
+                panel.state.historyView = true;
+                void panel.loadHistory(null).then((loaded) => {
+                    if (loaded && panel.state.historyView) {
+                        // The Assistant Service selects the newest conversation when no id is
+                        // supplied. History landing must remain an explicit no-chat state.
+                        panel.newConversation();
+                        panel.state.historyView = true;
+                    }
+                });
             },
             showHistory() {
                 panel.state.historyView = true;
