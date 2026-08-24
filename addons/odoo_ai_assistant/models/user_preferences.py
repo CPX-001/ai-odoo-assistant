@@ -9,7 +9,7 @@ from odoo.exceptions import ValidationError
 
 from ..services import AssistantServiceError
 
-_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
+_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
 _MAX_MODEL_OPTIONS = 50
 
 
@@ -85,21 +85,40 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
     def chat_model_preferences(self):
         if not self.env.user._is_internal():
             return _error("access_denied")
+        selected = self._preferred_reasoning_model()
+        can_manage = self.env.user.has_group("base.group_system")
         try:
             catalog = _validated_model_catalog(self._chat_client().codex_models())
-            selected = self._preferred_reasoning_model()
-            available = {item["model"] for item in catalog["models"]}
-            if selected not in available:
-                selected = None
+        except (AssistantServiceError, ValueError):
+            fallback_models = (
+                [
+                    {
+                        "model": selected,
+                        "display_name": selected,
+                        "is_default": False,
+                    }
+                ]
+                if selected
+                else []
+            )
             return {
                 "ok": True,
-                "models": catalog["models"],
-                "default_model": catalog["default_model"],
+                "models": fallback_models,
+                "default_model": None,
                 "selected_model": selected,
-                "can_manage_settings": self.env.user.has_group("base.group_system"),
+                "can_manage_settings": can_manage,
             }
-        except (AssistantServiceError, ValueError):
-            return _error("service_unavailable")
+
+        available = {item["model"] for item in catalog["models"]}
+        if selected not in available:
+            selected = None
+        return {
+            "ok": True,
+            "models": catalog["models"],
+            "default_model": catalog["default_model"],
+            "selected_model": selected,
+            "can_manage_settings": can_manage,
+        }
 
     @api.model
     def set_chat_model_preference(self, model):
@@ -109,13 +128,20 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
             not isinstance(model, str) or not _MODEL_PATTERN.fullmatch(model)
         ):
             return _error("invalid_context")
+        normalized = model or None
+        if normalized is None:
+            return {
+                "ok": True,
+                "selected_model": self.env[
+                    "odoo.ai.user.preference"
+                ].set_current_reasoning_model(None),
+            }
         try:
             catalog = _validated_model_catalog(self._chat_client().codex_models())
         except (AssistantServiceError, ValueError):
             return _error("service_unavailable")
         available = {item["model"] for item in catalog["models"]}
-        normalized = model or None
-        if normalized is not None and normalized not in available:
+        if normalized not in available:
             return _error("invalid_context")
         try:
             selected = self.env["odoo.ai.user.preference"].set_current_reasoning_model(
