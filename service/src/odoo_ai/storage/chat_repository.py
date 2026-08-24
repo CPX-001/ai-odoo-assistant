@@ -48,8 +48,6 @@ def load_chat_history(
         selected = next((item for item in conversations if item.id == conversation_id), None)
         if selected is None:
             raise ChatStoreError("conversation_not_found")
-    elif conversations:
-        selected = conversations[0]
 
     messages: tuple[ChatMessage, ...] = ()
     if selected is not None:
