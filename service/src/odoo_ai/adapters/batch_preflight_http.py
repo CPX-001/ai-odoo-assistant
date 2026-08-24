@@ -12,7 +12,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
 
 from odoo_ai.adapters.odoo_http import OdooGatewayError, OdooGatewaySettings
-from odoo_ai.contracts.batch import BatchMutationRequest
+from odoo_ai.contracts.action import ModelName
+from odoo_ai.contracts.batch import BatchMutationKind, BatchMutationRequest, SourceRef
 from odoo_ai.contracts.batch_preflight import BatchPreflightIssue, BatchPreflightResult
 from odoo_ai.security.shared_secret import (
     SHARED_SECRET_HEADER,
@@ -31,9 +32,9 @@ class _BatchPreflightResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     ok: bool
-    operation: str
-    model: str
-    accepted_source_refs: tuple[str, ...] = ()
+    operation: BatchMutationKind
+    model: ModelName
+    accepted_source_refs: tuple[SourceRef, ...] = ()
     issues: tuple[BatchPreflightIssue, ...] = ()
 
 
@@ -62,14 +63,14 @@ class BatchPreflightOdooGatewayFactory:
             if isinstance(delegation_token, SecretStr)
             else delegation_token
         )
-        _validate_header(token, maximum=8192)
+        _validate_header(token, maximum=8192, error_code="invalid_turn_authority")
         if not token.startswith("ag1."):
             raise OdooGatewayError("invalid_turn_authority")
         try:
             machine_secret = self._secret_loader()
         except SharedSecretError:
             raise OdooGatewayError("machine_auth_unavailable") from None
-        _validate_header(machine_secret, maximum=4096)
+        _validate_header(machine_secret, maximum=4096, error_code="machine_auth_unavailable")
         return HttpBatchPreflightGateway(
             settings=self._settings,
             turn_id=turn_id,
@@ -166,14 +167,14 @@ class HttpBatchPreflightGateway:
             connection.close()
 
 
-def _validate_header(value: object, *, maximum: int) -> None:
+def _validate_header(value: object, *, maximum: int, error_code: str) -> None:
     if (
         not isinstance(value, str)
         or not 1 <= len(value) <= maximum
         or value != value.strip()
         or any(ord(character) < 33 or ord(character) > 126 for character in value)
     ):
-        raise OdooGatewayError("invalid_turn_authority")
+        raise OdooGatewayError(error_code)
 
 
 def _status_error(status: int) -> str:
