@@ -54,6 +54,30 @@ class BrowserChatController(http.Controller):
         return request.env["odoo.ai.assistant.bridge"].set_chat_model_preference(model)
 
     @http.route(
+        "/odoo_ai/v1/agent-autonomy",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def agent_autonomy(self, **unexpected):
+        if unexpected:
+            return {"error": {"code": "invalid_context"}, "ok": False}
+        return request.env["odoo.ai.assistant.bridge"].agent_autonomy_preferences()
+
+    @http.route(
+        "/odoo_ai/v1/agent-autonomy-set",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def set_agent_autonomy(self, profile=None, **unexpected):
+        if unexpected:
+            return {"error": {"code": "invalid_context"}, "ok": False}
+        return request.env["odoo.ai.assistant.bridge"].set_agent_autonomy_preference(
+            profile
+        )
+
+    @http.route(
         "/odoo_ai/v1/agent-plan-decision",
         type="json",
         auth="user",
@@ -67,6 +91,8 @@ class BrowserChatController(http.Controller):
             decision,
         )
 
+    # Legacy policy endpoints remain available for older cached assets during module
+    # upgrades. New clients use the single autonomy-profile endpoints above.
     @http.route(
         "/odoo_ai/v1/agent-policy",
         type="json",
