@@ -80,11 +80,7 @@ patch(assistantPanelService, {
     start(env, dependencies) {
         const panel = super.start(env, dependencies);
         const sessionStorage = browserSessionStorage();
-        const cachedConversationId = loadRecentActiveChat(sessionStorage);
-        if (cachedConversationId) {
-            panel.state.conversationId = cachedConversationId;
-        }
-        panel.state.historyView = !cachedConversationId;
+        panel.state.historyView = true;
 
         const isBusy = () =>
             panel.state.loading || panel.state.historyLoading || panel.state.decisionLoading;
@@ -102,13 +98,17 @@ patch(assistantPanelService, {
         const open = () => {
             panel.state.isOpen = true;
             panel.refreshContext();
-            const conversationId = panel.state.conversationId;
-            if (!conversationId || panel.state.historyView) {
+            const recentConversationId = loadRecentActiveChat(sessionStorage);
+            if (!recentConversationId) {
+                panel.newConversation();
                 panel.state.historyView = true;
                 void panel.loadHistory(null);
                 return;
             }
-            void panel.loadHistory(conversationId).then((loaded) => {
+
+            panel.state.conversationId = recentConversationId;
+            panel.state.historyView = false;
+            void panel.loadHistory(recentConversationId).then((loaded) => {
                 if (loaded) {
                     saveRecentActiveChat(sessionStorage, panel.state.conversationId);
                     return;
