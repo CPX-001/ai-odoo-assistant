@@ -1,0 +1,129 @@
+.o_ai_assistant_panel {
+    .o_ai_assistant_autonomy_picker {
+        position: relative;
+        flex: 0 0 auto;
+        margin: 0;
+    }
+
+    .o_ai_assistant_autonomy_summary {
+        min-height: 2.65rem;
+        max-width: 9rem;
+        padding: 0.45rem 0.6rem;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        border-radius: var(--o-ai-control-radius, 0.55rem);
+        background-color: var(--o-ai-surface);
+        color: var(--bs-body-color, inherit);
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+        transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+
+        &:hover,
+        &:focus-visible {
+            border-color: color-mix(in srgb, var(--o-ai-accent) 45%, var(--bs-border-color));
+            background-color: var(--o-ai-surface-subtle);
+            outline: none;
+        }
+    }
+
+    .o_ai_assistant_autonomy_picker[open] .o_ai_assistant_autonomy_summary {
+        border-color: color-mix(in srgb, var(--o-ai-accent) 55%, var(--bs-border-color));
+        box-shadow: 0 0 0 0.12rem color-mix(in srgb, var(--o-ai-accent) 12%, transparent);
+    }
+
+    .o_ai_assistant_autonomy_label {
+        max-width: 6.6rem;
+    }
+
+    .o_ai_assistant_autonomy_menu {
+        position: absolute;
+        z-index: 20;
+        right: 0;
+        bottom: calc(100% + 0.5rem);
+        width: min(23rem, calc(100vw - 2rem));
+        overflow: hidden;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        border-radius: 0.75rem;
+        background-color: var(--o-ai-surface);
+        box-shadow: $box-shadow-lg;
+    }
+
+    .o_ai_assistant_autonomy_option {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 0.7rem;
+        padding: 0.65rem 0.75rem;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        transition: background-color 120ms ease;
+
+        &:hover,
+        &:focus-visible {
+            background-color: var(--o-ai-surface-subtle);
+            outline: none;
+        }
+    }
+
+    .o_ai_assistant_autonomy_option_full {
+        border-top: 1px solid var(--bs-border-color, #dee2e6);
+    }
+
+    .o_ai_assistant_autonomy_option_icon {
+        display: inline-flex;
+        flex: 0 0 2rem;
+        width: 2rem;
+        height: 2rem;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.55rem;
+        background-color: var(--o-ai-gray-100);
+        color: var(--o-ai-accent);
+    }
+
+    .o_ai_assistant_confirmation {
+        padding: var(--o-ai-space-3, 0.75rem);
+        border: 1px solid color-mix(in srgb, var(--o-ai-accent) 30%, var(--bs-border-color));
+        border-radius: 0.75rem;
+        background-color: var(--o-ai-surface-subtle);
+    }
+
+    .o_ai_assistant_confirmation_icon {
+        flex: 0 0 2rem;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 0.55rem;
+        background-color: color-mix(in srgb, var(--o-ai-accent) 12%, var(--o-ai-surface));
+        color: var(--o-ai-accent);
+    }
+}
+
+@media (max-width: 575.98px) {
+    .o_ai_assistant_panel {
+        .o_ai_assistant_autonomy_summary {
+            width: 2.65rem;
+            padding-inline: 0;
+            justify-content: center;
+        }
+
+        .o_ai_assistant_autonomy_label,
+        .o_ai_assistant_autonomy_summary .fa-angle-up {
+            display: none;
+        }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .o_ai_assistant_panel {
+        .o_ai_assistant_autonomy_summary,
+        .o_ai_assistant_autonomy_option {
+            transition: none;
+        }
+    }
+}
