@@ -8,6 +8,7 @@ import re
 from sqlalchemy.exc import SQLAlchemyError
 
 from odoo_ai.adapters.chat_routing import CodexChatRoutingInterpreter
+from odoo_ai.adapters.codex_engine import CodexAppServerEngine as BaseCodexAppServerEngine
 from odoo_ai.adapters.codex_runtime import CodexRuntimeSettings
 from odoo_ai.adapters.source_tools import SourceToolExecutorFactory, source_tool_specs
 from odoo_ai.adapters.user_model_engine import UserSelectableCodexAppServerEngine as CodexAppServerEngine
