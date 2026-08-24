@@ -44,6 +44,8 @@ Codex no recibirá el workbook completo salvo archivos diminutos. Para archivos 
 
 Cada fila conserva `source_ref` para poder enlazar errores y receipts con una fila/origen futuro (`sheet:Clientes:42`, `csv:120`, etc.). Un request en memoria queda limitado a 500 filas; una importación grande se persistirá y alimentará múltiples requests, no un payload gigante.
 
+Cada resultado conserva también `source_ref`, estado aplicado/fallido, `record_id` cuando se aplicó y un código de error sanitizado cuando falló. El contrato no transporta excepciones crudas de Odoo.
+
 ### 3. Chunking host-side y optimización por operación
 
 Defaults iniciales para servidores modestos:
@@ -53,14 +55,14 @@ Defaults iniciales para servidores modestos:
 - delete: 100 ids/chunk;
 - máximo configurable por chunk: 200.
 
-El planner está en `application/batching.py` y no depende de Odoo/Codex/storage.
+El planner está en `application/batching.py` y no depende de Odoo/Codex/storage. `application/batch_execution.py` secuencia los chunks, valida que el gateway devuelva exactamente un resultado por `source_ref` y agrega los resultados preservando el orden original.
 
-La futura ejecución Odoo aprovechará la semántica real del ORM:
+La ejecución Odoo aprovecha la semántica real del ORM:
 
-- create: `model.create([vals, ...])` por chunk;
-- delete: `recordset.unlink()` por chunk;
-- patch con valores idénticos: agrupar ids y usar `recordset.write(vals)`;
-- patch heterogéneo: filas acotadas dentro del chunk, sin fingir un multi-update heterogéneo inexistente.
+- create: intenta `model.create([vals, ...])` por chunk;
+- delete: intenta `recordset.unlink()` por chunk;
+- patch con valores idénticos: agrupa ids e intenta `recordset.write(vals)`;
+- patch heterogéneo: se separa en grupos/chunks, sin fingir un multi-update heterogéneo inexistente.
 
 ### 4. Validar antes de escribir
 
@@ -87,13 +89,24 @@ Orden orientativo de resolución de many2one:
 
 ### 6. Transacciones, errores y reanudación
 
-No se mantendrá una transacción Odoo abierta durante un workbook enorme. La unidad de commit será el chunk.
+No se mantendrá una transacción Odoo abierta durante un workbook enorme. Una importación/job alimentará chunks acotados y persistirá progreso entre ellos.
 
-El modo por defecto será `atomic_chunk`: si una fila provoca una excepción material durante el commit, se revierte ese chunk. El futuro modo `continue_on_error` podrá aislar filas con savepoints y producir errores por fila cuando el usuario prefiera maximizar throughput sobre atomicidad.
+El modo por defecto es `continue_on_error`:
+
+1. se intenta primero la operación ORM optimizada sobre el chunk completo;
+2. si el intento conjunto falla, su savepoint se revierte;
+3. el executor repite las filas de ese chunk en savepoints independientes;
+4. la fila que Odoo rechaza queda como `failed` y no se aplica;
+5. las filas válidas continúan;
+6. el usuario recibe al final un resumen y el detalle de `source_ref` + motivo sanitizado de cada fallo.
+
+De esta forma un único dato malo no tira una importación válida de cientos o miles de filas, pero el camino normal conserva la eficiencia de multi-create/recordsets.
+
+`atomic_chunk` se mantiene como modo explícito para business actions o trabajos donde el conjunto tenga una invariante real de todo-o-nada. No es el default de importaciones genéricas.
 
 Los jobs de importación deberán ser idempotentes/reanudables y persistir progreso fuera del thread de Codex.
 
-### 7. Seguridad y autoridad
+### 7. Seguridad, autoridad y autonomía
 
 Batching no altera las fronteras de autoridad:
 
@@ -101,16 +114,20 @@ Batching no altera las fronteras de autoridad:
 - ACL, record rules, field access, compañías y reglas de negocio siguen mandando;
 - Codex propone mappings/intención, no autoridad;
 - los límites de chunk, tamaño de job y reintentos son host-side;
-- `Acceso completo` elimina confirmaciones adicionales del Assistant, pero no permisos de Odoo ni límites anti-loop/recursos.
+- el perfil visible del usuario decide la confirmación del Assistant;
+- `full_access` elimina confirmaciones adicionales del Assistant incluso para riesgo protegido, pero no permisos/reglas de Odoo ni límites anti-loop/recursos.
+
+Una denegación ACL y una regla de negocio de Odoo no deben mostrarse como si fueran una confirmación pendiente: se reportan como causas de ejecución distintas.
 
 ## Consecuencias
 
 - Las operaciones masivas dejan de consumir un AgentPlanStep por registro.
 - Un archivo de miles de filas no necesita entrar completo en contexto LLM.
-- Se puede optimizar create/delete y updates homogéneos con primitivas ORM reales.
-- Hace falta una segunda fase para integrar BatchMutation con preview/approval/execution.
-- Hace falta una tercera fase para upload, parsing, mapping semántico, resolución de referencias y UI de importación.
-- El límite actual de un registro por proposal continúa vigente hasta completar la segunda fase; ADR-015 no pretende ocultar esa limitación temporal.
+- Se optimizan create/delete y updates homogéneos con primitivas ORM reales y fallback por fila sólo cuando hace falta.
+- La capa provider-neutral de planificación/ejecución y el helper ORM de chunks ya existen.
+- Sigue pendiente integrar BatchMutation como proposal/preview/authority/receipt de primera clase en el agente unificado.
+- Después queda upload, parsing, mapping semántico, resolución de referencias, jobs persistidos y UI de importación.
+- El límite del tool ACTION actual de un registro por proposal continúa vigente hasta completar esa integración; ADR-015 no pretende ocultar esa limitación temporal.
 
 ## Alternativas consideradas
 
@@ -136,3 +153,6 @@ Descartado como default: bloqueos largos, rollback costoso y mala recuperación 
 - `docs/UNIFIED_AGENT_RUNTIME.md`
 - `service/src/odoo_ai/contracts/batch.py`
 - `service/src/odoo_ai/application/batching.py`
+- `service/src/odoo_ai/application/batch_execution.py`
+- `service/src/odoo_ai/ports/batch.py`
+- `addons/odoo_ai_assistant/services/batch_tools.py`
