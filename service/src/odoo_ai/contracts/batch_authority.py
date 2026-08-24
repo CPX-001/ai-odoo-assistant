@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from odoo_ai.contracts.action import Fingerprint, Revision
-from odoo_ai.contracts.batch import BatchFailureMode, BatchMutationKind
+from odoo_ai.contracts.batch import MAX_BATCH_FIELDS, BatchFailureMode, BatchMutationKind
 
 
 class BatchAuthorityClaims(BaseModel):
@@ -29,7 +29,7 @@ class BatchAuthorityClaims(BaseModel):
     operation: BatchMutationKind
     model: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
     schema_id: Fingerprint | None = None
-    fields: tuple[str, ...] = Field(default=(), max_length=16)
+    fields: tuple[str, ...] = Field(default=(), max_length=MAX_BATCH_FIELDS)
     failure_mode: BatchFailureMode
     policy_revision: Revision
     row_count: int = Field(strict=True, ge=1, le=200)
