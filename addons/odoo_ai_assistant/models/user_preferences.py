@@ -41,11 +41,11 @@ class AssistantUserPreference(models.Model):
             ("autonomous", "Autonomous"),
             ("full_access", "Full access"),
         ],
-        default="balanced",
         string="Assistant autonomy",
     )
     # Legacy fields remain stored so existing databases upgrade without a destructive
-    # migration. They are synchronized from the visible autonomy profile.
+    # migration. A missing profile is derived from these fields once, preserving the
+    # user's previous autonomy instead of silently resetting it.
     agent_confirmation_mode = fields.Selection(
         selection=[
             ("always_confirm", "Always confirm"),
