@@ -1,48 +1,59 @@
-.o_ai_assistant_model_picker {
-    min-width: 0;
-    padding: 0.35rem 0.45rem;
-    border: 1px solid var(--o-gray-200, #dee2e6);
-    border-radius: 0.55rem;
-    background: rgba(255, 255, 255, 0.55);
-    transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
-
-    &:focus-within {
-        border-color: var(--o-brand-primary, #71639e);
-        box-shadow: 0 0 0 0.12rem rgba(113, 99, 158, 0.12);
-        background: rgba(255, 255, 255, 0.85);
-    }
-
-    .form-select {
+.o_ai_assistant_panel {
+    .o_ai_assistant_model_picker {
         min-width: 0;
-        border: 0;
-        box-shadow: none;
-        background-color: transparent;
-        padding-top: 0.2rem;
-        padding-bottom: 0.2rem;
+        min-height: 2.1rem;
+        padding: 0.2rem var(--o-ai-space-2, 0.5rem);
+        border: 1px solid var(--bs-border-color);
+        border-radius: var(--o-ai-control-radius, 0.55rem);
+        background-color: color-mix(
+            in srgb,
+            var(--o-view-background-color, var(--bs-body-bg)) 96%,
+            var(--o-brand-primary) 4%
+        );
+        transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+
+        &:focus-within {
+            border-color: color-mix(in srgb, var(--o-brand-primary) 55%, var(--bs-border-color));
+            box-shadow: 0 0 0 0.12rem color-mix(in srgb, var(--o-brand-primary) 12%, transparent);
+            background-color: var(--o-view-background-color, var(--bs-body-bg));
+        }
+
+        .form-select {
+            min-width: 0;
+            min-height: 1.65rem;
+            border: 0;
+            box-shadow: none;
+            background-color: transparent;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
     }
-}
 
-.o_ai_assistant_model_picker_label {
-    flex: 0 0 auto;
-}
-
-.o_ai_assistant_settings_shortcut {
-    border-radius: 0.45rem;
-    transition: background-color 140ms ease, transform 140ms ease;
-
-    &:hover,
-    &:focus-visible {
-        background: var(--o-gray-100, #f1f3f5);
+    .o_ai_assistant_model_picker_label {
+        flex: 0 0 auto;
+        margin-bottom: 0;
     }
 
-    &:active {
-        transform: scale(0.94);
+    .o_ai_assistant_settings_shortcut {
+        border-radius: 0.45rem;
+        transition: background-color 140ms ease, transform 140ms ease;
+
+        &:hover,
+        &:focus-visible {
+            background-color: var(--o-gray-100);
+        }
+
+        &:active {
+            transform: scale(0.94);
+        }
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .o_ai_assistant_model_picker,
-    .o_ai_assistant_settings_shortcut {
-        transition: none;
+    .o_ai_assistant_panel {
+        .o_ai_assistant_model_picker,
+        .o_ai_assistant_settings_shortcut {
+            transition: none;
+        }
     }
 }
