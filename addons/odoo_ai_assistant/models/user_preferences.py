@@ -9,7 +9,7 @@ from odoo.exceptions import ValidationError
 
 from ..services import AssistantServiceError
 
-_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
+_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _MAX_MODEL_OPTIONS = 50
 
 
@@ -110,7 +110,8 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
             }
 
         available = {item["model"] for item in catalog["models"]}
-        if selected not in available:
+        if selected is not None and selected not in available:
+            self.env["odoo.ai.user.preference"].set_current_reasoning_model(None)
             selected = None
         return {
             "ok": True,
