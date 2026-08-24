@@ -1,4 +1,6 @@
 import { expect, test } from "@odoo/hoot";
+import { mountWithCleanup } from "@web/../tests/web_test_helpers";
+import { AssistantMarkdown } from "@odoo_ai_assistant/components/assistant_markdown/assistant_markdown";
 import {
     parseMarkdown,
     safeMarkdownLink,
@@ -53,4 +55,31 @@ test("raw html is kept as escaped text for Owl to render", () => {
     expect(blocks[0].tokens).toHaveLength(1);
     expect(blocks[0].tokens[0].type).toBe("text");
     expect(blocks[0].tokens[0].text).toBe("<script>alert('x')</script>");
+});
+
+test("Owl renderer creates semantic markup instead of exposing markdown delimiters", async () => {
+    await mountWithCleanup(AssistantMarkdown, {
+        props: {
+            content: "## Resumen\n\n**Total:** 12\n\n| Tipo | Cantidad |\n|---|---:|\n| Facturas | 12 |",
+        },
+    });
+
+    const root = document.querySelector(".o_ai_assistant_markdown");
+    expect(root !== null).toBe(true);
+    expect(root.querySelector("strong")?.textContent).toBe("Total:");
+    expect(root.querySelector("table") !== null).toBe(true);
+    expect(root.textContent.includes("**")).toBe(false);
+    expect(root.textContent.includes("|---|")).toBe(false);
+});
+
+test("Owl renderer never turns raw assistant HTML into executable DOM", async () => {
+    await mountWithCleanup(AssistantMarkdown, {
+        props: { content: "<script>globalThis.__markdown_xss = true</script>" },
+    });
+
+    const root = document.querySelector(".o_ai_assistant_markdown");
+    expect(root !== null).toBe(true);
+    expect(root.querySelector("script")).toBe(null);
+    expect(root.textContent).toBe("<script>globalThis.__markdown_xss = true</script>");
+    expect(globalThis.__markdown_xss).toBe(undefined);
 });
