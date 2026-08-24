@@ -163,15 +163,27 @@ class SqlBatchMutationJobStore:
                     BatchJobTransitionOutcome.APPLIED,
                     _snapshot(session, record),
                 )
-            if current.snapshot.state is BatchJobState.EXECUTION_UNKNOWN:
-                if record.attempt_id is None:
+            if current.snapshot.state in {
+                BatchJobState.EXECUTING,
+                BatchJobState.EXECUTION_UNKNOWN,
+            }:
+                # The persisted attempt is authoritative. ``attempt_id`` is only a
+                # candidate for a PREPARED job and must never replace an in-flight
+                # identity: Odoo row receipts are keyed by the original attempt.
+                if record.attempt_id is None or record.execution_started_at is None:
                     return BatchJobTransitionResult(BatchJobTransitionOutcome.CORRUPT)
+                was_unknown = current.snapshot.state is BatchJobState.EXECUTION_UNKNOWN
                 record.state = BatchJobState.EXECUTING.value
                 record.error_code = None
                 record.state_version += 1
                 record.updated_at = started_at
                 session.flush()
-                _audit(session, record, "execution_resumed", started_at)
+                _audit(
+                    session,
+                    record,
+                    "execution_resumed" if was_unknown else "execution_reclaimed",
+                    started_at,
+                )
                 return BatchJobTransitionResult(
                     BatchJobTransitionOutcome.RESUMED,
                     _snapshot(session, record),
