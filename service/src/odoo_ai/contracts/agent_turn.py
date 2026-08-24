@@ -25,6 +25,8 @@ from odoo_ai.contracts.screen_context import ScreenContext
 
 MAX_TOOL_CALLS_PER_TURN = 32
 MAX_WRITE_STEPS_PER_PLAN = 12
+MAX_RECORDS_PER_WRITE_STEP = 500
+MAX_PLAN_ESTIMATED_RECORDS = MAX_WRITE_STEPS_PER_PLAN * MAX_RECORDS_PER_WRITE_STEP
 MAX_REPLANS = 2
 MAX_CONSECUTIVE_FAILURES = 3
 
@@ -203,7 +205,7 @@ class HostToolPolicySpec(BaseModel):
     effect_scope: EffectScope
     risk_floor: RiskLevel
     atomic: bool
-    max_records: int = Field(default=1, strict=True, ge=0, le=MAX_WRITE_STEPS_PER_PLAN)
+    max_records: int = Field(default=1, strict=True, ge=0, le=MAX_RECORDS_PER_WRITE_STEP)
     allowed_models: tuple[str, ...] = Field(default=(), max_length=128)
 
     @model_validator(mode="after")
@@ -227,7 +229,7 @@ class AgentPlanMetadata(BaseModel):
     has_external_effect: bool
     has_irreversible_effect: bool
     is_atomic: bool
-    estimated_blast_radius: int = Field(strict=True, ge=0, le=MAX_WRITE_STEPS_PER_PLAN)
+    estimated_blast_radius: int = Field(strict=True, ge=0, le=MAX_PLAN_ESTIMATED_RECORDS)
 
 
 class AgentPlanStep(BaseModel):
@@ -245,8 +247,11 @@ class AgentPlanStep(BaseModel):
     is_write: bool
     is_business_action: bool
     atomic: bool
-    estimated_records: int = Field(strict=True, ge=0, le=MAX_WRITE_STEPS_PER_PLAN)
+    estimated_records: int = Field(strict=True, ge=0, le=MAX_RECORDS_PER_WRITE_STEP)
     payload_fingerprint: str = Field(pattern=r"^agent-step:v1:sha256:[0-9a-f]{64}$")
+    # These names are retained for canonical compatibility with persisted ACTION plans.
+    # They remain ACTION-only; non-ACTION effects bind opaque host-owned handles through
+    # reconciled tool arguments included in this step's payload fingerprint.
     proposal_id: UUID | None = None
     proposal_fingerprint: str | None = Field(
         default=None,
@@ -287,7 +292,15 @@ class AgentPlanStepView(BaseModel):
 
     step_id: StepId
     title: str = Field(min_length=1, max_length=240)
-    state: Literal["planned", "previewed", "executing", "completed", "failed", "skipped"]
+    state: Literal[
+        "planned",
+        "previewed",
+        "executing",
+        "completed",
+        "partial",
+        "failed",
+        "skipped",
+    ]
     risk: RiskLevel
     effect_scope: EffectScope
     receipt: AgentPlanReceiptView | None = None
