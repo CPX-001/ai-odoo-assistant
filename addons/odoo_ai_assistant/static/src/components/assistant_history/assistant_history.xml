@@ -12,6 +12,15 @@
                 </p>
             </div>
 
+            <div t-if="showSearch" class="o_ai_assistant_history_search mb-2">
+                <i class="fa fa-search text-muted" aria-hidden="true"/>
+                <input type="search" class="form-control form-control-sm"
+                    maxlength="160" autocomplete="off"
+                    placeholder="Buscar conversaciones…"
+                    aria-label="Buscar conversaciones"
+                    t-att-value="ui.search" t-on-input="onSearchInput"/>
+            </div>
+
             <div class="o_ai_assistant_history_list d-flex flex-column gap-2">
                 <button type="button"
                     class="o_ai_assistant_history_item o_ai_assistant_history_item_new text-start border"
@@ -30,10 +39,16 @@
                     <i class="fa fa-spinner fa-spin me-1" aria-hidden="true"/> Cargando conversaciones…
                 </div>
 
-                <div t-elif="!conversations.length" class="o_ai_assistant_history_empty text-center px-3 py-4">
+                <div t-elif="!state.conversations.length" class="o_ai_assistant_history_empty text-center px-3 py-4">
                     <i class="fa fa-comments-o fa-2x text-muted mb-2" aria-hidden="true"/>
                     <div class="fw-semibold">Todavía no hay conversaciones</div>
                     <div class="small text-muted">El historial aparecerá aquí después de tu primer chat.</div>
+                </div>
+
+                <div t-elif="!conversations.length" class="o_ai_assistant_history_empty text-center px-3 py-4">
+                    <i class="fa fa-search text-muted mb-2" aria-hidden="true"/>
+                    <div class="fw-semibold">Sin coincidencias</div>
+                    <div class="small text-muted">Prueba con otro término.</div>
                 </div>
 
                 <t t-else="">
@@ -67,16 +82,17 @@
         </xpath>
 
         <xpath expr="//div[select[@aria-label='Historial de chats']]" position="replace">
-            <div t-if="!ui.isMinimized" class="o_ai_assistant_history_toolbar mt-2">
+            <div t-if="!ui.isMinimized" class="o_ai_assistant_history_toolbar">
                 <button t-if="!state.historyView" type="button"
                     class="btn btn-sm btn-outline-secondary o_ai_assistant_history_button"
+                    title="Historial de chats" aria-label="Abrir historial de chats"
                     t-att-disabled="state.loading or state.historyLoading or state.decisionLoading"
                     t-on-click="showHistory">
                     <i class="fa fa-history me-1" aria-hidden="true"/> Historial
                 </button>
-                <div t-else="" class="small text-muted d-flex align-items-center gap-1">
+                <div t-else="" class="small text-muted d-flex align-items-center gap-1 px-2">
                     <i class="fa fa-history" aria-hidden="true"/>
-                    <span>Conversaciones recientes</span>
+                    <span>Recientes</span>
                 </div>
             </div>
         </xpath>
