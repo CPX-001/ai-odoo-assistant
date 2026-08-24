@@ -58,20 +58,55 @@ def _tool(
     )
 
 
-def test_policy_intersection_is_always_the_most_restrictive_layer() -> None:
+def test_user_autonomy_controls_confirmation_even_if_hidden_layers_are_stricter() -> None:
     layers = AgentPolicyLayers(
-        system_ceiling=_layer(),
+        system_ceiling=_layer(ConfirmationMode.ALWAYS_CONFIRM, RiskLevel.LOW),
         administrator=_layer(ConfirmationMode.RISK_BASED, RiskLevel.MODERATE),
-        user=_layer(ConfirmationMode.PROTECTED_ONLY, RiskLevel.HIGH),
+        user=_layer(ConfirmationMode.PROTECTED_ONLY, RiskLevel.PROTECTED),
         conversation=_layer(ConfirmationMode.ALWAYS_CONFIRM, RiskLevel.LOW),
     )
 
     effective = intersect_agent_policy(layers)
 
-    assert effective.confirmation_mode is ConfirmationMode.ALWAYS_CONFIRM
-    assert effective.max_auto_risk is RiskLevel.LOW
+    assert effective.confirmation_mode is ConfirmationMode.PROTECTED_ONLY
+    assert effective.max_auto_risk is RiskLevel.PROTECTED
     assert effective.fingerprint.startswith("agent-policy:v1:sha256:")
-    assert effective.constrained_by == ("conversation",)
+    assert "user" in effective.constrained_by
+
+
+def test_hidden_layers_can_still_reduce_technical_budgets_and_synthetic_data() -> None:
+    system = AgentPolicyLayer(
+        confirmation_mode=ConfirmationMode.ALWAYS_CONFIRM,
+        max_auto_risk=RiskLevel.LOW,
+        allow_synthetic_data=False,
+        max_tool_calls_per_turn=8,
+        max_write_steps_per_plan=4,
+        max_replans=1,
+        max_consecutive_failures=2,
+    )
+    user = AgentPolicyLayer(
+        confirmation_mode=ConfirmationMode.PROTECTED_ONLY,
+        max_auto_risk=RiskLevel.PROTECTED,
+        allow_synthetic_data=True,
+    )
+    permissive = _layer(RiskLevel.PROTECTED if False else ConfirmationMode.PROTECTED_ONLY)
+    layers = AgentPolicyLayers(
+        system_ceiling=system,
+        administrator=_layer(),
+        user=user,
+        conversation=_layer(),
+    )
+
+    effective = intersect_agent_policy(layers)
+
+    assert effective.confirmation_mode is ConfirmationMode.PROTECTED_ONLY
+    assert effective.max_auto_risk is RiskLevel.PROTECTED
+    assert effective.allow_synthetic_data is False
+    assert effective.max_tool_calls_per_turn == 8
+    assert effective.max_write_steps_per_plan == 4
+    assert effective.max_replans == 1
+    assert effective.max_consecutive_failures == 2
+    assert "system_ceiling" in effective.constrained_by
 
 
 def test_low_single_write_executes_without_confirmation() -> None:
@@ -239,7 +274,7 @@ def test_sale_flow_uses_the_registered_whole_flow_risk(
     assert evaluated.risk is expected
 
 
-def test_external_or_irreversible_effect_is_always_protected() -> None:
+def test_external_or_irreversible_effect_is_protected_but_full_access_can_run_it() -> None:
     candidate = AgentCandidateOutput(
         answer_markdown="Eliminaré el registro.",
         confidence="high",
@@ -253,7 +288,7 @@ def test_external_or_irreversible_effect_is_always_protected() -> None:
         ),
     )
 
-    evaluated = evaluate_agent_candidate(
+    autonomous = evaluate_agent_candidate(
         candidate,
         registry=(
             _tool(
@@ -265,10 +300,28 @@ def test_external_or_irreversible_effect_is_always_protected() -> None:
         layers=AgentPolicyLayers(
             system_ceiling=_layer(),
             administrator=_layer(),
-            user=_layer(),
+            user=_layer(ConfirmationMode.PROTECTED_ONLY, RiskLevel.HIGH),
             conversation=_layer(),
         ),
     )
+    full_access = evaluate_agent_candidate(
+        candidate,
+        registry=(
+            _tool(
+                "record.delete",
+                RiskLevel.PROTECTED,
+                scope=EffectScope.INTERNAL_IRREVERSIBLE,
+            ),
+        ),
+        layers=AgentPolicyLayers(
+            system_ceiling=_layer(ConfirmationMode.ALWAYS_CONFIRM, RiskLevel.LOW),
+            administrator=_layer(),
+            user=_layer(ConfirmationMode.PROTECTED_ONLY, RiskLevel.PROTECTED),
+            conversation=_layer(ConfirmationMode.ALWAYS_CONFIRM, RiskLevel.LOW),
+        ),
+    )
 
-    assert evaluated.risk is RiskLevel.PROTECTED
-    assert evaluated.requires_confirmation is True
+    assert autonomous.risk is RiskLevel.PROTECTED
+    assert autonomous.requires_confirmation is True
+    assert full_access.risk is RiskLevel.PROTECTED
+    assert full_access.requires_confirmation is False
