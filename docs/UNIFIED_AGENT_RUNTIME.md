@@ -23,19 +23,42 @@ modelo y construye el schema efectivo antes de leer o preparar un write.
 
 ## Capacidad genérica y capacidad tipada
 
-| Necesidad | Cobertura dinámica |
+| Necesidad | Cobertura dinámica actual |
 | --- | --- |
 | Buscar modelos instalados | Registry runtime + ACL de lectura |
 | Consultar registros/agregados | Schema efectivo, domains y campos acotados |
 | Crear un registro | Schema create efectivo + `default_get` real |
 | Cambiar campos escalares/many2one | Schema write efectivo, máximo 16 campos |
 | Archivar | Acción reversible tipada sobre un registro elegible |
-| Borrar | Un registro, protegido, con ACL `unlink` y preview |
+| Borrar | Un registro por proposal, con ACL `unlink` y preview |
 | Ejecutar un método empresarial | Sólo business action tipada/versionada |
 
 Los campos x2many, binary, HTML de escritura, referencias polimórficas, JSON y
 familias sensibles permanecen fuera del CRUD genérico. No se traducen a command
 lists de Odoo desde texto libre.
+
+### Evolución batch
+
+ADR-015 define la evolución de create/patch/delete hacia mutaciones masivas. La
+primera fase ya aporta contratos normalizados y un planner determinista de
+chunks, pero todavía no sustituye el proposal individual en el tool registry.
+
+Defaults iniciales del planner para servidores self-hosted modestos:
+
+- create: 50 filas por chunk;
+- patch: 50 filas por chunk;
+- delete: 100 ids por chunk;
+- máximo host-side: 200 filas por chunk.
+
+Los patches con valores idénticos se agrupan para que el futuro adapter Odoo
+pueda ejecutar un `recordset.write(vals)`. Creates podrán usar multi-create y
+deletes `recordset.unlink()` por chunk. Una importación grande no se modelará
+como miles de AgentPlanSteps: se persistirá como job y alimentará batches
+acotados.
+
+El pipeline de archivos futuro será parser determinista/streaming -> perfil y
+muestra -> mapping semántico asistido por Codex -> validación Odoo -> filas
+normalizadas persistidas -> ejecución batch. Codex no será el parser de volumen.
 
 ## Resolución de una petición
 
@@ -51,12 +74,25 @@ El modelo puede pedir lecturas y previews, pero el host vuelve a validar todas
 las llamadas. En la salida estructurada sólo se aceptan pasos que correspondan
 exactamente a previews realmente emitidas en ese turn.
 
+El riesgo no es por sí mismo una ambigüedad. Si el usuario ha expresado un
+alcance inequívoco (por ejemplo, "todos los pedidos visibles"), Codex no debe
+usar una pregunta conversacional como segunda capa de aprobación; el host decide
+si corresponde confirmar según el perfil de autonomía del usuario.
+
 ## Decisión y commit
 
-`AgentTurnService` normaliza el plan. El Policy Engine calcula el riesgo y la
-política efectiva. Un plan autorizado automáticamente pasa al executor; si no,
-la UI muestra una única confirmación. El navegador no recibe argumentos
-ejecutables, tokens ni autoridad.
+`AgentTurnService` normaliza el plan. El Policy Engine calcula el riesgo y el
+perfil efectivo de autonomía. Un plan autorizado automáticamente pasa al
+executor; si no, la UI muestra una única confirmación compacta. El navegador no
+recibe argumentos ejecutables, tokens ni autoridad.
+
+Perfiles de usuario:
+
+- `strict`: confirma cualquier escritura;
+- `balanced`: autoejecuta hasta riesgo moderado;
+- `autonomous`: autoejecuta hasta riesgo alto y confirma efectos protegidos;
+- `full_access`: no añade confirmaciones del Assistant, conservando permisos
+  reales de Odoo y límites host-side.
 
 Estados persistidos:
 
