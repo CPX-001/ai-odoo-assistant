@@ -48,8 +48,16 @@ class EvaluatedAgentPlan:
 
 @dataclass(frozen=True, slots=True)
 class AgentProposalBinding:
-    proposal_id: UUID
-    payload_fingerprint: str
+    """Host-observed write binding used while normalizing one candidate step.
+
+    ACTION previews carry the durable proposal pair. Other effect families may leave
+    that pair empty and use reconciled host arguments while still contributing an
+    exact observed record count to blast-radius policy.
+    """
+
+    proposal_id: UUID | None = None
+    payload_fingerprint: str | None = None
+    estimated_records: int | None = None
 
 
 def intersect_agent_policy(layers: AgentPolicyLayers) -> EffectiveAgentPolicy:
@@ -132,6 +140,7 @@ def evaluate_agent_candidate(
             "tool_name": proposed.tool_name,
         }
         binding = bindings.get(proposed.step_id)
+        estimated_records = _observed_records(spec, binding)
         normalized.append(
             AgentPlanStep(
                 step_id=proposed.step_id,
@@ -144,7 +153,7 @@ def evaluate_agent_candidate(
                 is_write=spec.is_write,
                 is_business_action=spec.is_business_action,
                 atomic=spec.atomic,
-                estimated_records=spec.max_records,
+                estimated_records=estimated_records,
                 payload_fingerprint=_fingerprint("agent-step", step_payload),
                 proposal_id=(binding.proposal_id if binding is not None else None),
                 proposal_fingerprint=(
@@ -164,6 +173,20 @@ def evaluate_agent_candidate(
         risk=risk,
         requires_confirmation=_requires_confirmation(policy, risk, bool(write_steps)),
     )
+
+
+def _observed_records(
+    spec: HostToolPolicySpec,
+    binding: AgentProposalBinding | None,
+) -> int:
+    if binding is None or binding.estimated_records is None:
+        return spec.max_records
+    value = binding.estimated_records
+    if type(value) is not int or not 0 <= value <= spec.max_records:
+        raise AgentPolicyError("agent_observed_blast_radius_invalid")
+    if spec.is_write and value < 1:
+        raise AgentPolicyError("agent_observed_blast_radius_invalid")
+    return value
 
 
 def agent_policy_fingerprint(policy: AgentPolicyLayer) -> str:
@@ -230,8 +253,8 @@ def _aggregate_risk(
     }
     if metadata.estimated_blast_radius > 3 or len(model_names) > 1:
         risk = _at_least(risk, RiskLevel.MODERATE)
-    if metadata.estimated_blast_radius > 12:
-        raise AgentPolicyError("agent_plan_blast_radius_exceeded")
+    if metadata.estimated_blast_radius > 50:
+        risk = _at_least(risk, RiskLevel.HIGH)
     one_atomic_business_action = (
         len(write_steps) == 1 and write_steps[0].is_business_action and write_steps[0].atomic
     )
