@@ -17,6 +17,7 @@ from odoo_ai.contracts import (
     ActionKind,
     ActionProposalPayload,
     ActionProposalState,
+    ActionTarget,
     ActionVerificationResult,
     BusinessActionCommitResult,
     BusinessActionProposalPayload,
@@ -109,7 +110,10 @@ class ActionExecutionService:
                     and (
                         not isinstance(proposal.payload, BusinessActionProposalPayload)
                         or commit.action_id != proposal.payload.action_id
-                        or commit.record_id != proposal.payload.target.record_id
+                        or (
+                            isinstance(proposal.payload.target, ActionTarget)
+                            and commit.record_id != proposal.payload.target.record_id
+                        )
                     )
                 )
             ):
@@ -227,7 +231,11 @@ class ActionExecutionService:
             if isinstance(proposal.payload, ActionProposalPayload):
                 verification = await gateway.verify_record_patch(proposal.payload)
                 expected_after = {change.field: change.value for change in proposal.payload.changes}
-                record_id = proposal.payload.target.record_id
+                record_id = (
+                    proposal.payload.target.record_id
+                    if isinstance(proposal.payload.target, ActionTarget)
+                    else verification.record_id
+                )
             elif not isinstance(proposal.payload, BusinessActionProposalPayload):
                 verification = await gateway.verify_record_create(proposal.payload)
                 expected_after = {value.field: value.value for value in proposal.payload.values}
@@ -235,7 +243,7 @@ class ActionExecutionService:
             else:
                 verification = await gateway.verify_business_action(proposal.payload)
                 expected_after = None
-                record_id = proposal.payload.target.record_id
+                record_id = verification.record_id
             if (
                 verification.proposal_id != proposal.payload.proposal_id
                 or verification.attempt_id != attempt_id
@@ -244,13 +252,16 @@ class ActionExecutionService:
                     and (
                         not isinstance(proposal.payload, BusinessActionProposalPayload)
                         or verification.action_id != proposal.payload.action_id
-                        or verification.record_id != proposal.payload.target.record_id
+                        or (
+                            isinstance(proposal.payload.target, ActionTarget)
+                            and verification.record_id != proposal.payload.target.record_id
+                        )
                     )
                 )
             ):
                 raise OdooGatewayError("malformed_response")
             exact_match = (
-                verification.state in {"sale", "done"}
+                verification.matches
                 if isinstance(verification, BusinessActionVerificationResult)
                 else verification.after == expected_after
             )
@@ -264,7 +275,8 @@ class ActionExecutionService:
                     status=EvidenceStatus.CHECKED,
                     title=f"Verified ACTION result: {proposal.payload.target.model}",
                     summary=(
-                        "The curated action outcome was reread under the approving Odoo user."
+                        "The curated business-action outcome was reread under the approving "
+                        "Odoo user."
                         if isinstance(verification, BusinessActionVerificationResult)
                         else "Affected fields were reread under the approving Odoo user."
                     ),
@@ -364,8 +376,16 @@ class ActionExecutionService:
         else:
             action_kind = ActionKind.BUSINESS_ACTION
             action_id = payload.action_id
-            record_id = payload.target.record_id
-            fields = ("state",)
+            if isinstance(payload.target, ActionTarget):
+                record_id = payload.target.record_id
+            else:
+                record_id = None
+            fields = {
+                "sale.order.confirm.v1": ("state",),
+                "record.archive.v1": ("active",),
+                "record.delete.v1": ("id",),
+                "sale.order.build_flow.v1": ("order_line", "partner_id", "state"),
+            }[payload.action_id]
             effective_scope = (
                 "business_action_commit" if scope == "action_commit" else "business_action_verify"
             )

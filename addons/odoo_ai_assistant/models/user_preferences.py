@@ -26,8 +26,23 @@ class AssistantUserPreference(models.Model):
         default=lambda self: self.env.user,
     )
     reasoning_model = fields.Char(string="Preferred Codex model")
+    agent_confirmation_mode = fields.Selection(
+        selection=[
+            ("always_confirm", "Always confirm"),
+            ("risk_based", "Risk based"),
+            ("protected_only", "Protected only"),
+        ],
+        required=True,
+        default="risk_based",
+    )
+    agent_max_auto_risk = fields.Selection(
+        selection=[("low", "Low"), ("moderate", "Moderate"), ("high", "High")],
+        required=True,
+        default="low",
+    )
+    agent_allow_synthetic_data = fields.Boolean(required=True, default=True)
 
-    _sql_constraints = [
+    _sql_constraints = [  # noqa: RUF012 - Odoo model metadata
         (
             "odoo_ai_user_preference_user_unique",
             "unique(user_id)",
@@ -62,6 +77,21 @@ class AssistantUserPreference(models.Model):
         else:
             self.create({"user_id": self.env.uid, "reasoning_model": normalized})
         return normalized or None
+
+    @api.model
+    def current_agent_policy(self):
+        preference = self.search([("user_id", "=", self.env.uid)], limit=1)
+        return {
+            "confirmation_mode": preference.agent_confirmation_mode or "risk_based",
+            "max_auto_risk": preference.agent_max_auto_risk or "low",
+            "allow_synthetic_data": (
+                preference.agent_allow_synthetic_data if preference else True
+            ),
+            "max_tool_calls_per_turn": 32,
+            "max_write_steps_per_plan": 12,
+            "max_replans": 2,
+            "max_consecutive_failures": 3,
+        }
 
 
 class AssistantBridgeUserPreferences(models.AbstractModel):
@@ -153,6 +183,46 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
         return {
             "ok": True,
             "selected_model": selected,
+        }
+
+    @api.model
+    def agent_policy_preferences(self):
+        if not self.env.user._is_internal():
+            return _error("access_denied")
+        policy = self.env["odoo.ai.user.preference"].current_agent_policy()
+        return {
+            "ok": True,
+            "confirmation_mode": policy["confirmation_mode"],
+            "max_auto_risk": policy["max_auto_risk"],
+        }
+
+    @api.model
+    def set_agent_policy_preferences(self, confirmation_mode, max_auto_risk):
+        if not self.env.user._is_internal():
+            return _error("access_denied")
+        if confirmation_mode not in {
+            "always_confirm",
+            "risk_based",
+            "protected_only",
+        } or max_auto_risk not in {"low", "moderate", "high"}:
+            return _error("invalid_context")
+        preference = self.env["odoo.ai.user.preference"].search(
+            [("user_id", "=", self.env.uid)],
+            limit=1,
+        )
+        values = {
+            "agent_confirmation_mode": confirmation_mode,
+            "agent_max_auto_risk": max_auto_risk,
+        }
+        if preference:
+            preference.write(values)
+        else:
+            values["user_id"] = self.env.uid
+            self.env["odoo.ai.user.preference"].create(values)
+        return {
+            "ok": True,
+            "confirmation_mode": confirmation_mode,
+            "max_auto_risk": max_auto_risk,
         }
 
 

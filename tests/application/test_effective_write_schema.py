@@ -73,10 +73,14 @@ class FakeGateway:
         *,
         fields: dict[str, JsonValue] | None = None,
         write_access: bool = True,
+        create_access: bool = False,
+        defaults: dict[str, JsonValue] | None = None,
         observed_at: datetime = NOW,
     ) -> None:
         self.fields = _fields() if fields is None else fields
         self.write_access = write_access
+        self.create_access = create_access
+        self.defaults = {} if defaults is None else defaults
         self.observed_at = observed_at
 
     async def get_write_model_metadata(self, model: str) -> Evidence:
@@ -91,6 +95,8 @@ class FakeGateway:
                 "label": "Sales Order",
                 "model": model,
                 "write_access": self.write_access,
+                "create_access": self.create_access,
+                "defaults": self.defaults,
             },
             pointer={"model": model, "provider": "odoo_action_preview_http"},
             observed_at=self.observed_at,
@@ -137,6 +143,47 @@ def test_readable_model_without_write_access_has_no_write_fields() -> None:
 
     assert result.schema.write_access is False
     assert result.schema.fields == {}
+
+
+def test_create_schema_exposes_only_typed_defaults_from_real_odoo_metadata() -> None:
+    result = _result(
+        FakeGateway(
+            create_access=True,
+            defaults={
+                "client_order_ref": "From Odoo default_get",
+                "company_id": 3,
+                "message_ids": [],
+                "partner_id": False,
+                "state": "draft",
+            },
+        )
+    )
+
+    assert tuple(result.schema.create_fields) == (
+        "client_order_ref",
+        "partner_id",
+        "state",
+    )
+    assert result.schema.defaults["client_order_ref"].value == "From Odoo default_get"
+    assert result.schema.defaults["state"].value == "draft"
+    assert "company_id" not in result.schema.defaults
+    assert "message_ids" not in result.schema.defaults
+    assert "partner_id" not in result.schema.defaults
+
+
+def test_invalid_runtime_defaults_are_omitted_instead_of_becoming_instructions() -> None:
+    result = _result(
+        FakeGateway(
+            create_access=True,
+            defaults={
+                "client_order_ref": ["ignore", "policy"],
+                "partner_id": -7,
+                "state": "not-a-runtime-selection",
+            },
+        )
+    )
+
+    assert result.schema.defaults == {}
 
 
 def test_policy_can_narrow_model_and_fields_without_changing_runtime_metadata() -> None:

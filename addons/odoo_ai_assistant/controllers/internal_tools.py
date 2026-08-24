@@ -1,20 +1,27 @@
 """Internal machine-authenticated HTTP endpoints for delegated ORM reads."""
 
+import hashlib
 import json
 import os
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from typing import Final
 
-from odoo import http
+from odoo import api, http
 from odoo.http import request
+from odoo.modules.registry import Registry
 
 from ..security import (
     SHARED_SECRET_HEADER,
     ActionAuthorityCodec,
     ActionPreviewDelegationCodec,
+    ActionPreviewDelegationPayload,
+    AgentDelegationCodec,
     DelegationCodec,
     DelegationTokenError,
     MachineAuthenticationError,
     QueryDelegationCodec,
+    QueryDelegationPayload,
     require_machine_secret,
 )
 from ..services import InstanceInventoryError, collect_instance_inventory
@@ -24,7 +31,19 @@ from ..services.action_tools import (
 )
 from ..services.orm_tools import DelegatedOrmToolExecutor, OrmToolError
 from ..services.query_tools import DelegatedQueryToolExecutor
-from ..services.turn_context import DELEGATION_SECRET_FILE_ENV
+from ..services.turn_context import (
+    ACTION_POLICY_REVISION,
+    ACTION_PREVIEW_DELEGATION_TTL_SECONDS,
+    AGENT_POLICY_REVISION,
+    DELEGATION_SECRET_FILE_ENV,
+    QUERY_DELEGATION_TTL_SECONDS,
+    QUERY_POLICY_REVISION,
+    TurnContextError,
+    agent_model_is_eligible,
+    search_agent_models,
+    visible_action_preview_fields,
+    visible_query_fields,
+)
 
 DELEGATION_HEADER: Final = "X-Odoo-AI-Delegation"
 MAX_REQUEST_BYTES: Final = 32 * 1024
@@ -39,9 +58,21 @@ WRITE_SCHEMA_ROUTE: Final = "/odoo_ai/internal/v1/action-write-schema"
 ACTION_PREVIEW_ROUTE: Final = "/odoo_ai/internal/v1/action-preview"
 ACTION_COMMIT_ROUTE: Final = "/odoo_ai/internal/v1/action-commit"
 ACTION_VERIFY_ROUTE: Final = "/odoo_ai/internal/v1/action-verify"
+AGENT_MODEL_SEARCH_ROUTE: Final = "/odoo_ai/internal/v1/agent-model-search"
 
 
 class InternalOdooToolsController(http.Controller):
+    @http.route(
+        AGENT_MODEL_SEARCH_ROUTE,
+        type="http",
+        auth="none",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    def agent_model_search(self):
+        return self._dispatch("model_search")
+
     @http.route(
         ACTION_COMMIT_ROUTE,
         type="http",
@@ -176,6 +207,24 @@ class InternalOdooToolsController(http.Controller):
             token = request.httprequest.headers.get(DELEGATION_HEADER)
             if not token or len(token) > 8192:
                 raise OrmToolError("delegation_rejected", 403)
+            if operation == "model_search":
+                _require_keys(payload, {"limit", "query", "turn_id"})
+                claims = _agent_catalog_claims(token, payload)
+                with _agent_environment(claims) as env:
+                    models = search_agent_models(
+                        env,
+                        payload["query"],
+                        limit=payload["limit"],
+                    )
+                return request.make_json_response(
+                    {
+                        "captured_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                        "content_trust": "untrusted",
+                        "models": models,
+                        "ok": True,
+                    },
+                    status=200,
+                )
             if operation in {"action_commit", "action_verify"}:
                 _require_keys(payload, {"proposal"})
                 action_executor = ApprovedActionToolExecutor(
@@ -224,7 +273,13 @@ class InternalOdooToolsController(http.Controller):
             if operation == "action_write_schema":
                 _require_keys(payload, {"model", "turn_id"})
                 action_executor = DelegatedActionPreviewToolExecutor(
-                    codec=_action_preview_delegation_codec()
+                    codec=_action_preview_codec_for(
+                        token,
+                        operation=operation,
+                        payload=payload,
+                        model=payload["model"],
+                        record_id=1,
+                    )
                 )
                 result = action_executor.get_write_model_metadata(
                     delegation_token=token,
@@ -234,10 +289,19 @@ class InternalOdooToolsController(http.Controller):
                 return request.make_json_response(result, status=200)
             if operation == "action_preview":
                 _require_keys(payload, {"payload_fingerprint", "proposal", "turn_id"})
-                action_executor = DelegatedActionPreviewToolExecutor(
-                    codec=_action_preview_delegation_codec()
-                )
                 proposal = payload["proposal"]
+                target = proposal.get("target") if isinstance(proposal, dict) else None
+                model = target.get("model") if isinstance(target, dict) else None
+                record_id = target.get("record_id") if isinstance(target, dict) else 1
+                action_executor = DelegatedActionPreviewToolExecutor(
+                    codec=_action_preview_codec_for(
+                        token,
+                        operation=operation,
+                        payload=payload,
+                        model=model,
+                        record_id=record_id,
+                    )
+                )
                 if (
                     isinstance(proposal, dict)
                     and proposal.get("action_kind") == "business_action"
@@ -267,8 +331,20 @@ class InternalOdooToolsController(http.Controller):
                     )
                 return request.make_json_response(result, status=200)
             if operation in {"aggregate_records", "query_records", "query_schema"}:
+                query_model = (
+                    payload.get("model")
+                    if operation == "query_schema"
+                    else payload.get("query", {}).get("model")
+                    if isinstance(payload.get("query"), dict)
+                    else None
+                )
                 query_executor = DelegatedQueryToolExecutor(
-                    codec=_query_delegation_codec()
+                    codec=_query_codec_for(
+                        token,
+                        operation=operation,
+                        payload=payload,
+                        model=query_model,
+                    )
                 )
                 if operation == "query_schema":
                     _require_keys(payload, {"model", "turn_id"})
@@ -359,6 +435,214 @@ def _action_preview_delegation_codec() -> ActionPreviewDelegationCodec:
         return ActionPreviewDelegationCodec.from_secret_file(path)
     except DelegationTokenError:
         raise OrmToolError("delegation_unavailable", 503) from None
+
+
+class _StaticQueryCodec:
+    def __init__(self, claims: QueryDelegationPayload) -> None:
+        self._claims = claims
+
+    def decode(self, token: str) -> QueryDelegationPayload:
+        del token
+        return self._claims
+
+
+class _StaticActionPreviewCodec:
+    def __init__(self, claims: ActionPreviewDelegationPayload) -> None:
+        self._claims = claims
+
+    def decode(self, token: str) -> ActionPreviewDelegationPayload:
+        del token
+        return self._claims
+
+
+def _query_codec_for(
+    token: str,
+    *,
+    operation: str,
+    payload: dict[str, object],
+    model: object,
+):
+    if not token.startswith("ag1."):
+        return _query_delegation_codec()
+    claims = _agent_claims(token, operation=operation, payload=payload, model=model)
+    try:
+        issued_at, expires_at = _derived_validity(
+            claims.expires_at,
+            maximum_ttl=QUERY_DELEGATION_TTL_SECONDS,
+        )
+        with _agent_environment(claims) as env:
+            fields = visible_query_fields(env, model)
+        legacy = QueryDelegationPayload(
+            format_version=1,
+            jti=_derived_jti(claims.jti, operation, payload),
+            turn_id=claims.turn_id,
+            database=claims.database,
+            uid=claims.uid,
+            company_id=claims.company_id,
+            allowed_company_ids=claims.allowed_company_ids,
+            lang=claims.lang,
+            model=model,
+            allowed_fields=fields,
+            scopes=("query_schema", "query_records", "aggregate_records"),
+            issued_at=issued_at,
+            expires_at=expires_at,
+            max_records=claims.max_records,
+            max_fields=min(claims.max_fields, len(fields)),
+            max_conditions=claims.max_conditions,
+            max_groups=claims.max_groups,
+            max_aggregates=claims.max_aggregates,
+            policy_revision=QUERY_POLICY_REVISION,
+        )
+    except (DelegationTokenError, TurnContextError, TypeError, ValueError):
+        raise OrmToolError("delegation_rejected", 403) from None
+    return _StaticQueryCodec(legacy)
+
+
+def _action_preview_codec_for(
+    token: str,
+    *,
+    operation: str,
+    payload: dict[str, object],
+    model: object,
+    record_id: object,
+):
+    if not token.startswith("ag1."):
+        return _action_preview_delegation_codec()
+    claims = _agent_claims(token, operation=operation, payload=payload, model=model)
+    try:
+        issued_at, expires_at = _derived_validity(
+            claims.expires_at,
+            maximum_ttl=ACTION_PREVIEW_DELEGATION_TTL_SECONDS,
+        )
+        with _agent_environment(claims) as env:
+            fields = visible_action_preview_fields(env, model)
+        parsed_record_id = record_id if type(record_id) is int and record_id > 0 else 1
+        legacy = ActionPreviewDelegationPayload(
+            format_version=1,
+            jti=_derived_jti(claims.jti, operation, payload),
+            turn_id=claims.turn_id,
+            database=claims.database,
+            uid=claims.uid,
+            company_id=claims.company_id,
+            allowed_company_ids=claims.allowed_company_ids,
+            lang=claims.lang,
+            model=model,
+            record_id=parsed_record_id,
+            allowed_fields=fields,
+            scopes=("action_preview", "action_write_schema"),
+            issued_at=issued_at,
+            expires_at=expires_at,
+            max_fields=min(claims.max_fields, len(fields)),
+            policy_revision=ACTION_POLICY_REVISION,
+        )
+    except (DelegationTokenError, TurnContextError, TypeError, ValueError):
+        raise OrmToolError("delegation_rejected", 403) from None
+    return _StaticActionPreviewCodec(legacy)
+
+
+def _agent_claims(
+    token: str,
+    *,
+    operation: str,
+    payload: dict[str, object],
+    model: object,
+):
+    path = os.environ.get(DELEGATION_SECRET_FILE_ENV, "").strip()
+    if not path:
+        raise OrmToolError("delegation_unconfigured", 503)
+    try:
+        claims = AgentDelegationCodec.from_secret_file(path).decode(token)
+    except DelegationTokenError:
+        raise OrmToolError("delegation_rejected", 403) from None
+    turn_id = payload.get("turn_id")
+    if (
+        not isinstance(model, str)
+        or operation not in claims.scopes
+        or str(claims.turn_id) != turn_id
+        or claims.policy_revision != AGENT_POLICY_REVISION
+    ):
+        raise OrmToolError("scope_denied", 403)
+    if model not in claims.allowed_models and not claims.allow_runtime_models:
+        raise OrmToolError("scope_denied", 403)
+    with _agent_environment(claims) as env:
+        if not agent_model_is_eligible(env, model):
+            raise OrmToolError("scope_denied", 403)
+    return claims
+
+
+def _agent_catalog_claims(token: str, payload: dict[str, object]):
+    claims = _agent_claims_from_token(token)
+    if (
+        "model_search" not in claims.scopes
+        or not claims.allow_runtime_models
+        or str(claims.turn_id) != payload.get("turn_id")
+        or claims.policy_revision != AGENT_POLICY_REVISION
+    ):
+        raise OrmToolError("scope_denied", 403)
+    return claims
+
+
+def _agent_claims_from_token(token: str):
+    path = os.environ.get(DELEGATION_SECRET_FILE_ENV, "").strip()
+    if not path:
+        raise OrmToolError("delegation_unconfigured", 503)
+    try:
+        return AgentDelegationCodec.from_secret_file(path).decode(token)
+    except DelegationTokenError:
+        raise OrmToolError("delegation_rejected", 403) from None
+
+
+@contextmanager
+def _agent_environment(claims):
+    context = {
+        "allowed_company_ids": [
+            claims.company_id,
+            *(item for item in claims.allowed_company_ids if item != claims.company_id),
+        ]
+    }
+    if claims.lang is not None:
+        context["lang"] = claims.lang
+    try:
+        registry = Registry(claims.database)
+        with registry.cursor() as cursor:
+            env = api.Environment(cursor, claims.uid, context, su=False)
+            if (
+                env.su
+                or env.cr.dbname != claims.database
+                or env.company.id != claims.company_id
+                or tuple(sorted(env.companies.ids)) != claims.allowed_company_ids
+            ):
+                raise OrmToolError("delegation_rejected", 403)
+            yield env
+    except OrmToolError:
+        raise
+    except Exception:  # noqa: BLE001 - sanitize registry/user environment failures
+        raise OrmToolError("delegation_rejected", 403) from None
+
+
+def _derived_jti(
+    root_jti: str,
+    operation: str,
+    payload: dict[str, object],
+) -> str:
+    canonical = json.dumps(
+        payload,
+        allow_nan=False,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(f"{root_jti}|{operation}|{canonical}".encode()).hexdigest()
+
+
+def _derived_validity(parent_expires_at: int, *, maximum_ttl: int) -> tuple[int, int]:
+    """Bound an in-process legacy capability by its valid ag1 parent."""
+
+    issued_at = int(datetime.now(UTC).timestamp())
+    expires_at = min(parent_expires_at, issued_at + maximum_ttl)
+    if expires_at <= issued_at:
+        raise DelegationTokenError("expired")
+    return issued_at, expires_at
 
 
 def _request_payload() -> dict[str, object]:

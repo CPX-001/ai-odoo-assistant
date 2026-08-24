@@ -26,8 +26,13 @@ function state() {
         loading: false,
         historyLoading: false,
         decisionLoading: false,
+        policyLoading: false,
         result: null,
         actionReceipt: null,
+        agentPolicy: {
+            confirmation_mode: "risk_based",
+            max_auto_risk: "low",
+        },
         conversationId: null,
         conversations: [],
         messages: [],
@@ -35,24 +40,55 @@ function state() {
     };
 }
 
-function chatResponse(workflow = "GENERAL") {
+function agentPlan(state = "completed", requiresConfirmation = false) {
+    return {
+        plan_id: "32345678-1234-5678-9234-567812345678",
+        state,
+        risk: "low",
+        metadata: {
+            needs_read: true,
+            needs_schema: true,
+            needs_write: false,
+            needs_business_action: false,
+            has_external_effect: false,
+            has_irreversible_effect: false,
+            is_atomic: true,
+            estimated_blast_radius: 0,
+        },
+        policy: {
+            confirmation_mode: "risk_based",
+            max_auto_risk: "low",
+            allow_synthetic_data: false,
+            constrained_by: ["system_ceiling"],
+        },
+        goal: "Responder con datos efectivos de Odoo",
+        assumptions: [],
+        steps: [],
+        requires_confirmation: requiresConfirmation,
+        expires_at: "2026-08-24T08:35:00Z",
+    };
+}
+
+function chatResponse(plan = agentPlan()) {
     return {
         ok: true,
-        workflow,
+        workflow: "AGENT",
         turn_id: "12345678-1234-5678-1234-567812345678",
         conversation_id: "22345678-1234-5678-9234-567812345678",
         answer: "Checked answer",
         confidence: "high",
         limitations: [],
         citations: [],
+        plan,
     };
 }
 
-test("chat accepts a general response without exposing a workflow selector", () => {
+test("chat accepts a unified-agent response without exposing a category selector", () => {
     const normalized = normalizeChatResponse(chatResponse());
     expect(normalized.errorCode).toBe(null);
     expect(normalized.result.answer).toBe("Checked answer");
-    expect(normalized.result.workflow).toBe("GENERAL");
+    expect(normalized.result.workflow).toBe("AGENT");
+    expect(normalized.result.plan.state).toBe("completed");
 });
 
 test("chat sends no workflow and works without an active model", async () => {
@@ -152,23 +188,7 @@ test("loading guard prevents simultaneous chat turns", async () => {
 
 test("action decision remains explicit and one-shot from the UI", async () => {
     const panelState = state();
-    panelState.result = {
-        ...chatResponse("ACTION"),
-        proposal: {
-            proposal_id: "32345678-1234-5678-9234-567812345678",
-            target: { model: "sale.order", record_id: 42 },
-            changes: [
-                {
-                    field: "client_order_ref",
-                    label: "Customer Reference",
-                    before: { kind: "text", value: "OLD" },
-                    after: { kind: "text", value: "NEW" },
-                },
-            ],
-            warnings: [],
-            expires_at: "2026-08-24T08:32:00Z",
-        },
-    };
+    panelState.result = chatResponse(agentPlan("awaiting_confirmation", true));
     let resolveRpc;
     let calls = 0;
     const rpcCall = () => {
@@ -184,14 +204,11 @@ test("action decision remains explicit and one-shot from the UI", async () => {
     expect(calls).toBe(1);
     resolveRpc({
         ok: true,
-        proposal_id: panelState.result.proposal.proposal_id,
-        state: "verified",
-        completed_at: "2026-08-24T08:31:00Z",
-        approval_id: "42345678-1234-5678-9234-567812345678",
-        attempt_id: "52345678-1234-5678-9234-567812345678",
-        evidence_id: "62345678-1234-5678-9234-567812345678",
-        error_code: null,
+        plan_id: panelState.result.plan.plan_id,
+        state: "completed",
+        plan: agentPlan("completed", false),
     });
     await first;
-    expect(panelState.actionReceipt.state).toBe("verified");
+    expect(panelState.actionReceipt.state).toBe("completed");
+    expect(panelState.result.plan.state).toBe("completed");
 });

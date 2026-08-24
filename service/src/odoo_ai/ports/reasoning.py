@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from odoo_ai.contracts import AnswerEnvelope, ContextPack, ToolSpec
+from odoo_ai.contracts import AgentCandidateOutput, AnswerEnvelope, ContextPack, ToolSpec
 
 
 class ReasoningEngineError(RuntimeError):
@@ -22,3 +22,13 @@ class ReasoningEngine(Protocol):
         tools: list[ToolSpec],
         output_schema: dict[str, object],
     ) -> AnswerEnvelope: ...
+
+
+class AgentReasoningEngine(Protocol):
+    """Propose a unified plan; the implementation receives no authorization capability."""
+
+    async def run_agent_turn(
+        self,
+        context: ContextPack,
+        tools: list[ToolSpec],
+    ) -> AgentCandidateOutput: ...

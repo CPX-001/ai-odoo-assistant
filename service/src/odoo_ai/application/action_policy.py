@@ -9,8 +9,6 @@ from typing import Final
 
 from odoo_ai.contracts.action import (
     MAX_ACTION_FIELDS,
-    SALE_ORDER_CONFIRM_ACTION_ID,
-    SALE_ORDER_CONFIRM_SPEC_REVISION,
     ActionKind,
     ActionPayload,
     ActionProposalPayload,
@@ -18,7 +16,7 @@ from odoo_ai.contracts.action import (
     BusinessActionProposalPayload,
 )
 
-MAX_ACTION_PAYLOAD_BYTES: Final = 8 * 1024
+MAX_ACTION_PAYLOAD_BYTES: Final = 24 * 1024
 ACTION_POLICY_REVISION: Final = "m6-record-patch-v1"
 
 _BLOCKED_MODELS = frozenset(
@@ -140,12 +138,6 @@ class ActionPolicy:
         if not self.permits_model(payload.target.model):
             raise ActionPolicyError("model_denied")
         if isinstance(payload, BusinessActionProposalPayload):
-            if (
-                payload.action_id != SALE_ORDER_CONFIRM_ACTION_ID
-                or payload.action_spec_revision != SALE_ORDER_CONFIRM_SPEC_REVISION
-                or payload.target.model != "sale.order"
-            ):
-                raise ActionPolicyError("business_action_denied")
             if len(canonical_action_payload_bytes(payload)) > self.max_payload_bytes:
                 raise ActionPolicyError("payload_too_large")
             return

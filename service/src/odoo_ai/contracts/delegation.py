@@ -23,10 +23,12 @@ from odoo_ai.contracts.screen_context import ScreenContext
 DELEGATION_FORMAT_VERSION: Final = 1
 QUERY_DELEGATION_FORMAT_VERSION: Final = 1
 ACTION_PREVIEW_DELEGATION_FORMAT_VERSION: Final = 1
+AGENT_DELEGATION_FORMAT_VERSION: Final = 1
 MAX_ALLOWED_COMPANY_IDS: Final = 16
 MAX_DELEGATED_RECORD_IDS: Final = 8
 MAX_DELEGATION_SCOPES: Final = 2
 MAX_DELEGATION_TTL_SECONDS: Final = 120
+MAX_AGENT_DELEGATION_TTL_SECONDS: Final = 300
 MAX_CONTEXT_MESSAGE_LENGTH: Final = 4_000
 MAX_DELEGATED_FIELDS: Final = 64
 MAX_QUERY_CONDITIONS: Final = 8
@@ -60,6 +62,15 @@ class ActionPreviewDelegationScope(StrEnum):
 
     WRITE_SCHEMA = "action_write_schema"
     PREVIEW = "action_preview"
+
+
+class AgentDelegationScope(StrEnum):
+    SCHEMA = "query_schema"
+    RECORDS = "query_records"
+    AGGREGATE = "aggregate_records"
+    WRITE_SCHEMA = "action_write_schema"
+    PREVIEW = "action_preview"
+    MODEL_SEARCH = "model_search"
 
 
 class DelegationClaims(BaseModel):
@@ -256,6 +267,55 @@ class ActionPreviewDelegationClaims(BaseModel):
             raise ValueError("delegation TTL is invalid")
         if self.max_fields > len(self.allowed_fields):
             raise ValueError("action field limit exceeds delegated fields")
+        return self
+
+
+class AgentDelegationClaims(BaseModel):
+    """Strict transport mirror of Odoo's unified ag1 capability."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    format_version: Literal[1] = AGENT_DELEGATION_FORMAT_VERSION
+    jti: str = Field(min_length=22, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    turn_id: UUID
+    database: str = Field(min_length=1, max_length=128)
+    uid: PositiveId
+    company_id: PositiveId
+    allowed_company_ids: list[PositiveId] = Field(
+        min_length=1, max_length=MAX_ALLOWED_COMPANY_IDS
+    )
+    lang: str | None = Field(default=None, min_length=2, max_length=35)
+    allowed_models: list[str] = Field(min_length=1, max_length=32)
+    allow_runtime_models: bool = False
+    scopes: list[AgentDelegationScope] = Field(min_length=1, max_length=6)
+    issued_at: int = Field(strict=True, ge=0)
+    expires_at: int = Field(strict=True, ge=0)
+    max_records: int = Field(strict=True, ge=1, le=MAX_QUERY_RECORDS)
+    max_fields: int = Field(strict=True, ge=1, le=MAX_QUERY_RESULT_FIELDS)
+    max_conditions: int = Field(strict=True, ge=0, le=MAX_QUERY_CONDITIONS)
+    max_groups: int = Field(strict=True, ge=1, le=MAX_QUERY_GROUPS)
+    max_aggregates: int = Field(strict=True, ge=1, le=MAX_QUERY_AGGREGATES)
+    max_write_steps: int = Field(strict=True, ge=1, le=12)
+    policy_revision: str = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_agent_authority(self) -> Self:
+        if (
+            self.company_id not in self.allowed_company_ids
+            or self.allowed_company_ids != sorted(set(self.allowed_company_ids))
+            or self.allowed_models != sorted(set(self.allowed_models))
+            or len(self.scopes) != len(set(self.scopes))
+            or any(
+                not model
+                or len(model) > 128
+                or re.fullmatch(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$", model) is None
+                for model in self.allowed_models
+            )
+            or not 0
+            < self.expires_at - self.issued_at
+            <= MAX_AGENT_DELEGATION_TTL_SECONDS
+        ):
+            raise ValueError("agent delegation authority is invalid")
         return self
 
 

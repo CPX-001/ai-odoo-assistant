@@ -4,7 +4,7 @@ import { registry } from "@web/core/registry";
 import { rpc } from "@web/core/network/rpc";
 import { reactive } from "@odoo/owl";
 
-const CHAT_WORKFLOWS = new Set(["GENERAL", "EXPLAIN", "QUERY", "HOW_TO", "ACTION"]);
+const CHAT_WORKFLOWS = new Set(["AGENT"]);
 const KNOWN_ERROR_CODES = new Set([
     "access_denied",
     "action_budget_exceeded",
@@ -106,7 +106,7 @@ function validActionProposal(proposal) {
             typeof proposal.target.model !== "string" ||
             !Array.isArray(proposal.values) ||
             proposal.values.length < 1 ||
-            proposal.values.length > 4 ||
+            proposal.values.length > 16 ||
             !Array.isArray(proposal.warnings) ||
             proposal.warnings.length > 8 ||
             typeof proposal.expires_at !== "string"
@@ -142,7 +142,7 @@ function validActionProposal(proposal) {
         proposal.target.record_id <= 0 ||
         !Array.isArray(proposal.changes) ||
         proposal.changes.length < 1 ||
-        proposal.changes.length > 4 ||
+        proposal.changes.length > 16 ||
         !Array.isArray(proposal.warnings) ||
         proposal.warnings.length > 8 ||
         typeof proposal.expires_at !== "string"
@@ -165,6 +165,100 @@ function validActionProposal(proposal) {
     return true;
 }
 
+function validAgentPlan(plan) {
+    const states = new Set([
+        "planning",
+        "awaiting_confirmation",
+        "authorized",
+        "executing",
+        "completed",
+        "partial",
+        "failed",
+        "rejected",
+        "expired",
+    ]);
+    const stepStates = new Set([
+        "planned",
+        "previewed",
+        "executing",
+        "completed",
+        "failed",
+        "skipped",
+    ]);
+    const validReceipt = (receipt) =>
+        receipt === null ||
+        (exactKeys(receipt, [
+            "error_code",
+            "evidence_id",
+            "outcome",
+            "record_id",
+            "record_model",
+        ]) &&
+            typeof receipt.outcome === "string" &&
+            (receipt.error_code === null || typeof receipt.error_code === "string") &&
+            (receipt.evidence_id === null || typeof receipt.evidence_id === "string") &&
+            ((receipt.record_id === null && receipt.record_model === null) ||
+                (Number.isSafeInteger(receipt.record_id) &&
+                    receipt.record_id > 0 &&
+                    typeof receipt.record_model === "string")));
+    const validStep = (step) =>
+        exactKeys(step, ["effect_scope", "receipt", "risk", "state", "step_id", "title"]) &&
+        typeof step.step_id === "string" &&
+        typeof step.title === "string" &&
+        step.title.length > 0 &&
+        stepStates.has(step.state) &&
+        ["low", "moderate", "high", "protected"].includes(step.risk) &&
+        ["read_only", "internal_reversible", "internal_irreversible", "external"].includes(
+            step.effect_scope
+        ) &&
+        validReceipt(step.receipt);
+    return (
+        exactKeys(plan, [
+            "assumptions",
+            "expires_at",
+            "goal",
+            "metadata",
+            "plan_id",
+            "policy",
+            "requires_confirmation",
+            "risk",
+            "state",
+            "steps",
+        ]) &&
+        typeof plan.plan_id === "string" &&
+        states.has(plan.state) &&
+        ["low", "moderate", "high", "protected"].includes(plan.risk) &&
+        typeof plan.goal === "string" &&
+        plan.goal.length > 0 &&
+        plan.goal.length <= 1000 &&
+        Array.isArray(plan.assumptions) &&
+        plan.assumptions.length <= 12 &&
+        plan.assumptions.every((value) => typeof value === "string") &&
+        Array.isArray(plan.steps) &&
+        plan.steps.length <= 12 &&
+        plan.steps.every(validStep) &&
+        typeof plan.requires_confirmation === "boolean" &&
+        (plan.expires_at === null || typeof plan.expires_at === "string") &&
+        plan.metadata !== null &&
+        typeof plan.metadata === "object" &&
+        exactKeys(plan.policy, [
+            "allow_synthetic_data",
+            "confirmation_mode",
+            "constrained_by",
+            "max_auto_risk",
+        ]) &&
+        ["always_confirm", "risk_based", "protected_only"].includes(
+            plan.policy.confirmation_mode
+        ) &&
+        ["low", "moderate", "high", "protected"].includes(plan.policy.max_auto_risk) &&
+        typeof plan.policy.allow_synthetic_data === "boolean" &&
+        Array.isArray(plan.policy.constrained_by) &&
+        plan.policy.constrained_by.every((value) =>
+            ["system_ceiling", "administrator", "user", "conversation"].includes(value)
+        )
+    );
+}
+
 function validCitation(value) {
     return (
         value !== null &&
@@ -178,7 +272,7 @@ function validCitation(value) {
 export function normalizeChatResponse(response) {
     const limitations = response?.limitations;
     const citations = response?.citations || [];
-    const proposal = response?.proposal ?? null;
+    const plan = response?.plan;
     if (
         response?.ok === true &&
         typeof response.turn_id === "string" &&
@@ -195,13 +289,13 @@ export function normalizeChatResponse(response) {
         Array.isArray(citations) &&
         citations.length <= 24 &&
         citations.every(validCitation) &&
-        validActionProposal(proposal) &&
+        validAgentPlan(plan) &&
         (response.conversation_id === null ||
             response.conversation_id === undefined ||
             typeof response.conversation_id === "string")
     ) {
         return {
-            result: { ...response, citations, proposal },
+            result: { ...response, citations, plan },
             errorCode: null,
         };
     }
@@ -212,41 +306,21 @@ export function normalizeChatResponse(response) {
     };
 }
 
-export function normalizeActionDecisionResponse(response, proposalId) {
-    const states = new Set([
-        "rejected",
-        "verified",
-        "stale",
-        "failed",
-        "execution_unknown",
-        "committed_unverified",
-    ]);
+export function normalizeActionDecisionResponse(response, planId) {
+    const states = new Set(["completed", "partial", "failed", "rejected"]);
     if (
-        exactKeys(response, [
-            "ok",
-            "proposal_id",
-            "state",
-            "completed_at",
-            "approval_id",
-            "attempt_id",
-            "evidence_id",
-            "error_code",
-        ]) &&
+        exactKeys(response, ["ok", "plan", "plan_id", "state"]) &&
         response.ok === true &&
-        response.proposal_id === proposalId &&
+        response.plan_id === planId &&
         states.has(response.state) &&
-        typeof response.completed_at === "string" &&
-        (response.approval_id === null || typeof response.approval_id === "string") &&
-        (response.attempt_id === null || typeof response.attempt_id === "string") &&
-        (response.evidence_id === null || typeof response.evidence_id === "string") &&
-        (response.error_code === null || typeof response.error_code === "string") &&
-        (response.state !== "verified" || response.evidence_id !== null)
+        (response.plan === null || validAgentPlan(response.plan))
     ) {
-        return { receipt: response, errorCode: null };
+        return { receipt: response, plan: response.plan, errorCode: null };
     }
     const code = response?.error?.code;
     return {
         receipt: null,
+        plan: null,
         errorCode: KNOWN_ERROR_CODES.has(code) ? code : "invalid_response",
     };
 }
@@ -418,12 +492,71 @@ export async function loadChatHistory({ state, rpcCall, conversationId = state.c
     }
 }
 
+export async function loadAgentPolicy({ state, rpcCall }) {
+    state.policyLoading = true;
+    try {
+        const response = await rpcCall("/odoo_ai/v1/agent-policy", {});
+        if (
+            response?.ok === true &&
+            ["always_confirm", "risk_based", "protected_only"].includes(
+                response.confirmation_mode
+            ) &&
+            ["low", "moderate", "high"].includes(response.max_auto_risk)
+        ) {
+            state.agentPolicy = {
+                confirmation_mode: response.confirmation_mode,
+                max_auto_risk: response.max_auto_risk,
+            };
+            return true;
+        }
+        state.errorCode = "invalid_response";
+        return false;
+    } catch {
+        state.errorCode = "service_unavailable";
+        return false;
+    } finally {
+        state.policyLoading = false;
+    }
+}
+
+export async function saveAgentPolicy({ state, rpcCall, confirmationMode, maxAutoRisk }) {
+    if (
+        state.policyLoading ||
+        !["always_confirm", "risk_based", "protected_only"].includes(confirmationMode) ||
+        !["low", "moderate", "high"].includes(maxAutoRisk)
+    ) {
+        return false;
+    }
+    state.policyLoading = true;
+    try {
+        const response = await rpcCall("/odoo_ai/v1/agent-policy-set", {
+            confirmation_mode: confirmationMode,
+            max_auto_risk: maxAutoRisk,
+        });
+        if (response?.ok !== true) {
+            state.errorCode = "invalid_response";
+            return false;
+        }
+        state.agentPolicy = {
+            confirmation_mode: response.confirmation_mode,
+            max_auto_risk: response.max_auto_risk,
+        };
+        state.errorCode = null;
+        return true;
+    } catch {
+        state.errorCode = "service_unavailable";
+        return false;
+    } finally {
+        state.policyLoading = false;
+    }
+}
+
 export async function submitActionDecision({ state, rpcCall, decision }) {
-    const proposalId = state.result?.proposal?.proposal_id;
+    const planId = state.result?.plan?.plan_id;
     if (
         state.loading ||
         state.decisionLoading ||
-        typeof proposalId !== "string" ||
+        typeof planId !== "string" ||
         !["approve", "reject"].includes(decision)
     ) {
         return false;
@@ -431,13 +564,21 @@ export async function submitActionDecision({ state, rpcCall, decision }) {
     state.decisionLoading = true;
     state.errorCode = null;
     try {
-        const response = await rpcCall("/odoo_ai/v1/action-decision", {
-            proposal_id: proposalId,
+        const response = await rpcCall("/odoo_ai/v1/agent-plan-decision", {
+            plan_id: planId,
             decision,
         });
-        const normalized = normalizeActionDecisionResponse(response, proposalId);
+        const normalized = normalizeActionDecisionResponse(response, planId);
         state.actionReceipt = normalized.receipt;
         state.errorCode = normalized.errorCode;
+        if (normalized.plan && state.result) {
+            state.result = { ...state.result, plan: normalized.plan };
+        } else if (normalized.receipt?.state === "rejected" && state.result) {
+            state.result = {
+                ...state.result,
+                plan: { ...state.result.plan, state: "rejected" },
+            };
+        }
     } catch {
         state.actionReceipt = null;
         state.errorCode = "service_unavailable";
@@ -456,6 +597,7 @@ export const assistantPanelService = {
             loading: false,
             historyLoading: false,
             decisionLoading: false,
+            policyLoading: false,
             context: null,
             conversations: [],
             conversationId: null,
@@ -463,6 +605,10 @@ export const assistantPanelService = {
             draft: loadDraft(storage, null),
             result: null,
             actionReceipt: null,
+            agentPolicy: {
+                confirmation_mode: "risk_based",
+                max_auto_risk: "low",
+            },
             errorCode: null,
         });
         const refreshContext = () => {
@@ -482,6 +628,7 @@ export const assistantPanelService = {
             state.isOpen = true;
             refreshContext();
             void loadHistory();
+            void loadAgentPolicy({ state, rpcCall: rpc });
         };
         return {
             state,
@@ -539,6 +686,14 @@ export const assistantPanelService = {
             },
             async decide(decision) {
                 return submitActionDecision({ state, rpcCall: rpc, decision });
+            },
+            async setAgentPolicy(confirmationMode, maxAutoRisk) {
+                return saveAgentPolicy({
+                    state,
+                    rpcCall: rpc,
+                    confirmationMode,
+                    maxAutoRisk,
+                });
             },
         };
     },

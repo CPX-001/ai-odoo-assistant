@@ -8,10 +8,16 @@ from odoo_ai.adapters import (
     ODOO_AGGREGATE_RECORDS,
     ODOO_GET_EFFECTIVE_SCHEMA,
     ODOO_QUERY_RECORDS,
+    ODOO_SEARCH_MODELS,
     QueryToolExecutorFactory,
+    UnifiedAgentToolExecutorFactory,
+    agent_tool_specs,
     query_tool_specs,
 )
 from odoo_ai.contracts import (
+    AgentModelCatalogItem,
+    AgentModelSearchRequest,
+    AgentModelSearchResult,
     AggregateGroup,
     AggregateRecordsRequest,
     AggregateRecordsResult,
@@ -131,6 +137,21 @@ class FakeQueryGateway:
             captured_at=NOW,
         )
 
+    async def search_agent_models(
+        self, request: AgentModelSearchRequest
+    ) -> AgentModelSearchResult:
+        models = (
+            (
+                AgentModelCatalogItem(
+                    model="oca.custom.asset",
+                    label="Activos personalizados OCA",
+                ),
+            )
+            if "activo" in request.query.casefold()
+            else ()
+        )
+        return AgentModelSearchResult(models=models, captured_at=NOW)
+
 
 def _context(*, max_tool_calls: int = 3) -> ContextPack:
     screen = ScreenContext(
@@ -224,6 +245,52 @@ def test_prompt_injection_remains_data_and_cannot_expand_registry() -> None:
         in {ODOO_GET_EFFECTIVE_SCHEMA, ODOO_QUERY_RECORDS}
         for event in report.events
     )
+
+
+def test_unified_agent_can_use_a_runtime_discovered_oca_model_only_after_search() -> None:
+    async def run() -> None:
+        gateway = FakeQueryGateway()
+        context = _context(max_tool_calls=3).model_copy(
+            update={"workflow_hint": None}
+        )
+        factory = UnifiedAgentToolExecutorFactory(
+            query_gateway=gateway,
+            action_gateway=gateway,  # type: ignore[arg-type]
+            approval_service=object(),  # type: ignore[arg-type]
+            turn_id=TURN_ID,
+            database="customer-db",
+            user_id=17,
+            company_id=3,
+            allowed_company_ids=(3,),
+            allowed_models=("sale.order",),
+        )
+        async with factory(context, agent_tool_specs()) as executor:
+            with pytest.raises(ToolExecutorError, match="query_model_not_allowed"):
+                await executor.execute(
+                    ToolCall(
+                        call_id="schema-before-search",
+                        tool_name=ODOO_GET_EFFECTIVE_SCHEMA,
+                        arguments={"model": "oca.custom.asset"},
+                    )
+                )
+            discovered = await executor.execute(
+                ToolCall(
+                    call_id="model-search",
+                    tool_name=ODOO_SEARCH_MODELS,
+                    arguments={"query": "activo OCA", "limit": 10},
+                )
+            )
+            assert discovered.data["result"]["models"][0]["model"] == "oca.custom.asset"
+            schema = await executor.execute(
+                ToolCall(
+                    call_id="schema-after-search",
+                    tool_name=ODOO_GET_EFFECTIVE_SCHEMA,
+                    arguments={"model": "oca.custom.asset"},
+                )
+            )
+            assert schema.data["effective_schema"]["model"] == "oca.custom.asset"
+
+    asyncio.run(run())
 
 
 def test_model_tampering_and_budget_exhaustion_fail_closed() -> None:

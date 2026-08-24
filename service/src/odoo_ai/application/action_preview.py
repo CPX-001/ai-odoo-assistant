@@ -15,6 +15,7 @@ from odoo_ai.contracts import (
     ActionCreatePreview,
     ActionPreview,
     ActionProposalPayload,
+    ActionTarget,
     BusinessActionPreview,
     BusinessActionProposalPayload,
     EffectiveWriteFieldSchema,
@@ -213,10 +214,7 @@ class BusinessActionPreviewService:
             evidence_id=preview.preview_id,
             kind=EvidenceKind.RECORD,
             status=EvidenceStatus.CHECKED,
-            title=(
-                f"Business action preview: {payload.action_id} on "
-                f"{payload.target.model}#{payload.target.record_id}"
-            ),
+            title=f"Business action preview: {payload.action_id} on {payload.target.model}",
             summary=(
                 "The current sale order state and the curated confirmation action "
                 "were checked without executing the business method."
@@ -225,7 +223,11 @@ class BusinessActionPreviewService:
             pointer={
                 "action_id": payload.action_id,
                 "model": payload.target.model,
-                "record_id": payload.target.record_id,
+                "record_id": (
+                    payload.target.record_id
+                    if isinstance(payload.target, ActionTarget)
+                    else None
+                ),
                 "proposal_id": str(payload.proposal_id),
                 "provider": "odoo_business_action_preview",
             },

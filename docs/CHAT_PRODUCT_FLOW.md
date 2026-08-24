@@ -1,5 +1,8 @@
 # Product chat facade
 
+> Documento histórico anterior a ADR-014. El producto activo usa un agente
+> unificado sin categorías de routing; consultar `UNIFIED_AGENT_RUNTIME.md`.
+
 El panel principal del producto es un **chat único**. `EXPLAIN`, `QUERY`, `HOW_TO` y `ACTION`
 continúan existiendo como boundaries internos de autoridad y validación, pero ya no son una
 decisión que deba tomar el usuario.

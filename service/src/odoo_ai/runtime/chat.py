@@ -7,12 +7,11 @@ import re
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from odoo_ai.adapters.chat_routing import CodexChatRoutingInterpreter
-from odoo_ai.adapters.codex_engine import CodexAppServerEngine as BaseCodexAppServerEngine
 from odoo_ai.adapters.configured_codex import ConfiguredCodexRuntimeSettings as CodexRuntimeSettings
 from odoo_ai.adapters.source_tools import SourceToolExecutorFactory, source_tool_specs
-from odoo_ai.adapters.user_model_engine import UserSelectableCodexAppServerEngine as CodexAppServerEngine
-from odoo_ai.application.chat_routing import ChatRoutingService
+from odoo_ai.adapters.user_model_engine import (
+    UserSelectableCodexAppServerEngine as CodexAppServerEngine,
+)
 from odoo_ai.application.general_chat import GeneralChatService
 from odoo_ai.contracts import (
     Evidence,
@@ -24,7 +23,6 @@ from odoo_ai.contracts.chat import (
     ChatAppendResponse,
     ChatHistoryRequest,
     ChatHistoryResponse,
-    ChatRouteRequest,
     GeneralTurnRequest,
 )
 from odoo_ai.knowledge import (
@@ -219,37 +217,6 @@ class RuntimeGeneralChatContext:
                 engine.dispose()
 
 
-class RuntimeChatRoutingContext:
-    """Load only bounded Assistant-owned conversation text for intent continuity."""
-
-    def __init__(self, *, database_settings: DatabaseSettings) -> None:
-        self._database_settings = database_settings
-
-    async def history(self, request: ChatRouteRequest) -> str:
-        return await asyncio.to_thread(self._history_sync, request)
-
-    def _history_sync(self, request: ChatRouteRequest) -> str:
-        if request.conversation_id is None:
-            return ""
-        engine = None
-        try:
-            engine = create_database_engine(self._database_settings)
-            factory = create_session_factory(engine)
-            with session_scope(factory) as session:
-                return recent_chat_text(
-                    session,
-                    actor=request.actor,
-                    conversation_id=request.conversation_id,
-                )
-        except ChatStoreError:
-            return ""
-        except (DatabaseConfigurationError, SQLAlchemyError, OSError, ValueError):
-            return ""
-        finally:
-            if engine is not None:
-                engine.dispose()
-
-
 def create_runtime_general_chat_service() -> GeneralChatService:
     """Compose the application service with concrete runtime adapters."""
 
@@ -276,19 +243,6 @@ def create_runtime_general_chat_service() -> GeneralChatService:
         knowledge_loader=context.knowledge,
         tools=source_tool_specs(),
         fallback_engine=CodexAppServerEngine(codex_settings),
-    )
-
-
-def create_runtime_chat_routing_service() -> ChatRoutingService:
-    """Compose multilingual interpretation without granting the provider authority."""
-
-    database_settings = DatabaseSettings.from_env()
-    codex_settings = CodexRuntimeSettings.from_env()
-    context = RuntimeChatRoutingContext(database_settings=database_settings)
-    interpreter = CodexChatRoutingInterpreter(BaseCodexAppServerEngine(codex_settings))
-    return ChatRoutingService(
-        interpreter=interpreter,
-        history_loader=context.history,
     )
 
 

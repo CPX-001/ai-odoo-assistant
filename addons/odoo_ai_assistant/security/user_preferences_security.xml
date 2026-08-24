@@ -10,4 +10,14 @@
         <field name="perm_create" eval="True"/>
         <field name="perm_unlink" eval="True"/>
     </record>
+    <record id="rule_odoo_ai_chat_policy_own" model="ir.rule">
+        <field name="name">AI Assistant conversation policy: own record</field>
+        <field name="model_id" ref="model_odoo_ai_chat_policy"/>
+        <field name="domain_force">[("user_id", "=", user.id)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
 </odoo>

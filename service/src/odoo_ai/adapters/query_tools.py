@@ -136,23 +136,25 @@ class QueryToolBackend:
         service: QueryPrimitiveService,
         *,
         user_id: int,
-        model: str,
+        model: str | None = None,
+        allowed_models: Sequence[str] = (),
     ) -> None:
         self._service = service
         self._user_id = user_id
         self._model = model
-        self._schema: EffectiveSchemaResult | None = None
+        self._allowed_models = set(allowed_models or (() if model is None else (model,)))
+        self._schemas: dict[str, EffectiveSchemaResult] = {}
 
     async def get_effective_schema(
         self, request: GetEffectiveSchemaRequest
     ) -> EffectiveSchemaResult:
         self._require_model(request.model)
-        if self._schema is None:
-            self._schema = await self._service.get_effective_schema(
-                model=self._model,
+        if request.model not in self._schemas:
+            self._schemas[request.model] = await self._service.get_effective_schema(
+                model=request.model,
                 captured_for_user=self._user_id,
             )
-        return self._schema
+        return self._schemas[request.model]
 
     async def query_records(
         self, request: QueryRecordsRequest
@@ -171,8 +173,11 @@ class QueryToolBackend:
         return schema, result
 
     def _require_model(self, model: str) -> None:
-        if model != self._model:
+        if model not in self._allowed_models:
             raise ToolExecutorError("query_model_not_allowed")
+
+    def allow_models(self, models: Sequence[str]) -> None:
+        self._allowed_models.update(models)
 
 
 def build_query_tool_registry(
@@ -189,7 +194,7 @@ def build_query_tool_registry(
                     input_model=GetEffectiveSchemaRequest,
                     output_model=EffectiveSchemaToolData,
                     handler=_schema_handler(backend),
-                    max_calls=1,
+                    max_calls=12,
                     max_input_bytes=2 * 1024,
                     max_output_bytes=96 * 1024,
                 )
@@ -202,7 +207,7 @@ def build_query_tool_registry(
                     input_model=QueryRecordsRequest,
                     output_model=QueryRecordsToolData,
                     handler=_records_handler(backend),
-                    max_calls=2,
+                    max_calls=12,
                     max_input_bytes=16 * 1024,
                     max_output_bytes=128 * 1024,
                 )
@@ -215,7 +220,7 @@ def build_query_tool_registry(
                     input_model=AggregateRecordsRequest,
                     output_model=AggregateRecordsToolData,
                     handler=_aggregate_handler(backend),
-                    max_calls=2,
+                    max_calls=12,
                     max_input_bytes=16 * 1024,
                     max_output_bytes=128 * 1024,
                 )

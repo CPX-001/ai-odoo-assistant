@@ -1,6 +1,6 @@
 # Arquitectura operativa
 
-Esta referencia resume decisiones del [Source of Truth](source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf). No lo sustituye ni añade decisiones nuevas. La política concreta de autodetección/overrides está en [DEPLOYMENT_CONFIG.md](DEPLOYMENT_CONFIG.md).
+Esta referencia resume decisiones del [Source of Truth v1.1](source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.1.pdf). No lo sustituye ni añade decisiones nuevas. La política concreta de autodetección/overrides está en [DEPLOYMENT_CONFIG.md](DEPLOYMENT_CONFIG.md) y el runtime del agente en [UNIFIED_AGENT_RUNTIME.md](UNIFIED_AGENT_RUNTIME.md).
 
 ```text
 Odoo addon
@@ -50,13 +50,17 @@ El Assistant usa una DB PostgreSQL propia para conversaciones, índices, scans, 
 
 La identidad efectiva, compañías y contexto de seguridad se derivan server-side. Cada tool vuelve a validar delegación y policy; Odoo aplica ACL, record rules, restricciones de campos y reglas de negocio. `ScreenContext` es sólo una pista de navegación y los registros se releen por ORM bajo el usuario real.
 
-## Runtime schemas
+## Runtime schemas y módulos instalados
 
-Los schemas efectivos se descubren en runtime bajo el usuario, compañías y policy actuales. No se crean clases por major de Odoo. El catálogo de instancia sirve para descubrimiento; sólo `EffectiveModelSchema` gobierna la exposición y validación de fields durante un turn.
+Los schemas efectivos se descubren en runtime bajo el usuario, compañías y policy actuales. No se crean clases por major de Odoo ni catálogos por módulo. El catálogo de instancia sirve para descubrimiento; sólo `EffectiveModelSchema`/`EffectiveWriteSchema` gobiernan la exposición y validación de fields durante un turn.
 
-## ReasoningEngine y agent loop
+La lista inicial de modelos es una pista. `odoo.search_models` consulta el registry real y descubre modelos instalados de Odoo, OCA, terceros o addons propios. Cada candidato se revalida bajo el usuario real antes de buscar, leer o preparar un write. El CRUD genérico escalar se adapta al schema runtime; los métodos y transiciones empresariales siguen necesitando business actions tipadas.
 
-`ReasoningEngine` es un port estable. Codex App Server por stdio será el adapter inicial y su acoplamiento queda confinado al engine. Cada turn recibe un `ContextPack` compacto y tools explícitas; `ToolExecutor`, fuera del modelo, valida policy, schemas, budgets y ejecución. La memoria de producto vive en la DB del Assistant, no en threads de Codex.
+## ReasoningEngine y agente unificado
+
+`ReasoningEngine` es un port estable. Codex App Server por stdio es el adapter inicial y su acoplamiento queda confinado al engine. Cada turn recibe un `ContextPack` compacto y tools explícitas. No existen categorías de routing ni workflows excluyentes: el modelo puede combinar lecturas y propuestas en un único plan.
+
+Codex sólo solicita tools de lectura/preview y propone argumentos. `AgentTurnService`, `ToolExecutor`, el Policy Engine y Odoo validan registry, schemas, ACL, record rules, budgets, riesgo, autorización, commit y verificación. La memoria de producto vive en la DB del Assistant, no en threads de Codex.
 
 ## Retrieval y evidencia
 
@@ -64,15 +68,21 @@ Primero retrieval estructural y lexical: símbolos/relaciones para source, Postg
 
 Los scanners/providers reciben roots, units y paths resueltos/validados. No contienen paths de cliente como constantes y nunca escanean todo el host para compensar una detección incompleta.
 
-## Writes
+## Writes, política y riesgo
 
 Los efectos siguen el flujo:
 
 ```text
-proposal → preview → approval → commit → verification
+proposal → preview → autorización host-side → commit → verification → audit
 ```
 
-La approval se liga al payload canónico, usuario y expiración, y se consume una sola vez. Los business actions usan handlers allowlisted; no métodos arbitrarios.
+La política efectiva es `system ceiling ∩ administrator policy ∩ user preference ∩ conversation override`, con modos `always_confirm`, `risk_based` y `protected_only`. El host calcula riesgo agregado por máximo, blast radius, efecto empresarial y atomicidad; no suma ingenuamente cada write ni confía en una etiqueta del modelo.
+
+Los cambios pequeños pueden autoejecutarse cuando la política lo permite. Los planes superiores muestran una confirmación agrupada y los efectos protegidos se detienen siempre. La autorización se liga al plan ordenado, payloads, previews, dependencias, actor, base, compañías, revisiones y snapshot de policy. Los business actions usan handlers allowlisted; nunca métodos arbitrarios.
+
+Antes de preguntar se resuelve `mensaje → conversación → contexto Odoo → búsqueda de registros → defaults/schema → inferencia segura → preguntar`. Datos sintéticos sólo en prueba/demo explícita o con autorización, siempre marcados `AI TEST`.
+
+Los límites máximos host-side son 32 tool calls, 12 writes por plan, dos replans y tres fallos consecutivos. Una llamada canónica no se repite sin cambio de precondición y un write incierto nunca se reintenta automáticamente.
 
 ## Prohibiciones principales
 

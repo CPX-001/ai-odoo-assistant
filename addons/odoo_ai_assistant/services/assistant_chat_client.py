@@ -13,16 +13,27 @@ from .assistant_client import (
     _response_error_code,
 )
 
-CHAT_MAX_REQUEST_BYTES = max(MAX_REQUEST_BYTES, 32 * 1024)
+CHAT_MAX_REQUEST_BYTES = max(MAX_REQUEST_BYTES, 64 * 1024)
 CHAT_MAX_RESPONSE_BYTES = 512 * 1024
 
 
 class AssistantChatServiceClient(AssistantServiceClient):
-    def route_chat(self, payload: dict[str, object]) -> dict[str, object]:
-        return self._chat_post("/v1/chat/route", payload)
+    def agent_turn(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._chat_post("/v1/agent/turn", payload)
 
-    def general_chat(self, payload: dict[str, object]) -> dict[str, object]:
-        return self._chat_post("/v1/turns/general", payload)
+    def agent_plan_decision(
+        self,
+        plan_id: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._chat_post(f"/v1/agent/plans/{plan_id}/decision", payload)
+
+    def agent_plan_execute(
+        self,
+        plan_id: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._chat_post(f"/v1/agent/plans/{plan_id}/execute", payload)
 
     def chat_history(self, payload: dict[str, object]) -> dict[str, object]:
         return self._chat_post("/v1/chat/history", payload)
@@ -41,7 +52,7 @@ class AssistantChatServiceClient(AssistantServiceClient):
         secret = self._read_shared_secret()
         wire_payload = (
             self._with_reasoning_model(payload)
-            if path == "/v1/turns/general"
+            if path == "/v1/agent/turn"
             else payload
         )
         try:
@@ -97,9 +108,17 @@ class AssistantChatServiceClient(AssistantServiceClient):
         if response.status == 413:
             raise AssistantServiceError("invalid_request")
         if response.status == 422:
-            raise AssistantServiceError("invalid_context")
+            raise AssistantServiceError(code or "invalid_context")
         if response.status in {502, 503, 504}:
-            if code in {"chat_store_unavailable", "engine_timeout", "engine_unavailable"}:
+            if code in {
+                "agent_engine_timeout",
+                "agent_engine_unavailable",
+                "agent_execution_unavailable",
+                "agent_plan_store_unavailable",
+                "chat_store_unavailable",
+                "engine_timeout",
+                "engine_unavailable",
+            }:
                 raise AssistantServiceError(code)
             raise AssistantServiceError("service_unavailable")
         if response.status >= 500:

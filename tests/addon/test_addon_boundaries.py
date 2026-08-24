@@ -15,7 +15,7 @@ def test_browser_assets_use_only_the_authenticated_odoo_bridge() -> None:
     assert '"web.assets_backend"' in manifest
     assert '"web.assets_unit_tests"' in manifest
     assert 'rpcCall("/odoo_ai/v1/chat"' in static_text
-    assert 'rpcCall("/odoo_ai/v1/action-decision"' in static_text
+    assert 'rpcCall("/odoo_ai/v1/agent-plan-decision"' in static_text
     assert "orm.call(" not in static_text
     assert "fetch(" not in static_text
     assert "127.0.0.1" not in static_text
@@ -37,7 +37,10 @@ def test_browser_assets_use_only_the_authenticated_odoo_bridge() -> None:
     assert "/odoo_ai/v1/query" in browser_controller
     assert "/odoo_ai/v1/how-to" in browser_controller
     assert "/odoo_ai/v1/turn" in browser_controller
-    assert "/odoo_ai/v1/action-decision" in browser_controller
+    chat_controller = (ADDON_ROOT / "controllers/chat_bridge.py").read_text(
+        encoding="utf-8"
+    )
+    assert "/odoo_ai/v1/agent-plan-decision" in chat_controller
     assert '"uid"' not in browser_controller
 
 
@@ -53,6 +56,7 @@ def test_internal_tool_routes_have_double_auth_and_no_generic_execution() -> Non
     assert "/odoo_ai/internal/v1/query-schema" in controller
     assert "/odoo_ai/internal/v1/query-records" in controller
     assert "/odoo_ai/internal/v1/aggregate-records" in controller
+    assert "/odoo_ai/internal/v1/agent-model-search" in controller
     assert "/odoo_ai/internal/v1/action-write-schema" in controller
     assert "/odoo_ai/internal/v1/action-preview" in controller
     assert "/odoo_ai/internal/v1/action-commit" in controller

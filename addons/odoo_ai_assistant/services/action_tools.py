@@ -30,11 +30,12 @@ from .orm_tools import (
     check_response_size,
     collect_model_metadata,
     iso_datetime,
+    normalize_orm_value,
 )
 
 ACTION_POLICY_REVISION = "m6-record-patch-v1"
-MAX_ACTION_FIELDS: Final = 4
-MAX_ACTION_PAYLOAD_BYTES: Final = 8 * 1024
+MAX_ACTION_FIELDS: Final = 16
+MAX_ACTION_PAYLOAD_BYTES: Final = 24 * 1024
 MAX_ACTION_VALUE_TEXT: Final = 4_000
 _MODEL_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
 _FIELD_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
@@ -93,9 +94,22 @@ _CREATE_PREVIEW_WARNING: Final = (
 )
 SALE_ORDER_CONFIRM_ACTION_ID: Final = "sale.order.confirm.v1"
 SALE_ORDER_CONFIRM_SPEC_REVISION: Final = "sale-order-confirm-spec-v1"
+RECORD_ARCHIVE_ACTION_ID: Final = "record.archive.v1"
+RECORD_ARCHIVE_SPEC_REVISION: Final = "record-archive-spec-v1"
+RECORD_DELETE_ACTION_ID: Final = "record.delete.v1"
+RECORD_DELETE_SPEC_REVISION: Final = "record-delete-spec-v1"
+SALE_ORDER_BUILD_FLOW_ACTION_ID: Final = "sale.order.build_flow.v1"
+SALE_ORDER_BUILD_FLOW_SPEC_REVISION: Final = "sale-order-build-flow-spec-v1"
 _BUSINESS_ACTION_WARNING: Final = (
     "Confirming a sale order may trigger deliveries, invoices, messages, or other "
     "side effects added by installed modules; extensions are not simulated."
+)
+_ARCHIVE_WARNING: Final = "Archiving sets active=False and can normally be reversed."
+_DELETE_WARNING: Final = (
+    "Permanent deletion of this record is irreversible and may cascade through Odoo."
+)
+_SALE_BUILD_WARNING: Final = (
+    "This atomic flow may create marked test master data, a quotation and one order line."
 )
 
 JsonValue = str | int | float | bool | list["JsonValue"] | dict[str, "JsonValue"] | None
@@ -177,6 +191,18 @@ class DelegatedActionPreviewToolExecutor:
                 result["fields"] = write_fields
                 result["write_access"] = write_access
                 result["create_access"] = create_access
+                defaults: dict[str, JsonValue] = {}
+                if create_access and write_fields:
+                    raw_defaults = model_set.default_get(list(write_fields))
+                    if not isinstance(raw_defaults, dict):
+                        raise OrmToolError("invalid_metadata", 500)
+                    defaults = {
+                        name: normalize_orm_value(value)
+                        for name, value in raw_defaults.items()
+                        if name in write_fields
+                    }
+                result["defaults"] = defaults
+                check_response_size(result)
                 return result
         except OrmToolError:
             raise
@@ -336,7 +362,7 @@ class DelegatedActionPreviewToolExecutor:
         proposal: object,
         payload_fingerprint: object,
     ) -> dict[str, JsonValue]:
-        """Preview only the explicitly curated sale.order confirmation handler."""
+        """Preview one exact allowlisted business action without mutation."""
 
         parsed_turn = _turn_id(turn_id)
         parsed = _proposal(proposal)
@@ -346,42 +372,66 @@ class DelegatedActionPreviewToolExecutor:
         if not hmac.compare_digest(fingerprint, _action_payload_fingerprint(parsed)):
             raise OrmToolError("payload_fingerprint_mismatch", 403)
         target = parsed["target"]
+        action_id = parsed["action_id"]
         claims = self._authorize(
             delegation_token,
             turn_id=parsed_turn,
             scope="action_preview",
-            model="sale.order",
+            model=target["model"],
         )
         _check_proposal_authority(parsed, claims)
         self._replay_guard(claims, "action_preview")
         observed_at = self._observed_at()
         try:
             with self._environment_provider(claims) as env:
-                records = env["sale.order"].browse([target["record_id"]])
-                records.check_access("read")
-                records.check_access("write")
-                rows = records.read(["name", "state"], load=None)
-                if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
-                    raise OrmToolError("access_denied", 403)
-                display_name, state = _sale_confirm_state(rows[0])
+                if action_id == SALE_ORDER_CONFIRM_ACTION_ID:
+                    records = env["sale.order"].browse([target["record_id"]])
+                    records.check_access("read")
+                    records.check_access("write")
+                    rows = records.read(["name", "state"], load=None)
+                    if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
+                        raise OrmToolError("access_denied", 403)
+                    display_name, state = _sale_confirm_state(rows[0])
+                    if state not in {"draft", "sent"}:
+                        raise OrmToolError("invalid_action_state", 409)
+                    expected_states = ["sale", "done"]
+                    details: dict[str, JsonValue] = {}
+                    warnings = [_BUSINESS_ACTION_WARNING]
+                    precondition = _business_precondition_fingerprint(
+                        action_id=action_id,
+                        model="sale.order",
+                        record_id=target["record_id"],
+                        state=state,
+                    )
+                elif action_id == RECORD_ARCHIVE_ACTION_ID:
+                    display_name, state, precondition = _preview_archive(env, target)
+                    expected_states = ["archived"]
+                    details = {"model": target["model"], "record_id": target["record_id"]}
+                    warnings = [_ARCHIVE_WARNING]
+                elif action_id == RECORD_DELETE_ACTION_ID:
+                    display_name, state, precondition = _preview_delete(env, target)
+                    expected_states = ["deleted"]
+                    details = {"model": target["model"], "record_id": target["record_id"]}
+                    warnings = [_DELETE_WARNING]
+                else:
+                    (
+                        display_name,
+                        state,
+                        expected_states,
+                        details,
+                        precondition,
+                    ) = _preview_sale_order_build(env, parsed["arguments"])
+                    warnings = [_SALE_BUILD_WARNING]
         except OrmToolError:
             raise
         except (AccessError, MissingError, ValidationError, KeyError):
             raise OrmToolError("access_denied", 403) from None
-        if state not in {"draft", "sent"}:
-            raise OrmToolError("invalid_action_state", 409)
-        precondition = _business_precondition_fingerprint(
-            action_id=SALE_ORDER_CONFIRM_ACTION_ID,
-            model="sale.order",
-            record_id=target["record_id"],
-            state=state,
-        )
         result: dict[str, JsonValue] = {
             "ok": True,
             "preview": {
-                "action_id": SALE_ORDER_CONFIRM_ACTION_ID,
+                "action_id": action_id,
                 "action_kind": "business_action",
-                "action_spec_revision": SALE_ORDER_CONFIRM_SPEC_REVISION,
+                "action_spec_revision": parsed["action_spec_revision"],
                 "expires_at": iso_datetime(datetime.fromtimestamp(claims.expires_at, UTC)),
                 "observed_at": iso_datetime(observed_at),
                 "payload_fingerprint": fingerprint,
@@ -389,13 +439,14 @@ class DelegatedActionPreviewToolExecutor:
                 "precondition_fingerprint": precondition,
                 "preview_id": str(uuid4()),
                 "summary": {
-                    "action_id": SALE_ORDER_CONFIRM_ACTION_ID,
+                    "action_id": action_id,
+                    "details": details,
                     "display_name": display_name,
-                    "expected_states": ["sale", "done"],
+                    "expected_states": expected_states,
                     "proposal_id": parsed["proposal_id"],
                     "state_before": state,
                     "target": target,
-                    "warnings": [_BUSINESS_ACTION_WARNING],
+                    "warnings": warnings,
                 },
             },
         }
@@ -646,6 +697,8 @@ class ApprovedActionToolExecutor:
             raise OrmToolError("invalid_action", 400)
         claims = self._authorize(authority_token, parsed, "business_action_commit")
         target = parsed["target"]
+        action_id = parsed["action_id"]
+        target_model = target["model"]
         try:
             with self._environment_provider(claims) as env:
                 receipt, is_new = env["odoo.ai.action.execution"]._claim(
@@ -654,7 +707,7 @@ class ApprovedActionToolExecutor:
                     proposal_id=claims.proposal_id,
                     action_kind="business_action",
                     payload_fingerprint=claims.payload_fingerprint,
-                    target_model="sale.order",
+                    target_model=target_model,
                     expires_at=claims.expires_at,
                 )
                 if not is_new:
@@ -662,33 +715,49 @@ class ApprovedActionToolExecutor:
                         raise OrmToolError("execution_in_progress", 409)
                     record_id = receipt.target_record_id
                 else:
-                    records = env["sale.order"].browse([target["record_id"]])
-                    records.check_access("read")
-                    records.check_access("write")
-                    rows = records.read(["name", "state"], load=None)
-                    if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
-                        raise OrmToolError("access_denied", 403)
-                    _, state = _sale_confirm_state(rows[0])
-                    current = _business_precondition_fingerprint(
-                        action_id=SALE_ORDER_CONFIRM_ACTION_ID,
-                        model="sale.order",
-                        record_id=target["record_id"],
-                        state=state,
-                    )
+                    if action_id == SALE_ORDER_CONFIRM_ACTION_ID:
+                        records = env["sale.order"].browse([target["record_id"]])
+                        records.check_access("read")
+                        records.check_access("write")
+                        rows = records.read(["name", "state"], load=None)
+                        if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
+                            raise OrmToolError("access_denied", 403)
+                        _, state = _sale_confirm_state(rows[0])
+                        current = _business_precondition_fingerprint(
+                            action_id=action_id,
+                            model="sale.order",
+                            record_id=target["record_id"],
+                            state=state,
+                        )
+                    elif action_id == RECORD_ARCHIVE_ACTION_ID:
+                        _, _, current = _preview_archive(env, target)
+                    elif action_id == RECORD_DELETE_ACTION_ID:
+                        _, _, current = _preview_delete(env, target)
+                    else:
+                        *_, current = _preview_sale_order_build(env, parsed["arguments"])
                     if not hmac.compare_digest(current, claims.precondition_fingerprint):
                         raise OrmToolError("stale_precondition", 409)
-                    if state not in {"draft", "sent"}:
-                        raise OrmToolError("invalid_action_state", 409)
-                    records.action_confirm()
-                    after_rows = records.read(["state"], load=None)
-                    if (
-                        len(after_rows) != 1
-                        or after_rows[0].get("id") != target["record_id"]
-                        or after_rows[0].get("state") not in {"sale", "done"}
-                    ):
-                        raise OrmToolError("invalid_action_result", 502)
-                    receipt._complete(record_id=target["record_id"])
-                    record_id = target["record_id"]
+                    if action_id == SALE_ORDER_CONFIRM_ACTION_ID:
+                        records.action_confirm()
+                        after_rows = records.read(["state"], load=None)
+                        if (
+                            len(after_rows) != 1
+                            or after_rows[0].get("id") != target["record_id"]
+                            or after_rows[0].get("state") not in {"sale", "done"}
+                        ):
+                            raise OrmToolError("invalid_action_result", 502)
+                        record_id = target["record_id"]
+                    elif action_id == RECORD_ARCHIVE_ACTION_ID:
+                        records = env[target_model].browse([target["record_id"]])
+                        records.write({"active": False})
+                        record_id = target["record_id"]
+                    elif action_id == RECORD_DELETE_ACTION_ID:
+                        records = env[target_model].browse([target["record_id"]])
+                        records.unlink()
+                        record_id = target["record_id"]
+                    else:
+                        record_id = _execute_sale_order_build(env, parsed["arguments"])
+                    receipt._complete(record_id=record_id)
         except OrmToolError:
             raise
         except (AccessError, MissingError, KeyError):
@@ -696,7 +765,7 @@ class ApprovedActionToolExecutor:
         except (UserError, ValidationError):
             raise OrmToolError("business_rule_rejected", 409) from None
         return {
-            "action_id": SALE_ORDER_CONFIRM_ACTION_ID,
+            "action_id": action_id,
             "attempt_id": str(claims.attempt_id),
             "committed_at": iso_datetime(self._observed_at()),
             "ok": True,
@@ -715,6 +784,8 @@ class ApprovedActionToolExecutor:
         claims = self._authorize(authority_token, parsed, "business_action_verify")
         self._replay_guard(claims, "business_action_verify")
         target = parsed["target"]
+        action_id = parsed["action_id"]
+        target_model = target["model"]
         try:
             with self._environment_provider(claims) as env:
                 receipt = env["odoo.ai.action.execution"]._get_completed(
@@ -722,29 +793,65 @@ class ApprovedActionToolExecutor:
                     proposal_id=claims.proposal_id,
                     action_kind="business_action",
                     payload_fingerprint=claims.payload_fingerprint,
-                    target_model="sale.order",
+                    target_model=target_model,
                 )
-                if not receipt or receipt.target_record_id != target["record_id"]:
+                if not receipt:
                     raise OrmToolError("execution_receipt_not_found", 404)
-                records = env["sale.order"].browse([target["record_id"]])
-                records.check_access("read")
-                rows = records.read(["state"], load=None)
-                if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
-                    raise OrmToolError("access_denied", 403)
-                state = rows[0].get("state")
-                if state not in {"draft", "sent", "sale", "done", "cancel"}:
-                    raise OrmToolError("invalid_action_result", 502)
+                record_id = receipt.target_record_id
+                if "record_id" in target and record_id != target["record_id"]:
+                    raise OrmToolError("execution_receipt_not_found", 404)
+                if action_id == RECORD_DELETE_ACTION_ID:
+                    matches = not bool(env[target_model].browse([record_id]).exists())
+                    state = "deleted" if matches else "present"
+                elif action_id == RECORD_ARCHIVE_ACTION_ID:
+                    records = env[target_model].with_context(active_test=False).browse([record_id])
+                    records.check_access("read")
+                    rows = records.read(["active"], load=None)
+                    matches = len(rows) == 1 and rows[0].get("active") is False
+                    state = "archived" if matches else "active"
+                else:
+                    records = env["sale.order"].browse([record_id])
+                    records.check_access("read")
+                    fields = (
+                        ["state"]
+                        if action_id == SALE_ORDER_CONFIRM_ACTION_ID
+                        else ["state", "invoice_ids"]
+                    )
+                    rows = records.read(fields, load=None)
+                    if len(rows) != 1 or rows[0].get("id") != record_id:
+                        raise OrmToolError("access_denied", 403)
+                    order_state = rows[0].get("state")
+                    if action_id == SALE_ORDER_CONFIRM_ACTION_ID:
+                        matches = order_state in {"sale", "done"}
+                        state = str(order_state)
+                    else:
+                        end_state = parsed["arguments"]["end_state"]
+                        if end_state == "quotation":
+                            matches = order_state in {"draft", "sent"}
+                            state = str(order_state)
+                        elif end_state == "sale_order":
+                            matches = order_state in {"sale", "done"}
+                            state = str(order_state)
+                        else:
+                            invoice_ids = rows[0].get("invoice_ids")
+                            invoices = env["account.move"].browse(invoice_ids or [])
+                            invoices.check_access("read")
+                            invoice_states = invoices.mapped("state")
+                            matches = order_state in {"sale", "done"} and bool(
+                                invoice_states
+                            ) and all(item == "draft" for item in invoice_states)
+                            state = "invoice_draft" if matches else str(order_state)
         except OrmToolError:
             raise
         except (AccessError, MissingError, ValidationError, KeyError):
             raise OrmToolError("access_denied", 403) from None
         return {
-            "action_id": SALE_ORDER_CONFIRM_ACTION_ID,
+            "action_id": action_id,
             "attempt_id": str(claims.attempt_id),
-            "matches": state in {"sale", "done"},
+            "matches": matches,
             "ok": True,
             "proposal_id": str(claims.proposal_id),
-            "record_id": target["record_id"],
+            "record_id": record_id,
             "state": state,
             "verified_at": iso_datetime(self._observed_at()),
         }
@@ -762,7 +869,19 @@ class ApprovedActionToolExecutor:
             if proposal["action_kind"] == "record_patch"
             else proposal["values"]
             if proposal["action_kind"] == "record_create"
-            else [{"field": "state"}]
+            else [
+                {"field": field}
+                for field in {
+                    SALE_ORDER_CONFIRM_ACTION_ID: ("state",),
+                    RECORD_ARCHIVE_ACTION_ID: ("active",),
+                    RECORD_DELETE_ACTION_ID: ("id",),
+                    SALE_ORDER_BUILD_FLOW_ACTION_ID: (
+                        "order_line",
+                        "partner_id",
+                        "state",
+                    ),
+                }[proposal["action_id"]]
+            ]
         )
         fields = tuple(sorted(change["field"] for change in assignments))
         fingerprint = _action_payload_fingerprint(proposal)
@@ -779,7 +898,11 @@ class ApprovedActionToolExecutor:
             or claims.record_id
             != (
                 target["record_id"]
-                if proposal["action_kind"] in {"record_patch", "business_action"}
+                if proposal["action_kind"] == "record_patch"
+                or (
+                    proposal["action_kind"] == "business_action"
+                    and "record_id" in target
+                )
                 else None
             )
             or claims.fields != fields
@@ -991,6 +1114,7 @@ def _business_action_proposal(value: object) -> dict[str, object]:
             "action_kind",
             "action_spec_revision",
             "allowed_company_ids",
+            "arguments",
             "company_id",
             "database",
             "format_version",
@@ -1002,41 +1126,122 @@ def _business_action_proposal(value: object) -> dict[str, object]:
             "uid",
         },
     )
+    action_id = raw["action_id"]
+    revisions = {
+        SALE_ORDER_CONFIRM_ACTION_ID: SALE_ORDER_CONFIRM_SPEC_REVISION,
+        RECORD_ARCHIVE_ACTION_ID: RECORD_ARCHIVE_SPEC_REVISION,
+        RECORD_DELETE_ACTION_ID: RECORD_DELETE_SPEC_REVISION,
+        SALE_ORDER_BUILD_FLOW_ACTION_ID: SALE_ORDER_BUILD_FLOW_SPEC_REVISION,
+    }
     if (
         raw["format_version"] != 1
         or raw["action_kind"] != "business_action"
-        or raw["action_id"] != SALE_ORDER_CONFIRM_ACTION_ID
-        or raw["action_spec_revision"] != SALE_ORDER_CONFIRM_SPEC_REVISION
+        or not isinstance(action_id, str)
+        or action_id not in revisions
+        or raw["action_spec_revision"] != revisions[action_id]
     ):
         raise OrmToolError("business_action_denied", 403)
     allowed_company_ids = _positive_id_list(raw["allowed_company_ids"], maximum=16)
     company_id = _positive_int(raw["company_id"])
     if company_id not in allowed_company_ids or allowed_company_ids != sorted(allowed_company_ids):
         raise OrmToolError("invalid_action", 400)
-    target_raw = _exact_dict(raw["target"], {"model", "record_id"})
-    if target_raw["model"] != "sale.order":
-        raise OrmToolError("business_action_denied", 403)
+    if action_id == SALE_ORDER_BUILD_FLOW_ACTION_ID:
+        target_raw = _exact_dict(raw["target"], {"model"})
+        if target_raw["model"] != "sale.order":
+            raise OrmToolError("business_action_denied", 403)
+        target: dict[str, object] = {"model": "sale.order"}
+        arguments = _sale_order_build_arguments(raw["arguments"])
+    else:
+        target_raw = _exact_dict(raw["target"], {"model", "record_id"})
+        target_model = _model_name(target_raw["model"])
+        if action_id == SALE_ORDER_CONFIRM_ACTION_ID and target_model != "sale.order":
+            raise OrmToolError("business_action_denied", 403)
+        if not _model_permitted(target_model):
+            raise OrmToolError("model_denied", 403)
+        target = {
+            "model": target_model,
+            "record_id": _positive_int(target_raw["record_id"]),
+        }
+        if raw["arguments"] is not None:
+            raise OrmToolError("invalid_action", 400)
+        arguments = None
     parsed: dict[str, object] = {
-        "action_id": SALE_ORDER_CONFIRM_ACTION_ID,
+        "action_id": action_id,
         "action_kind": "business_action",
-        "action_spec_revision": SALE_ORDER_CONFIRM_SPEC_REVISION,
+        "action_spec_revision": revisions[action_id],
         "allowed_company_ids": allowed_company_ids,
+        "arguments": arguments,
         "company_id": company_id,
         "database": _bounded_text(raw["database"], maximum=128),
         "format_version": 1,
         "instance_id": _bounded_text(raw["instance_id"], maximum=255),
         "policy_revision": _bounded_text(raw["policy_revision"], maximum=128),
         "proposal_id": _canonical_uuid(raw["proposal_id"]),
-        "target": {
-            "model": "sale.order",
-            "record_id": _positive_int(target_raw["record_id"]),
-        },
+        "target": target,
         "turn_id": _canonical_uuid(raw["turn_id"]),
         "uid": _positive_int(raw["uid"]),
     }
     if len(_canonical_bytes(parsed)) > MAX_ACTION_PAYLOAD_BYTES:
         raise OrmToolError("payload_too_large", 413)
     return parsed
+
+
+def _sale_order_build_arguments(value: object) -> dict[str, object]:
+    raw = _exact_dict(
+        value,
+        {
+            "create_synthetic_partner",
+            "create_synthetic_product",
+            "end_state",
+            "partner_id",
+            "partner_name",
+            "price_unit",
+            "product_id",
+            "product_name",
+            "quantity",
+            "synthetic_data_authorized",
+        },
+    )
+    end_state = raw["end_state"]
+    if end_state not in {"quotation", "sale_order", "invoice_draft"}:
+        raise OrmToolError("invalid_action", 400)
+    create_partner = _boolean(raw["create_synthetic_partner"])
+    create_product = _boolean(raw["create_synthetic_product"])
+    synthetic_authorized = _boolean(raw["synthetic_data_authorized"])
+    partner_id = _optional_positive_int(raw["partner_id"])
+    product_id = _optional_positive_int(raw["product_id"])
+    partner_name = _optional_bounded_text(raw["partner_name"], maximum=256)
+    product_name = _optional_bounded_text(raw["product_name"], maximum=256)
+    if (partner_id is None) == (not create_partner) or (product_id is None) == (
+        not create_product
+    ):
+        raise OrmToolError("invalid_action", 400)
+    if create_partner:
+        _validate_synthetic_name(partner_name, synthetic_authorized)
+    elif partner_name is not None:
+        raise OrmToolError("invalid_action", 400)
+    if create_product:
+        _validate_synthetic_name(product_name, synthetic_authorized)
+    elif product_name is not None:
+        raise OrmToolError("invalid_action", 400)
+    quantity = _positive_decimal_text(raw["quantity"], maximum_digits=6, scale=3)
+    price_unit = (
+        None
+        if raw["price_unit"] is None
+        else _nonnegative_decimal_text(raw["price_unit"], maximum_digits=13, scale=6)
+    )
+    return {
+        "create_synthetic_partner": create_partner,
+        "create_synthetic_product": create_product,
+        "end_state": end_state,
+        "partner_id": partner_id,
+        "partner_name": partner_name,
+        "price_unit": price_unit,
+        "product_id": product_id,
+        "product_name": product_name,
+        "quantity": quantity,
+        "synthetic_data_authorized": synthetic_authorized,
+    }
 
 
 def _changes(value: object) -> list[dict[str, object]]:
@@ -1122,7 +1327,12 @@ def _check_proposal_authority(
         or proposal["company_id"] != claims.company_id
         or tuple(proposal["allowed_company_ids"]) != claims.allowed_company_ids
         or (
-            proposal["action_kind"] in {"record_patch", "business_action"}
+            proposal["action_kind"] == "record_patch"
+            and target["record_id"] != claims.record_id
+        )
+        or (
+            proposal["action_kind"] == "business_action"
+            and "record_id" in target
             and target["record_id"] != claims.record_id
         )
         or proposal["policy_revision"] != claims.policy_revision
@@ -1452,6 +1662,221 @@ def _business_precondition_fingerprint(
     return f"action-precondition:v1:sha256:{digest}"
 
 
+def _curated_precondition_fingerprint(action_id: str, snapshot: object) -> str:
+    digest = hashlib.sha256(
+        _canonical_bytes(
+            {
+                "action_id": action_id,
+                "format_version": 1,
+                "snapshot": snapshot,
+            }
+        )
+    ).hexdigest()
+    return f"action-precondition:v1:sha256:{digest}"
+
+
+def _preview_archive(
+    env: object, target: dict[str, object]
+) -> tuple[str, str, str]:
+    model_set = env[target["model"]]
+    if "active" not in model_set._fields:
+        raise OrmToolError("archive_not_supported", 409)
+    records = model_set.browse([target["record_id"]])
+    records.check_access("read")
+    records.check_access("write")
+    rows = records.read(["display_name", "active", "write_date"], load=None)
+    if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
+        raise OrmToolError("access_denied", 403)
+    display_name = rows[0].get("display_name")
+    active = rows[0].get("active")
+    if not isinstance(display_name, str) or type(active) is not bool:
+        raise OrmToolError("invalid_action_result", 502)
+    if not active:
+        raise OrmToolError("invalid_action_state", 409)
+    snapshot = {
+        "active": active,
+        "model": target["model"],
+        "record_id": target["record_id"],
+        "write_date": str(rows[0].get("write_date") or ""),
+    }
+    return (
+        display_name[:256],
+        "active",
+        _curated_precondition_fingerprint(RECORD_ARCHIVE_ACTION_ID, snapshot),
+    )
+
+
+def _preview_delete(
+    env: object, target: dict[str, object]
+) -> tuple[str, str, str]:
+    records = env[target["model"]].browse([target["record_id"]])
+    records.check_access("read")
+    records.check_access("unlink")
+    rows = records.read(["display_name", "write_date"], load=None)
+    if len(rows) != 1 or rows[0].get("id") != target["record_id"]:
+        raise OrmToolError("access_denied", 403)
+    display_name = rows[0].get("display_name")
+    if not isinstance(display_name, str):
+        raise OrmToolError("invalid_action_result", 502)
+    snapshot = {
+        "model": target["model"],
+        "record_id": target["record_id"],
+        "write_date": str(rows[0].get("write_date") or ""),
+    }
+    return (
+        display_name[:256],
+        "present",
+        _curated_precondition_fingerprint(RECORD_DELETE_ACTION_ID, snapshot),
+    )
+
+
+def _preview_sale_order_build(
+    env: object, arguments: dict[str, object]
+) -> tuple[str, str, list[str], dict[str, JsonValue], str]:
+    env["sale.order"].browse().check_access("create")
+    env["sale.order.line"].browse().check_access("create")
+    if arguments["end_state"] == "invoice_draft":
+        env["account.move"].browse().check_access("create")
+    if arguments["create_synthetic_partner"]:
+        env["res.partner"].browse().check_access("create")
+        partner_name = arguments["partner_name"]
+        partner_snapshot: dict[str, JsonValue] = {
+            "create": True,
+            "name": partner_name,
+        }
+    else:
+        partner_snapshot = _reference_snapshot(
+            env, "res.partner", arguments["partner_id"], fields=("display_name", "write_date")
+        )
+        partner_name = partner_snapshot["display_name"]
+    if arguments["create_synthetic_product"]:
+        env["product.product"].browse().check_access("create")
+        product_name = arguments["product_name"]
+        product_snapshot: dict[str, JsonValue] = {
+            "create": True,
+            "name": product_name,
+        }
+    else:
+        product_snapshot = _reference_snapshot(
+            env,
+            "product.product",
+            arguments["product_id"],
+            fields=(
+                "display_name",
+                "invoice_policy",
+                "list_price",
+                "sale_ok",
+                "write_date",
+            ),
+        )
+        if product_snapshot.get("sale_ok") is not True:
+            raise OrmToolError("invalid_action_state", 409)
+        if (
+            arguments["end_state"] == "invoice_draft"
+            and product_snapshot.get("invoice_policy") != "order"
+        ):
+            raise OrmToolError("product_not_invoiceable_on_order", 409)
+        product_name = product_snapshot["display_name"]
+    expected = {
+        "quotation": ["draft"],
+        "sale_order": ["sale", "done"],
+        "invoice_draft": ["invoice_draft"],
+    }[arguments["end_state"]]
+    snapshot = {
+        "arguments": arguments,
+        "partner": partner_snapshot,
+        "product": product_snapshot,
+    }
+    details: dict[str, JsonValue] = {
+        "end_state": arguments["end_state"],
+        "partner": partner_name,
+        "product": product_name,
+        "quantity": arguments["quantity"],
+        "synthetic_partner": arguments["create_synthetic_partner"],
+        "synthetic_product": arguments["create_synthetic_product"],
+    }
+    if arguments["price_unit"] is not None:
+        details["price_unit"] = arguments["price_unit"]
+    return (
+        f"{partner_name} — {product_name}"[:256],
+        "not_created",
+        expected,
+        details,
+        _curated_precondition_fingerprint(SALE_ORDER_BUILD_FLOW_ACTION_ID, snapshot),
+    )
+
+
+def _reference_snapshot(
+    env: object, model: str, record_id: object, *, fields: tuple[str, ...]
+) -> dict[str, JsonValue]:
+    parsed_id = _positive_int(record_id)
+    records = env[model].browse([parsed_id])
+    records.check_access("read")
+    rows = records.read(list(fields), load=None)
+    if len(rows) != 1 or rows[0].get("id") != parsed_id:
+        raise OrmToolError("access_denied", 403)
+    result: dict[str, JsonValue] = {"id": parsed_id}
+    for field in fields:
+        value = rows[0].get(field)
+        if isinstance(value, datetime):
+            result[field] = str(value)
+        elif value is None or isinstance(value, (str, int, float, bool)):
+            result[field] = value
+        else:
+            raise OrmToolError("invalid_action_result", 502)
+    display_name = result.get("display_name")
+    if "display_name" in fields and not isinstance(display_name, str):
+        raise OrmToolError("invalid_action_result", 502)
+    return result
+
+
+def _execute_sale_order_build(env: object, arguments: dict[str, object]) -> int:
+    if arguments["create_synthetic_partner"]:
+        partner = env["res.partner"].create({"name": arguments["partner_name"]})
+    else:
+        partner = env["res.partner"].browse([arguments["partner_id"]])
+        partner.check_access("read")
+        if len(partner.exists()) != 1:
+            raise OrmToolError("access_denied", 403)
+    if arguments["create_synthetic_product"]:
+        product = env["product.product"].create(
+            {
+                "invoice_policy": "order",
+                "name": arguments["product_name"],
+                "sale_ok": True,
+            }
+        )
+    else:
+        product = env["product.product"].browse([arguments["product_id"]])
+        product.check_access("read")
+        if len(product.exists()) != 1 or not product.sale_ok:
+            raise OrmToolError("invalid_action_state", 409)
+    order = env["sale.order"].create({"partner_id": partner.id})
+    price_unit = (
+        float(Decimal(arguments["price_unit"]))
+        if arguments["price_unit"] is not None
+        else product.list_price
+    )
+    description = product.get_product_multiline_description_sale() or product.display_name
+    env["sale.order.line"].create(
+        {
+            "name": description,
+            "order_id": order.id,
+            "price_unit": price_unit,
+            "product_id": product.id,
+            "product_uom": product.uom_id.id,
+            "product_uom_qty": float(Decimal(arguments["quantity"])),
+        }
+    )
+    if arguments["end_state"] in {"sale_order", "invoice_draft"}:
+        order.action_confirm()
+    if arguments["end_state"] == "invoice_draft":
+        invoices = order._create_invoices()
+        if not invoices or any(invoice.state != "draft" for invoice in invoices):
+            raise OrmToolError("invalid_action_result", 502)
+    return order.id
+
+
 def _sale_confirm_state(row: dict[str, object]) -> tuple[str, str]:
     display_name = row.get("name")
     state = row.get("state")
@@ -1508,10 +1933,68 @@ def _bounded_text(value: object, *, maximum: int) -> str:
     return value
 
 
+def _optional_bounded_text(value: object, *, maximum: int) -> str | None:
+    if value is None:
+        return None
+    return _bounded_text(value, maximum=maximum)
+
+
+def _boolean(value: object) -> bool:
+    if type(value) is not bool:
+        raise OrmToolError("invalid_action", 400)
+    return value
+
+
 def _positive_int(value: object) -> int:
     if type(value) is not int or value <= 0:
         raise OrmToolError("invalid_action", 400)
     return value
+
+
+def _optional_positive_int(value: object) -> int | None:
+    return None if value is None else _positive_int(value)
+
+
+def _canonical_decimal_text(
+    value: object, *, maximum_digits: int, scale: int, allow_zero: bool
+) -> str:
+    if not isinstance(value, str) or _DECIMAL_PATTERN.fullmatch(value) is None:
+        raise OrmToolError("invalid_action", 400)
+    try:
+        parsed = Decimal(value)
+    except InvalidOperation:
+        raise OrmToolError("invalid_action", 400) from None
+    if parsed < 0 or (not allow_zero and parsed == 0):
+        raise OrmToolError("invalid_action", 400)
+    integral = value.partition(".")[0].lstrip("-")
+    decimals = value.partition(".")[2]
+    if len(integral) > maximum_digits or len(decimals) > scale:
+        raise OrmToolError("invalid_action", 400)
+    normalized = format(parsed, "f")
+    if "." in normalized:
+        normalized = normalized.rstrip("0").rstrip(".")
+    if normalized != value:
+        raise OrmToolError("invalid_action", 400)
+    return value
+
+
+def _positive_decimal_text(value: object, *, maximum_digits: int, scale: int) -> str:
+    return _canonical_decimal_text(
+        value, maximum_digits=maximum_digits, scale=scale, allow_zero=False
+    )
+
+
+def _nonnegative_decimal_text(
+    value: object, *, maximum_digits: int, scale: int
+) -> str:
+    return _canonical_decimal_text(
+        value, maximum_digits=maximum_digits, scale=scale, allow_zero=True
+    )
+
+
+def _validate_synthetic_name(value: str | None, authorized: bool) -> None:
+    if not authorized or value is None or not value.upper().startswith("AI TEST"):
+        raise OrmToolError("synthetic_data_denied", 403)
 
 
 def _positive_id_list(value: object, *, maximum: int) -> list[int]:

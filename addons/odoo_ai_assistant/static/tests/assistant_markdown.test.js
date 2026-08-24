@@ -1,10 +1,13 @@
 import { expect, test } from "@odoo/hoot";
+import { defineMailModels } from "@mail/../tests/mail_test_helpers";
 import { mountWithCleanup } from "@web/../tests/web_test_helpers";
 import { AssistantMarkdown } from "@odoo_ai_assistant/components/assistant_markdown/assistant_markdown";
 import {
     parseMarkdown,
     safeMarkdownLink,
 } from "@odoo_ai_assistant/components/assistant_markdown/assistant_markdown_parser";
+
+defineMailModels();
 
 test("markdown parses emphasis without exposing delimiter text", () => {
     const blocks = parseMarkdown("Resultado **correcto** y *visible*.");
@@ -74,12 +77,12 @@ test("Owl renderer creates semantic markup instead of exposing markdown delimite
 
 test("Owl renderer never turns raw assistant HTML into executable DOM", async () => {
     await mountWithCleanup(AssistantMarkdown, {
-        props: { content: "<script>globalThis.__markdown_xss = true</script>" },
+        props: { content: "<script>globalThis.markdownXssProbe = true</script>" },
     });
 
     const root = document.querySelector(".o_ai_assistant_markdown");
     expect(root !== null).toBe(true);
     expect(root.querySelector("script")).toBe(null);
-    expect(root.textContent).toBe("<script>globalThis.__markdown_xss = true</script>");
-    expect(globalThis.__markdown_xss).toBe(undefined);
+    expect(root.textContent).toBe("<script>globalThis.markdownXssProbe = true</script>");
+    expect(globalThis.markdownXssProbe).toBe(undefined);
 });

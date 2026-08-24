@@ -102,7 +102,7 @@ class ActionProposalRecord(Base):
         CheckConstraint(
             "(action_kind = 'record_patch' AND target_record_id IS NOT NULL) OR "
             "(action_kind = 'record_create' AND target_record_id IS NULL) OR "
-            "(action_kind = 'business_action' AND target_record_id IS NOT NULL)",
+            "(action_kind = 'business_action')",
             name="ck_action_proposal_target_shape",
         ),
         CheckConstraint(
@@ -120,7 +120,7 @@ class ActionProposalRecord(Base):
             name="ck_action_proposal_precondition_fingerprint",
         ),
         CheckConstraint(
-            "octet_length(canonical_payload) BETWEEN 1 AND 8192",
+            "octet_length(canonical_payload) BETWEEN 1 AND 24576",
             name="ck_action_proposal_payload_size",
         ),
         CheckConstraint("state_version >= 0", name="ck_action_proposal_state_version"),

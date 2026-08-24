@@ -13,11 +13,24 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 ACTION_PAYLOAD_FORMAT_VERSION: Final = 1
 MAX_ACTION_COMPANIES: Final = 16
-MAX_ACTION_FIELDS: Final = 4
+MAX_ACTION_FIELDS: Final = 16
 MAX_ACTION_WARNINGS: Final = 8
 MAX_ACTION_VALUE_TEXT: Final = 4_000
 SALE_ORDER_CONFIRM_ACTION_ID: Final = "sale.order.confirm.v1"
 SALE_ORDER_CONFIRM_SPEC_REVISION: Final = "sale-order-confirm-spec-v1"
+RECORD_ARCHIVE_ACTION_ID: Final = "record.archive.v1"
+RECORD_ARCHIVE_SPEC_REVISION: Final = "record-archive-spec-v1"
+RECORD_DELETE_ACTION_ID: Final = "record.delete.v1"
+RECORD_DELETE_SPEC_REVISION: Final = "record-delete-spec-v1"
+SALE_ORDER_BUILD_FLOW_ACTION_ID: Final = "sale.order.build_flow.v1"
+SALE_ORDER_BUILD_FLOW_SPEC_REVISION: Final = "sale-order-build-flow-spec-v1"
+
+BusinessActionId = Literal[
+    "sale.order.confirm.v1",
+    "record.archive.v1",
+    "record.delete.v1",
+    "sale.order.build_flow.v1",
+]
 
 PositiveId = Annotated[int, Field(strict=True, gt=0)]
 ModelName = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")]
@@ -133,6 +146,48 @@ class ActionCreateTarget(BaseModel):
     model: ModelName
 
 
+class SaleOrderBuildFlowArguments(BaseModel):
+    """Typed inputs for the atomic sale-order construction flow."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    end_state: Literal["quotation", "sale_order", "invoice_draft"]
+    partner_id: PositiveId | None = None
+    partner_name: str | None = Field(default=None, min_length=1, max_length=256)
+    create_synthetic_partner: bool = False
+    product_id: PositiveId | None = None
+    product_name: str | None = Field(default=None, min_length=1, max_length=256)
+    create_synthetic_product: bool = False
+    quantity: str = Field(pattern=r"^(?:[1-9][0-9]{0,5})(?:\.[0-9]{1,3})?$")
+    price_unit: str | None = Field(
+        default=None,
+        pattern=r"^(?:0|[1-9][0-9]{0,12})(?:\.[0-9]{1,6})?$",
+    )
+    synthetic_data_authorized: bool = False
+
+    @model_validator(mode="after")
+    def validate_references_and_synthetic_data(self) -> Self:
+        if (self.partner_id is None) == (not self.create_synthetic_partner):
+            raise ValueError("exactly one partner source is required")
+        if (self.product_id is None) == (not self.create_synthetic_product):
+            raise ValueError("exactly one product source is required")
+        if self.create_synthetic_partner:
+            if not self.synthetic_data_authorized or not self.partner_name:
+                raise ValueError("synthetic partner is not authorized")
+            if not self.partner_name.upper().startswith("AI TEST"):
+                raise ValueError("synthetic partner must be visibly marked")
+        elif self.partner_name is not None:
+            raise ValueError("partner_name is only valid for synthetic data")
+        if self.create_synthetic_product:
+            if not self.synthetic_data_authorized or not self.product_name:
+                raise ValueError("synthetic product is not authorized")
+            if not self.product_name.upper().startswith("AI TEST"):
+                raise ValueError("synthetic product must be visibly marked")
+        elif self.product_name is not None:
+            raise ValueError("product_name is only valid for synthetic data")
+        return self
+
+
 class ActionFieldChange(BaseModel):
     """One field assignment in a record patch."""
 
@@ -223,7 +278,7 @@ class RecordCreateProposalPayload(BaseModel):
 
 
 class BusinessActionProposalPayload(BaseModel):
-    """Canonical invocation of one host-curated, parameter-free business action."""
+    """Canonical invocation of one versioned host-curated business action."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -231,7 +286,7 @@ class BusinessActionProposalPayload(BaseModel):
     proposal_id: UUID
     turn_id: UUID
     action_kind: Literal[ActionKind.BUSINESS_ACTION] = ActionKind.BUSINESS_ACTION
-    action_id: Literal["sale.order.confirm.v1"] = SALE_ORDER_CONFIRM_ACTION_ID
+    action_id: BusinessActionId = SALE_ORDER_CONFIRM_ACTION_ID
     instance_id: str = Field(min_length=1, max_length=255)
     database: str = Field(min_length=1, max_length=128)
     uid: PositiveId
@@ -239,9 +294,10 @@ class BusinessActionProposalPayload(BaseModel):
     allowed_company_ids: tuple[PositiveId, ...] = Field(
         min_length=1, max_length=MAX_ACTION_COMPANIES
     )
-    target: ActionTarget
+    target: ActionTarget | ActionCreateTarget
+    arguments: SaleOrderBuildFlowArguments | None = None
     policy_revision: Revision
-    action_spec_revision: Literal["sale-order-confirm-spec-v1"] = SALE_ORDER_CONFIRM_SPEC_REVISION
+    action_spec_revision: Revision = SALE_ORDER_CONFIRM_SPEC_REVISION
 
     @field_validator("database", "instance_id")
     @classmethod
@@ -252,12 +308,34 @@ class BusinessActionProposalPayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_closed_action(self) -> Self:
-        if (
-            self.company_id not in self.allowed_company_ids
-            or self.allowed_company_ids != tuple(sorted(set(self.allowed_company_ids)))
-            or self.target.model != "sale.order"
+        if self.company_id not in self.allowed_company_ids or self.allowed_company_ids != tuple(
+            sorted(set(self.allowed_company_ids))
         ):
             raise ValueError("invalid curated business action")
+        expected_revision = {
+            SALE_ORDER_CONFIRM_ACTION_ID: SALE_ORDER_CONFIRM_SPEC_REVISION,
+            RECORD_ARCHIVE_ACTION_ID: RECORD_ARCHIVE_SPEC_REVISION,
+            RECORD_DELETE_ACTION_ID: RECORD_DELETE_SPEC_REVISION,
+            SALE_ORDER_BUILD_FLOW_ACTION_ID: SALE_ORDER_BUILD_FLOW_SPEC_REVISION,
+        }[self.action_id]
+        if self.action_spec_revision != expected_revision:
+            raise ValueError("invalid curated business action revision")
+        if self.action_id == SALE_ORDER_BUILD_FLOW_ACTION_ID:
+            if (
+                not isinstance(self.target, ActionCreateTarget)
+                or self.target.model != "sale.order"
+                or self.arguments is None
+            ):
+                raise ValueError("invalid sale order build flow")
+        elif (
+            not isinstance(self.target, ActionTarget)
+            or self.arguments is not None
+            or (
+                self.action_id == SALE_ORDER_CONFIRM_ACTION_ID
+                and self.target.model != "sale.order"
+            )
+        ):
+            raise ValueError("invalid curated business action target")
         return self
 
 
@@ -366,16 +444,17 @@ class ActionCreatePreview(BaseModel):
 
 
 class BusinessActionPreviewSummary(BaseModel):
-    """Effect-free, citable preview of the curated sale confirmation action."""
+    """Effect-free, citable preview of one curated business action."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     proposal_id: UUID
-    action_id: Literal["sale.order.confirm.v1"] = SALE_ORDER_CONFIRM_ACTION_ID
-    target: ActionTarget
+    action_id: BusinessActionId = SALE_ORDER_CONFIRM_ACTION_ID
+    target: ActionTarget | ActionCreateTarget
     display_name: str = Field(min_length=1, max_length=256)
-    state_before: Literal["draft", "sent"]
-    expected_states: tuple[Literal["sale", "done"], ...] = ("sale", "done")
+    state_before: str | None = Field(default=None, max_length=64)
+    expected_states: tuple[str, ...] = Field(default=("sale", "done"), min_length=1, max_length=8)
+    details: dict[str, str | int | bool | None] = Field(default_factory=dict, max_length=16)
     warnings: tuple[str, ...] = Field(default=(), max_length=MAX_ACTION_WARNINGS)
 
     @field_validator("warnings")
@@ -385,26 +464,19 @@ class BusinessActionPreviewSummary(BaseModel):
             raise ValueError("preview warning is invalid")
         return value
 
-    @model_validator(mode="after")
-    def validate_expected_states(self) -> Self:
-        if self.expected_states != ("sale", "done"):
-            raise ValueError("curated action outcome is invalid")
-        return self
-
-
 class BusinessActionPreview(BaseModel):
     """Checked preview for one exact allowlisted business action."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     action_kind: Literal[ActionKind.BUSINESS_ACTION] = ActionKind.BUSINESS_ACTION
-    action_id: Literal["sale.order.confirm.v1"] = SALE_ORDER_CONFIRM_ACTION_ID
+    action_id: BusinessActionId = SALE_ORDER_CONFIRM_ACTION_ID
     preview_id: UUID
     summary: BusinessActionPreviewSummary
     payload_fingerprint: Fingerprint
     precondition_fingerprint: Fingerprint
     policy_revision: Revision
-    action_spec_revision: Literal["sale-order-confirm-spec-v1"] = SALE_ORDER_CONFIRM_SPEC_REVISION
+    action_spec_revision: Revision = SALE_ORDER_CONFIRM_SPEC_REVISION
     observed_at: AwareDatetime
     expires_at: AwareDatetime
 
@@ -459,6 +531,7 @@ class EffectiveWriteSchema(BaseModel):
     create_fields: dict[FieldName, EffectiveWriteFieldSchema] = Field(
         default_factory=dict, max_length=64
     )
+    defaults: dict[FieldName, ActionValue] = Field(default_factory=dict, max_length=64)
     source: Literal["runtime"] = "runtime"
     captured_for_user: PositiveId
     company_id: PositiveId
@@ -493,4 +566,10 @@ class EffectiveWriteSchema(BaseModel):
             raise ValueError("effective create schema fields must be deterministically ordered")
         if not self.create_access and self.create_fields:
             raise ValueError("a non-createable model cannot expose create fields")
+        if tuple(self.defaults) != tuple(sorted(self.defaults)) or not set(
+            self.defaults
+        ).issubset(self.create_fields):
+            raise ValueError("effective create defaults must match create fields")
+        if not self.create_access and self.defaults:
+            raise ValueError("a non-createable model cannot expose defaults")
         return self

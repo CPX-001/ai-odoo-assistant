@@ -4,21 +4,16 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from odoo import api, models
-from odoo.exceptions import AccessError, MissingError
 
 from ..services import (
     AssistantServiceError,
-    ScreenContextValidationError,
     TurnContextError,
-    derive_user_execution_context,
-    validate_how_to_screen,
+    prepare_agent_turn,
 )
 from ..services.assistant_chat_client import AssistantChatServiceClient
-from ..services.navigation import NavigationMetadataError, collect_visible_navigation
 from .assistant_bridge import (
     DEFAULT_TURN_TIMEOUT_SECONDS,
     SECRET_FILE_ENV,
@@ -32,10 +27,6 @@ from .assistant_bridge import (
     _turn_timeout,
 )
 from .chat_preferences import recent_chat_limit
-
-_CHAT_WORKFLOWS = frozenset({"GENERAL", "EXPLAIN", "QUERY", "HOW_TO", "ACTION"})
-_MAX_ROUTE_MODELS = 128
-_MAX_ROUTE_LABELS = 6
 
 
 class AssistantChatBridge(models.AbstractModel):
@@ -57,39 +48,38 @@ class AssistantChatBridge(models.AbstractModel):
         try:
             normalized_message = _chat_message(message)
             conversation_id = _optional_uuid(conversation_id)
-            validated = validate_how_to_screen(screen)
-            route = self._route_chat(
-                normalized_message,
-                validated.to_mapping(),
-                conversation_id,
+            prepared = prepare_agent_turn(
+                env=self.env,
+                screen_payload=screen,
+                message=normalized_message,
             )
-            internal_workflow = route["workflow"]
-            target_model = route["target_model"]
-            routed_message = route["resolved_message"]
-            routed_screen = _screen_for_model(validated.to_mapping(), target_model)
-
-            if internal_workflow == "HOW_TO":
-                response = self.submit_how_to(routed_message, routed_screen)
-            elif internal_workflow == "ACTION":
-                response = self.submit_action(routed_message, screen)
-            elif internal_workflow == "QUERY":
-                response = self.submit_query(routed_message, routed_screen)
-            elif internal_workflow == "EXPLAIN":
-                response = self.submit_explain(routed_message, screen)
-            else:
-                response = self._submit_general(
-                    routed_message,
-                    validated.to_mapping(),
-                    conversation_id,
-                )
+            payload = prepared.to_assistant_payload()
+            policy = self._agent_policy_layers(
+                conversation_id,
+                normalized_message,
+            )
+            payload.update(
+                {
+                    "actor": self._chat_actor(),
+                    "conversation_id": conversation_id,
+                    "policy_layers": policy["layers"],
+                    "synthetic_data_authorized": policy[
+                        "synthetic_data_authorized"
+                    ],
+                }
+            )
+            response = _browser_agent(
+                self._chat_client().agent_turn(payload),
+                prepared.turn_id,
+            )
 
             return self._persist_chat_result(
                 response,
                 message=normalized_message,
                 conversation_id=conversation_id,
-                internal_workflow=internal_workflow,
+                internal_workflow="AGENT",
             )
-        except (ScreenContextValidationError, ValueError):
+        except ValueError:
             return _error("invalid_context")
         except TurnContextError:
             return _error("invalid_context")
@@ -122,20 +112,42 @@ class AssistantChatBridge(models.AbstractModel):
         except Exception:  # noqa: BLE001
             return _error("service_unavailable")
 
-    def _submit_general(self, message, screen, conversation_id):
-        turn_id = uuid4()
-        user = derive_user_execution_context(self.env)
-        response = self._chat_client().general_chat(
-            {
-                "turn_id": str(turn_id),
-                "actor": self._chat_actor(),
-                "conversation_id": conversation_id,
-                "message": message,
-                "screen": screen,
-                "user": user.to_mapping(),
-            }
+    @api.model
+    def decide_agent_plan(self, plan_id, decision):
+        if not self.env.user._is_internal():
+            return _error("access_denied")
+        try:
+            parsed_plan_id = _required_uuid(plan_id)
+            if decision not in {"approve", "reject"}:
+                raise ValueError
+            actor = self._chat_actor()
+            decided = self._chat_client().agent_plan_decision(
+                parsed_plan_id,
+                {
+                    "actor": actor,
+                    "decision": decision,
+                    "plan_id": parsed_plan_id,
+                },
+            )
+            if decision == "reject":
+                return _browser_plan_decision(decided, parsed_plan_id)
+            executed = self._chat_client().agent_plan_execute(
+                parsed_plan_id,
+                {"actor": actor, "plan_id": parsed_plan_id},
+            )
+            return _browser_plan_execution(executed, parsed_plan_id)
+        except ValueError:
+            return _error("invalid_context")
+        except AssistantServiceError as error:
+            return _error(_client_error_code(error.code))
+        except Exception:  # noqa: BLE001 - browser boundary stays sanitized
+            return _error("service_unavailable")
+
+    def _agent_policy_layers(self, conversation_id, message):
+        return self.env["odoo.ai.chat.policy"].policy_layers_for_turn(
+            conversation_id=conversation_id,
+            message=message,
         )
-        return _browser_general(response, turn_id)
 
     def _persist_chat_result(
         self,
@@ -170,35 +182,6 @@ class AssistantChatBridge(models.AbstractModel):
             result["conversation_id"] = conversation_id
         return result
 
-    def _route_chat(self, message, screen, conversation_id):
-        candidates = _routing_candidates(self.env, screen.get("model"))
-        allowed_models = {candidate["model"] for candidate in candidates}
-        current_model = screen.get("model")
-        if not isinstance(current_model, str) or current_model not in allowed_models:
-            current_model = None
-        route_id = uuid4()
-        response = self._chat_client().route_chat(
-            {
-                "actor": self._chat_actor(),
-                "candidates": candidates,
-                "conversation_id": conversation_id,
-                "current_model": current_model,
-                "has_current_record": current_model is not None
-                and isinstance(screen.get("res_id"), int),
-                "message": message,
-                "turn_id": str(route_id),
-                "user_language": self.env.user.lang or "en_US",
-            }
-        )
-        return _validated_route(
-            response,
-            route_id=route_id,
-            allowed_models=allowed_models,
-            current_model=current_model,
-            has_current_record=current_model is not None
-            and isinstance(screen.get("res_id"), int),
-        )
-
     def _chat_actor(self):
         return {"database": self.env.cr.dbname, "uid": self.env.uid}
 
@@ -226,150 +209,195 @@ class AssistantChatBridge(models.AbstractModel):
         )
 
 
-def _routing_candidates(env, current_model) -> list[dict[str, object]]:
-    labels_by_model: dict[str, list[str]] = {}
-    if isinstance(current_model, str) and _readable_model(env, current_model):
-        labels_by_model[current_model] = []
-    try:
-        navigation = collect_visible_navigation(env, captured_at=datetime.now(UTC))
-        nodes = navigation.get("nodes")
-        if isinstance(nodes, list):
-            for node in nodes:
-                if not isinstance(node, dict):
-                    continue
-                action = node.get("action")
-                path = node.get("path")
-                if not isinstance(action, dict) or not isinstance(path, list):
-                    continue
-                target = action.get("target_model")
-                if not isinstance(target, str) or not _readable_model(env, target):
-                    continue
-                labels = labels_by_model.setdefault(target, [])
-                label = " / ".join(value.strip() for value in path if isinstance(value, str))
-                if (
-                    1 <= len(label) <= 240
-                    and label not in labels
-                    and len(labels) < _MAX_ROUTE_LABELS
-                ):
-                    labels.append(label)
-                if len(labels_by_model) >= _MAX_ROUTE_MODELS:
-                    break
-    except NavigationMetadataError:
-        pass
-    return [
-        {"labels": labels, "model": model}
-        for model, labels in list(labels_by_model.items())[:_MAX_ROUTE_MODELS]
-    ]
-
-
-def _readable_model(env, model: str) -> bool:
-    try:
-        if model not in env:
-            return False
-        env[model].browse().check_access("read")
-        return True
-    except (AccessError, MissingError, KeyError, ValueError):
-        return False
-
-
-def _screen_for_model(screen: dict[str, object], target_model) -> dict[str, object]:
-    if target_model == screen.get("model"):
-        return screen
-    return {
-        "action_id": None,
-        "allowed_context_subset": {},
-        "captured_at": screen["captured_at"],
-        "menu_id": None,
-        "model": target_model,
-        "res_id": None,
-        "selected_ids": [],
-        "view_type": None,
-    }
-
-
-def _validated_route(
-    response,
-    *,
-    route_id,
-    allowed_models,
-    current_model,
-    has_current_record,
-):
-    expected = {"resolved_message", "status", "target_model", "turn_id", "workflow"}
-    if not isinstance(response, dict) or set(response) != expected:
-        raise AssistantServiceError("invalid_response")
-    workflow = response.get("workflow")
-    target_model = response.get("target_model")
-    resolved_message = response.get("resolved_message")
-    if (
-        response.get("status") != "ok"
-        or response.get("turn_id") != str(route_id)
-        or workflow not in _CHAT_WORKFLOWS
-        or (target_model is not None and target_model not in allowed_models)
-        or not isinstance(resolved_message, str)
-        or not 1 <= len(resolved_message) <= 4_000
-        or resolved_message != resolved_message.strip()
-        or "\0" in resolved_message
-    ):
-        raise AssistantServiceError("invalid_response")
-    if workflow == "QUERY" and target_model is None:
-        raise AssistantServiceError("invalid_response")
-    if workflow in {"ACTION", "EXPLAIN"} and (
-        not has_current_record
-        or target_model is None
-        or target_model != current_model
-    ):
-        raise AssistantServiceError("invalid_response")
-    if workflow == "GENERAL" and target_model is not None:
-        raise AssistantServiceError("invalid_response")
-    return {
-        "resolved_message": resolved_message,
-        "target_model": target_model,
-        "workflow": workflow,
-    }
-
-
-def _browser_general(response, turn_id):
+def _browser_agent(response, turn_id):
     expected = {
         "answer_markdown",
         "completed_at",
         "confidence",
-        "evidence_refs",
-        "limitations",
+        "conversation_id",
+        "plan",
+        "state",
         "status",
         "turn_id",
-        "workflow",
     }
     if not isinstance(response, dict) or set(response) != expected:
         raise AssistantServiceError("invalid_response")
     answer = response.get("answer_markdown")
-    limitations = response.get("limitations")
-    references = response.get("evidence_refs")
+    plan = _validated_plan(response.get("plan"))
     if (
         response.get("status") != "ok"
         or response.get("turn_id") != str(turn_id)
-        or response.get("workflow") == "ACTION"
+        or response.get("state") != plan["state"]
         or response.get("confidence") not in {"high", "medium", "low"}
         or not isinstance(answer, str)
         or not 1 <= len(answer) <= 16_384
-        or not isinstance(limitations, list)
-        or len(limitations) > 8
-        or any(not isinstance(value, str) or not 1 <= len(value) <= 1_024 for value in limitations)
-        or not isinstance(references, list)
-        or len(references) > 24
-        or any(not _is_uuid(value) for value in references)
         or not isinstance(response.get("completed_at"), str)
     ):
         raise AssistantServiceError("invalid_response")
     return {
         "ok": True,
         "turn_id": str(turn_id),
-        "workflow": "GENERAL",
+        "workflow": "AGENT",
         "answer": answer,
         "confidence": response["confidence"],
-        "limitations": list(limitations),
+        "limitations": list(plan["assumptions"]),
         "citations": [],
+        "plan": plan,
     }
+
+
+def _validated_plan(value):
+    expected = {
+        "assumptions",
+        "expires_at",
+        "goal",
+        "metadata",
+        "plan_id",
+        "policy",
+        "requires_confirmation",
+        "risk",
+        "state",
+        "steps",
+    }
+    states = {
+        "planning",
+        "awaiting_confirmation",
+        "authorized",
+        "executing",
+        "completed",
+        "partial",
+        "failed",
+        "rejected",
+        "expired",
+    }
+    metadata_keys = {
+        "estimated_blast_radius",
+        "has_external_effect",
+        "has_irreversible_effect",
+        "is_atomic",
+        "needs_business_action",
+        "needs_read",
+        "needs_schema",
+        "needs_write",
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != expected
+        or not _is_uuid(value.get("plan_id"))
+        or value.get("state") not in states
+        or value.get("risk") not in {"low", "moderate", "high", "protected"}
+        or not isinstance(value.get("goal"), str)
+        or not 1 <= len(value["goal"]) <= 1_000
+        or not isinstance(value.get("assumptions"), list)
+        or len(value["assumptions"]) > 12
+        or any(not isinstance(item, str) for item in value["assumptions"])
+        or not isinstance(value.get("steps"), list)
+        or len(value["steps"]) > 12
+        or any(not _valid_plan_step(item) for item in value["steps"])
+        or not isinstance(value.get("requires_confirmation"), bool)
+        or value.get("expires_at") is not None
+        and not isinstance(value.get("expires_at"), str)
+        or not isinstance(value.get("metadata"), dict)
+        or set(value["metadata"]) != metadata_keys
+        or type(value["metadata"].get("estimated_blast_radius")) is not int
+        or any(
+            not isinstance(value["metadata"].get(key), bool)
+            for key in metadata_keys - {"estimated_blast_radius"}
+        )
+        or not _valid_plan_policy(value.get("policy"))
+    ):
+        raise AssistantServiceError("invalid_response")
+    return dict(value)
+
+
+def _valid_plan_policy(value):
+    return (
+        isinstance(value, dict)
+        and set(value)
+        == {
+            "allow_synthetic_data",
+            "confirmation_mode",
+            "constrained_by",
+            "max_auto_risk",
+        }
+        and value.get("confirmation_mode")
+        in {"always_confirm", "risk_based", "protected_only"}
+        and value.get("max_auto_risk") in {"low", "moderate", "high", "protected"}
+        and isinstance(value.get("allow_synthetic_data"), bool)
+        and isinstance(value.get("constrained_by"), list)
+        and len(value["constrained_by"]) <= 4
+        and all(
+            item in {"system_ceiling", "administrator", "user", "conversation"}
+            for item in value["constrained_by"]
+        )
+    )
+
+
+def _valid_plan_step(value):
+    if (
+        not isinstance(value, dict)
+        or set(value)
+        != {"effect_scope", "receipt", "risk", "state", "step_id", "title"}
+        or not isinstance(value.get("step_id"), str)
+        or not isinstance(value.get("title"), str)
+        or not value["title"]
+        or value.get("state")
+        not in {"planned", "previewed", "executing", "completed", "failed", "skipped"}
+        or value.get("risk") not in {"low", "moderate", "high", "protected"}
+        or value.get("effect_scope")
+        not in {"read_only", "internal_reversible", "internal_irreversible", "external"}
+    ):
+        return False
+    receipt = value.get("receipt")
+    if receipt is None:
+        return True
+    return (
+        isinstance(receipt, dict)
+        and set(receipt)
+        == {"error_code", "evidence_id", "outcome", "record_id", "record_model"}
+        and isinstance(receipt.get("outcome"), str)
+        and (receipt.get("error_code") is None or isinstance(receipt["error_code"], str))
+        and (receipt.get("evidence_id") is None or _is_uuid(receipt["evidence_id"]))
+        and (
+            receipt.get("record_id") is None
+            and receipt.get("record_model") is None
+            or type(receipt.get("record_id")) is int
+            and receipt["record_id"] > 0
+            and isinstance(receipt.get("record_model"), str)
+        )
+    )
+
+
+def _browser_plan_decision(response, plan_id):
+    if (
+        not isinstance(response, dict)
+        or set(response) != {"authorization_id", "decided_at", "plan_id", "state"}
+        or response.get("plan_id") != plan_id
+        or response.get("state") != "rejected"
+        or response.get("authorization_id") is not None
+        or not isinstance(response.get("decided_at"), str)
+    ):
+        raise AssistantServiceError("invalid_response")
+    return {"ok": True, "plan_id": plan_id, "state": "rejected", "plan": None}
+
+
+def _browser_plan_execution(response, plan_id):
+    if (
+        not isinstance(response, dict)
+        or set(response) != {"answer_markdown", "completed_at", "error_code", "plan"}
+    ):
+        raise AssistantServiceError("invalid_response")
+    plan = _validated_plan(response.get("plan"))
+    if (
+        plan.get("plan_id") != plan_id
+        or plan.get("state") not in {"completed", "partial", "failed"}
+        or response.get("completed_at") is not None
+        and not isinstance(response.get("completed_at"), str)
+        or response.get("error_code") is not None
+        and not isinstance(response.get("error_code"), str)
+    ):
+        raise AssistantServiceError("invalid_response")
+    return {"ok": True, "plan_id": plan_id, "state": plan["state"], "plan": plan}
 
 
 def _browser_history(payload):
@@ -427,7 +455,7 @@ def _browser_history(payload):
 
 def _chat_message(value) -> str:
     if not isinstance(value, str):
-        raise ValueError
+        raise TypeError
     normalized = value.strip()
     if not 1 <= len(normalized) <= 4_000 or "\x00" in normalized:
         raise ValueError
@@ -440,6 +468,13 @@ def _optional_uuid(value):
     if not isinstance(value, str) or not _is_uuid(value):
         raise ValueError
     return value
+
+
+def _required_uuid(value):
+    parsed = _optional_uuid(value)
+    if parsed is None:
+        raise ValueError
+    return parsed
 
 
 def _is_uuid(value) -> bool:

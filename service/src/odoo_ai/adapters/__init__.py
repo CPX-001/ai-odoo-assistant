@@ -3,8 +3,11 @@
 from odoo_ai.adapters.action_tools import (
     ODOO_GET_EFFECTIVE_WRITE_SCHEMA,
     ODOO_PREVIEW_BUSINESS_ACTION,
+    ODOO_PREVIEW_RECORD_ARCHIVE,
     ODOO_PREVIEW_RECORD_CREATE,
+    ODOO_PREVIEW_RECORD_DELETE,
     ODOO_PREVIEW_RECORD_PATCH,
+    ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW,
     ActionPreviewToolData,
     ActionToolBackend,
     ActionToolExecutorFactory,
@@ -15,6 +18,12 @@ from odoo_ai.adapters.action_tools import (
     PreviewRecordPatchRequest,
     action_tool_specs,
     build_action_tool_registry,
+)
+from odoo_ai.adapters.agent_tools import (
+    ODOO_SEARCH_MODELS,
+    UnifiedAgentToolExecutorFactory,
+    agent_tool_policy_specs,
+    agent_tool_specs,
 )
 from odoo_ai.adapters.codex_engine import (
     CodexEngineError,
@@ -99,6 +108,7 @@ __all__ = [
     "ActionPreviewToolData",
     "ActionToolBackend",
     "ActionToolExecutorFactory",
+    "UnifiedAgentToolExecutorFactory",
     "CodexAppServerClient",
     "CodexAppServerEngine",
     "CodexEngineError",
@@ -133,8 +143,12 @@ __all__ = [
     "ODOO_GET_EFFECTIVE_SCHEMA",
     "ODOO_GET_EFFECTIVE_WRITE_SCHEMA",
     "ODOO_PREVIEW_BUSINESS_ACTION",
+    "ODOO_PREVIEW_RECORD_ARCHIVE",
     "ODOO_PREVIEW_RECORD_PATCH",
     "ODOO_PREVIEW_RECORD_CREATE",
+    "ODOO_PREVIEW_RECORD_DELETE",
+    "ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW",
+    "ODOO_SEARCH_MODELS",
     "ODOO_QUERY_RECORDS",
     "AggregateRecordsToolData",
     "EffectiveSchemaToolData",
@@ -167,6 +181,8 @@ __all__ = [
     "probe_codex_runtime",
     "query_tool_specs",
     "action_tool_specs",
+    "agent_tool_policy_specs",
+    "agent_tool_specs",
     "serialize_codex_context",
     "source_tool_specs",
 ]

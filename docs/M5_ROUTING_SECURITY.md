@@ -1,5 +1,8 @@
 # M5 routing and panel security
 
+> Documento histórico del gate M5. El router por categorías fue sustituido por
+> `AgentTurnService` mediante ADR-014; no describe el routing activo.
+
 M5 introduced separate read-only workflow boundaries. The product UI now places an
 automatic chat facade in front of those boundaries: the user does **not** choose
 `EXPLAIN`, `QUERY`, `HOW_TO` or `ACTION` manually.

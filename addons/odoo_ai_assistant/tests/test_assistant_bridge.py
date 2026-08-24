@@ -7,9 +7,9 @@ from unittest.mock import patch
 from odoo import Command
 from odoo.tests import TransactionCase, tagged
 
-from ..models.assistant_chat_bridge import _routing_candidates, _validated_route
+from ..controllers.internal_tools import _derived_validity
 from ..security import (
-    ActionPreviewDelegationCodec,
+    AgentDelegationCodec,
     DelegationCodec,
     QueryDelegationCodec,
 )
@@ -193,21 +193,52 @@ class FakeContextReadClient:
         }
 
 
-class FakeProductChatClient:
-    def __init__(self, *, workflow, target_model, resolved_message=None):
-        self.workflow = workflow
-        self.target_model = target_model
-        self.resolved_message = resolved_message
+class FakeAgentChatClient:
+    def __init__(self, *, mutate_response=None):
+        self.mutate_response = mutate_response
+        self.payload = None
         self.append_payload = None
 
-    def route_chat(self, payload):
-        return {
-            "resolved_message": self.resolved_message or payload["message"],
+    def agent_turn(self, payload):
+        self.payload = payload
+        response = {
+            "answer_markdown": "Respuesta unificada comprobada.",
+            "completed_at": datetime.now(UTC).isoformat(),
+            "confidence": "high",
+            "conversation_id": payload.get("conversation_id"),
+            "plan": {
+                "assumptions": [],
+                "expires_at": datetime.now(UTC).isoformat(),
+                "goal": "Responder usando la instancia Odoo real",
+                "metadata": {
+                    "estimated_blast_radius": 0,
+                    "has_external_effect": False,
+                    "has_irreversible_effect": False,
+                    "is_atomic": True,
+                    "needs_business_action": False,
+                    "needs_read": True,
+                    "needs_schema": True,
+                    "needs_write": False,
+                },
+                "plan_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "policy": {
+                    "allow_synthetic_data": False,
+                    "confirmation_mode": "risk_based",
+                    "constrained_by": ["system_ceiling"],
+                    "max_auto_risk": "low",
+                },
+                "requires_confirmation": False,
+                "risk": "low",
+                "state": "completed",
+                "steps": [],
+            },
+            "state": "completed",
             "status": "ok",
-            "target_model": self.target_model,
             "turn_id": payload["turn_id"],
-            "workflow": self.workflow,
         }
+        if self.mutate_response is not None:
+            self.mutate_response(response)
+        return response
 
     def chat_append(self, payload):
         self.append_payload = payload
@@ -219,6 +250,16 @@ class FakeProductChatClient:
 
 @tagged("post_install", "-at_install")
 class TestAssistantBridge(TransactionCase):
+    def test_unified_capability_derives_bounded_legacy_validity(self):
+        now = int(datetime.now(UTC).timestamp())
+
+        issued_at, expires_at = _derived_validity(now + 300, maximum_ttl=120)
+
+        self.assertGreaterEqual(issued_at, now)
+        self.assertGreater(expires_at, issued_at)
+        self.assertLessEqual(expires_at - issued_at, 120)
+        self.assertLessEqual(expires_at, now + 300)
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -411,155 +452,60 @@ class TestAssistantBridge(TransactionCase):
         self.assertNotIn("groups", result)
         self.assertNotIn(client.payload["delegation_token"], repr(result))
 
-    def test_explicit_router_selects_query_before_authority_is_prepared(self):
-        client = FakeContextReadClient()
+    def test_chat_uses_unified_agent_and_signs_runtime_model_discovery(self):
+        client = FakeAgentChatClient()
         bridge = self.env(user=self.user.id, su=False)["odoo.ai.assistant.bridge"]
         with (
             patch.dict(
                 os.environ,
                 {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
             ),
-            patch.object(type(bridge), "_client", return_value=client),
-            patch.object(
-                type(bridge),
-                "_chat_client",
-                return_value=FakeProductChatClient(
-                    workflow="QUERY",
-                    target_model="res.partner",
-                ),
-            ),
+            patch.object(type(bridge), "_chat_client", return_value=client),
         ):
-            result = bridge.submit_turn("¿Cuántos?", self._screen(), "QUERY")
-
-        self.assertTrue(result.get("ok"), result)
-        self.assertEqual(result["workflow"], "QUERY")
-        claims = QueryDelegationCodec(SECRET).decode(client.payload["delegation_token"])
-        self.assertEqual(claims.scopes, ("query_schema", "query_records", "aggregate_records"))
-
-    def test_chat_routing_candidates_are_runtime_visible_models_not_language_aliases(self):
-        navigation = {
-            "nodes": [
-                {
-                    "action": {"target_model": "account.move"},
-                    "path": ["Invoicing", "Customers", "Invoices"],
-                }
-            ]
-        }
-        with patch(
-            "odoo.addons.odoo_ai_assistant.models.assistant_chat_bridge.collect_visible_navigation",
-            return_value=navigation,
-        ):
-            candidates = _routing_candidates(self.env, "sale.order")
-
-        self.assertIn(
-            {
-                "labels": ["Invoicing / Customers / Invoices"],
-                "model": "account.move",
-            },
-            candidates,
-        )
-
-    def test_chat_route_decision_rejects_a_model_not_allowed_by_odoo(self):
-        with self.assertRaisesRegex(AssistantServiceError, "invalid_response"):
-            _validated_route(
-                {
-                    "resolved_message": "Consulta facturas reales",
-                    "status": "ok",
-                    "target_model": "res.users",
-                    "turn_id": "11111111-1111-4111-8111-111111111111",
-                    "workflow": "QUERY",
-                },
-                route_id="11111111-1111-4111-8111-111111111111",
-                allowed_models={"sale.order", "account.move"},
-                current_model="sale.order",
-                has_current_record=True,
+            result = bridge.submit_turn(
+                "¿Cuántos contactos puedo ver?",
+                self._screen(),
+                "QUERY",
             )
 
-    def test_chat_uses_resolved_message_but_persists_the_original_user_text(self):
-        client = FakeContextReadClient()
-        routing = FakeProductChatClient(
-            workflow="QUERY",
-            target_model="res.partner",
-            resolved_message="Cuenta los contactos que mencionamos antes.",
+        self.assertTrue(result.get("ok"), result)
+        self.assertEqual(result["workflow"], "AGENT")
+        self.assertEqual(result["plan"]["state"], "completed")
+        self.assertEqual(client.payload["message"], "¿Cuántos contactos puedo ver?")
+        self.assertEqual(
+            client.append_payload["user_message"],
+            "¿Cuántos contactos puedo ver?",
         )
+        self.assertEqual(client.append_payload["internal_workflow"], "AGENT")
+        claims = AgentDelegationCodec(SECRET).decode(
+            client.payload["capability_token"]
+        )
+        self.assertEqual(claims.uid, self.user.id)
+        self.assertTrue(claims.allow_runtime_models)
+        self.assertIn("model_search", claims.scopes)
+        self.assertIn("res.partner", claims.allowed_models)
+        self.assertNotIn("res.users", claims.allowed_models)
+        self.assertNotIn(client.payload["capability_token"], repr(result))
+
+    def test_unified_agent_response_cannot_inject_host_authority(self):
+        def inject_authority(response):
+            response["plan"]["authority"] = "approve-and-commit"
+
+        client = FakeAgentChatClient(mutate_response=inject_authority)
         bridge = self.env(user=self.user.id, su=False)["odoo.ai.assistant.bridge"]
         with (
             patch.dict(
                 os.environ,
                 {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
             ),
-            patch.object(type(bridge), "_client", return_value=client),
-            patch.object(type(bridge), "_chat_client", return_value=routing),
+            patch.object(type(bridge), "_chat_client", return_value=client),
         ):
-            result = bridge.submit_chat("¿Y esos?", self._screen())
+            result = bridge.submit_chat("Cambia el nombre", self._screen())
 
-        self.assertTrue(result.get("ok"), result)
-        self.assertEqual(client.payload["message"], routing.resolved_message)
-        self.assertEqual(routing.append_payload["user_message"], "¿Y esos?")
-
-    def test_browser_workflow_is_ignored_in_favor_of_internal_routing(self):
-        client = FakeContextReadClient()
-        bridge = self.env(user=self.user.id, su=False)["odoo.ai.assistant.bridge"]
-        with (
-            patch.dict(
-                os.environ,
-                {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
-            ),
-            patch.object(type(bridge), "_client", return_value=client),
-            patch.object(
-                type(bridge),
-                "_chat_client",
-                return_value=FakeProductChatClient(
-                    workflow="QUERY",
-                    target_model="res.partner",
-                ),
-            ),
-        ):
-            result = bridge.submit_turn("¿Cuántos?", self._screen(), "DIAGNOSE")
-
-        self.assertTrue(result.get("ok"), result)
-        self.assertEqual(result["workflow"], "QUERY")
-
-    def test_action_router_uses_preview_only_p1_and_returns_exact_safe_diff(self):
-        client = FakeContextReadClient()
-        user_env = self.env(
-            user=self.user.id,
-            su=False,
-            context={
-                **self.env.context,
-                "allowed_company_ids": [self.env.company.id],
-                "lang": "en_US",
-            },
+        self.assertEqual(
+            result,
+            {"error": {"code": "invalid_response"}, "ok": False},
         )
-        bridge = user_env["odoo.ai.assistant.bridge"]
-        with (
-            patch.dict(
-                os.environ,
-                {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
-            ),
-            patch.object(type(bridge), "_client", return_value=client),
-            patch.object(
-                type(bridge),
-                "_chat_client",
-                return_value=FakeProductChatClient(
-                    workflow="ACTION",
-                    target_model="res.partner",
-                ),
-            ),
-        ):
-            result = bridge.submit_turn("Cambia el nombre", self._screen(), "ACTION")
-
-        claims = ActionPreviewDelegationCodec(SECRET).decode(
-            client.payload["delegation_token"]
-        )
-        self.assertEqual(claims.scopes, ("action_write_schema", "action_preview"))
-        self.assertEqual(claims.model, "res.partner")
-        self.assertEqual(claims.record_id, self.user.partner_id.id)
-        self.assertIn("name", claims.allowed_fields)
-        self.assertEqual(result["workflow"], "ACTION")
-        self.assertEqual(result["proposal"]["changes"][0]["after"]["value"], "Nuevo\nnombre")
-        self.assertNotIn("payload_fingerprint", repr(result))
-        self.assertNotIn(client.payload["delegation_token"], repr(result))
 
     def test_how_to_uses_metadata_only_authority_and_browser_safe_citations(self):
         client = FakeContextReadClient()

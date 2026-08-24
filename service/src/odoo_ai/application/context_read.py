@@ -23,7 +23,9 @@ from odoo_ai.contracts import (
     InstanceProfileSummary,
     RecordRef,
     RecordSnapshot,
+    ScreenContext,
     TurnLimits,
+    UserExecutionContext,
     UserRequest,
 )
 from odoo_ai.ports import OdooGateway
@@ -322,8 +324,19 @@ def validate_how_to_turn_request(request: ContextReadTurnRequest, *, now: dateti
     _validate_turn_request(request, now=now, require_record=False, require_model=False)
 
 
+class TurnContextRequest(Protocol):
+    screen: ScreenContext
+    user: UserExecutionContext
+
+
+def validate_agent_turn_request(request: TurnContextRequest, *, now: datetime) -> None:
+    """Validate a unified turn without requiring a current model or record."""
+
+    _validate_turn_request(request, now=now, require_record=False, require_model=False)
+
+
 def _validate_turn_request(
-    request: ContextReadTurnRequest,
+    request: TurnContextRequest,
     *,
     now: datetime,
     require_record: bool,

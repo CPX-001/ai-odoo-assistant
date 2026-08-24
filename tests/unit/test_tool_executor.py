@@ -314,6 +314,116 @@ def test_call_and_duplicate_budgets_fail_closed() -> None:
     assert calls == 1
 
 
+def test_semantically_repeated_successful_call_is_blocked() -> None:
+    async def handler(value: BaseModel) -> ToolHandlerOutput:
+        validated = EchoInput.model_validate(value)
+        return ToolHandlerOutput(data={"echoed": validated.value})
+
+    executor = _executor(_binding(handler))
+    asyncio.run(
+        executor.execute(
+            ToolCall(call_id="call-1", tool_name="fixture.echo", arguments={"value": "same"})
+        )
+    )
+
+    with pytest.raises(ToolExecutorError, match="tool_call_repeated"):
+        asyncio.run(
+            executor.execute(
+                ToolCall(
+                    call_id="call-2",
+                    tool_name="fixture.echo",
+                    arguments={"value": "same"},
+                )
+            )
+        )
+
+
+def test_host_precondition_change_allows_one_previously_blocked_call() -> None:
+    unlocked = False
+
+    async def guarded_handler(value: BaseModel) -> ToolHandlerOutput:
+        validated = EchoInput.model_validate(value)
+        if not unlocked:
+            raise ToolExecutorError("model_not_available")
+        return ToolHandlerOutput(data={"echoed": validated.value})
+
+    async def unlock_handler(value: BaseModel) -> ToolHandlerOutput:
+        nonlocal unlocked
+        validated = EchoInput.model_validate(value)
+        unlocked = True
+        return ToolHandlerOutput(
+            data={"echoed": validated.value},
+            changes_preconditions=True,
+        )
+
+    unlock_spec = _spec(
+        name="fixture.unlock",
+        executor_id="fixture.unlock.v1",
+        risk=ToolRisk.METADATA,
+    )
+    executor = ToolExecutor(
+        registry=ToolRegistry(
+            [
+                _binding(guarded_handler),
+                _binding(
+                    unlock_handler,
+                    spec=unlock_spec,
+                    executor_id="fixture.unlock.v1",
+                ),
+            ]
+        ),
+        ledger=EvidenceLedger(max_items=8, max_payload_bytes=32 * 1024),
+        turn_limits=TurnLimits(max_tool_calls=3, max_evidence_items=8),
+    )
+    guarded_call = {"tool_name": "fixture.echo", "arguments": {"value": "same"}}
+
+    with pytest.raises(ToolExecutorError, match="model_not_available"):
+        asyncio.run(executor.execute(ToolCall(call_id="call-1", **guarded_call)))
+    asyncio.run(
+        executor.execute(
+            ToolCall(
+                call_id="call-2",
+                tool_name="fixture.unlock",
+                arguments={"value": "new evidence"},
+            )
+        )
+    )
+    result = asyncio.run(
+        executor.execute(ToolCall(call_id="call-3", **guarded_call))
+    )
+
+    assert result.data == {"echoed": "same"}
+
+
+def test_one_transient_read_retry_is_allowed() -> None:
+    calls = 0
+
+    async def handler(value: BaseModel) -> ToolHandlerOutput:
+        nonlocal calls
+        validated = EchoInput.model_validate(value)
+        calls += 1
+        if calls == 1:
+            raise RuntimeError
+        return ToolHandlerOutput(data={"echoed": validated.value})
+
+    executor = _executor(_binding(handler))
+    with pytest.raises(ToolExecutorError, match="tool_handler_failed"):
+        asyncio.run(
+            executor.execute(
+                ToolCall(call_id="call-1", tool_name="fixture.echo", arguments={"value": "x"})
+            )
+        )
+
+    result = asyncio.run(
+        executor.execute(
+            ToolCall(call_id="call-2", tool_name="fixture.echo", arguments={"value": "x"})
+        )
+    )
+
+    assert result.data == {"echoed": "x"}
+    assert calls == 2
+
+
 def test_deadline_is_checked_before_handler() -> None:
     now = [10.0]
     calls = 0

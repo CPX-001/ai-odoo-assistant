@@ -25,8 +25,8 @@ from odoo_ai.contracts import (
     ActionPreview,
     ActionProposalPayload,
     ActionProposalState,
+    ActionTarget,
     BusinessActionPreview,
-    BusinessActionProposalPayload,
     RecordCreateProposalPayload,
 )
 from odoo_ai.ports.actions import (
@@ -75,11 +75,7 @@ class SqlActionApprovalStore:
             company_id=payload.company_id,
             allowed_company_ids=list(payload.allowed_company_ids),
             target_model=payload.target.model,
-            target_record_id=(
-                payload.target.record_id
-                if isinstance(payload, (ActionProposalPayload, BusinessActionProposalPayload))
-                else None
-            ),
+            target_record_id=_target_record_id(payload),
             canonical_payload=proposal.canonical_payload,
             payload_fingerprint=proposal.payload_fingerprint,
             policy_revision=payload.policy_revision,
@@ -252,7 +248,7 @@ def _snapshot(record: ActionProposalRecord) -> StoredActionProposal:
     canonical = canonical_action_payload_bytes(payload).decode("utf-8")
     expected_fingerprint = action_payload_fingerprint(payload)
     if (
-        not hmac.compare_digest(canonical, record.canonical_payload)
+        not _constant_time_text_equal(canonical, record.canonical_payload)
         or not hmac.compare_digest(expected_fingerprint, record.payload_fingerprint)
         or record.proposal_id != payload.proposal_id
         or record.action_kind != payload.action_kind.value
@@ -263,12 +259,7 @@ def _snapshot(record: ActionProposalRecord) -> StoredActionProposal:
         or record.company_id != payload.company_id
         or tuple(record.allowed_company_ids) != payload.allowed_company_ids
         or record.target_model != payload.target.model
-        or record.target_record_id
-        != (
-            payload.target.record_id
-            if isinstance(payload, (ActionProposalPayload, BusinessActionProposalPayload))
-            else None
-        )
+        or record.target_record_id != _target_record_id(payload)
         or record.policy_revision != payload.policy_revision
         or record.schema_revision
         != (
@@ -307,6 +298,16 @@ def _snapshot(record: ActionProposalRecord) -> StoredActionProposal:
         error_code=record.error_code,
         verification_payload=cast(dict[str, object] | None, record.verification_payload),
     )
+
+
+def _target_record_id(payload: ActionPayload) -> int | None:
+    return payload.target.record_id if isinstance(payload.target, ActionTarget) else None
+
+
+def _constant_time_text_equal(left: str, right: str) -> bool:
+    """Compare canonical JSON safely even when business values contain Unicode."""
+
+    return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
 
 
 def _execution_shape_is_valid(record: ActionProposalRecord, state: ActionProposalState) -> bool:

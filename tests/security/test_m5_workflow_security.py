@@ -46,7 +46,7 @@ def test_each_read_only_workflow_has_an_exact_disjoint_registry() -> None:
     )
 
 
-def test_browser_routing_and_citations_are_text_only_and_have_no_authority_data() -> None:
+def test_unified_browser_agent_is_text_only_and_has_no_authority_data() -> None:
     service = (
         ADDON_ROOT / "static" / "src" / "services" / "assistant_panel_service.js"
     ).read_text(encoding="utf-8")
@@ -60,10 +60,11 @@ def test_browser_routing_and_citations_are_text_only_and_have_no_authority_data(
     ).read_text(encoding="utf-8")
 
     assert 'rpcCall("/odoo_ai/v1/chat"' in service
+    assert 'new Set(["AGENT"])' in service
     for workflow in ("EXPLAIN", "QUERY", "HOW_TO", "ACTION"):
-        assert f'"{workflow}"' in service
-    assert 'rpcCall("/odoo_ai/v1/action-decision", {' in service
-    assert "proposal_id: proposalId" in service
+        assert f'"{workflow}"' not in service
+    assert 'rpcCall("/odoo_ai/v1/agent-plan-decision", {' in service
+    assert "plan_id: planId" in service
     assert "decision," in service
     assert "CHAT_WORKFLOWS" in service
     assert "t-esc" in template

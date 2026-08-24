@@ -47,6 +47,8 @@ def _load_addon_services() -> tuple[ModuleType, ModuleType, ModuleType]:
     security_package.QueryDelegationPayload = delegation.QueryDelegationPayload
     security_package.ActionPreviewDelegationCodec = delegation.ActionPreviewDelegationCodec
     security_package.ActionPreviewDelegationPayload = delegation.ActionPreviewDelegationPayload
+    security_package.AgentDelegationCodec = delegation.AgentDelegationCodec
+    security_package.AgentDelegationPayload = delegation.AgentDelegationPayload
     screen = _load_module(
         f"{root_name}.services.screen_context", addon / "services/screen_context.py"
     )
@@ -183,6 +185,19 @@ def _action_preview_preparer():
     )
 
 
+def _agent_codec():
+    return delegation.AgentDelegationCodec(SECRET, clock=lambda: NOW)
+
+
+def _agent_preparer():
+    return turn_context.AgentTurnContextPreparer(
+        codec=_agent_codec(),
+        clock=lambda: NOW,
+        turn_id_factory=lambda: TURN_ID,
+        nonce_factory=lambda: "agent_0123456789abcdefgh",
+    )
+
+
 def test_server_env_identity_and_current_record_are_signed() -> None:
     prepared = _preparer().prepare(
         env=FakeEnv(), screen_payload=_screen(), message="¿Qué estado tiene?"
@@ -241,6 +256,7 @@ def test_query_authority_keeps_common_runtime_fields_within_the_existing_cap() -
             }
             values.update(
                 {
+                    "api_token": {"type": "char"},
                     "id": {"type": "integer"},
                     "invoice_date": {"type": "date"},
                     "invoice_date_due": {"type": "date"},
@@ -258,7 +274,80 @@ def test_query_authority_keeps_common_runtime_fields_within_the_existing_cap() -
 
     assert len(fields) == 64
     assert {"id", "partner_id", "invoice_date", "invoice_date_due"} <= set(fields)
+    assert "api_token" not in fields
     assert fields == tuple(sorted(fields, key=lambda item: (item != "id", item)))
+
+
+def test_agent_discovers_installed_third_party_models_under_the_real_user() -> None:
+    class RuntimeRegistry:
+        models = (
+            "sale.order",
+            "oca.custom.asset",
+            "ir.model",
+            "denied.secret",
+            "wizard.transient",
+        )
+
+    class RuntimeModel(FakeModel):
+        def __init__(
+            self,
+            description: str,
+            *,
+            denied: bool = False,
+            transient: bool = False,
+        ) -> None:
+            self._description = description
+            self._denied = denied
+            self._transient = transient
+
+        def check_access(self, operation: str) -> None:
+            assert operation == "read"
+            if self._denied:
+                raise RuntimeError("forbidden")
+
+    class RuntimeEnv(FakeEnv):
+        registry = RuntimeRegistry()
+
+        def __init__(self) -> None:
+            self.models = {
+                "sale.order": RuntimeModel("Pedidos de venta"),
+                "oca.custom.asset": RuntimeModel("Activos personalizados OCA"),
+                "ir.model": RuntimeModel("Modelos técnicos"),
+                "denied.secret": RuntimeModel("Activos secretos", denied=True),
+                "wizard.transient": RuntimeModel(
+                    "Asistente de activos", transient=True
+                ),
+            }
+
+        def __contains__(self, model: object) -> bool:
+            return model in self.models
+
+        def __getitem__(self, model: str) -> RuntimeModel:
+            return self.models[model]
+
+    env = RuntimeEnv()
+    prepared = _agent_preparer().prepare(
+        env=env,
+        screen_payload=_screen(
+            model=None,
+            res_id=None,
+            selected_ids=[],
+            allowed_context_subset={},
+        ),
+        message="Busca los activos personalizados del módulo OCA",
+    )
+    claims = _agent_codec().decode(prepared.capability_token)
+
+    assert "oca.custom.asset" in claims.allowed_models
+    assert claims.allow_runtime_models is True
+    assert "model_search" in claims.scopes
+    assert "ir.model" not in claims.allowed_models
+    assert "denied.secret" not in claims.allowed_models
+    assert "wizard.transient" not in claims.allowed_models
+
+    assert turn_context.search_agent_models(
+        env, "activos personalizados", limit=10
+    ) == [{"label": "Activos personalizados OCA", "model": "oca.custom.asset"}]
 
 
 def test_action_preview_authority_is_record_bound_and_non_writing() -> None:

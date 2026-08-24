@@ -6,9 +6,10 @@ from datetime import datetime
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from odoo_ai.contracts.action import (
+    MAX_ACTION_FIELDS,
     MAX_ACTION_WARNINGS,
     SALE_ORDER_CONFIRM_ACTION_ID,
     ActionCreatePreviewValue,
@@ -16,6 +17,7 @@ from odoo_ai.contracts.action import (
     ActionKind,
     ActionPreviewChange,
     ActionTarget,
+    BusinessActionId,
     Fingerprint,
 )
 from odoo_ai.contracts.action_approval import ActionDecision, ActionProposalState
@@ -39,7 +41,9 @@ class ActionProposalHandle(BaseModel):
     payload_fingerprint: Fingerprint
     precondition_fingerprint: Fingerprint
     target: ActionTarget
-    changes: tuple[ActionPreviewChange, ...] = Field(min_length=1, max_length=4)
+    changes: tuple[ActionPreviewChange, ...] = Field(
+        min_length=1, max_length=MAX_ACTION_FIELDS
+    )
     warnings: tuple[Annotated[str, Field(min_length=1, max_length=512)], ...] = Field(
         default=(), max_length=MAX_ACTION_WARNINGS
     )
@@ -58,7 +62,9 @@ class ActionCreateProposalHandle(BaseModel):
     payload_fingerprint: Fingerprint
     precondition_fingerprint: Fingerprint
     target: ActionCreateTarget
-    values: tuple[ActionCreatePreviewValue, ...] = Field(min_length=1, max_length=4)
+    values: tuple[ActionCreatePreviewValue, ...] = Field(
+        min_length=1, max_length=MAX_ACTION_FIELDS
+    )
     warnings: tuple[Annotated[str, Field(min_length=1, max_length=512)], ...] = Field(
         default=(), max_length=MAX_ACTION_WARNINGS
     )
@@ -72,15 +78,16 @@ class BusinessActionProposalHandle(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     action_kind: Literal[ActionKind.BUSINESS_ACTION] = ActionKind.BUSINESS_ACTION
-    action_id: Literal["sale.order.confirm.v1"] = SALE_ORDER_CONFIRM_ACTION_ID
+    action_id: BusinessActionId = SALE_ORDER_CONFIRM_ACTION_ID
     proposal_id: UUID
     turn_id: UUID
     payload_fingerprint: Fingerprint
     precondition_fingerprint: Fingerprint
-    target: ActionTarget
+    target: ActionTarget | ActionCreateTarget
     display_name: str = Field(min_length=1, max_length=256)
-    state_before: Literal["draft", "sent"]
-    expected_states: tuple[Literal["sale", "done"], ...] = ("sale", "done")
+    state_before: str | None = Field(default=None, max_length=64)
+    expected_states: tuple[str, ...] = Field(min_length=1, max_length=8)
+    details: dict[str, str | int | bool | None] = Field(default_factory=dict, max_length=16)
     warnings: tuple[Annotated[str, Field(min_length=1, max_length=512)], ...] = Field(
         default=(), max_length=MAX_ACTION_WARNINGS
     )
@@ -91,6 +98,17 @@ class BusinessActionProposalHandle(BaseModel):
 ActionProposalPresentation = (
     ActionProposalHandle | ActionCreateProposalHandle | BusinessActionProposalHandle
 )
+
+
+class ActionProposalTrace(BaseModel):
+    """Host-only binding between an executed preview call and its durable proposal."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    tool_name: str = Field(min_length=1, max_length=128)
+    arguments: dict[str, JsonValue] = Field(max_length=32)
+    proposal_id: UUID
+    payload_fingerprint: Fingerprint
 
 
 class ActionTurnResponse(BaseModel):
@@ -117,7 +135,8 @@ class ActionToolReport(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     tool_report: ToolExecutionReport = Field(default_factory=ToolExecutionReport)
-    proposals: tuple[ActionProposalPresentation, ...] = Field(default=(), max_length=1)
+    proposals: tuple[ActionProposalPresentation, ...] = Field(default=(), max_length=12)
+    proposal_traces: tuple[ActionProposalTrace, ...] = Field(default=(), max_length=12)
 
 
 class OdooActionActorContext(BaseModel):
@@ -171,6 +190,10 @@ class ActionCommandReceipt(BaseModel):
     approval_id: UUID | None = None
     attempt_id: UUID | None = None
     evidence_id: UUID | None = None
+    record_model: str | None = Field(
+        default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$"
+    )
+    record_id: int | None = Field(default=None, strict=True, gt=0)
     error_code: str | None = Field(default=None, max_length=128)
 
     @model_validator(mode="after")
@@ -182,4 +205,8 @@ class ActionCommandReceipt(BaseModel):
             raise ValueError("execution outcome requires opaque handles")
         if (self.state is ActionProposalState.VERIFIED) != (self.evidence_id is not None):
             raise ValueError("verified ACTION requires checked evidence")
+        if (self.record_model is None) != (self.record_id is None):
+            raise ValueError("ACTION record pointer is incomplete")
+        if self.state is not ActionProposalState.VERIFIED and self.record_id is not None:
+            raise ValueError("only verified ACTION can expose a record pointer")
         return self

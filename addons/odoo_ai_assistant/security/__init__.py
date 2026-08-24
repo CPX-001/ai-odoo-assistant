@@ -8,6 +8,8 @@ from .action_authority import (
 from .delegation import (
     ActionPreviewDelegationCodec,
     ActionPreviewDelegationPayload,
+    AgentDelegationCodec,
+    AgentDelegationPayload,
     DelegationCodec,
     DelegationPayload,
     DelegationTokenError,
@@ -29,6 +31,8 @@ __all__ = [
     "ActionAuthorityPayload",
     "ActionPreviewDelegationCodec",
     "ActionPreviewDelegationPayload",
+    "AgentDelegationCodec",
+    "AgentDelegationPayload",
     "DelegationCodec",
     "DelegationPayload",
     "DelegationTokenError",

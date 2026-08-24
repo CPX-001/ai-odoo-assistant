@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Literal, cast
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,6 +27,13 @@ from odoo_ai.application import (
     action_payload_fingerprint,
 )
 from odoo_ai.contracts import (
+    MAX_ACTION_FIELDS,
+    RECORD_ARCHIVE_ACTION_ID,
+    RECORD_ARCHIVE_SPEC_REVISION,
+    RECORD_DELETE_ACTION_ID,
+    RECORD_DELETE_SPEC_REVISION,
+    SALE_ORDER_BUILD_FLOW_ACTION_ID,
+    SALE_ORDER_BUILD_FLOW_SPEC_REVISION,
     SALE_ORDER_CONFIRM_ACTION_ID,
     SALE_ORDER_CONFIRM_SPEC_REVISION,
     ActionCreateProposalHandle,
@@ -35,8 +42,10 @@ from odoo_ai.contracts import (
     ActionProposalHandle,
     ActionProposalPayload,
     ActionProposalPresentation,
+    ActionProposalTrace,
     ActionTarget,
     ActionToolReport,
+    BusinessActionId,
     BusinessActionProposalHandle,
     BusinessActionProposalPayload,
     ContextPack,
@@ -44,6 +53,7 @@ from odoo_ai.contracts import (
     EvidenceStatus,
     PersistActionPreviewRequest,
     RecordCreateProposalPayload,
+    SaleOrderBuildFlowArguments,
     ToolExecutionReport,
     ToolRisk,
     ToolSpec,
@@ -64,12 +74,18 @@ ODOO_GET_EFFECTIVE_WRITE_SCHEMA = "odoo.get_effective_write_schema"
 ODOO_PREVIEW_RECORD_PATCH = "odoo.preview_record_patch"
 ODOO_PREVIEW_RECORD_CREATE = "odoo.preview_record_create"
 ODOO_PREVIEW_BUSINESS_ACTION = "odoo.preview_business_action"
+ODOO_PREVIEW_RECORD_ARCHIVE = "odoo.preview_record_archive"
+ODOO_PREVIEW_RECORD_DELETE = "odoo.preview_record_delete"
+ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW = "odoo.preview_sale_order_build_flow"
 
 _EXECUTOR_IDS = {
     ODOO_GET_EFFECTIVE_WRITE_SCHEMA: "odoo.get_effective_write_schema.v1",
     ODOO_PREVIEW_RECORD_PATCH: "odoo.preview_record_patch.v1",
     ODOO_PREVIEW_RECORD_CREATE: "odoo.preview_record_create.v1",
     ODOO_PREVIEW_BUSINESS_ACTION: "odoo.preview_business_action.v1",
+    ODOO_PREVIEW_RECORD_ARCHIVE: "odoo.preview_record_archive.v1",
+    ODOO_PREVIEW_RECORD_DELETE: "odoo.preview_record_delete.v1",
+    ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW: "odoo.preview_sale_order_build_flow.v1",
 }
 _ACTION_TOOL_RISKS = frozenset({ToolRisk.METADATA, ToolRisk.WRITE_PREVIEW})
 
@@ -88,7 +104,9 @@ class PreviewRecordPatchRequest(BaseModel):
     model: Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")]
     record_id: int = Field(strict=True, gt=0)
     schema_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}:v[0-9]+:sha256:[0-9a-f]{64}$")
-    changes: tuple[ActionFieldChange, ...] = Field(min_length=1, max_length=4)
+    changes: tuple[ActionFieldChange, ...] = Field(
+        min_length=1, max_length=MAX_ACTION_FIELDS
+    )
 
 
 class PreviewRecordCreateRequest(BaseModel):
@@ -98,11 +116,13 @@ class PreviewRecordCreateRequest(BaseModel):
 
     model: Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")]
     schema_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}:v[0-9]+:sha256:[0-9a-f]{64}$")
-    values: tuple[ActionFieldChange, ...] = Field(min_length=1, max_length=4)
+    values: tuple[ActionFieldChange, ...] = Field(
+        min_length=1, max_length=MAX_ACTION_FIELDS
+    )
 
 
 class PreviewBusinessActionRequest(BaseModel):
-    """The only caller-controlled value is one exact host-allowlisted action id."""
+    """Preview confirmation of one exact existing sale order."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -110,6 +130,46 @@ class PreviewBusinessActionRequest(BaseModel):
         str,
         Field(pattern=r"^sale\.order\.confirm\.v1$", min_length=21, max_length=21),
     ]
+    record_id: int | None = Field(default=None, strict=True, gt=0)
+
+
+class PreviewRecordArchiveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    model: Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")]
+    record_id: int = Field(strict=True, gt=0)
+
+
+class PreviewRecordDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    model: Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")]
+    record_id: int = Field(strict=True, gt=0)
+
+
+class PreviewSaleOrderBuildFlowRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    end_state: Literal["quotation", "sale_order", "invoice_draft"]
+    partner_id: int | None = Field(default=None, strict=True, gt=0)
+    partner_name: str | None = Field(default=None, min_length=1, max_length=256)
+    create_synthetic_partner: bool = False
+    product_id: int | None = Field(default=None, strict=True, gt=0)
+    product_name: str | None = Field(default=None, min_length=1, max_length=256)
+    create_synthetic_product: bool = False
+    quantity: str = Field(default="1", pattern=r"^(?:[1-9][0-9]{0,5})(?:\.[0-9]{1,3})?$")
+    price_unit: str | None = Field(
+        default=None,
+        pattern=r"^(?:0|[1-9][0-9]{0,12})(?:\.[0-9]{1,6})?$",
+    )
+
+
+BusinessPreviewRequest = (
+    PreviewBusinessActionRequest
+    | PreviewRecordArchiveRequest
+    | PreviewRecordDeleteRequest
+    | PreviewSaleOrderBuildFlowRequest
+)
 
 
 class EffectiveWriteSchemaToolData(BaseModel):
@@ -142,7 +202,10 @@ class ActionToolBackend:
         company_id: int,
         allowed_company_ids: tuple[int, ...],
         model: str,
-        record_id: int,
+        record_id: int | None,
+        allowed_models: Sequence[str] = (),
+        restrict_record_target: bool = True,
+        synthetic_data_authorized: bool = False,
         proposal_id_factory: Callable[[], UUID] = uuid4,
     ) -> None:
         self._gateway = gateway
@@ -155,35 +218,44 @@ class ActionToolBackend:
         self._allowed_company_ids = allowed_company_ids
         self._model = model
         self._record_id = record_id
+        self._allowed_models = set(allowed_models or (model,))
+        self._restrict_record_target = restrict_record_target
+        self._synthetic_data_authorized = synthetic_data_authorized
         self._proposal_id_factory = proposal_id_factory
-        self._schema: EffectiveWriteSchemaResult | None = None
+        self._schemas: dict[str, EffectiveWriteSchemaResult] = {}
         self._proposals: list[ActionProposalPresentation] = []
+        self._proposal_traces: list[ActionProposalTrace] = []
 
     @property
     def proposals(self) -> tuple[ActionProposalPresentation, ...]:
         return tuple(self._proposals)
 
+    @property
+    def proposal_traces(self) -> tuple[ActionProposalTrace, ...]:
+        return tuple(self._proposal_traces)
+
     async def get_effective_write_schema(
         self, request: GetEffectiveWriteSchemaRequest
     ) -> EffectiveWriteSchemaResult:
-        self._require_target(request.model, self._record_id)
-        if self._schema is None:
-            self._schema = await EffectiveWriteSchemaService(self._gateway).get(
-                model=self._model,
+        self._require_model(request.model)
+        if request.model not in self._schemas:
+            self._schemas[request.model] = await EffectiveWriteSchemaService(
+                self._gateway
+            ).get(
+                model=request.model,
                 instance_id=self._instance_id,
                 database=self._database,
                 captured_for_user=self._uid,
                 company_id=self._company_id,
                 allowed_company_ids=self._allowed_company_ids,
             )
-        return self._schema
+        return self._schemas[request.model]
 
     async def preview_record_patch(
         self, request: PreviewRecordPatchRequest
     ) -> tuple[EffectiveWriteSchemaResult, ActionProposalHandle, ActionPreviewResult]:
-        self._require_target(request.model, request.record_id)
-        if self._proposals:
-            raise ToolExecutorError("action_proposal_already_created")
+        self._require_record(request.model, request.record_id)
+        self._require_proposal_capacity()
         schema_result = await self.get_effective_write_schema(
             GetEffectiveWriteSchemaRequest(model=request.model)
         )
@@ -200,7 +272,7 @@ class ActionToolBackend:
             uid=self._uid,
             company_id=self._company_id,
             allowed_company_ids=self._allowed_company_ids,
-            target=ActionTarget(model=self._model, record_id=self._record_id),
+            target=ActionTarget(model=request.model, record_id=request.record_id),
             changes=tuple(sorted(request.changes, key=lambda item: item.field)),
             policy_revision=schema_result.schema.policy_revision,
             schema_revision=schema_result.schema.schema_id,
@@ -233,14 +305,21 @@ class ActionToolBackend:
             evidence_id=preview_result.evidence.evidence_id,
         )
         self._proposals.append(handle)
+        self._proposal_traces.append(
+            ActionProposalTrace(
+                tool_name=ODOO_PREVIEW_RECORD_PATCH,
+                arguments=request.model_dump(mode="json"),
+                proposal_id=handle.proposal_id,
+                payload_fingerprint=handle.payload_fingerprint,
+            )
+        )
         return schema_result, handle, preview_result
 
     async def preview_record_create(
         self, request: PreviewRecordCreateRequest
     ) -> tuple[EffectiveWriteSchemaResult, ActionCreateProposalHandle, ActionCreatePreviewResult]:
-        self._require_target(request.model, self._record_id)
-        if self._proposals:
-            raise ToolExecutorError("action_proposal_already_created")
+        self._require_model(request.model)
+        self._require_proposal_capacity()
         schema_result = await self.get_effective_write_schema(
             GetEffectiveWriteSchemaRequest(model=request.model)
         )
@@ -257,7 +336,7 @@ class ActionToolBackend:
             uid=self._uid,
             company_id=self._company_id,
             allowed_company_ids=self._allowed_company_ids,
-            target=ActionCreateTarget(model=self._model),
+            target=ActionCreateTarget(model=request.model),
             values=tuple(sorted(request.values, key=lambda item: item.field)),
             policy_revision=schema_result.schema.policy_revision,
             schema_revision=schema_result.schema.schema_id,
@@ -290,31 +369,73 @@ class ActionToolBackend:
             evidence_id=preview_result.evidence.evidence_id,
         )
         self._proposals.append(handle)
+        self._proposal_traces.append(
+            ActionProposalTrace(
+                tool_name=ODOO_PREVIEW_RECORD_CREATE,
+                arguments=request.model_dump(mode="json"),
+                proposal_id=handle.proposal_id,
+                payload_fingerprint=handle.payload_fingerprint,
+            )
+        )
         return schema_result, handle, preview_result
 
     async def preview_business_action(
-        self, request: PreviewBusinessActionRequest
+        self,
+        request: BusinessPreviewRequest,
     ) -> tuple[BusinessActionProposalHandle, BusinessActionPreviewResult]:
-        if request.action_id != SALE_ORDER_CONFIRM_ACTION_ID:
-            raise ToolExecutorError("business_action_not_allowlisted")
-        self._require_target("sale.order", self._record_id)
-        if self._proposals:
-            raise ToolExecutorError("action_proposal_already_created")
+        if isinstance(request, PreviewBusinessActionRequest):
+            action_id: BusinessActionId = SALE_ORDER_CONFIRM_ACTION_ID
+            revision = SALE_ORDER_CONFIRM_SPEC_REVISION
+            record_id = request.record_id or self._record_id
+            if record_id is None:
+                raise ToolExecutorError("action_record_required")
+            target: ActionTarget | ActionCreateTarget = ActionTarget(
+                model="sale.order", record_id=record_id
+            )
+            arguments = None
+            self._require_record("sale.order", record_id)
+        elif isinstance(request, PreviewRecordArchiveRequest):
+            action_id = RECORD_ARCHIVE_ACTION_ID
+            revision = RECORD_ARCHIVE_SPEC_REVISION
+            target = ActionTarget(model=request.model, record_id=request.record_id)
+            arguments = None
+            self._require_record(request.model, request.record_id)
+        elif isinstance(request, PreviewRecordDeleteRequest):
+            action_id = RECORD_DELETE_ACTION_ID
+            revision = RECORD_DELETE_SPEC_REVISION
+            target = ActionTarget(model=request.model, record_id=request.record_id)
+            arguments = None
+            self._require_record(request.model, request.record_id)
+        else:
+            action_id = SALE_ORDER_BUILD_FLOW_ACTION_ID
+            revision = SALE_ORDER_BUILD_FLOW_SPEC_REVISION
+            target = ActionCreateTarget(model="sale.order")
+            self._require_model("sale.order")
+            if (
+                request.create_synthetic_partner or request.create_synthetic_product
+            ) and not self._synthetic_data_authorized:
+                raise ToolExecutorError("synthetic_data_not_authorized")
+            arguments = SaleOrderBuildFlowArguments(
+                **request.model_dump(mode="python"),
+                synthetic_data_authorized=self._synthetic_data_authorized,
+            )
+        self._require_proposal_capacity()
         proposal_id = self._proposal_id_factory()
         if not isinstance(proposal_id, UUID):
             raise ToolExecutorError("proposal_id_unavailable")
         payload = BusinessActionProposalPayload(
             proposal_id=proposal_id,
             turn_id=self._turn_id,
-            action_id=SALE_ORDER_CONFIRM_ACTION_ID,
+            action_id=action_id,
             instance_id=self._instance_id,
             database=self._database,
             uid=self._uid,
             company_id=self._company_id,
             allowed_company_ids=self._allowed_company_ids,
-            target=ActionTarget(model="sale.order", record_id=self._record_id),
+            target=target,
+            arguments=arguments,
             policy_revision=ACTION_POLICY_REVISION,
-            action_spec_revision=SALE_ORDER_CONFIRM_SPEC_REVISION,
+            action_spec_revision=revision,
         )
         fingerprint = action_payload_fingerprint(payload)
         preview_result = await BusinessActionPreviewService(self._gateway).preview(
@@ -333,6 +454,7 @@ class ActionToolBackend:
             raise ToolExecutorError("approval_store_corrupt")
         summary = preview_result.preview.summary
         handle = BusinessActionProposalHandle(
+            action_id=action_id,
             proposal_id=proposal_id,
             turn_id=self._turn_id,
             payload_fingerprint=fingerprint,
@@ -341,16 +463,45 @@ class ActionToolBackend:
             display_name=summary.display_name,
             state_before=summary.state_before,
             expected_states=summary.expected_states,
+            details=summary.details,
             warnings=summary.warnings,
             expires_at=preview_result.preview.expires_at,
             evidence_id=preview_result.evidence.evidence_id,
         )
         self._proposals.append(handle)
+        trace_tool = {
+            SALE_ORDER_CONFIRM_ACTION_ID: ODOO_PREVIEW_BUSINESS_ACTION,
+            RECORD_ARCHIVE_ACTION_ID: ODOO_PREVIEW_RECORD_ARCHIVE,
+            RECORD_DELETE_ACTION_ID: ODOO_PREVIEW_RECORD_DELETE,
+            SALE_ORDER_BUILD_FLOW_ACTION_ID: ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW,
+        }[action_id]
+        self._proposal_traces.append(
+            ActionProposalTrace(
+                tool_name=trace_tool,
+                arguments=request.model_dump(mode="json"),
+                proposal_id=handle.proposal_id,
+                payload_fingerprint=handle.payload_fingerprint,
+            )
+        )
         return handle, preview_result
 
-    def _require_target(self, model: str, record_id: int) -> None:
-        if model != self._model or record_id != self._record_id:
+    def _require_model(self, model: str) -> None:
+        if model not in self._allowed_models:
             raise ToolExecutorError("action_target_not_allowed")
+
+    def allow_models(self, models: Sequence[str]) -> None:
+        self._allowed_models.update(models)
+
+    def _require_record(self, model: str, record_id: int) -> None:
+        self._require_model(model)
+        if self._restrict_record_target and (
+            self._record_id is None or record_id != self._record_id
+        ):
+            raise ToolExecutorError("action_target_not_allowed")
+
+    def _require_proposal_capacity(self) -> None:
+        if len(self._proposals) >= 12:
+            raise ToolExecutorError("action_proposal_limit_exceeded")
 
 
 def action_tool_specs() -> tuple[ToolSpec, ...]:
@@ -392,12 +543,43 @@ def action_tool_specs() -> tuple[ToolSpec, ...]:
         ToolSpec(
             name=ODOO_PREVIEW_BUSINESS_ACTION,
             description=(
-                "Preview the exact host-curated sale.order.confirm.v1 action on the "
-                "current sale order. This never approves or executes the action."
+                "Preview the exact host-curated sale.order.confirm.v1 action on one "
+                "sale order. This never approves or executes the action."
             ),
             input_schema=PreviewBusinessActionRequest.model_json_schema(),
             risk=ToolRisk.WRITE_PREVIEW,
             executor_id=_EXECUTOR_IDS[ODOO_PREVIEW_BUSINESS_ACTION],
+        ),
+        ToolSpec(
+            name=ODOO_PREVIEW_RECORD_ARCHIVE,
+            description=(
+                "Preview reversible archival of exactly one eligible business record. "
+                "This never archives, approves, or commits the change."
+            ),
+            input_schema=PreviewRecordArchiveRequest.model_json_schema(),
+            risk=ToolRisk.WRITE_PREVIEW,
+            executor_id=_EXECUTOR_IDS[ODOO_PREVIEW_RECORD_ARCHIVE],
+        ),
+        ToolSpec(
+            name=ODOO_PREVIEW_RECORD_DELETE,
+            description=(
+                "Preview permanent deletion of exactly one eligible business record. "
+                "Deletion is protected and this tool never commits it."
+            ),
+            input_schema=PreviewRecordDeleteRequest.model_json_schema(),
+            risk=ToolRisk.WRITE_PREVIEW,
+            executor_id=_EXECUTOR_IDS[ODOO_PREVIEW_RECORD_DELETE],
+        ),
+        ToolSpec(
+            name=ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW,
+            description=(
+                "Preview the atomic sale.order.build_flow.v1 action ending in quotation, "
+                "sale_order, or invoice_draft. Synthetic records require explicit host "
+                "authorization and AI TEST names. This never commits the flow."
+            ),
+            input_schema=PreviewSaleOrderBuildFlowRequest.model_json_schema(),
+            risk=ToolRisk.WRITE_PREVIEW,
+            executor_id=_EXECUTOR_IDS[ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW],
         ),
     )
 
@@ -416,7 +598,7 @@ def build_action_tool_registry(
                     input_model=GetEffectiveWriteSchemaRequest,
                     output_model=EffectiveWriteSchemaToolData,
                     handler=_schema_handler(backend),
-                    max_calls=1,
+                    max_calls=12,
                     max_input_bytes=2 * 1024,
                     max_output_bytes=96 * 1024,
                 )
@@ -429,7 +611,7 @@ def build_action_tool_registry(
                     input_model=PreviewRecordPatchRequest,
                     output_model=ActionPreviewToolData,
                     handler=_preview_handler(backend),
-                    max_calls=2,
+                    max_calls=12,
                     max_input_bytes=16 * 1024,
                     max_output_bytes=96 * 1024,
                 )
@@ -442,21 +624,35 @@ def build_action_tool_registry(
                     input_model=PreviewRecordCreateRequest,
                     output_model=ActionPreviewToolData,
                     handler=_create_preview_handler(backend),
-                    max_calls=2,
+                    max_calls=12,
                     max_input_bytes=16 * 1024,
                     max_output_bytes=96 * 1024,
                 )
             )
-        elif spec.name == ODOO_PREVIEW_BUSINESS_ACTION:
+        elif spec.name in {
+            ODOO_PREVIEW_BUSINESS_ACTION,
+            ODOO_PREVIEW_RECORD_ARCHIVE,
+            ODOO_PREVIEW_RECORD_DELETE,
+            ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW,
+        }:
+            input_model = cast(
+                type[BaseModel],
+                {
+                    ODOO_PREVIEW_BUSINESS_ACTION: PreviewBusinessActionRequest,
+                    ODOO_PREVIEW_RECORD_ARCHIVE: PreviewRecordArchiveRequest,
+                    ODOO_PREVIEW_RECORD_DELETE: PreviewRecordDeleteRequest,
+                    ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW: PreviewSaleOrderBuildFlowRequest,
+                }[spec.name],
+            )
             bindings.append(
                 RegisteredTool(
                     spec=spec,
                     executor_id=spec.executor_id,
-                    input_model=PreviewBusinessActionRequest,
+                    input_model=input_model,
                     output_model=ActionPreviewToolData,
-                    handler=_business_preview_handler(backend),
-                    max_calls=1,
-                    max_input_bytes=2 * 1024,
+                    handler=_business_preview_handler(backend, input_model),
+                    max_calls=12,
+                    max_input_bytes=8 * 1024,
                     max_output_bytes=96 * 1024,
                 )
             )
@@ -545,11 +741,12 @@ def _create_preview_handler(
 
 def _business_preview_handler(
     backend: ActionToolBackend,
+    input_model: type[BaseModel],
 ) -> Callable[[BaseModel], Awaitable[ToolHandlerOutput]]:
     async def handler(value: BaseModel) -> ToolHandlerOutput:
         try:
             handle, raw = await backend.preview_business_action(
-                PreviewBusinessActionRequest.model_validate(value)
+                cast(BusinessPreviewRequest, input_model.model_validate(value))
             )
             evidence = raw.evidence
         except (ActionApprovalError, ActionPreviewError) as error:
@@ -577,7 +774,7 @@ class ActionToolExecutorFactory:
         company_id: int,
         allowed_company_ids: tuple[int, ...],
         model: str,
-        record_id: int,
+        record_id: int | None,
         limits: ToolExecutionLimits | None = None,
     ) -> None:
         self._gateway = gateway
@@ -603,7 +800,7 @@ class ActionToolExecutorFactory:
     ) -> AsyncIterator[ToolExecutor]:
         self._last_report = ActionToolReport()
         if (
-            context.workflow_hint is not Workflow.ACTION
+            context.workflow_hint not in {None, Workflow.ACTION}
             or context.user.uid != self._user_id
             or context.user.company_id != self._company_id
             or tuple(context.user.allowed_company_ids) != self._allowed_company_ids
@@ -645,6 +842,7 @@ class ActionToolExecutorFactory:
                     retrieved_evidence=executor.ledger.retrieved_evidence,
                 ),
                 proposals=backend.proposals,
+                proposal_traces=backend.proposal_traces,
             )
 
     def take_report(self) -> ActionToolReport:

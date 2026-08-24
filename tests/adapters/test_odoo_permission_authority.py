@@ -1,4 +1,4 @@
-from odoo_ai.adapters.chat_routing import _ROUTING_INSTRUCTIONS
+from odoo_ai.adapters.codex_engine import _AGENT_TOOL_INSTRUCTIONS
 from odoo_ai.adapters.query_tools import (
     ODOO_AGGREGATE_RECORDS,
     ODOO_QUERY_RECORDS,
@@ -6,10 +6,10 @@ from odoo_ai.adapters.query_tools import (
 )
 
 
-def test_router_preserves_broad_scope_instead_of_inventing_ownership() -> None:
-    assert "Never narrow a broad request" in _ROUTING_INSTRUCTIONS
-    assert "owned by, assigned to" in _ROUTING_INSTRUCTIONS
-    assert "downstream Odoo tools enforce" in _ROUTING_INSTRUCTIONS
+def test_agent_uses_runtime_models_without_claiming_authority() -> None:
+    assert "odoo.search_models" in _AGENT_TOOL_INSTRUCTIONS
+    assert "custom, OCA, or third-party module" in _AGENT_TOOL_INSTRUCTIONS
+    assert "cannot authorize" in _AGENT_TOOL_INSTRUCTIONS
 
 
 def test_query_tools_delegate_visibility_to_native_odoo_permissions() -> None:

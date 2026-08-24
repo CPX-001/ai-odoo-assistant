@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 import time
 from collections.abc import Callable, Mapping
@@ -14,6 +15,8 @@ from uuid import UUID, uuid4
 from ..security import (
     ActionPreviewDelegationCodec,
     ActionPreviewDelegationPayload,
+    AgentDelegationCodec,
+    AgentDelegationPayload,
     DelegationCodec,
     DelegationPayload,
     DelegationTokenError,
@@ -32,17 +35,33 @@ DELEGATION_SECRET_FILE_ENV: Final = "ODOO_AI_DELEGATION_SECRET_FILE"
 DELEGATION_TTL_SECONDS: Final = 60
 QUERY_DELEGATION_TTL_SECONDS: Final = 120
 ACTION_PREVIEW_DELEGATION_TTL_SECONDS: Final = 120
+AGENT_DELEGATION_TTL_SECONDS: Final = 300
 MAX_ACTIVE_COMPANIES: Final = 16
 MAX_MESSAGE_LENGTH: Final = 4_000
 DELEGATED_MAX_FIELDS: Final = 32
 QUERY_POLICY_REVISION: Final = "m5-query-read-v1"
 ACTION_POLICY_REVISION: Final = "m6-record-patch-v1"
-ACTION_MAX_FIELDS: Final = 4
+ACTION_MAX_FIELDS: Final = 16
 QUERY_MAX_RECORDS: Final = 50
 QUERY_MAX_FIELDS: Final = 16
 QUERY_MAX_CONDITIONS: Final = 8
 QUERY_MAX_GROUPS: Final = 50
 QUERY_MAX_AGGREGATES: Final = 8
+AGENT_POLICY_REVISION: Final = "agent-capability-v1"
+AGENT_HINT_MODELS: Final = (
+    "account.move",
+    "account.move.line",
+    "crm.lead",
+    "product.product",
+    "product.template",
+    "project.project",
+    "project.task",
+    "purchase.order",
+    "res.partner",
+    "sale.order",
+    "sale.order.line",
+    "stock.picking",
+)
 QUERY_FIELD_PRIORITY: Final = (
     "id",
     "name",
@@ -120,6 +139,24 @@ ACTION_PREVIEW_SENSITIVE_FIELD_PARTS: Final = (
     "secret",
     "token",
 )
+QUERY_SENSITIVE_FIELD_PARTS: Final = (
+    *ACTION_PREVIEW_SENSITIVE_FIELD_PARTS,
+    "private_key",
+)
+AGENT_BLOCKED_MODELS: Final = frozenset(
+    {
+        "base.automation",
+        "ir.config_parameter",
+        "ir.cron",
+        "ir.model",
+        "ir.model.access",
+        "ir.model.fields",
+        "ir.rule",
+        "res.groups",
+        "res.users",
+    }
+)
+AGENT_BLOCKED_MODEL_PREFIXES: Final = ("auth.", "ir.actions.", "ir.ui.")
 
 
 class _Record(Protocol):
@@ -143,6 +180,7 @@ class OdooEnvironment(Protocol):
     companies: _Records
     lang: str
     cr: _Cursor
+    registry: object
 
     def __contains__(self, model: object) -> bool: ...
 
@@ -244,6 +282,33 @@ class PreparedActionPreviewTurn:
     def to_assistant_payload(self) -> dict[str, object]:
         return {
             "delegation_token": self.delegation_token,
+            "gateway": {"database": self.database},
+            "message": self.message,
+            "screen": self.screen.to_mapping(),
+            "turn_id": str(self.turn_id),
+            "user": self.user.to_mapping(),
+        }
+
+    def to_browser_payload(self) -> dict[str, str]:
+        return {"turn_id": str(self.turn_id)}
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedAgentTurn:
+    """Server-only unified turn with one bounded multi-model capability."""
+
+    turn_id: UUID
+    message: str
+    screen: ValidatedScreenContext
+    user: EffectiveUserContext
+    database: str
+    candidates: tuple[str, ...]
+    capability_token: str = field(repr=False)
+
+    def to_assistant_payload(self) -> dict[str, object]:
+        return {
+            "candidates": [{"labels": [], "model": model} for model in self.candidates],
+            "capability_token": self.capability_token,
             "gateway": {"database": self.database},
             "message": self.message,
             "screen": self.screen.to_mapping(),
@@ -476,6 +541,87 @@ class ActionPreviewTurnContextPreparer:
         )
 
 
+class AgentTurnContextPreparer:
+    """Issue one ag1 capability after deriving visible models under the real user."""
+
+    def __init__(
+        self,
+        *,
+        codec: AgentDelegationCodec,
+        clock: Callable[[], int] | None = None,
+        turn_id_factory: Callable[[], UUID] | None = None,
+        nonce_factory: Callable[[], str] | None = None,
+    ) -> None:
+        self._codec = codec
+        self._clock = clock or _unix_time
+        self._turn_id_factory = turn_id_factory or uuid4
+        self._nonce_factory = nonce_factory or (lambda: secrets.token_urlsafe(18))
+
+    def prepare(
+        self,
+        *,
+        env: OdooEnvironment,
+        screen_payload: Mapping[str, object],
+        message: str,
+    ) -> PreparedAgentTurn:
+        now = self._clock()
+        if type(now) is not int:
+            raise TurnContextError("clock_unavailable")
+        screen = validate_how_to_screen(
+            screen_payload,
+            clock=lambda: datetime.fromtimestamp(now, UTC),
+        )
+        normalized_message = _message(message)
+        user = derive_user_execution_context(env)
+        database = _database_binding(env)
+        candidates = _visible_agent_models(env, screen.model, normalized_message)
+        turn_id = self._turn_id_factory()
+        if not isinstance(turn_id, UUID):
+            raise TurnContextError("turn_id_unavailable")
+        try:
+            payload = AgentDelegationPayload(
+                format_version=1,
+                jti=self._nonce_factory(),
+                turn_id=turn_id,
+                database=database,
+                uid=user.uid,
+                company_id=user.company_id,
+                allowed_company_ids=tuple(sorted(user.allowed_company_ids)),
+                lang=user.lang,
+                allowed_models=candidates,
+                allow_runtime_models=True,
+                scopes=(
+                    "aggregate_records",
+                    "query_records",
+                    "query_schema",
+                    "action_preview",
+                    "action_write_schema",
+                    "model_search",
+                ),
+                issued_at=now,
+                expires_at=now + AGENT_DELEGATION_TTL_SECONDS,
+                max_records=QUERY_MAX_RECORDS,
+                max_fields=QUERY_MAX_FIELDS,
+                max_conditions=QUERY_MAX_CONDITIONS,
+                max_groups=QUERY_MAX_GROUPS,
+                max_aggregates=QUERY_MAX_AGGREGATES,
+                max_write_steps=12,
+                policy_revision=AGENT_POLICY_REVISION,
+            )
+            token = self._codec.encode(payload)
+        except DelegationTokenError as error:
+            raise TurnContextError("delegation_unavailable") from error
+        return PreparedAgentTurn(
+            turn_id=turn_id,
+            message=normalized_message,
+            screen=screen,
+            user=user,
+            database=database,
+            candidates=candidates,
+            capability_token=token,
+        )
+
+
 class HowToTurnContextPreparer:
     """Create navigation/schema-only authority for one HOW_TO turn."""
 
@@ -664,6 +810,36 @@ def prepare_action_preview_turn(
     )
 
 
+def prepare_agent_turn(
+    *,
+    env: OdooEnvironment,
+    screen_payload: Mapping[str, object],
+    message: str,
+    secret_file: str | None = None,
+    clock: Callable[[], int] | None = None,
+) -> PreparedAgentTurn:
+    """Configured ag1 entrypoint; the root signing secret remains inside Odoo."""
+
+    resolved_secret_file = (
+        secret_file or os.environ.get(DELEGATION_SECRET_FILE_ENV, "")
+    ).strip()
+    if not resolved_secret_file:
+        raise TurnContextError("delegation_unconfigured")
+    effective_clock = clock or _unix_time
+    try:
+        codec = AgentDelegationCodec.from_secret_file(
+            resolved_secret_file,
+            clock=effective_clock,
+        )
+    except DelegationTokenError:
+        raise TurnContextError("delegation_unavailable") from None
+    return AgentTurnContextPreparer(codec=codec, clock=effective_clock).prepare(
+        env=env,
+        screen_payload=screen_payload,
+        message=message,
+    )
+
+
 def derive_user_execution_context(env: OdooEnvironment) -> EffectiveUserContext:
     """Map Odoo 18 env identity/active companies/lang without browser claims."""
 
@@ -704,7 +880,7 @@ def derive_action_decision_actor(env: OdooEnvironment) -> dict[str, object]:
         "database": _database_binding(env),
         "uid": user.uid,
         "company_id": user.company_id,
-        "allowed_company_ids": list(sorted(user.allowed_company_ids)),
+        "allowed_company_ids": sorted(user.allowed_company_ids),
     }
 
 
@@ -748,6 +924,7 @@ def _visible_query_fields(env: OdooEnvironment, model: str) -> tuple[str, ...]:
         if isinstance(name, str)
         and isinstance(description, dict)
         and description.get("type") in QUERY_ALLOWED_FIELD_TYPES
+        and not any(part in name.casefold() for part in QUERY_SENSITIVE_FIELD_PARTS)
     ]
     unique = set(allowed)
     priority = [name for name in QUERY_FIELD_PRIORITY if name in unique]
@@ -782,13 +959,129 @@ def _visible_action_preview_fields(env: OdooEnvironment, model: str) -> tuple[st
     for name in candidates:
         try:
             model_set.check_field_access_rights("write", [name])
-        except Exception:  # noqa: BLE001 - inaccessible fields are omitted
+        except Exception:  # noqa: BLE001,S112 - inaccessible fields are omitted
             continue
         allowed_values.append(name)
     allowed = tuple(allowed_values)
     if not allowed:
         raise TurnContextError("access_denied")
     return allowed
+
+
+def visible_query_fields(env: OdooEnvironment, model: str) -> tuple[str, ...]:
+    return _visible_query_fields(env, model)
+
+
+def visible_action_preview_fields(
+    env: OdooEnvironment,
+    model: str,
+) -> tuple[str, ...]:
+    return _visible_action_preview_fields(env, model)
+
+
+def _visible_agent_models(
+    env: OdooEnvironment,
+    screen_model: str | None,
+    message: str,
+) -> tuple[str, ...]:
+    requested = [screen_model] if screen_model else []
+    requested.extend(AGENT_HINT_MODELS)
+    terms = tuple(
+        token
+        for token in re.findall(r"[A-Za-z0-9_]+", message.casefold())
+        if len(token) >= 3
+    )
+    try:
+        registry_models = tuple(env.registry.models)
+    except Exception:  # noqa: BLE001 - optional runtime enrichment
+        registry_models = ()
+    for model in registry_models:
+        if not isinstance(model, str) or model in requested:
+            continue
+        try:
+            description = str(getattr(env[model], "_description", ""))
+        except Exception:  # noqa: BLE001,S112 - unavailable models are omitted
+            continue
+        searchable = f"{model} {description}".casefold()
+        if terms and any(term in searchable for term in terms):
+            requested.append(model)
+    visible: list[str] = []
+    for model in requested:
+        if model in visible or not agent_model_is_eligible(env, model):
+            continue
+        visible.append(model)
+    result = tuple(sorted(visible))
+    if not result:
+        raise TurnContextError("access_denied")
+    return result[:32]
+
+
+def agent_model_is_eligible(env: OdooEnvironment, model: object) -> bool:
+    """Re-derive runtime model eligibility under the authenticated Odoo user."""
+
+    if (
+        not isinstance(model, str)
+        or re.fullmatch(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$", model) is None
+        or model in AGENT_BLOCKED_MODELS
+        or model.startswith(AGENT_BLOCKED_MODEL_PREFIXES)
+        or model not in env
+    ):
+        return False
+    try:
+        model_set = env[model]
+        if getattr(model_set, "_abstract", False) or getattr(model_set, "_transient", False):
+            return False
+        model_set.browse().check_access("read")
+    except Exception:  # noqa: BLE001 - eligibility is fail-closed
+        return False
+    return True
+
+
+def search_agent_models(
+    env: OdooEnvironment,
+    query: object,
+    *,
+    limit: object,
+) -> list[dict[str, str]]:
+    """Search the installed runtime registry without granting technical-model access."""
+
+    if (
+        not isinstance(query, str)
+        or not 1 <= len(query.strip()) <= 128
+        or type(limit) is not int
+        or not 1 <= limit <= 32
+    ):
+        raise TurnContextError("invalid_request")
+    terms = tuple(
+        token for token in re.findall(r"[A-Za-z0-9_]+", query.casefold()) if token
+    )
+    if not terms:
+        raise TurnContextError("invalid_request")
+    try:
+        registry_models = tuple(env.registry.models)
+    except Exception:  # noqa: BLE001 - sanitize runtime registry discovery
+        raise TurnContextError("model_catalog_unavailable") from None
+    matches: list[tuple[int, str, str]] = []
+    for model in registry_models:
+        if not agent_model_is_eligible(env, model):
+            continue
+        description = _safe_model_label(getattr(env[model], "_description", model), model)
+        searchable = f"{model} {description}".casefold()
+        if not all(term in searchable for term in terms):
+            continue
+        exact = 0 if query.casefold() in {model.casefold(), description.casefold()} else 1
+        matches.append((exact, model, description or model))
+    return [
+        {"label": label, "model": model}
+        for _, model, label in sorted(matches)[:limit]
+    ]
+
+
+def _safe_model_label(value: object, fallback: str) -> str:
+    label = " ".join(str(value).split())[:240]
+    if not label or any(ord(character) < 32 for character in label):
+        return fallback
+    return label
 
 
 def _action_preview_field_permitted(field: str) -> bool:

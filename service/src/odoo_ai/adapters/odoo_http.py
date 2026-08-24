@@ -32,6 +32,9 @@ from odoo_ai.contracts import (
     ActionPreview,
     ActionProposalPayload,
     ActionVerificationResult,
+    AgentModelCatalogItem,
+    AgentModelSearchRequest,
+    AgentModelSearchResult,
     AggregateGroup,
     AggregateRecordsRequest,
     AggregateRecordsResult,
@@ -68,6 +71,7 @@ WRITE_SCHEMA_ROUTE: Final = "/odoo_ai/internal/v1/action-write-schema"
 ACTION_PREVIEW_ROUTE: Final = "/odoo_ai/internal/v1/action-preview"
 ACTION_COMMIT_ROUTE: Final = "/odoo_ai/internal/v1/action-commit"
 ACTION_VERIFY_ROUTE: Final = "/odoo_ai/internal/v1/action-verify"
+AGENT_MODEL_SEARCH_ROUTE: Final = "/odoo_ai/internal/v1/agent-model-search"
 DEFAULT_TIMEOUT_SECONDS: Final = 2.0
 MAX_REQUEST_BYTES: Final = 32 * 1024
 MAX_RESPONSE_BYTES: Final = 128 * 1024
@@ -550,6 +554,7 @@ class HttpOdooGateway:
             summary="Write metadata checked under the separately delegated Odoo user.",
             payload={
                 "create_access": response.create_access,
+                "defaults": cast(JsonValue, response.defaults),
                 "fields": cast(JsonValue, response.fields),
                 "label": response.label,
                 "model": response.model,
@@ -674,6 +679,28 @@ class HttpOdooGateway:
         except (ValidationError, ValueError):
             raise OdooGatewayError("malformed_response") from None
 
+    async def search_agent_models(
+        self, request: AgentModelSearchRequest
+    ) -> AgentModelSearchResult:
+        raw = await asyncio.to_thread(
+            self._post_json,
+            AGENT_MODEL_SEARCH_ROUTE,
+            {
+                "limit": request.limit,
+                "query": request.query,
+                "turn_id": str(self._turn_id),
+            },
+        )
+        try:
+            _json_object_without_duplicates(raw)
+            response = _AgentModelSearchResponse.model_validate_json(raw)
+            return AgentModelSearchResult(
+                models=response.models,
+                captured_at=response.captured_at,
+            )
+        except (ValidationError, ValueError):
+            raise OdooGatewayError("malformed_response") from None
+
     def _post_json(self, route: str, payload: dict[str, object]) -> bytes:
         try:
             body = json.dumps(
@@ -757,6 +784,14 @@ class _WriteMetadataResponse(_MetadataResponse):
 
     write_access: bool
     create_access: bool = False
+    defaults: dict[str, JsonValue] = Field(default_factory=dict, max_length=64)
+
+    @field_validator("defaults")
+    @classmethod
+    def validate_defaults(cls, value: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        if any(_FIELD_PATTERN.fullmatch(name) is None for name in value):
+            raise ValueError("invalid metadata default")
+        return value
 
 
 class _ActionPreviewResponse(BaseModel):
@@ -906,6 +941,15 @@ class _AggregateRecordsResponse(BaseModel):
     group_limit: int = Field(strict=True, ge=1, le=50)
     truncated: bool
     captured_at: AwareDatetime
+
+
+class _AgentModelSearchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: Literal[True]
+    models: tuple[AgentModelCatalogItem, ...] = Field(max_length=32)
+    captured_at: AwareDatetime
+    content_trust: Literal["untrusted"]
 
 
 def _validate_base_url(value: object) -> tuple[str, str, int, str]:

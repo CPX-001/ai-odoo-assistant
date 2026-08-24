@@ -7,11 +7,13 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Final, cast
 from uuid import uuid4
 
 from odoo_ai.application.action_policy import ActionPolicy
 from odoo_ai.contracts import (
+    ActionValue,
     ActionValueKind,
     EffectiveWriteFieldSchema,
     EffectiveWriteSchema,
@@ -116,9 +118,14 @@ class EffectiveWriteSchemaService:
             raise EffectiveWriteSchemaError("invalid_user_context", 422)
 
         metadata = await self._gateway.get_write_model_metadata(model)
-        raw_fields, label, write_access, create_access, captured_at = _validate_metadata(
-            metadata, model=model
-        )
+        (
+            raw_fields,
+            raw_defaults,
+            label,
+            write_access,
+            create_access,
+            captured_at,
+        ) = _validate_metadata(metadata, model=model)
         fields: dict[str, EffectiveWriteFieldSchema] = {}
         create_fields: dict[str, EffectiveWriteFieldSchema] = {}
         if (write_access or create_access) and self._policy.permits_model(model):
@@ -130,6 +137,7 @@ class EffectiveWriteSchemaService:
                     if create_access:
                         create_fields[name] = field
 
+        defaults = _effective_defaults(raw_defaults, create_fields)
         canonical_body = {
             "allowed_company_ids": list(allowed_company_ids),
             "captured_for_user": captured_for_user,
@@ -137,6 +145,9 @@ class EffectiveWriteSchemaService:
             "create_access": create_access,
             "create_fields": {
                 name: field.model_dump(mode="json") for name, field in create_fields.items()
+            },
+            "defaults": {
+                name: value.model_dump(mode="json") for name, value in defaults.items()
             },
             "database": database,
             "fields": {name: field.model_dump(mode="json") for name, field in fields.items()},
@@ -160,6 +171,7 @@ class EffectiveWriteSchemaService:
                 fields=fields,
                 create_access=create_access,
                 create_fields=create_fields,
+                defaults=defaults,
                 captured_for_user=captured_for_user,
                 company_id=company_id,
                 allowed_company_ids=allowed_company_ids,
@@ -195,17 +207,23 @@ class EffectiveWriteSchemaService:
 
 def _validate_metadata(
     metadata: Evidence, *, model: str
-) -> tuple[dict[str, dict[str, JsonValue]], str | None, bool, bool, datetime]:
+) -> tuple[
+    dict[str, dict[str, JsonValue]],
+    dict[str, JsonValue],
+    str | None,
+    bool,
+    bool,
+    datetime,
+]:
+    required_keys = {"fields", "label", "model", "write_access"}
+    allowed_keys = required_keys | {"create_access", "defaults"}
     if (
         metadata.kind is not EvidenceKind.METADATA
         or metadata.status is not EvidenceStatus.CHECKED
         or metadata.observed_at is None
         or metadata.observed_at.utcoffset() is None
-        or set(metadata.payload)
-        not in (
-            {"fields", "label", "model", "write_access"},
-            {"create_access", "fields", "label", "model", "write_access"},
-        )
+        or not required_keys.issubset(metadata.payload)
+        or not set(metadata.payload).issubset(allowed_keys)
         or metadata.payload.get("model") != model
         or not isinstance(metadata.pointer, dict)
         or metadata.pointer.get("model") != model
@@ -215,11 +233,15 @@ def _validate_metadata(
     write_access = metadata.payload.get("write_access")
     create_access = metadata.payload.get("create_access", False)
     raw_fields = metadata.payload.get("fields")
+    raw_defaults = metadata.payload.get("defaults", {})
     if (
         (label is not None and (not isinstance(label, str) or not 1 <= len(label) <= 256))
         or not isinstance(write_access, bool)
         or not isinstance(create_access, bool)
         or not isinstance(raw_fields, dict)
+        or not isinstance(raw_defaults, dict)
+        or len(raw_defaults) > MAX_EFFECTIVE_WRITE_FIELDS
+        or not set(raw_defaults).issubset(raw_fields)
         or len(raw_fields) > MAX_EFFECTIVE_WRITE_FIELDS
         or any(
             not isinstance(name, str)
@@ -231,11 +253,73 @@ def _validate_metadata(
         raise EffectiveWriteSchemaError("invalid_metadata")
     return (
         cast(dict[str, dict[str, JsonValue]], raw_fields),
+        raw_defaults,
         label,
         write_access,
         create_access,
         metadata.observed_at,
     )
+
+
+def _effective_defaults(
+    raw_defaults: dict[str, JsonValue],
+    create_fields: dict[str, EffectiveWriteFieldSchema],
+) -> dict[str, ActionValue]:
+    defaults: dict[str, ActionValue] = {}
+    for name in sorted(raw_defaults):
+        field = create_fields.get(name)
+        if field is None:
+            continue
+        value = _effective_default_value(field, raw_defaults[name])
+        if value is not None:
+            defaults[name] = value
+    return defaults
+
+
+def _effective_default_value(
+    field: EffectiveWriteFieldSchema, raw: JsonValue
+) -> ActionValue | None:
+    kind = field.value_kind
+    value: bool | int | str | None
+    if kind is ActionValueKind.BOOLEAN:
+        value = raw if type(raw) is bool else None
+    elif kind is ActionValueKind.INTEGER:
+        value = raw if type(raw) is int else None
+    elif kind is ActionValueKind.MANY2ONE:
+        value = raw if type(raw) is int and raw > 0 else None
+    elif kind is ActionValueKind.DECIMAL:
+        if type(raw) not in {int, float, str}:
+            return None
+        try:
+            decimal = Decimal(str(raw))
+        except InvalidOperation:
+            return None
+        value = format(decimal, "f")
+        if "." in value:
+            value = value.rstrip("0").rstrip(".")
+        if value in {"", "-0"}:
+            value = "0"
+    elif kind in {
+        ActionValueKind.TEXT,
+        ActionValueKind.DATE,
+        ActionValueKind.DATETIME,
+        ActionValueKind.SELECTION,
+    }:
+        value = raw if isinstance(raw, str) else None
+        if (
+            kind is ActionValueKind.SELECTION
+            and value is not None
+            and (field.selection is None or value not in field.selection)
+        ):
+            value = None
+    else:
+        return None
+    if value is None:
+        return None
+    try:
+        return ActionValue(kind=kind, value=value)
+    except ValueError:
+        return None
 
 
 def _effective_write_field(

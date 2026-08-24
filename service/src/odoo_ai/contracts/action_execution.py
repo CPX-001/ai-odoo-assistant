@@ -8,9 +8,13 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from odoo_ai.contracts.action import (
+    RECORD_ARCHIVE_ACTION_ID,
+    RECORD_DELETE_ACTION_ID,
+    SALE_ORDER_BUILD_FLOW_ACTION_ID,
     SALE_ORDER_CONFIRM_ACTION_ID,
     ActionKind,
     ActionValue,
+    BusinessActionId,
     Fingerprint,
 )
 from odoo_ai.contracts.action_approval import ActionActorContext, ActionProposalState
@@ -33,7 +37,7 @@ class ActionAuthorityClaims(BaseModel):
 
     format_version: Literal[1] = 1
     action_kind: ActionKind = ActionKind.RECORD_PATCH
-    action_id: Literal["sale.order.confirm.v1"] | None = None
+    action_id: BusinessActionId | None = None
     jti: str = Field(pattern=r"^[A-Za-z0-9_-]{22,64}$")
     proposal_id: UUID
     approval_id: UUID
@@ -45,7 +49,7 @@ class ActionAuthorityClaims(BaseModel):
     allowed_company_ids: tuple[int, ...] = Field(min_length=1, max_length=16)
     model: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
     record_id: int | None = Field(default=None, strict=True, gt=0)
-    fields: tuple[str, ...] = Field(min_length=1, max_length=4)
+    fields: tuple[str, ...] = Field(min_length=1, max_length=8)
     payload_fingerprint: Fingerprint
     precondition_fingerprint: Fingerprint
     policy_revision: str = Field(min_length=1, max_length=128)
@@ -91,11 +95,32 @@ class ActionAuthorityClaims(BaseModel):
             or (
                 self.action_kind is ActionKind.BUSINESS_ACTION
                 and (
-                    self.action_id != SALE_ORDER_CONFIRM_ACTION_ID
-                    or self.record_id is None
-                    or self.model != "sale.order"
-                    or self.fields != ("state",)
+                    self.action_id is None
                     or self.scopes not in {("business_action_commit",), ("business_action_verify",)}
+                    or (
+                        self.action_id == SALE_ORDER_CONFIRM_ACTION_ID
+                        and (
+                            self.record_id is None
+                            or self.model != "sale.order"
+                            or self.fields != ("state",)
+                        )
+                    )
+                    or (
+                        self.action_id == RECORD_ARCHIVE_ACTION_ID
+                        and (self.record_id is None or self.fields != ("active",))
+                    )
+                    or (
+                        self.action_id == RECORD_DELETE_ACTION_ID
+                        and (self.record_id is None or self.fields != ("id",))
+                    )
+                    or (
+                        self.action_id == SALE_ORDER_BUILD_FLOW_ACTION_ID
+                        and (
+                            self.record_id is not None
+                            or self.model != "sale.order"
+                            or self.fields != ("order_line", "partner_id", "state")
+                        )
+                    )
                 )
             )
         ):
@@ -150,7 +175,7 @@ class BusinessActionCommitResult(BaseModel):
 
     proposal_id: UUID
     attempt_id: UUID
-    action_id: Literal["sale.order.confirm.v1"] = SALE_ORDER_CONFIRM_ACTION_ID
+    action_id: BusinessActionId = SALE_ORDER_CONFIRM_ACTION_ID
     record_id: int = Field(strict=True, gt=0)
     committed_at: AwareDatetime
     payload_fingerprint: Fingerprint
@@ -162,11 +187,11 @@ class BusinessActionVerificationResult(BaseModel):
 
     proposal_id: UUID
     attempt_id: UUID
-    action_id: Literal["sale.order.confirm.v1"] = SALE_ORDER_CONFIRM_ACTION_ID
+    action_id: BusinessActionId = SALE_ORDER_CONFIRM_ACTION_ID
     record_id: int = Field(strict=True, gt=0)
     verified_at: AwareDatetime
     matches: bool
-    state: Literal["draft", "sent", "sale", "done", "cancel"]
+    state: str = Field(min_length=1, max_length=64)
 
 
 class ActionExecutionReceipt(BaseModel):

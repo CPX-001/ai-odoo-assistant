@@ -3,12 +3,51 @@
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    field_validator,
+    model_validator,
+)
 
 TechnicalName = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")]
 ModelName = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")]
 SchemaId = Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
 PositiveId = Annotated[int, Field(strict=True, gt=0)]
+
+
+class AgentModelSearchRequest(BaseModel):
+    """Bounded runtime lookup over installed, user-readable business models."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    query: str = Field(min_length=1, max_length=128)
+    limit: int = Field(default=20, strict=True, ge=1, le=32)
+
+
+class AgentModelCatalogItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    model: ModelName
+    label: str = Field(min_length=1, max_length=240)
+
+    @field_validator("label")
+    @classmethod
+    def validate_label(cls, value: str) -> str:
+        if value != value.strip() or any(ord(character) < 32 for character in value):
+            raise ValueError("model label is not normalized")
+        return value
+
+
+class AgentModelSearchResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    models: tuple[AgentModelCatalogItem, ...] = Field(max_length=32)
+    captured_at: AwareDatetime
+    content_trust: Literal["untrusted"] = "untrusted"
 
 
 class QueryMatch(StrEnum):

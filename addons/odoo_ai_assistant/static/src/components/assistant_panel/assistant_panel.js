@@ -111,6 +111,7 @@ export class AssistantSystray extends Component {
 
     setup() {
         this.panel = useService("odoo_ai_assistant_panel");
+        this.actionService = useService("action");
         this.state = useState(this.panel.state);
     }
 
@@ -235,25 +236,52 @@ export class AssistantPanel extends Component {
 
     get actionDecisionMessage() {
         const messages = {
-            verified: _t("Cambio verificado mediante relectura de Odoo."),
-            rejected: _t("Propuesta cancelada. No se realizó ningún cambio."),
-            stale: _t("El registro cambió. Pide una nueva preview."),
-            failed: _t("El cambio falló y no se presenta como completado."),
-            execution_unknown: _t("El resultado es desconocido y no se reintentará solo."),
-            committed_unverified: _t("El commit se realizó, pero no pudo verificarse."),
+            completed: _t("Plan completado y verificado en Odoo."),
+            rejected: _t("Plan cancelado. No se realizó ningún cambio."),
+            partial: _t("El plan terminó parcialmente; revisa el resultado antes de continuar."),
+            failed: _t("El plan falló y no se presenta como completado."),
         };
         return messages[this.state.actionReceipt?.state] || "";
     }
 
+    openPlanRecord(ev) {
+        const stepIndex = Number(ev.currentTarget?.dataset?.stepIndex);
+        const receipt = this.state.result?.plan?.steps?.[stepIndex]?.receipt;
+        if (!receipt?.record_model || !Number.isSafeInteger(receipt.record_id)) {
+            return;
+        }
+        this.actionService.doAction({
+            type: "ir.actions.act_window",
+            res_model: receipt.record_model,
+            res_id: receipt.record_id,
+            views: [[false, "form"]],
+            target: "current",
+        });
+    }
+
+    onConfirmationModeChange(ev) {
+        void this.panel.setAgentPolicy(
+            ev.target.value,
+            this.state.agentPolicy.max_auto_risk
+        );
+    }
+
+    onMaxAutoRiskChange(ev) {
+        void this.panel.setAgentPolicy(
+            this.state.agentPolicy.confirmation_mode,
+            ev.target.value
+        );
+    }
+
     get actionDecisionClass() {
         const value = this.state.actionReceipt?.state;
-        if (value === "verified") {
+        if (value === "completed") {
             return "alert-success";
         }
         if (value === "rejected") {
             return "alert-secondary";
         }
-        if (["stale", "execution_unknown", "committed_unverified"].includes(value)) {
+        if (value === "partial") {
             return "alert-warning";
         }
         return "alert-danger";

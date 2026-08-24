@@ -26,6 +26,7 @@ _REASONING_ALLOWED_RISKS = frozenset(
         ToolRisk.ACTION_PREVIEW,
     }
 )
+_TRANSIENT_RETRY_ERRORS = frozenset({"tool_handler_failed", "tool_timeout_exceeded"})
 
 
 class ToolExecutorError(RuntimeError):
@@ -52,6 +53,7 @@ class ToolHandlerOutput:
 
     data: object
     evidence: tuple[object, ...] = ()
+    changes_preconditions: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +137,12 @@ class ToolRegistry:
     @property
     def specs(self) -> tuple[ToolSpec, ...]:
         return tuple(binding.spec for binding in self._by_name.values())
+
+    @property
+    def bindings(self) -> tuple[RegisteredTool, ...]:
+        """Expose immutable validated bindings for host-side registry composition."""
+
+        return tuple(self._by_name.values())
 
     @property
     def allowed_risks(self) -> frozenset[ToolRisk]:
@@ -257,6 +265,7 @@ class ToolExecutionLimits:
     max_input_nesting: int = 8
     deadline_seconds: float = 120.0
     per_tool_timeout_seconds: float = 5.0
+    max_consecutive_failures: int = 3
 
     def __post_init__(self) -> None:
         if not 0 <= self.max_calls <= 128:
@@ -275,6 +284,8 @@ class ToolExecutionLimits:
             raise ToolExecutorError("tool_deadline_invalid")
         if not 0 < self.per_tool_timeout_seconds <= 120:
             raise ToolExecutorError("tool_timeout_invalid")
+        if not 1 <= self.max_consecutive_failures <= 3:
+            raise ToolExecutorError("tool_failure_limit_invalid")
 
 
 class ToolExecutor:
@@ -302,11 +313,14 @@ class ToolExecutor:
         self._clock = clock
         self._deadline = clock() + self._limits.deadline_seconds
         self._seen_call_ids: set[str] = set()
+        self._semantic_calls: dict[tuple[str, bytes], tuple[int, str, int]] = {}
+        self._semantic_revision = 0
         self._tool_calls: dict[str, int] = {}
         self._calls = 0
         self._input_bytes = 0
         self._output_bytes = 0
         self._events: list[ToolExecutionEvent] = []
+        self._consecutive_failures = 0
 
     @property
     def registry(self) -> ToolRegistry:
@@ -331,6 +345,8 @@ class ToolExecutor:
         try:
             result = await self._execute(call)
         except ToolExecutorError as error:
+            self._record_semantic_outcome(call, error.code)
+            self._consecutive_failures += 1
             self._events.append(
                 ToolExecutionEvent(
                     event_name="tool.completed",
@@ -341,7 +357,11 @@ class ToolExecutor:
                     },
                 )
             )
+            if self._consecutive_failures >= self._limits.max_consecutive_failures:
+                raise ToolExecutorError("tool_consecutive_failure_limit") from None
             raise
+        self._record_semantic_outcome(call, "ok")
+        self._consecutive_failures = 0
         self._events.append(
             ToolExecutionEvent(
                 event_name="tool.completed",
@@ -362,6 +382,8 @@ class ToolExecutor:
             raise ToolExecutorError("tool_risk_not_allowed")
         _validate_nesting(call.arguments, self._limits.max_input_nesting)
         input_bytes = _canonical_bytes(call.arguments)
+        semantic_key = (call.tool_name, input_bytes)
+        previous = self._semantic_calls.get(semantic_key)
         if len(input_bytes) > binding.max_input_bytes:
             raise ToolExecutorError("tool_input_too_large")
         if self._input_bytes + len(input_bytes) > self._limits.max_total_input_bytes:
@@ -380,6 +402,22 @@ class ToolExecutor:
         per_tool_calls = self._tool_calls.get(call.tool_name, 0)
         if per_tool_calls >= binding.max_calls:
             raise ToolExecutorError("tool_per_name_budget_exceeded")
+        if previous is not None:
+            attempts, outcome, revision = previous
+            retryable_read = (
+                attempts == 1
+                and outcome in _TRANSIENT_RETRY_ERRORS
+                and binding.spec.risk in {ToolRisk.READ, ToolRisk.METADATA}
+            )
+            if revision == self._semantic_revision and not retryable_read:
+                raise ToolExecutorError("tool_call_repeated")
+        self._semantic_calls[semantic_key] = (
+            1
+            if previous is None or previous[2] != self._semantic_revision
+            else previous[0] + 1,
+            "running",
+            self._semantic_revision,
+        )
 
         self._seen_call_ids.add(call.call_id)
         self._calls += 1
@@ -405,7 +443,10 @@ class ToolExecutor:
             raise ToolExecutorError("tool_handler_failed") from None
         if self._clock() > self._deadline:
             raise ToolExecutorError("tool_deadline_exceeded")
-        if not isinstance(raw_result, ToolHandlerOutput):
+        if (
+            not isinstance(raw_result, ToolHandlerOutput)
+            or type(raw_result.changes_preconditions) is not bool
+        ):
             raise ToolExecutorError("tool_output_invalid")
         try:
             output_model = binding.output_model.model_validate(raw_result.data)
@@ -426,7 +467,18 @@ class ToolExecutor:
             raise ToolExecutorError("tool_output_budget_exceeded")
         self._ledger.add_retrieved(evidence)
         self._output_bytes += len(output_bytes)
+        if raw_result.changes_preconditions:
+            self._semantic_revision += 1
         return result
+
+    def _record_semantic_outcome(self, call: ToolCall, outcome: str) -> None:
+        try:
+            key = (call.tool_name, _canonical_bytes(call.arguments))
+        except ToolExecutorError:
+            return
+        current = self._semantic_calls.get(key)
+        if current is not None:
+            self._semantic_calls[key] = (current[0], outcome, current[2])
 
 
 def _validate_nesting(value: object, max_depth: int, *, depth: int = 0) -> None:

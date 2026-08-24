@@ -126,7 +126,7 @@ class ActionAuthorityPayload:
             or not 1 <= len(self.allowed_company_ids) <= 16
             or self.allowed_company_ids != tuple(sorted(set(self.allowed_company_ids)))
             or self.company_id not in self.allowed_company_ids
-            or not 1 <= len(self.fields) <= 4
+            or not 1 <= len(self.fields) <= 8
             or self.fields != tuple(sorted(set(self.fields)))
             or any(not _FIELDS.fullmatch(field) for field in self.fields)
             or (
@@ -150,13 +150,48 @@ class ActionAuthorityPayload:
             or (
                 self.action_kind == "business_action"
                 and (
-                    self.action_id != "sale.order.confirm.v1"
-                    or self.model != "sale.order"
-                    or self.record_id is None
-                    or self.record_id <= 0
-                    or self.fields != ("state",)
+                    self.action_id
+                    not in {
+                        "sale.order.confirm.v1",
+                        "record.archive.v1",
+                        "record.delete.v1",
+                        "sale.order.build_flow.v1",
+                    }
                     or self.scopes
                     not in {("business_action_commit",), ("business_action_verify",)}
+                    or (
+                        self.action_id == "sale.order.confirm.v1"
+                        and (
+                            self.model != "sale.order"
+                            or self.record_id is None
+                            or self.record_id <= 0
+                            or self.fields != ("state",)
+                        )
+                    )
+                    or (
+                        self.action_id == "record.archive.v1"
+                        and (
+                            self.record_id is None
+                            or self.record_id <= 0
+                            or self.fields != ("active",)
+                        )
+                    )
+                    or (
+                        self.action_id == "record.delete.v1"
+                        and (
+                            self.record_id is None
+                            or self.record_id <= 0
+                            or self.fields != ("id",)
+                        )
+                    )
+                    or (
+                        self.action_id == "sale.order.build_flow.v1"
+                        and (
+                            self.model != "sale.order"
+                            or self.record_id is not None
+                            or self.fields != ("order_line", "partner_id", "state")
+                        )
+                    )
                 )
             )
             or self.action_kind

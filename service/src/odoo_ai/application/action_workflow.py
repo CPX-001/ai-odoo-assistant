@@ -17,8 +17,10 @@ from odoo_ai.application.context_read import (
 )
 from odoo_ai.contracts import (
     ActionCreateProposalHandle,
+    ActionCreateTarget,
     ActionProposalHandle,
     ActionProposalPresentation,
+    ActionTarget,
     ActionToolReport,
     ActionTurnRequest,
     ActionTurnResponse,
@@ -302,7 +304,15 @@ def _validated_answer(
         action_type = "record_create"
         evidence_provider = "odoo_action_create_preview"
     elif isinstance(proposal, BusinessActionProposalHandle):
-        target_matches = proposal.target.model == model and proposal.target.record_id == record_id
+        target_matches = (
+            isinstance(proposal.target, ActionTarget)
+            and proposal.target.model == model
+            and proposal.target.record_id == record_id
+        ) or (
+            isinstance(proposal.target, ActionCreateTarget)
+            and proposal.target.model == model
+            and record_id is None
+        )
         action_type = "business_action"
         evidence_provider = "odoo_business_action_preview"
     else:

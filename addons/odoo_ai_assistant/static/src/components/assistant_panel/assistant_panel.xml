@@ -91,65 +91,52 @@
                     <t t-esc="errorMessage"/>
                 </div>
 
-                <section t-if="state.result and state.result.proposal"
+                <section t-if="state.result and state.result.plan"
                     class="o_ai_assistant_action_preview border rounded p-3 mt-3">
                     <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-                        <h3 class="h6 mb-0">Preview del cambio</h3>
+                        <h3 class="h6 mb-0">Plan del agente</h3>
+                        <span class="badge text-bg-light border" t-esc="state.result.plan.risk"/>
+                    </div>
+                    <div class="small mb-2 text-break" t-esc="state.result.plan.goal"/>
+                    <div class="d-flex flex-wrap gap-2 small mb-2">
                         <span class="badge text-bg-light border" t-esc="confidenceLabel"/>
+                        <span class="badge text-bg-light border" t-esc="state.result.plan.state"/>
+                        <span t-if="state.result.plan.metadata.is_atomic"
+                            class="badge text-bg-light border">atómico</span>
+                        <span t-if="state.result.plan.metadata.has_external_effect"
+                            class="badge text-bg-warning">efecto externo</span>
+                        <span t-if="state.result.plan.metadata.has_irreversible_effect"
+                            class="badge text-bg-danger">irreversible</span>
                     </div>
-                    <div class="small mb-2">
-                        <span class="font-monospace" t-esc="state.result.proposal.target.model"/>
-                        <t t-if="state.result.proposal.action_kind !== 'record_create'">
-                            <span> #</span><span t-esc="state.result.proposal.target.record_id"/>
+                    <div class="small text-muted mb-2">
+                        Política efectiva: <t t-esc="state.result.plan.policy.confirmation_mode"/>
+                        · auto hasta <t t-esc="state.result.plan.policy.max_auto_risk"/>
+                        <t t-if="state.result.plan.policy.constrained_by.length">
+                            · limita <t t-esc="state.result.plan.policy.constrained_by.join(', ')"/>
                         </t>
-                        <span t-else="" class="ms-1 badge text-bg-light">nuevo registro</span>
                     </div>
-
-                    <div t-if="state.result.proposal.action_kind === 'record_create'"
-                        class="d-flex flex-column gap-2">
-                        <div t-foreach="state.result.proposal.values" t-as="value"
-                            t-key="value.field" class="border rounded p-2">
-                            <div class="fw-bold text-break" t-esc="value.label || value.field"/>
-                            <div class="small text-break">
-                                <span class="text-muted">Valor: </span>
-                                <span t-esc="formatActionValue(value.value)"/>
-                            </div>
-                        </div>
+                    <ol t-if="state.result.plan.steps.length" class="small ps-3 mb-2">
+                        <li t-foreach="state.result.plan.steps" t-as="step"
+                            t-key="step.step_id" class="mb-1">
+                            <span t-esc="step.title"/>
+                            <span class="badge text-bg-light border ms-1" t-esc="step.state"/>
+                            <button t-if="step.receipt and step.receipt.record_model"
+                                type="button" class="btn btn-link btn-sm p-0 ms-2"
+                                t-att-data-step-index="step_index"
+                                t-on-click="openPlanRecord">Abrir registro</button>
+                            <span t-if="step.receipt and step.receipt.error_code"
+                                class="text-danger ms-2" t-esc="step.receipt.error_code"/>
+                        </li>
+                    </ol>
+                    <div t-if="state.result.plan.expires_at" class="small text-muted mt-2">
+                        Autorización válida hasta: <t t-esc="state.result.plan.expires_at"/>
                     </div>
-                    <div t-elif="state.result.proposal.action_kind === 'business_action'"
-                        class="border rounded p-2">
-                        <div class="fw-bold text-break">
-                            Confirmar pedido <t t-esc="state.result.proposal.display_name"/>
-                        </div>
-                        <div class="small text-break">
-                            <span class="text-muted">Estado actual: </span>
-                            <span t-esc="state.result.proposal.state_before"/>
-                        </div>
-                    </div>
-                    <div t-else="" class="d-flex flex-column gap-2">
-                        <div t-foreach="state.result.proposal.changes" t-as="change"
-                            t-key="change.field" class="border rounded p-2">
-                            <div class="fw-bold text-break" t-esc="change.label || change.field"/>
-                            <div class="small text-break">
-                                <span class="text-muted" t-esc="formatActionValue(change.before)"/>
-                                <i class="fa fa-arrow-right mx-2" aria-hidden="true"/>
-                                <span t-esc="formatActionValue(change.after)"/>
-                            </div>
-                        </div>
-                    </div>
-
-                    <ul t-if="state.result.proposal.warnings.length" class="small mt-2 mb-0">
-                        <li t-foreach="state.result.proposal.warnings" t-as="warning"
-                            t-key="warning_index" t-esc="warning"/>
-                    </ul>
-                    <div class="small text-muted mt-2">
-                        Caduca: <t t-esc="state.result.proposal.expires_at"/>
-                    </div>
-                    <div t-if="!state.actionReceipt" class="d-flex gap-2 mt-3">
+                    <div t-if="state.result.plan.state === 'awaiting_confirmation' and !state.actionReceipt"
+                        class="d-flex gap-2 mt-3">
                         <button type="button" class="btn btn-primary flex-grow-1"
                             t-att-disabled="state.decisionLoading" t-on-click="approveAction">
                             <i t-if="state.decisionLoading" class="fa fa-spinner fa-spin me-1"
-                                aria-hidden="true"/> Aprobar y verificar
+                                aria-hidden="true"/> Confirmar plan
                         </button>
                         <button type="button" class="btn btn-outline-secondary"
                             t-att-disabled="state.decisionLoading" t-on-click="rejectAction">
@@ -157,6 +144,34 @@
                         </button>
                     </div>
                 </section>
+
+                <details class="mt-3 small">
+                    <summary class="text-muted">Autonomía de escritura</summary>
+                    <div class="row g-2 mt-1">
+                        <div class="col-7">
+                            <label class="form-label mb-1">Confirmación</label>
+                            <select class="form-select form-select-sm"
+                                t-att-value="state.agentPolicy.confirmation_mode"
+                                t-att-disabled="state.policyLoading"
+                                t-on-change="onConfirmationModeChange">
+                                <option value="always_confirm">Confirmar siempre</option>
+                                <option value="risk_based">Según riesgo</option>
+                                <option value="protected_only">Solo protegidas</option>
+                            </select>
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label mb-1">Auto hasta</label>
+                            <select class="form-select form-select-sm"
+                                t-att-value="state.agentPolicy.max_auto_risk"
+                                t-att-disabled="state.policyLoading"
+                                t-on-change="onMaxAutoRiskChange">
+                                <option value="low">Bajo</option>
+                                <option value="moderate">Moderado</option>
+                                <option value="high">Alto</option>
+                            </select>
+                        </div>
+                    </div>
+                </details>
 
                 <div t-if="state.actionReceipt" t-att-class="'alert mt-3 ' + actionDecisionClass"
                     role="status" t-esc="actionDecisionMessage"/>

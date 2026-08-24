@@ -99,6 +99,7 @@ def _load_action_tools() -> tuple[ModuleType, ModuleType, ModuleType]:
     orm_tools.OrmToolError = FakeOrmToolError
     orm_tools.check_response_size = lambda payload: None
     orm_tools.iso_datetime = lambda value: value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    orm_tools.normalize_orm_value = lambda value: value
 
     def collect_model_metadata(
         env: object,
@@ -462,7 +463,7 @@ def test_real_user_preview_returns_exact_diff_and_never_has_a_write_call() -> No
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "write"
     ]
-    assert len(writes) == 1
+    assert len(writes) == 2
 
 
 def test_state_change_changes_precondition_without_changing_payload() -> None:

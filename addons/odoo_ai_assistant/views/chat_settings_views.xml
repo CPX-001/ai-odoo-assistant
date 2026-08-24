@@ -16,6 +16,19 @@
                             Recommended for modest self-hosted servers: 10–20. Allowed range: 5–50.
                         </div>
                     </setting>
+                    <setting
+                        string="Agent write confirmations"
+                        help="Defines the maximum autonomy the administrator allows. User and conversation policy can only make it stricter."
+                    >
+                        <field name="assistant_agent_confirmation_mode"/>
+                        <field name="assistant_agent_max_auto_risk" class="ms-2"/>
+                    </setting>
+                    <setting
+                        string="Test data"
+                        help="Allows synthetic data only when the user explicitly requests test/demo data or authorizes it for the conversation."
+                    >
+                        <field name="assistant_agent_allow_synthetic_data"/>
+                    </setting>
                 </block>
             </xpath>
         </field>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 
 from odoo_ai.application.action_approval import ActionApprovalService
 from odoo_ai.application.action_execution import ActionExecutionService
@@ -59,6 +60,18 @@ class ActionCommandService:
                 actor=actor,
             )
         )
+        pointer = (
+            execution.evidence.pointer
+            if execution.evidence is not None and execution.evidence.pointer is not None
+            else {}
+        )
+        raw_record_model = pointer.get("model")
+        raw_record_id = pointer.get("record_id")
+        has_record_pointer = isinstance(raw_record_model, str) and isinstance(
+            raw_record_id, int
+        ) and not isinstance(raw_record_id, bool)
+        record_model = cast(str, raw_record_model) if has_record_pointer else None
+        record_id: int | None = raw_record_id if has_record_pointer else None  # type: ignore[assignment]
         return ActionCommandReceipt(
             proposal_id=execution.proposal_id,
             state=execution.state,
@@ -67,5 +80,7 @@ class ActionCommandService:
             approval_id=execution.approval_id,
             attempt_id=execution.attempt_id,
             evidence_id=execution.evidence_id,
+            record_model=record_model,
+            record_id=record_id,
             error_code=execution.error_code,
         )

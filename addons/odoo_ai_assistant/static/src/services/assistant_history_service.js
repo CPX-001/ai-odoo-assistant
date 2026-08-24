@@ -80,7 +80,9 @@ patch(assistantPanelService, {
     start(env, dependencies) {
         const panel = super.start(env, dependencies);
         const sessionStorage = browserSessionStorage();
-        panel.state.historyView = true;
+        const initialConversationId = loadRecentActiveChat(sessionStorage);
+        panel.state.conversationId = initialConversationId;
+        panel.state.historyView = !initialConversationId;
 
         const isBusy = () =>
             panel.state.loading || panel.state.historyLoading || panel.state.decisionLoading;

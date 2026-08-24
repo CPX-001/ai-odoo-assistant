@@ -74,7 +74,7 @@ class TestQueryUsesNativeOdooPermissions(TransactionCase):
                 allowed_company_ids=(self.env.company.id,),
                 lang="en_US",
                 model="sale.order",
-                allowed_fields=("id", "name", "client_order_ref", "user_id"),
+                allowed_fields=("id", "client_order_ref", "name", "user_id"),
                 scopes=("query_records",),
                 issued_at=NOW,
                 expires_at=NOW + 60,

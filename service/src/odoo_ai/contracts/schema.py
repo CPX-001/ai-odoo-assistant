@@ -42,6 +42,26 @@ from odoo_ai.contracts.action_execution import (
     ExecuteApprovedActionRequest,
 )
 from odoo_ai.contracts.agent import AnswerEnvelope, ProposedAction, ToolSpec
+from odoo_ai.contracts.agent_turn import (
+    AgentCandidateOutput,
+    AgentModelCandidate,
+    AgentPlanDecisionRequest,
+    AgentPlanDecisionResponse,
+    AgentPlanExecutionRequest,
+    AgentPlanMetadata,
+    AgentPlanReceiptView,
+    AgentPlanStatusResponse,
+    AgentPlanStep,
+    AgentPlanStepView,
+    AgentPlanView,
+    AgentPolicyLayer,
+    AgentPolicyLayers,
+    AgentPolicyView,
+    AgentTurnRequest,
+    AgentTurnResponse,
+    EffectiveAgentPolicy,
+    HostToolPolicySpec,
+)
 from odoo_ai.contracts.context import (
     ContextPack,
     ConversationState,
@@ -52,6 +72,7 @@ from odoo_ai.contracts.context import (
 )
 from odoo_ai.contracts.delegation import (
     ActionPreviewDelegationClaims,
+    AgentDelegationClaims,
     ContextReadTurnRequest,
     ContextReadTurnResponse,
     DelegationClaims,
@@ -86,6 +107,9 @@ from odoo_ai.contracts.navigation import (
     NavigationSnapshot,
 )
 from odoo_ai.contracts.query import (
+    AgentModelCatalogItem,
+    AgentModelSearchRequest,
+    AgentModelSearchResult,
     AggregateGroup,
     AggregateRecordsRequest,
     AggregateRecordsResult,
@@ -118,6 +142,24 @@ from odoo_ai.contracts.source import (
 type JsonSchema = dict[str, JsonValue]
 
 PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
+    AgentCandidateOutput,
+    AgentModelCandidate,
+    AgentPlanDecisionRequest,
+    AgentPlanDecisionResponse,
+    AgentPlanExecutionRequest,
+    AgentPlanMetadata,
+    AgentPlanReceiptView,
+    AgentPlanStep,
+    AgentPlanStepView,
+    AgentPlanStatusResponse,
+    AgentPlanView,
+    AgentPolicyLayer,
+    AgentPolicyLayers,
+    AgentPolicyView,
+    AgentTurnRequest,
+    AgentTurnResponse,
+    EffectiveAgentPolicy,
+    HostToolPolicySpec,
     ActionActorContext,
     ActionAuthorityClaims,
     ActionCommitResult,
@@ -127,6 +169,7 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     ActionDecisionRequest,
     ActionExecutionReceipt,
     ActionPreviewDelegationClaims,
+    AgentDelegationClaims,
     ActionFieldChange,
     ActionCreatePreview,
     ActionCreatePreviewSummary,
@@ -183,6 +226,9 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     NavigationLimits,
     NavigationNode,
     NavigationSnapshot,
+    AgentModelCatalogItem,
+    AgentModelSearchRequest,
+    AgentModelSearchResult,
     AggregateGroup,
     AggregateRecordsRequest,
     AggregateRecordsResult,

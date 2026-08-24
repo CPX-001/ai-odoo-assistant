@@ -10,6 +10,8 @@ from odoo_ai.contracts import (
     ActionPreview,
     ActionProposalPayload,
     ActionVerificationResult,
+    AgentModelSearchRequest,
+    AgentModelSearchResult,
     AggregateRecordsRequest,
     AggregateRecordsResult,
     BusinessActionCommitResult,
@@ -69,6 +71,10 @@ class OdooQueryGateway(Protocol):
     async def aggregate_records(
         self, request: AggregateRecordsRequest
     ) -> AggregateRecordsResult: ...
+
+    async def search_agent_models(
+        self, request: AgentModelSearchRequest
+    ) -> AgentModelSearchResult: ...
 
 
 class OdooActionPreviewGateway(Protocol):

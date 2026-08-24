@@ -7,8 +7,11 @@ import pytest
 from odoo_ai.adapters import (
     ODOO_GET_EFFECTIVE_WRITE_SCHEMA,
     ODOO_PREVIEW_BUSINESS_ACTION,
+    ODOO_PREVIEW_RECORD_ARCHIVE,
     ODOO_PREVIEW_RECORD_CREATE,
+    ODOO_PREVIEW_RECORD_DELETE,
     ODOO_PREVIEW_RECORD_PATCH,
+    ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW,
     ActionToolExecutorFactory,
     action_tool_specs,
 )
@@ -308,6 +311,9 @@ def test_action_registry_is_exact_preview_only_and_persists_real_proposal() -> N
         (ODOO_PREVIEW_RECORD_CREATE, "write-preview"),
         (ODOO_PREVIEW_RECORD_PATCH, "write-preview"),
         (ODOO_PREVIEW_BUSINESS_ACTION, "write-preview"),
+        (ODOO_PREVIEW_RECORD_ARCHIVE, "write-preview"),
+        (ODOO_PREVIEW_RECORD_DELETE, "write-preview"),
+        (ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW, "write-preview"),
     ]
     assert all("commit" not in tool.name and "write" != tool.name for tool in action_tool_specs())
 
