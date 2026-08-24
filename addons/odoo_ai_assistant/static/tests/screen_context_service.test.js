@@ -1,5 +1,8 @@
 import { expect, test } from "@odoo/hoot";
-import { buildScreenContext } from "@odoo_ai_assistant/services/screen_context_service";
+import {
+    buildScreenContext,
+    currentViewId,
+} from "@odoo_ai_assistant/services/screen_context_service";
 
 const ACTION_ID = 42;
 const MENU_ID = 7;
@@ -60,7 +63,7 @@ test("captured payload contains navigation only and bounds selected ids", () => 
         currentController: {
             action: { id: ACTION_ID, res_model: "sale.order" },
             config: { actionId: ACTION_ID },
-            props: { resModel: "sale.order", type: "list" },
+            props: { resModel: "sale.order", type: "list", viewId: 314 },
             currentState: { active_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9] },
         },
     };
@@ -69,9 +72,29 @@ test("captured payload contains navigation only and bounds selected ids", () => 
     const serialized = JSON.stringify(context);
 
     expect(context.selected_ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(serialized).not.toInclude("view_id");
     expect(serialized).not.toInclude("uid");
     expect(serialized).not.toInclude("company");
     expect(serialized).not.toInclude("secret");
     expect(serialized).not.toInclude("token");
     expect(serialized).not.toInclude("session");
+});
+
+test("current view id is resolved for developer UI without entering screen context", () => {
+    const direct = {
+        currentController: {
+            props: { type: "form", viewId: 314 },
+            action: { views: [[99, "form"]] },
+        },
+    };
+    expect(currentViewId(direct)).toBe(314);
+
+    const fallback = {
+        currentController: {
+            props: { type: "list" },
+            action: { views: [[271, "list"], [99, "form"]] },
+        },
+    };
+    expect(currentViewId(fallback)).toBe(271);
+    expect(currentViewId({ currentController: {} })).toBe(null);
 });
