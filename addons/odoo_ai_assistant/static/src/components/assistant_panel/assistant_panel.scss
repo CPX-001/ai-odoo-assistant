@@ -1,4 +1,7 @@
 .o_ai_assistant_panel {
+    --o-ai-accent: #{$o-brand-primary};
+    --o-ai-gray-100: #{$o-gray-100};
+    --o-ai-gray-200: #{$o-gray-200};
     --o-ai-space-1: 0.25rem;
     --o-ai-space-2: 0.5rem;
     --o-ai-space-3: 0.75rem;
@@ -7,7 +10,7 @@
     --o-ai-surface-subtle: color-mix(
         in srgb,
         var(--o-view-background-color, var(--bs-body-bg)) 96%,
-        var(--o-brand-primary) 4%
+        var(--o-ai-accent) 4%
     );
 
     z-index: $zindex-modal;
@@ -54,19 +57,18 @@
         position: relative;
         z-index: 3;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr);
         align-items: center;
         gap: var(--o-ai-space-2);
         border-color: var(--bs-border-color) !important;
         background-color: color-mix(
             in srgb,
             var(--o-view-background-color, var(--bs-body-bg)) 97%,
-            var(--o-brand-primary) 3%
+            var(--o-ai-accent) 3%
         ) !important;
     }
 
     .o_ai_assistant_drag_handle {
-        grid-column: 1 / -1;
         min-height: 2.5rem;
         cursor: move;
         touch-action: none;
@@ -74,16 +76,7 @@
     }
 
     .o_ai_assistant_model_picker {
-        grid-column: 1;
         margin-top: 0 !important;
-    }
-
-    .o_ai_assistant_history_toolbar {
-        grid-column: 2;
-        margin-top: 0 !important;
-        align-self: stretch;
-        display: flex;
-        align-items: center;
     }
 
     .o_ai_assistant_messages {
@@ -110,16 +103,16 @@
         margin-left: auto;
         padding: var(--o-ai-space-3) var(--o-ai-space-4);
         border-radius: 0.9rem 0.9rem 0.2rem 0.9rem;
-        background-color: var(--o-gray-200);
+        background-color: var(--o-ai-gray-200);
     }
 
     .o_ai_assistant_message_assistant {
         align-self: flex-start;
         margin-right: auto;
         padding: var(--o-ai-space-3) var(--o-ai-space-4);
-        border: 1px solid var(--o-gray-200);
+        border: 1px solid var(--o-ai-gray-200);
         border-radius: 0.9rem 0.9rem 0.9rem 0.2rem;
-        background-color: var(--o-gray-100);
+        background-color: var(--o-ai-gray-100);
     }
 
     .o_ai_assistant_message_content {
@@ -150,7 +143,7 @@
         background-color: color-mix(
             in srgb,
             var(--o-view-background-color, var(--bs-body-bg)) 97%,
-            var(--o-gray-200) 3%
+            var(--o-ai-gray-200) 3%
         ) !important;
         box-shadow: 0 -0.35rem 0.8rem color-mix(in srgb, var(--bs-body-color) 7%, transparent);
     }
@@ -166,8 +159,8 @@
     }
 
     .o_ai_assistant_composer textarea:focus {
-        border-color: color-mix(in srgb, var(--o-brand-primary) 55%, var(--bs-border-color));
-        box-shadow: 0 0 0 0.12rem color-mix(in srgb, var(--o-brand-primary) 14%, transparent);
+        border-color: color-mix(in srgb, var(--o-ai-accent) 55%, var(--bs-border-color));
+        box-shadow: 0 0 0 0.12rem color-mix(in srgb, var(--o-ai-accent) 14%, transparent);
     }
 
     .min-w-0 {
