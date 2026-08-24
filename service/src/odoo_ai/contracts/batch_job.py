@@ -31,6 +31,7 @@ MAX_BATCH_FAILURE_PREVIEW: int = 50
 class BatchJobState(StrEnum):
     PREPARED = "prepared"
     EXECUTING = "executing"
+    EXECUTION_UNKNOWN = "execution_unknown"
     COMPLETED = "completed"
     PARTIAL = "partial"
     FAILED = "failed"
@@ -111,6 +112,10 @@ class BatchMutationJobSnapshot(BaseModel):
             BatchJobState.PARTIAL,
             BatchJobState.FAILED,
         }
+        active_or_unknown = self.state in {
+            BatchJobState.EXECUTING,
+            BatchJobState.EXECUTION_UNKNOWN,
+        }
         if self.state is BatchJobState.PREPARED:
             if (
                 self.attempt_id is not None
@@ -118,13 +123,13 @@ class BatchMutationJobSnapshot(BaseModel):
                 or self.completed_at is not None
             ):
                 raise ValueError("prepared batch job has execution state")
-        elif self.state is BatchJobState.EXECUTING:
+        elif active_or_unknown:
             if (
                 self.attempt_id is None
                 or self.execution_started_at is None
                 or self.completed_at is not None
             ):
-                raise ValueError("executing batch job state is invalid")
+                raise ValueError("active batch job state is invalid")
         elif terminal and (
             self.attempt_id is None
             or self.execution_started_at is None
