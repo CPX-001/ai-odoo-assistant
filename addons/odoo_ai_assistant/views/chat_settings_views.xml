@@ -5,7 +5,7 @@
         <field name="model">res.config.settings</field>
         <field name="inherit_id" ref="odoo_ai_assistant.res_config_settings_view_form_odoo_ai_assistant"/>
         <field name="arch" type="xml">
-            <xpath expr="//block[@title='Knowledge']" position="after">
+            <xpath expr="//block[@name='assistant_knowledge']" position="after">
                 <block title="Chat interface">
                     <setting
                         string="Recent chats"

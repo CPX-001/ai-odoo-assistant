@@ -59,7 +59,7 @@
                         </setting>
                     </block>
 
-                    <block title="Knowledge">
+                    <block name="assistant_knowledge" title="Knowledge">
                         <setting
                             string="Knowledge provider"
                             help="M5 uses the provisioned Assistant PostgreSQL index; no arbitrary knowledge path is exposed here."
