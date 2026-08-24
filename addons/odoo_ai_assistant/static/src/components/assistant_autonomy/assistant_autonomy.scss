@@ -50,7 +50,7 @@
 }
 
 .o_ai_assistant_picker_menu.o-dropdown--menu {
-    width: calc(100vw - 2rem);
+    width: max-content;
     max-width: 23rem;
     max-height: calc(100vh - 2rem);
     padding: 0;
@@ -60,6 +60,12 @@
     border-radius: 0.75rem;
     background-color: var(--o-view-background-color, var(--bs-body-bg, #fff));
     box-shadow: $box-shadow-lg;
+}
+
+@media (max-width: 575.98px) {
+    .o_ai_assistant_picker_menu.o-dropdown--menu {
+        max-width: calc(100vw - 2rem);
+    }
 }
 
 .o_ai_assistant_picker_menu_title {
