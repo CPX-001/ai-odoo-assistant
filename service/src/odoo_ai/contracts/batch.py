@@ -12,7 +12,6 @@ from typing import Annotated, Final, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from odoo_ai.contracts.action import (
-    MAX_ACTION_FIELDS,
     ActionFieldChange,
     Fingerprint,
     ModelName,
@@ -20,6 +19,7 @@ from odoo_ai.contracts.action import (
 )
 
 MAX_BATCH_ITEMS: Final = 500
+MAX_BATCH_FIELDS: Final = 64
 MAX_BATCH_SOURCE_REF: Final = 128
 MAX_BATCH_ERROR_CODE: Final = 128
 
@@ -56,7 +56,7 @@ class BatchCreateItem(BaseModel):
     source_ref: SourceRef
     values: tuple[ActionFieldChange, ...] = Field(
         min_length=1,
-        max_length=MAX_ACTION_FIELDS,
+        max_length=MAX_BATCH_FIELDS,
     )
 
     @model_validator(mode="after")
@@ -75,7 +75,7 @@ class BatchPatchItem(BaseModel):
     record_id: PositiveId
     changes: tuple[ActionFieldChange, ...] = Field(
         min_length=1,
-        max_length=MAX_ACTION_FIELDS,
+        max_length=MAX_BATCH_FIELDS,
     )
 
     @model_validator(mode="after")
