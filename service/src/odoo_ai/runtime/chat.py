@@ -103,6 +103,7 @@ class RuntimeChatHistoryService:
                     session,
                     actor=request.actor,
                     conversation_id=request.conversation_id,
+                    max_conversations=request.max_conversations,
                     max_messages=request.max_messages,
                 )
         except ChatStoreError as error:
@@ -246,6 +247,7 @@ class RuntimeChatRoutingContext:
         finally:
             if engine is not None:
                 engine.dispose()
+
 
 def create_runtime_general_chat_service() -> GeneralChatService:
     """Compose the application service with concrete runtime adapters."""
