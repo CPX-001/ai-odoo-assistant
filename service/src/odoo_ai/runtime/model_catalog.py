@@ -16,7 +16,7 @@ from odoo_ai.adapters.configured_codex import ConfiguredCodexRuntimeSettings
 
 MODEL_CATALOG_TTL_SECONDS: Final = 300.0
 MAX_MODEL_OPTIONS: Final = 50
-_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
+_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 
 
 class RuntimeModelCatalogError(RuntimeError):
@@ -119,7 +119,7 @@ async def _fetch_catalog() -> ModelCatalog:
             )
         )
 
-    default_model = settings.model
+    default_model = settings.model if settings.model and _MODEL_PATTERN.fullmatch(settings.model) else None
     if default_model is None:
         default_model = next((item.model for item in options if item.is_default), None)
     return ModelCatalog(models=tuple(options), default_model=default_model)
