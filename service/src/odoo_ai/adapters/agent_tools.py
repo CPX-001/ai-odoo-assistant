@@ -235,7 +235,8 @@ def agent_tool_policy_specs(
             risk_floor=RiskLevel.LOW,
             atomic=False,
             max_records=500,
-            allowed_models=models,
+            # Runtime discovery plus the ag1/Odoo preflight are the actual model authority.
+            allowed_models=(),
         ),
     )
 
@@ -430,11 +431,14 @@ class UnifiedAgentToolExecutorFactory:
             yield executor
         finally:
             action_traces = action_backend.proposal_traces
-            batch_traces = batch_backend.traces if batch_backend is not None else ()
+            batch_trace_slots = batch_backend.trace_slots if batch_backend is not None else ()
+            batch_traces = tuple(
+                trace for trace in batch_trace_slots if trace is not None
+            )
             preview_traces = _ordered_preview_traces(
                 executor.execution_events,
                 action_traces,
-                batch_traces,
+                batch_trace_slots,
             )
             self._last_report = ActionToolReport(
                 tool_report=ToolExecutionReport(
@@ -456,7 +460,7 @@ class UnifiedAgentToolExecutorFactory:
 def _ordered_preview_traces(
     events,
     action_traces: tuple[ActionProposalTrace, ...],
-    batch_traces: tuple[BatchProposalTrace, ...],
+    batch_trace_slots: tuple[BatchProposalTrace | None, ...],
 ):
     ordered: list[ActionProposalTrace | BatchProposalTrace] = []
     action_index = 0
@@ -474,13 +478,14 @@ def _ordered_preview_traces(
                 raise ToolExecutorError("agent_preview_report_corrupt")
             ordered.append(action_trace)
         elif tool_name == ODOO_PREVIEW_BATCH_MUTATION:
-            # A completely rejected batch preflight produces no sealed proposal and
-            # therefore no executable plan step. It is still a successful tool call.
-            if batch_index < len(batch_traces):
-                batch_trace = batch_traces[batch_index]
-                if batch_trace.tool_name == tool_name:
-                    batch_index += 1
-                    ordered.append(batch_trace)
-    if action_index != len(action_traces) or batch_index != len(batch_traces):
+            if batch_index >= len(batch_trace_slots):
+                raise ToolExecutorError("agent_preview_report_corrupt")
+            batch_trace = batch_trace_slots[batch_index]
+            batch_index += 1
+            if batch_trace is not None:
+                if batch_trace.tool_name != tool_name:
+                    raise ToolExecutorError("agent_preview_report_corrupt")
+                ordered.append(batch_trace)
+    if action_index != len(action_traces) or batch_index != len(batch_trace_slots):
         raise ToolExecutorError("agent_preview_report_corrupt")
     return tuple(ordered)
