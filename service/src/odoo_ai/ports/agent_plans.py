@@ -57,7 +57,15 @@ class StoredAgentPlan:
 @dataclass(frozen=True, slots=True)
 class StoredAgentPlanStepResult:
     step_id: str
-    state: Literal["planned", "previewed", "executing", "completed", "failed", "skipped"]
+    state: Literal[
+        "planned",
+        "previewed",
+        "executing",
+        "completed",
+        "partial",
+        "failed",
+        "skipped",
+    ]
     receipt: dict[str, object] | None
     error_code: str | None
     updated_at: datetime
@@ -115,7 +123,7 @@ class AgentPlanStore(Protocol):
         *,
         plan_id: UUID,
         step_id: str,
-        state: Literal["completed", "failed", "skipped"],
+        state: Literal["completed", "partial", "failed", "skipped"],
         occurred_at: datetime,
         receipt: dict[str, object] | None = None,
         error_code: str | None = None,
