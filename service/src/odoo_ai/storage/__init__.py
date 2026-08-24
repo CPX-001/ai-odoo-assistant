@@ -2,6 +2,7 @@
 
 from odoo_ai.storage.action_repository import ActionStoreError, SqlActionApprovalStore
 from odoo_ai.storage.base import Base
+from odoo_ai.storage.chat_models import ChatConversation, ChatMessage
 from odoo_ai.storage.config import DatabaseConfigurationError, DatabaseSettings
 from odoo_ai.storage.database import create_database_engine, create_session_factory, session_scope
 from odoo_ai.storage.knowledge_repository import (
@@ -67,6 +68,8 @@ __all__ = [
     "ActionAuditRecord",
     "ActionStoreError",
     "CapabilitySnapshot",
+    "ChatConversation",
+    "ChatMessage",
     "DatabaseConfigurationError",
     "DatabaseSettings",
     "InstanceProfile",

@@ -12,6 +12,7 @@ from odoo_ai.source.extractors import (
     m3_source_extractors,
 )
 from odoo_ai.source.query import SourceEvidenceService, SourceQueryError
+from odoo_ai.source.resilient_scanner import ResilientSourceScanner as SourceScanner
 from odoo_ai.source.scanner import (
     ExtractedSymbol,
     ExtractedXmlRecord,
@@ -27,7 +28,6 @@ from odoo_ai.source.scanner import (
     ScanLimits,
     SourceExtractionError,
     SourceScanMetrics,
-    SourceScanner,
     SourceScanResult,
     StoredSourceFile,
     locate_installed_modules,

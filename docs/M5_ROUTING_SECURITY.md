@@ -1,88 +1,90 @@
 # M5 routing and panel security
 
-M5-08 integrates the three read-only workflows in one Odoo-native panel without
-combining their authority.
+M5 introduced separate read-only workflow boundaries. The product UI now places an
+automatic chat facade in front of those boundaries: the user does **not** choose
+`EXPLAIN`, `QUERY`, `HOW_TO` or `ACTION` manually.
 
-## Workflow selection
+## Automatic product routing
 
-The user explicitly selects `EXPLAIN`, `QUERY` or `HOW_TO` in the panel. The
-browser sends that value only as an untrusted routing hint to
-`/odoo_ai/v1/turn`. Odoo validates it against the fixed read-only allowlist
-before preparing any delegation or contacting the Assistant Service:
+The browser sends only the message, the untrusted `ScreenContext` hint and an optional
+conversation id to `/odoo_ai/v1/chat`. Odoo derives the effective user server-side and
+chooses the narrow internal boundary before granting any authority:
 
 ```text
-EXPLAIN -> v1 record delegation -> /v1/turns/explain
-QUERY   -> q1 model/query delegation -> /v1/turns/query
-HOW_TO  -> v1 navigation/schema delegation -> /v1/turns/how-to
+single chat
+    ├─ contextual explanation -> EXPLAIN boundary
+    ├─ live ORM question       -> QUERY boundary
+    ├─ navigation/how-to       -> HOW_TO boundary
+    ├─ requested write         -> ACTION preview boundary
+    └─ code/docs/general       -> GENERAL read-only boundary
 ```
 
-`ACTION`, unknown values and values recovered from records, menu labels,
-metadata, documents or model output are rejected. A workflow cannot be changed
-by a tool call or by Evidence because routing finishes before the registry is
-built.
+The routing decision is internal product behavior, not browser authority. Existing
+legacy endpoints remain for compatibility, but the standard panel uses only the chat
+facade and action-decision endpoint.
 
-The dedicated legacy browser routes remain available for M4/M5 compatibility,
-but the integrated panel uses only `/odoo_ai/v1/turn`.
+`ScreenContext` remains a navigation hint. QUERY may resolve a different visible/readable
+model from Odoo navigation metadata instead of being mechanically tied to the model that
+happens to be open. ACTION remains intentionally stricter: the current implementation
+only grants preview authority for a concrete current record/model; it never silently
+turns a cross-model request into a write on the open record.
 
-## Least-privilege registries
+## Least-privilege boundaries
 
-The Assistant Service keeps separate endpoints and constructs exactly one
-registry per turn:
+The facade does not merge write authority or expose generic execution. Internally the
+existing registries remain bounded:
 
-| Workflow | Dynamic tools visible to Codex |
+| Boundary | Dynamic tools visible to Codex |
 | --- | --- |
 | EXPLAIN | `source.find_symbol`, `source.find_model_extensions`, `source.read_excerpt` |
 | QUERY | `odoo.get_effective_schema`, `odoo.query_records`, `odoo.aggregate_records` |
 | HOW_TO | `knowledge.search`, `knowledge.read_excerpt` |
+| ACTION | allowlisted schema/preview tools only; approval and commit stay host-side |
+| GENERAL | source tools plus pre-retrieved persistent knowledge; no Odoo write authority |
 
-HOW_TO navigation and effective schema are deterministic pre-context, not
-general tools. No registry contains write, preview, approval, business action,
-shell, SQL, Python, filesystem or generic method execution.
+GENERAL exists so code/backend/documentation questions do not require an artificial
+saved-record context. Persistent knowledge is retrieved from Assistant PostgreSQL before
+the reasoning turn; source tools use the persistent source index and revalidate excerpts.
+No boundary exposes shell, arbitrary SQL, Python execution, `sudo()`, generic
+`execute_method` or generic `execute_kw`.
+
+## Conversation state
+
+User-visible conversation history lives in the Assistant PostgreSQL database and is
+isolated by Odoo database + effective uid. The memory supplied to reasoning is bounded;
+Codex threads remain ephemeral and are not the product memory store.
+
+Unsent composer text is a browser draft only. It is saved per host/user/conversation so
+closing the panel or refreshing Odoo does not discard it. It grants no authority and is
+sent to the server only when the user submits it.
 
 ## Browser response
 
-Odoo returns only:
+Odoo returns only sanitized chat presentation data: answer, confidence, bounded
+limitations/citations, conversation id and (for ACTION) the validated preview. Delegation
+and machine secrets, effective authority claims, internal URLs, physical roots/paths,
+raw tool transcripts and raw query rows do not cross to the browser.
 
-- the selected workflow and turn id;
-- answer text, confidence and bounded limitations;
-- sanitized logical citations for the selected workflow.
+The Owl template renders all user/model/source/document text with escaped text directives;
+it contains no `t-raw`, `innerHTML`, dynamic arbitrary links or HTML/Markdown renderer.
 
-The response excludes delegation and machine secrets, user/company authority,
-internal URLs, physical roots/paths, raw query rows, raw Evidence and tool
-transcripts. A response whose `workflow` differs from the selected workflow, or
-which contains a citation kind from another workflow, fails closed.
+## Source and knowledge lifecycle
 
-The Owl template renders answer, limitations and every citation field with
-escaped text directives. It contains no `t-raw`, `innerHTML`, dynamic links or
-HTML/Markdown renderer. Record values, menu labels, field labels and document
-titles therefore remain untrusted text.
+Source and knowledge are installation-level persistent indexes, not per-model or
+per-reasoning-model state. Install/upgrade hooks ask the local Assistant Service to build
+or refresh them. Manual maintenance operations remain available for diagnostics and
+reindexing.
 
-## Diagnostics
+An isolated unreadable or unparsable source file no longer makes the whole useful source
+index unavailable. Valid files are persisted and the scan reports `partial_scan`; stale
+rows are only deleted after a complete traversal. Global safety limits/timeouts still
+fail the scan.
 
-`/v1/admin/status` exposes sanitized `workflow_capabilities` for `query`,
-`navigation`, `knowledge` and `how_to`. These states describe whether their
-runtime dependencies are present and note that user-specific validation occurs
-per turn.
+## Security invariants retained
 
-They do not change global readiness. `FULLY_READY` continues to require the
-Assistant DB/migrations, Codex, source, logs and a valid scan as established by
-the Source of Truth and earlier milestones.
-
-## Hardening evidence
-
-The M5-08 test set covers:
-
-- explicit routing and rejection before authority creation;
-- cross-workflow response/citation confusion;
-- exact disjoint registries and absence of M6 tools;
-- ACL denial before HOW_TO reasoning;
-- manipulated QUERY schemas/arguments and stale knowledge references;
-- unknown/duplicate tool calls, event floods, timeouts, interruption and
-  runtime cleanup inherited from the M4 ToolExecutor/App Server hardening;
-- prompt injection and canary redaction in records, metadata, source and
-  documents;
-- HTML/JavaScript payloads rendered as text;
-- request/response/tool/evidence budgets;
-- browser network restricted to authenticated Odoo RPC.
-
-M5 remains read-only.
+- effective identity/company context is derived in Odoo server-side;
+- live business records are read through Odoo ORM under ACL/record rules;
+- writes remain proposal -> preview -> explicit approval -> commit -> verification;
+- no model output can manufacture approval or write authority;
+- source/document contents remain untrusted data;
+- request, response, tool and evidence budgets stay server-enforced.

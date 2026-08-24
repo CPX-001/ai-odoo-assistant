@@ -1,0 +1,90 @@
+"""Runtime facade for persistent chat history in the Assistant PostgreSQL database."""
+
+from __future__ import annotations
+
+import asyncio
+
+from sqlalchemy.exc import SQLAlchemyError
+
+from odoo_ai.contracts.chat import (
+    ChatAppendRequest,
+    ChatAppendResponse,
+    ChatHistoryRequest,
+    ChatHistoryResponse,
+)
+from odoo_ai.storage import (
+    DatabaseConfigurationError,
+    DatabaseSettings,
+    create_database_engine,
+    create_session_factory,
+    session_scope,
+)
+from odoo_ai.storage.chat_repository import (
+    ChatStoreError,
+    append_chat_exchange,
+    load_chat_history,
+)
+
+
+class RuntimeChatError(RuntimeError):
+    def __init__(self, code: str, status_code: int = 503) -> None:
+        super().__init__(code)
+        self.code = code
+        self.status_code = status_code
+
+
+class RuntimeChatHistoryService:
+    def __init__(self, *, database_settings: DatabaseSettings) -> None:
+        self._database_settings = database_settings
+
+    @classmethod
+    def from_env(cls) -> RuntimeChatHistoryService:
+        return cls(database_settings=DatabaseSettings.from_env())
+
+    async def history(self, request: ChatHistoryRequest) -> ChatHistoryResponse:
+        return await asyncio.to_thread(self._history_sync, request)
+
+    async def append(self, request: ChatAppendRequest) -> ChatAppendResponse:
+        return await asyncio.to_thread(self._append_sync, request)
+
+    def _history_sync(self, request: ChatHistoryRequest) -> ChatHistoryResponse:
+        engine = None
+        try:
+            engine = create_database_engine(self._database_settings)
+            factory = create_session_factory(engine)
+            with session_scope(factory) as session:
+                return load_chat_history(
+                    session,
+                    actor=request.actor,
+                    conversation_id=request.conversation_id,
+                    max_messages=request.max_messages,
+                )
+        except ChatStoreError as error:
+            raise RuntimeChatError(error.code, 404) from None
+        except (DatabaseConfigurationError, SQLAlchemyError, OSError, ValueError):
+            raise RuntimeChatError("chat_store_unavailable", 503) from None
+        finally:
+            if engine is not None:
+                engine.dispose()
+
+    def _append_sync(self, request: ChatAppendRequest) -> ChatAppendResponse:
+        engine = None
+        try:
+            engine = create_database_engine(self._database_settings)
+            factory = create_session_factory(engine)
+            with session_scope(factory) as session:
+                return append_chat_exchange(
+                    session,
+                    actor=request.actor,
+                    conversation_id=request.conversation_id,
+                    user_message=request.user_message,
+                    assistant_message=request.assistant_message,
+                    internal_workflow=request.internal_workflow,
+                )
+        except ChatStoreError as error:
+            raise RuntimeChatError(error.code, 404) from None
+        except (DatabaseConfigurationError, SQLAlchemyError, OSError, ValueError):
+            raise RuntimeChatError("chat_store_unavailable", 503) from None
+        finally:
+            if engine is not None:
+                engine.dispose()

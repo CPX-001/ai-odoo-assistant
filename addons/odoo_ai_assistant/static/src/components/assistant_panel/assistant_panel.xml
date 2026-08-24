@@ -12,237 +12,172 @@
 
     <t t-name="odoo_ai_assistant.AssistantPanel">
         <aside t-if="state.isOpen"
-            class="o_ai_assistant_panel position-fixed end-0 bottom-0 bg-body border-start shadow d-flex flex-column"
+            class="o_ai_assistant_panel position-fixed end-0 bottom-0 border-start shadow d-flex flex-column"
             aria-label="AI Assistant">
-            <header class="d-flex align-items-center justify-content-between border-bottom px-3 py-2">
-                <div>
-                    <h2 class="h5 mb-0">AI Assistant</h2>
-                    <small class="text-muted">Asistente con evidencia y aprobación explícita</small>
+            <header class="o_ai_assistant_header border-bottom px-3 py-2">
+                <div class="d-flex align-items-center justify-content-between gap-2">
+                    <div class="min-w-0">
+                        <h2 class="h5 mb-0">AI Assistant</h2>
+                        <small class="text-muted text-truncate d-block" t-esc="contextLabel"/>
+                    </div>
+                    <div class="d-flex gap-1">
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                            title="Nuevo chat" aria-label="Nuevo chat" t-on-click="newConversation">
+                            <i class="fa fa-plus" aria-hidden="true"/>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-link text-body"
+                            aria-label="Cerrar AI Assistant" title="Cerrar" t-on-click="closePanel">
+                            <i class="fa fa-times" aria-hidden="true"/>
+                        </button>
+                    </div>
                 </div>
-                <button type="button" class="btn btn-link text-body"
-                    aria-label="Cerrar AI Assistant" title="Cerrar" t-on-click="closePanel">
-                    <i class="fa fa-times" aria-hidden="true"/>
-                </button>
+                <div class="mt-2">
+                    <select class="form-select form-select-sm" aria-label="Historial de chats"
+                        t-att-disabled="state.loading or state.historyLoading or state.decisionLoading"
+                        t-on-change="selectConversation">
+                        <option value="" t-att-selected="!state.conversationId">Nuevo chat</option>
+                        <option t-foreach="state.conversations" t-as="conversation"
+                            t-key="conversation.conversation_id"
+                            t-att-value="conversation.conversation_id"
+                            t-att-selected="conversation.conversation_id === state.conversationId"
+                            t-esc="conversation.title"/>
+                    </select>
+                </div>
             </header>
 
-            <div class="flex-grow-1 overflow-auto p-3">
-                <section class="alert alert-light border" aria-live="polite">
-                    <div class="small text-uppercase text-muted fw-bold mb-1">
-                        Contexto detectado
-                    </div>
-                    <div class="font-monospace text-break" t-esc="contextLabel"/>
-                </section>
+            <div class="o_ai_assistant_messages flex-grow-1 overflow-auto p-3" aria-live="polite">
+                <div t-if="state.historyLoading and !state.messages.length"
+                    class="text-center text-muted py-5">
+                    <i class="fa fa-spinner fa-spin me-1" aria-hidden="true"/> Cargando historial…
+                </div>
 
-                <div t-if="state.errorCode" class="alert alert-danger" role="alert">
+                <div t-if="!state.historyLoading and !state.messages.length"
+                    class="o_ai_assistant_empty text-center px-3 py-5">
+                    <i class="fa fa-magic fa-2x mb-3 text-muted" aria-hidden="true"/>
+                    <h3 class="h6">¿Qué necesitas hacer?</h3>
+                    <p class="small text-muted mb-0">
+                        Pregunta por datos de Odoo, configuración, código, módulos o cómo realizar una tarea.
+                        El Assistant elegirá las herramientas necesarias.
+                    </p>
+                </div>
+
+                <div class="d-flex flex-column gap-3">
+                    <div t-foreach="state.messages" t-as="message" t-key="message.message_id"
+                        t-att-class="'o_ai_assistant_message ' + (message.role === 'user' ? 'o_ai_assistant_message_user' : 'o_ai_assistant_message_assistant')">
+                        <div class="small text-muted mb-1">
+                            <t t-if="message.role === 'user'">Tú</t>
+                            <t t-else="">Assistant</t>
+                        </div>
+                        <div class="o_ai_assistant_message_content text-break" t-esc="message.content"/>
+                    </div>
+                </div>
+
+                <div t-if="state.loading" class="o_ai_assistant_message o_ai_assistant_message_assistant mt-3">
+                    <div class="small text-muted mb-1">Assistant</div>
+                    <div><i class="fa fa-spinner fa-spin me-1" aria-hidden="true"/> Pensando…</div>
+                </div>
+
+                <div t-if="state.errorCode" class="alert alert-danger mt-3 mb-0" role="alert">
                     <t t-esc="errorMessage"/>
                 </div>
 
-                <section t-if="state.result" class="o_ai_assistant_result" aria-live="polite">
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                        <h3 class="h6 mb-0"><t t-esc="state.result.workflow"/></h3>
+                <section t-if="state.result and state.result.proposal"
+                    class="o_ai_assistant_action_preview border rounded p-3 mt-3">
+                    <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                        <h3 class="h6 mb-0">Preview del cambio</h3>
                         <span class="badge text-bg-light border" t-esc="confidenceLabel"/>
                     </div>
-                    <p class="o_ai_assistant_answer text-break" t-esc="state.result.answer"/>
-
-                    <section t-if="state.result.workflow === 'ACTION' and state.result.proposal"
-                        class="o_ai_assistant_action_preview border rounded p-3 mt-3">
-                        <h4 class="small text-uppercase text-muted fw-bold">Preview pendiente</h4>
-                        <div class="small mb-2">
-                            <span class="font-monospace"
-                                t-esc="state.result.proposal.target.model"/>
-                            <t t-if="state.result.proposal.action_kind !== 'record_create'">
-                                <span> #</span>
-                                <span t-esc="state.result.proposal.target.record_id"/>
-                            </t>
-                            <span t-else="" class="ms-1 badge text-bg-light">nuevo registro</span>
-                        </div>
-                        <div t-if="state.result.proposal.action_kind === 'record_create'"
-                            class="d-flex flex-column gap-2">
-                            <div t-foreach="state.result.proposal.values" t-as="value"
-                                t-key="value.field" class="border rounded p-2">
-                                <div class="fw-bold text-break"
-                                    t-esc="value.label || value.field"/>
-                                <div class="small text-break">
-                                    <span class="text-muted">Valor solicitado: </span>
-                                    <span t-esc="formatActionValue(value.value)"/>
-                                </div>
-                            </div>
-                        </div>
-                        <div t-elif="state.result.proposal.action_kind === 'business_action'"
-                            class="border rounded p-2">
-                            <div class="fw-bold text-break">
-                                Confirmar pedido <t t-esc="state.result.proposal.display_name"/>
-                            </div>
-                            <div class="small text-break">
-                                <span class="text-muted">Estado actual: </span>
-                                <span t-esc="state.result.proposal.state_before"/>
-                                <i class="fa fa-arrow-right mx-2" aria-hidden="true"/>
-                                <span>sale/done</span>
-                            </div>
-                            <div class="small font-monospace text-muted mt-1"
-                                t-esc="state.result.proposal.action_id"/>
-                        </div>
-                        <div t-else="" class="d-flex flex-column gap-2">
-                            <div t-foreach="state.result.proposal.changes" t-as="change"
-                                t-key="change.field" class="border rounded p-2">
-                                <div class="fw-bold text-break"
-                                    t-esc="change.label || change.field"/>
-                                <div class="small text-break">
-                                    <span class="text-muted"
-                                        t-esc="formatActionValue(change.before)"/>
-                                    <i class="fa fa-arrow-right mx-2" aria-hidden="true"/>
-                                    <span t-esc="formatActionValue(change.after)"/>
-                                </div>
-                            </div>
-                        </div>
-                        <ul t-if="state.result.proposal.warnings.length" class="small mt-2 mb-0">
-                            <li t-foreach="state.result.proposal.warnings" t-as="warning"
-                                t-key="warning_index" t-esc="warning"/>
-                        </ul>
-                        <div class="small text-muted mt-2">
-                            Caduca: <t t-esc="state.result.proposal.expires_at"/>
-                        </div>
-                        <div t-if="!state.actionReceipt" class="d-flex gap-2 mt-3">
-                            <button type="button" class="btn btn-primary flex-grow-1"
-                                t-att-disabled="state.decisionLoading"
-                                t-on-click="approveAction">
-                                <i t-if="state.decisionLoading"
-                                    class="fa fa-spinner fa-spin me-1" aria-hidden="true"/>
-                                Aprobar y verificar
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary"
-                                t-att-disabled="state.decisionLoading"
-                                t-on-click="rejectAction">Cancelar</button>
-                        </div>
-                    </section>
-
-                    <div t-if="state.actionReceipt"
-                        t-att-class="'alert mt-3 ' + actionDecisionClass" role="status">
-                        <t t-esc="actionDecisionMessage"/>
+                    <div class="small mb-2">
+                        <span class="font-monospace" t-esc="state.result.proposal.target.model"/>
+                        <t t-if="state.result.proposal.action_kind !== 'record_create'">
+                            <span> #</span><span t-esc="state.result.proposal.target.record_id"/>
+                        </t>
+                        <span t-else="" class="ms-1 badge text-bg-light">nuevo registro</span>
                     </div>
 
-                    <section t-if="state.result.limitations.length" class="mt-3">
-                        <h4 class="small text-uppercase text-muted fw-bold">Limitaciones</h4>
-                        <ul class="small mb-0">
-                            <li t-foreach="state.result.limitations" t-as="limitation"
-                                t-key="limitation_index" t-esc="limitation"/>
-                        </ul>
-                    </section>
-
-                    <section t-if="state.result.citations and state.result.citations.length"
-                        class="mt-3">
-                        <h4 class="small text-uppercase text-muted fw-bold">Evidencia</h4>
-                        <div class="d-flex flex-column gap-2">
-                            <details t-foreach="state.result.citations" t-as="citation"
-                                t-key="citation.evidence_id"
-                                class="o_ai_assistant_citation border rounded p-2">
-                                <summary class="small fw-bold">
-                                    <t t-if="citation.kind === 'record'">
-                                        Registro: <t t-esc="citation.display_name || citation.model"/>
-                                    </t>
-                                    <t t-elif="citation.kind === 'source'">
-                                        Source: <t t-esc="citation.module"/>
-                                    </t>
-                                    <t t-elif="citation.kind === 'query'">
-                                        Consulta: <t t-esc="citation.model"/>
-                                    </t>
-                                    <t t-elif="citation.kind === 'navigation'">
-                                        Menú: <t t-esc="citation.path.join(' > ')"/>
-                                    </t>
-                                    <t t-elif="citation.kind === 'schema'">
-                                        Schema: <t t-esc="citation.model"/>
-                                    </t>
-                                    <t t-elif="citation.kind === 'document'">
-                                        Documento: <t t-esc="citation.title"/>
-                                    </t>
-                                </summary>
-
-                                <div t-if="citation.kind === 'record'"
-                                    class="small mt-2 text-break">
-                                    <span class="font-monospace" t-esc="citation.model"/>
-                                    <span> #</span><span t-esc="citation.id"/>
-                                </div>
-                                <div t-elif="citation.kind === 'source'"
-                                    class="small mt-2 text-break">
-                                    <div class="font-monospace" t-esc="citation.logical_path"/>
-                                    <div>
-                                        Líneas <t t-esc="citation.start_line"/>-<t t-esc="citation.end_line"/>
-                                    </div>
-                                    <div class="text-muted font-monospace"
-                                        t-esc="citation.fingerprint"/>
-                                </div>
-                                <div t-elif="citation.kind === 'query'"
-                                    class="small mt-2 text-break">
-                                    <div>
-                                        <t t-esc="citation.operation"/>:
-                                        <t t-esc="citation.returned_count"/> resultado(s)
-                                    </div>
-                                    <div t-if="citation.empty" class="text-muted">
-                                        Resultado vacío comprobado
-                                    </div>
-                                    <div t-if="citation.truncated" class="text-warning">
-                                        Resultado limitado
-                                    </div>
-                                </div>
-                                <div t-elif="citation.kind === 'navigation'"
-                                    class="small mt-2 text-break">
-                                    <div t-esc="citation.path.join(' > ')"/>
-                                    <div class="text-muted"
-                                        t-esc="citation.view_modes.join(', ')"/>
-                                </div>
-                                <div t-elif="citation.kind === 'schema'"
-                                    class="small mt-2 text-break">
-                                    <div t-foreach="citation.fields" t-as="field"
-                                        t-key="field.name">
-                                        <span class="font-monospace" t-esc="field.name"/>
-                                        <span> - </span>
-                                        <span t-esc="field.label || field.field_type"/>
-                                    </div>
-                                </div>
-                                <div t-elif="citation.kind === 'document'"
-                                    class="small mt-2 text-break">
-                                    <div>
-                                        <t t-esc="citation.document_id"/>
-                                        <span> · líneas </span>
-                                        <t t-esc="citation.start_line"/>-<t t-esc="citation.end_line"/>
-                                    </div>
-                                    <div class="text-muted font-monospace"
-                                        t-esc="citation.fingerprint"/>
-                                </div>
-                            </details>
+                    <div t-if="state.result.proposal.action_kind === 'record_create'"
+                        class="d-flex flex-column gap-2">
+                        <div t-foreach="state.result.proposal.values" t-as="value"
+                            t-key="value.field" class="border rounded p-2">
+                            <div class="fw-bold text-break" t-esc="value.label || value.field"/>
+                            <div class="small text-break">
+                                <span class="text-muted">Valor: </span>
+                                <span t-esc="formatActionValue(value.value)"/>
+                            </div>
                         </div>
-                    </section>
+                    </div>
+                    <div t-elif="state.result.proposal.action_kind === 'business_action'"
+                        class="border rounded p-2">
+                        <div class="fw-bold text-break">
+                            Confirmar pedido <t t-esc="state.result.proposal.display_name"/>
+                        </div>
+                        <div class="small text-break">
+                            <span class="text-muted">Estado actual: </span>
+                            <span t-esc="state.result.proposal.state_before"/>
+                        </div>
+                    </div>
+                    <div t-else="" class="d-flex flex-column gap-2">
+                        <div t-foreach="state.result.proposal.changes" t-as="change"
+                            t-key="change.field" class="border rounded p-2">
+                            <div class="fw-bold text-break" t-esc="change.label || change.field"/>
+                            <div class="small text-break">
+                                <span class="text-muted" t-esc="formatActionValue(change.before)"/>
+                                <i class="fa fa-arrow-right mx-2" aria-hidden="true"/>
+                                <span t-esc="formatActionValue(change.after)"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <ul t-if="state.result.proposal.warnings.length" class="small mt-2 mb-0">
+                        <li t-foreach="state.result.proposal.warnings" t-as="warning"
+                            t-key="warning_index" t-esc="warning"/>
+                    </ul>
+                    <div class="small text-muted mt-2">
+                        Caduca: <t t-esc="state.result.proposal.expires_at"/>
+                    </div>
+                    <div t-if="!state.actionReceipt" class="d-flex gap-2 mt-3">
+                        <button type="button" class="btn btn-primary flex-grow-1"
+                            t-att-disabled="state.decisionLoading" t-on-click="approveAction">
+                            <i t-if="state.decisionLoading" class="fa fa-spinner fa-spin me-1"
+                                aria-hidden="true"/> Aprobar y verificar
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary"
+                            t-att-disabled="state.decisionLoading" t-on-click="rejectAction">
+                            Cancelar
+                        </button>
+                    </div>
                 </section>
+
+                <div t-if="state.actionReceipt" t-att-class="'alert mt-3 ' + actionDecisionClass"
+                    role="status" t-esc="actionDecisionMessage"/>
+
+                <details t-if="state.result and state.result.limitations.length" class="mt-3 small">
+                    <summary class="text-muted">Limitaciones</summary>
+                    <ul class="mb-0 mt-2">
+                        <li t-foreach="state.result.limitations" t-as="limitation"
+                            t-key="limitation_index" t-esc="limitation"/>
+                    </ul>
+                </details>
             </div>
 
-            <form class="border-top p-3" t-on-submit.prevent="submit">
-                <label class="form-label fw-bold"
-                    for="o_ai_assistant_workflow">Flujo</label>
-                <select id="o_ai_assistant_workflow" class="form-select mb-1"
-                    t-model="state.workflow"
-                    t-att-disabled="state.loading or state.decisionLoading">
-                    <option value="EXPLAIN">Explicar</option>
-                    <option value="QUERY">Consultar</option>
-                    <option value="HOW_TO">Cómo hacerlo</option>
-                    <option value="ACTION">Acción con aprobación</option>
-                </select>
-                <p class="small text-muted mb-2" t-esc="workflowDescription"/>
-                <label class="form-label fw-bold"
-                    for="o_ai_assistant_question">Pregunta</label>
+            <form class="o_ai_assistant_composer border-top p-3" t-on-submit.prevent="submit">
                 <textarea id="o_ai_assistant_question" class="form-control mb-2"
-                    rows="3" maxlength="4000" t-att-placeholder="questionPlaceholder"
-                    t-model="form.question"
+                    rows="3" maxlength="4000"
+                    placeholder="Pregunta o pide una operación en Odoo…"
+                    t-att-value="state.draft"
+                    t-on-input="onDraftInput"
                     t-att-disabled="state.loading or state.decisionLoading"/>
-                <button type="submit" class="btn btn-primary w-100"
-                    t-att-disabled="state.loading or state.decisionLoading or !form.question.trim()">
-                    <i t-if="state.loading" class="fa fa-spinner fa-spin me-1"
-                        aria-hidden="true"/>
-                    <t t-if="state.loading">Analizando...</t>
-                    <t t-else="">Enviar</t>
-                </button>
-                <p class="small text-muted mb-0 mt-2">
-                    Odoo valida identidad y permisos; el flujo sólo recibe sus tools mínimas.
-                </p>
+                <div class="d-flex align-items-center gap-2">
+                    <small class="text-muted flex-grow-1">
+                        El contexto de pantalla es una pista; no limita lo que puedes preguntar.
+                    </small>
+                    <button type="submit" class="btn btn-primary"
+                        t-att-disabled="state.loading or state.decisionLoading or !state.draft.trim()">
+                        <i t-if="state.loading" class="fa fa-spinner fa-spin me-1" aria-hidden="true"/>
+                        <i t-else="" class="fa fa-paper-plane" aria-hidden="true"/>
+                        <span class="ms-1">Enviar</span>
+                    </button>
+                </div>
             </form>
         </aside>
     </t>

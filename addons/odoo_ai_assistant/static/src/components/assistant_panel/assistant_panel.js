@@ -26,7 +26,6 @@ export class AssistantPanel extends Component {
     setup() {
         this.panel = useService("odoo_ai_assistant_panel");
         this.state = useState(this.panel.state);
-        this.form = useState({ question: "" });
         useBus(this.env.bus, "ACTION_MANAGER:UI-UPDATED", () => {
             if (this.state.isOpen) {
                 this.panel.refreshContext();
@@ -37,7 +36,7 @@ export class AssistantPanel extends Component {
     get contextLabel() {
         const context = this.state.context;
         if (!context?.model) {
-            return _t("No hay un modelo activo en esta pantalla.");
+            return _t("Contexto general de Odoo");
         }
         if (!context.res_id) {
             return context.model;
@@ -47,43 +46,27 @@ export class AssistantPanel extends Component {
 
     get errorMessage() {
         const messages = {
-            access_denied: _t(
-                "Odoo no permitió releer este registro con tus permisos actuales."
-            ),
+            access_denied: _t("No tienes permisos para acceder a los datos necesarios."),
             action_budget_exceeded: _t("La acción superó los límites seguros del turno."),
             action_rejected: _t("La acción solicitada no está permitida."),
-            approval_binding_mismatch: _t(
-                "La propuesta pertenece a otro usuario, compañía o base de datos."
-            ),
-            approval_expired: _t(
-                "La preview ha caducado. Genera una nueva antes de aprobar."
-            ),
+            approval_binding_mismatch: _t("La propuesta pertenece a otro contexto de usuario."),
+            approval_expired: _t("La preview ha caducado. Pide de nuevo el cambio."),
             approval_not_found: _t("No se encontró una aprobación ejecutable."),
-            authentication_failed: _t(
-                "La autenticación interna del Assistant Service ha fallado."
-            ),
-            engine_timeout: _t(
-                "El motor de razonamiento agotó el tiempo disponible. Inténtalo de nuevo."
-            ),
-            engine_unavailable: _t("El motor de razonamiento no está disponible."),
-            evidence_unavailable: _t(
-                "No está disponible la evidencia de source necesaria para explicar este caso."
-            ),
-            invalid_context: _t(
-                "Abre un registro guardado para poder explicar su contexto."
-            ),
-            invalid_response: _t("El Assistant Service devolvió una respuesta no válida."),
-            invalid_workflow: _t("Elige uno de los flujos de lectura disponibles."),
+            authentication_failed: _t("La autenticación interna del Assistant ha fallado."),
+            chat_store_unavailable: _t("El historial no está disponible temporalmente."),
+            engine_timeout: _t("Codex agotó el tiempo disponible. Inténtalo de nuevo."),
+            engine_unavailable: _t("Codex no está disponible en este momento."),
+            evidence_unavailable: _t("No está disponible la evidencia necesaria."),
+            invalid_context: _t("No se pudo interpretar la petición o el contexto actual."),
+            invalid_response: _t("El Assistant devolvió una respuesta no válida."),
             query_budget_exceeded: _t("La consulta superó los límites seguros del turno."),
-            query_rejected: _t(
-                "La consulta solicitada no está permitida por el esquema efectivo."
-            ),
+            query_rejected: _t("La consulta no está permitida por el esquema efectivo."),
             proposal_already_decided: _t("Esta propuesta ya fue decidida."),
             proposal_not_found: _t("No se encontró la propuesta."),
-            record_context_required: _t("Abre un registro guardado para usar ACTION."),
+            record_context_required: _t("Esta acción necesita un registro abierto."),
             service_unavailable: _t("El Assistant Service no está disponible."),
         };
-        return messages[this.state.errorCode] || "";
+        return messages[this.state.errorCode] || _t("No se pudo completar la petición.");
     }
 
     get confidenceLabel() {
@@ -95,34 +78,51 @@ export class AssistantPanel extends Component {
         return labels[this.state.result?.confidence] || "";
     }
 
-    get workflowDescription() {
-        const descriptions = {
-            EXPLAIN: _t("Explica el registro abierto con evidencia de runtime y source."),
-            QUERY: _t(
-                "Consulta el modelo actual mediante ORM acotado y permisos efectivos."
-            ),
-            HOW_TO: _t(
-                "Construye una guía con menús, schema y documentación comprobados."
-            ),
-            ACTION: _t(
-                "Prepara un cambio acotado; sólo se escribe tras tu aprobación explícita."
-            ),
+    get actionDecisionMessage() {
+        const messages = {
+            verified: _t("Cambio verificado mediante relectura de Odoo."),
+            rejected: _t("Propuesta cancelada. No se realizó ningún cambio."),
+            stale: _t("El registro cambió. Pide una nueva preview."),
+            failed: _t("El cambio falló y no se presenta como completado."),
+            execution_unknown: _t("El resultado es desconocido y no se reintentará solo."),
+            committed_unverified: _t("El commit se realizó, pero no pudo verificarse."),
         };
-        return descriptions[this.state.workflow] || "";
+        return messages[this.state.actionReceipt?.state] || "";
     }
 
-    get questionPlaceholder() {
-        const placeholders = {
-            EXPLAIN: _t("¿Por qué ocurre esto en el registro abierto?"),
-            QUERY: _t("¿Cuántos registros abiertos puedo ver?"),
-            HOW_TO: _t("¿Cómo realizo esta tarea en esta instalación?"),
-            ACTION: _t("Cambia el campo indicado al valor solicitado"),
-        };
-        return placeholders[this.state.workflow] || _t("Escribe una pregunta");
+    get actionDecisionClass() {
+        const value = this.state.actionReceipt?.state;
+        if (value === "verified") {
+            return "alert-success";
+        }
+        if (value === "rejected") {
+            return "alert-secondary";
+        }
+        if (["stale", "execution_unknown", "committed_unverified"].includes(value)) {
+            return "alert-warning";
+        }
+        return "alert-danger";
     }
 
     closePanel() {
         this.panel.close();
+    }
+
+    newConversation() {
+        this.panel.newConversation();
+    }
+
+    async selectConversation(event) {
+        const value = event.target.value;
+        if (value) {
+            await this.panel.selectConversation(value);
+        } else {
+            this.panel.newConversation();
+        }
+    }
+
+    onDraftInput(event) {
+        this.panel.setDraft(event.target.value);
     }
 
     formatActionValue(value) {
@@ -138,40 +138,6 @@ export class AssistantPanel extends Component {
         return String(value.value);
     }
 
-    get actionDecisionMessage() {
-        const messages = {
-            verified: _t("Cambio verificado mediante relectura de Odoo."),
-            rejected: _t("Propuesta cancelada. No se realizó ningún cambio."),
-            stale: _t("El registro cambió. Genera una nueva preview; no se forzó el cambio."),
-            failed: _t("El cambio falló y no se presenta como completado."),
-            execution_unknown: _t(
-                "El resultado de ejecución es desconocido. No se reintentará automáticamente."
-            ),
-            committed_unverified: _t(
-                "Odoo confirmó el commit, pero la relectura no pudo verificar el resultado."
-            ),
-        };
-        return messages[this.state.actionReceipt?.state] || "";
-    }
-
-    get actionDecisionClass() {
-        const actionState = this.state.actionReceipt?.state;
-        if (actionState === "verified") {
-            return "alert-success";
-        }
-        if (actionState === "rejected") {
-            return "alert-secondary";
-        }
-        if (
-            ["stale", "execution_unknown", "committed_unverified"].includes(
-                actionState
-            )
-        ) {
-            return "alert-warning";
-        }
-        return "alert-danger";
-    }
-
     async approveAction() {
         await this.panel.decide("approve");
     }
@@ -181,7 +147,7 @@ export class AssistantPanel extends Component {
     }
 
     async submit() {
-        const question = this.form.question.trim();
+        const question = this.state.draft.trim();
         if (!question || this.state.loading || this.state.decisionLoading) {
             return;
         }
