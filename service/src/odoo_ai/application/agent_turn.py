@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -371,8 +372,16 @@ def _reconcile_previews(
             if trace.tool_name != _BATCH_PREVIEW_TOOL:
                 raise AgentTurnError("agent_preview_report_corrupt", 502)
             try:
-                handle = BatchProposalHandle.model_validate(trace.arguments)
-            except ValidationError:
+                handle = BatchProposalHandle.model_validate_json(
+                    json.dumps(
+                        trace.arguments,
+                        allow_nan=False,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    )
+                )
+            except (ValidationError, TypeError, ValueError):
                 raise AgentTurnError("agent_preview_report_corrupt", 502) from None
             if (
                 handle.turn_id != turn_id
