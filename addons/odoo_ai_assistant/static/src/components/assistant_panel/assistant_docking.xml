@@ -2,14 +2,6 @@
 <templates xml:space="preserve">
     <t t-name="odoo_ai_assistant.AssistantPanelDocking"
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
-        <xpath expr="//aside" position="before">
-            <div t-if="dock and dock.previewTarget" t-portal="'body'"
-                t-att-class="'o_ai_assistant_dock_preview o_ai_assistant_dock_preview_' + dock.previewTarget"
-                t-att-style="dockPreviewStyle" aria-hidden="true">
-                <div class="o_ai_assistant_dock_preview_inner"/>
-            </div>
-        </xpath>
-
         <xpath expr="//button[@t-on-click='toggleMinimized']" position="before">
             <button t-if="dock and dock.docked" type="button"
                 class="btn btn-sm btn-link text-body o_ai_assistant_undock_button"
@@ -20,6 +12,12 @@
         </xpath>
 
         <xpath expr="//aside" position="inside">
+            <div t-if="dock and dock.previewTarget" t-portal="'body'"
+                t-att-class="'o_ai_assistant_dock_preview o_ai_assistant_dock_preview_' + dock.previewTarget"
+                t-att-style="dockPreviewStyle" aria-hidden="true">
+                <div class="o_ai_assistant_dock_preview_inner"/>
+            </div>
+
             <t t-if="!ui.isMinimized and dock and !dock.docked">
                 <div t-foreach="['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']"
                     t-as="resizeDirection" t-key="resizeDirection"
