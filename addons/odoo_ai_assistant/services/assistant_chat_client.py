@@ -30,11 +30,23 @@ class AssistantChatServiceClient(AssistantServiceClient):
     def chat_append(self, payload: dict[str, object]) -> dict[str, object]:
         return self._chat_post("/v1/chat/append", payload)
 
+    def codex_models(self) -> dict[str, object]:
+        secret = self._read_shared_secret()
+        return self._get_json(
+            "/v1/chat/models",
+            headers={SHARED_SECRET_HEADER: secret},
+        )
+
     def _chat_post(self, path: str, payload: dict[str, object]) -> dict[str, object]:
         secret = self._read_shared_secret()
+        wire_payload = (
+            self._with_reasoning_model(payload)
+            if path == "/v1/turns/general"
+            else payload
+        )
         try:
             body = json.dumps(
-                payload,
+                wire_payload,
                 allow_nan=False,
                 ensure_ascii=False,
                 separators=(",", ":"),
