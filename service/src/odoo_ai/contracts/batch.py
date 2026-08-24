@@ -149,10 +149,10 @@ class BatchItemResult(BaseModel):
     @model_validator(mode="after")
     def validate_outcome(self) -> Self:
         if self.state is BatchItemState.APPLIED:
-            if self.error_code is not None:
-                raise ValueError("applied batch item cannot contain an error")
-        elif self.error_code is None:
-            raise ValueError("failed batch item requires an error code")
+            if self.error_code is not None or self.record_id is None:
+                raise ValueError("applied batch item requires a record id and no error")
+        elif self.error_code is None or self.record_id is not None:
+            raise ValueError("failed batch item requires an error and no record id")
         return self
 
 
