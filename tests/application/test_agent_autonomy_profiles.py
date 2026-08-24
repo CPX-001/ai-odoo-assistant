@@ -1,4 +1,8 @@
+import re
+
+import pytest
 from odoo_ai.application.agent_policy import evaluate_agent_candidate
+from odoo_ai.application.agent_turn import _autonomy_capability
 from odoo_ai.contracts import (
     AgentCandidateOutput,
     AgentCandidateStep,
@@ -9,6 +13,25 @@ from odoo_ai.contracts import (
     HostToolPolicySpec,
     RiskLevel,
 )
+
+
+@pytest.mark.parametrize(
+    ("mode", "risk"),
+    [
+        (ConfirmationMode.ALWAYS_CONFIRM, RiskLevel.LOW),
+        (ConfirmationMode.RISK_BASED, RiskLevel.MODERATE),
+        (ConfirmationMode.PROTECTED_ONLY, RiskLevel.HIGH),
+        (ConfirmationMode.PROTECTED_ONLY, RiskLevel.PROTECTED),
+    ],
+)
+def test_autonomy_profile_is_a_valid_context_capability(
+    mode: ConfirmationMode,
+    risk: RiskLevel,
+) -> None:
+    capability = _autonomy_capability(mode, risk)
+
+    assert len(capability) <= 128
+    assert re.fullmatch(r"[A-Za-z0-9_.:-]+", capability)
 
 
 def _layer(mode=ConfirmationMode.PROTECTED_ONLY, risk=RiskLevel.PROTECTED):

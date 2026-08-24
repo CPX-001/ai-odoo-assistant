@@ -120,21 +120,9 @@ class AgentTurnService:
             capabilities = list(instance.capabilities)
             capabilities.extend(
                 [
-                    (
-                        "Host policy: approval and risk confirmation are owned by the host. "
-                        "Never ask the user to confirm merely because an operation is risky, "
-                        "destructive, irreversible, or broad."
-                    ),
-                    (
-                        "Host scope rule: explicit words such as all, every, todos or todas in "
-                        "the current Odoo model are a resolved scope, not a confirmation request. "
-                        "Do not split that scope by lifecycle state unless the user asked for it."
-                    ),
-                    (
-                        "Host clarification rule: ask only when a material target or business "
-                        "value cannot be derived after available reads. Never use clarification "
-                        "as a substitute for approval."
-                    ),
+                    "host_owns_approval",
+                    "host_scope_explicit_all_resolved",
+                    "host_clarification_material_data_only",
                     _autonomy_capability(policy.confirmation_mode, policy.max_auto_risk),
                 ]
             )
@@ -252,21 +240,12 @@ class AgentTurnService:
 
 def _autonomy_capability(mode: ConfirmationMode, risk: RiskLevel) -> str:
     if mode is ConfirmationMode.ALWAYS_CONFIRM:
-        return "Host autonomy profile: Strict. The host will require approval for every write."
+        return "host_autonomy:strict"
     if mode is ConfirmationMode.PROTECTED_ONLY and risk is RiskLevel.PROTECTED:
-        return (
-            "Host autonomy profile: Full access. Do not seek conversational confirmation for "
-            "writes; Odoo permissions and registered tool boundaries remain authoritative."
-        )
+        return "host_autonomy:full_access"
     if mode is ConfirmationMode.PROTECTED_ONLY:
-        return (
-            "Host autonomy profile: Autonomous. The host may require approval only for protected "
-            "or irreversible operations."
-        )
-    return (
-        "Host autonomy profile: Balanced. The host may require approval for high or protected "
-        "risk operations."
-    )
+        return "host_autonomy:autonomous"
+    return "host_autonomy:balanced"
 
 
 async def _maybe_await_history(
