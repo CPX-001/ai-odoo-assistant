@@ -31,6 +31,7 @@ from odoo_ai.ports.agent_plans import (
 )
 
 PLAN_TTL = timedelta(minutes=10)
+RECOVERABLE_EXECUTION_ERROR = "batch_execution_outcome_unknown"
 Clock = Callable[[], datetime]
 
 
@@ -162,6 +163,34 @@ class AgentPlanService:
         plan = _transition_plan(result.outcome, result.plan)
         if plan.authorization_id is None or plan.authorization_source is None:
             raise AgentPlanError("agent_plan_authorization_missing", 503)
+        return plan
+
+    def prepare_execution_recovery(
+        self,
+        *,
+        plan_id: UUID,
+        error_code: str,
+    ) -> StoredAgentPlan:
+        if error_code != RECOVERABLE_EXECUTION_ERROR:
+            raise AgentPlanError("agent_recovery_error_invalid", 503)
+        try:
+            plan = self._store.prepare_execution_recovery(
+                plan_id=plan_id,
+                error_code=error_code,
+                occurred_at=self._now(),
+            )
+        except Exception as error:
+            code = getattr(error, "code", "agent_plan_store_unavailable")
+            raise AgentPlanError(str(code), 503) from None
+        if (
+            plan.state is not PlanState.AUTHORIZED
+            or plan.authorization_id is None
+            or plan.authorization_source is None
+            or plan.error_code != RECOVERABLE_EXECUTION_ERROR
+            or plan.completed_at is not None
+            or plan.execution_started_at is not None
+        ):
+            raise AgentPlanError("agent_plan_corrupt", 503)
         return plan
 
     def complete(
