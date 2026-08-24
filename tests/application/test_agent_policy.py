@@ -89,7 +89,6 @@ def test_hidden_layers_can_still_reduce_technical_budgets_and_synthetic_data() -
         max_auto_risk=RiskLevel.PROTECTED,
         allow_synthetic_data=True,
     )
-    permissive = _layer(RiskLevel.PROTECTED if False else ConfirmationMode.PROTECTED_ONLY)
     layers = AgentPolicyLayers(
         system_ceiling=system,
         administrator=_layer(),
