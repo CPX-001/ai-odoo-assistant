@@ -201,18 +201,18 @@ export function resizeDockSize(side, startSize, deltaX, deltaY, viewport) {
     return side === "left" || side === "right" ? geometry.width : geometry.height;
 }
 
-export function undockDistance(side, clientX, clientY, viewport) {
+export function undockDistance(side, startX, startY, clientX, clientY) {
     if (side === "left") {
-        return clientX;
+        return Math.max(0, clientX - startX);
     }
     if (side === "right") {
-        return viewport.width - clientX;
+        return Math.max(0, startX - clientX);
     }
     if (side === "top") {
-        return clientY - viewport.top;
+        return Math.max(0, clientY - startY);
     }
     if (side === "bottom") {
-        return viewport.height - clientY;
+        return Math.max(0, startY - clientY);
     }
     return 0;
 }
