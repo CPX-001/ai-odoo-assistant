@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
@@ -114,7 +114,10 @@ class MemoryBatchJobStore:
             )
             self.jobs[job_id] = updated
             return BatchJobTransitionResult(BatchJobTransitionOutcome.APPLIED, updated)
-        if job.snapshot.state is BatchJobState.EXECUTION_UNKNOWN:
+        if job.snapshot.state in {
+            BatchJobState.EXECUTING,
+            BatchJobState.EXECUTION_UNKNOWN,
+        }:
             updated = StoredBatchMutationJob(
                 snapshot=job.snapshot.model_copy(
                     update={
@@ -299,6 +302,35 @@ def test_execution_unknown_resumes_with_original_attempt_id() -> None:
     assert resumed.snapshot.state is BatchJobState.EXECUTING
     assert resumed.snapshot.attempt_id == first_attempt
     assert resumed.snapshot.attempt_id != discarded_resume_candidate
+
+
+def test_persisted_executing_job_reclaims_original_attempt_after_assistant_crash() -> None:
+    store = MemoryBatchJobStore()
+    job_id = UUID(int=9)
+    original_attempt = UUID(int=10)
+    discarded_recovery_candidate = UUID(int=11)
+    service = _service(
+        store,
+        [job_id, original_attempt, discarded_recovery_candidate],
+    )
+    handle = service.prepare(spec=_spec(), request=_request())
+    first = service.claim_execution(
+        handle.job_id,
+        actor=ACTOR,
+        expected_fingerprint=handle.job_fingerprint,
+    )
+    assert first.snapshot.state is BatchJobState.EXECUTING
+    assert first.snapshot.attempt_id == original_attempt
+
+    recovered = service.claim_execution(
+        handle.job_id,
+        actor=ACTOR,
+        expected_fingerprint=handle.job_fingerprint,
+    )
+
+    assert recovered.snapshot.state is BatchJobState.EXECUTING
+    assert recovered.snapshot.attempt_id == original_attempt
+    assert recovered.snapshot.attempt_id != discarded_recovery_candidate
 
 
 def test_partial_result_is_durable_and_compact_receipt_lists_failed_sources() -> None:
