@@ -68,6 +68,25 @@ _PREVIEW_TOOLS = frozenset(
         "odoo.preview_sale_order_build_flow",
     }
 )
+_EXECUTION_FAILURE_MESSAGES = {
+    "access_denied": "Odoo no permite esta operación con los permisos actuales.",
+    "business_rule_rejected": (
+        "Odoo rechazó la operación por una regla de negocio del modelo o por el estado "
+        "actual del registro."
+    ),
+    "invalid_action_state": "El estado actual del registro no permite esa operación.",
+    "stale_precondition": (
+        "El registro cambió después de preparar la operación; no se aplicó sobre datos "
+        "desactualizados."
+    ),
+    "verification_mismatch": (
+        "El cambio no pudo verificarse de forma fiable, así que no lo doy por completado."
+    ),
+    "verification_unavailable": (
+        "No se pudo verificar el resultado de forma fiable, así que no afirmo que haya "
+        "quedado aplicado."
+    ),
+}
 
 
 class AgentTurnError(RuntimeError):
@@ -123,6 +142,7 @@ class AgentTurnService:
                     "host_owns_approval",
                     "host_scope_explicit_all_resolved",
                     "host_clarification_material_data_only",
+                    "host_reports_commit_outcome",
                     _autonomy_capability(policy.confirmation_mode, policy.max_auto_risk),
                 ]
             )
@@ -169,6 +189,7 @@ class AgentTurnService:
                 candidate=candidate,
                 evaluated=evaluated,
             )
+            answer_markdown = candidate.answer_markdown
             if plan.state is PlanState.AUTHORIZED:
                 if self._execution_service is None:
                     raise AgentTurnError("agent_execution_unavailable", 503)
@@ -180,6 +201,7 @@ class AgentTurnService:
                 )
                 state = status.plan.state
                 view = status.plan
+                answer_markdown = _execution_answer(status)
             else:
                 state = plan.state
                 view = agent_plan_view(plan)
@@ -187,7 +209,7 @@ class AgentTurnService:
                 turn_id=request.turn_id,
                 conversation_id=request.conversation_id,
                 state=state,
-                answer_markdown=candidate.answer_markdown,
+                answer_markdown=answer_markdown,
                 confidence=candidate.confidence,
                 plan=view,
                 completed_at=self._now(),
@@ -246,6 +268,46 @@ def _autonomy_capability(mode: ConfirmationMode, risk: RiskLevel) -> str:
     if mode is ConfirmationMode.PROTECTED_ONLY:
         return "host_autonomy:autonomous"
     return "host_autonomy:balanced"
+
+
+def _execution_answer(status) -> str:
+    """Return host-owned truth after an auto-authorized write plan ran."""
+
+    plan = status.plan
+    completed = sum(step.state == "completed" for step in plan.steps)
+    failed = sum(step.state == "failed" for step in plan.steps)
+    skipped = sum(step.state == "skipped" for step in plan.steps)
+    if plan.state is PlanState.COMPLETED:
+        if completed <= 1:
+            return "**Hecho.** La operación se ejecutó y Odoo verificó el resultado."
+        return f"**Hecho.** Odoo ejecutó y verificó {completed} operaciones."
+    if plan.state is PlanState.PARTIAL:
+        parts = [f"{completed} completadas"]
+        if failed:
+            parts.append(f"{failed} fallidas")
+        if skipped:
+            parts.append(f"{skipped} omitidas")
+        return (
+            "**Completado parcialmente.** "
+            + ", ".join(parts)
+            + ". Los cambios que fallaron no se dan por aplicados."
+        )
+    if plan.state is PlanState.FAILED:
+        code = status.error_code or _first_step_error(plan.steps)
+        detail = _EXECUTION_FAILURE_MESSAGES.get(
+            code,
+            "Odoo rechazó la operación o no pudo completarla de forma verificable.",
+        )
+        return f"**No se pudo completar la operación.** {detail}"
+    return status.answer_markdown
+
+
+def _first_step_error(steps) -> str | None:
+    for step in steps:
+        receipt = step.receipt
+        if receipt is not None and receipt.error_code:
+            return receipt.error_code
+    return None
 
 
 async def _maybe_await_history(
