@@ -21,6 +21,7 @@ from odoo_ai.contracts.action import (
 
 MAX_BATCH_ITEMS: Final = 500
 MAX_BATCH_SOURCE_REF: Final = 128
+MAX_BATCH_ERROR_CODE: Final = 128
 
 
 class BatchMutationKind(StrEnum):
@@ -36,6 +37,11 @@ class BatchFailureMode(StrEnum):
 
     ATOMIC_CHUNK = "atomic_chunk"
     CONTINUE_ON_ERROR = "continue_on_error"
+
+
+class BatchItemState(StrEnum):
+    APPLIED = "applied"
+    FAILED = "failed"
 
 
 SourceRef = Annotated[str, Field(min_length=1, max_length=MAX_BATCH_SOURCE_REF)]
@@ -127,6 +133,53 @@ class BatchMutationRequest(BaseModel):
             record_ids = tuple(item.record_id for item in self.items)  # type: ignore[attr-defined]
             if len(record_ids) != len(set(record_ids)):
                 raise ValueError("batch record ids must be unique")
+        return self
+
+
+class BatchItemResult(BaseModel):
+    """One row-level result; failures never contain raw exception text."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    source_ref: SourceRef
+    state: BatchItemState
+    record_id: PositiveId | None = None
+    error_code: str | None = Field(default=None, min_length=1, max_length=MAX_BATCH_ERROR_CODE)
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> Self:
+        if self.state is BatchItemState.APPLIED:
+            if self.error_code is not None:
+                raise ValueError("applied batch item cannot contain an error")
+        elif self.error_code is None:
+            raise ValueError("failed batch item requires an error code")
+        return self
+
+
+class BatchMutationResult(BaseModel):
+    """Aggregate result preserving one deterministic outcome per source row."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    operation: BatchMutationKind
+    model: ModelName
+    total_items: int = Field(strict=True, ge=1, le=MAX_BATCH_ITEMS)
+    applied_items: int = Field(strict=True, ge=0, le=MAX_BATCH_ITEMS)
+    failed_items: int = Field(strict=True, ge=0, le=MAX_BATCH_ITEMS)
+    results: tuple[BatchItemResult, ...] = Field(min_length=1, max_length=MAX_BATCH_ITEMS)
+
+    @model_validator(mode="after")
+    def validate_counts(self) -> Self:
+        if (
+            len(self.results) != self.total_items
+            or self.applied_items + self.failed_items != self.total_items
+            or sum(item.state is BatchItemState.APPLIED for item in self.results)
+            != self.applied_items
+        ):
+            raise ValueError("batch result counts are inconsistent")
+        refs = tuple(item.source_ref for item in self.results)
+        if len(refs) != len(set(refs)):
+            raise ValueError("batch result source refs must be unique")
         return self
 
 
