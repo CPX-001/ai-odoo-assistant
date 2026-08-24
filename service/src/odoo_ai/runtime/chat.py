@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from odoo_ai.adapters.chat_routing import CodexChatRoutingInterpreter
 from odoo_ai.adapters.codex_engine import CodexAppServerEngine as BaseCodexAppServerEngine
-from odoo_ai.adapters.codex_runtime import CodexRuntimeSettings
+from odoo_ai.adapters.configured_codex import ConfiguredCodexRuntimeSettings as CodexRuntimeSettings
 from odoo_ai.adapters.source_tools import SourceToolExecutorFactory, source_tool_specs
 from odoo_ai.adapters.user_model_engine import UserSelectableCodexAppServerEngine as CodexAppServerEngine
 from odoo_ai.application.chat_routing import ChatRoutingService
