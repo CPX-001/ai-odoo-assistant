@@ -1,4 +1,4 @@
-"""Deterministic host-side policy intersection and aggregate plan risk."""
+"""Deterministic host-side policy resolution and aggregate plan risk."""
 
 from __future__ import annotations
 
@@ -22,12 +22,7 @@ from odoo_ai.contracts.agent_turn import (
     RiskLevel,
 )
 
-POLICY_REVISION = "agent-policy-v2"
-_MODE_ORDER = {
-    ConfirmationMode.ALWAYS_CONFIRM: 0,
-    ConfirmationMode.RISK_BASED: 1,
-    ConfirmationMode.PROTECTED_ONLY: 2,
-}
+POLICY_REVISION = "agent-policy-v3"
 _RISK_ORDER = {
     RiskLevel.LOW: 0,
     RiskLevel.MODERATE: 1,
@@ -58,6 +53,14 @@ class AgentProposalBinding:
 
 
 def intersect_agent_policy(layers: AgentPolicyLayers) -> EffectiveAgentPolicy:
+    """Resolve visible autonomy plus hidden host-side technical constraints.
+
+    Confirmation behaviour is intentionally controlled only by the user's explicit
+    autonomy profile. System, administrator and conversation layers may still reduce
+    technical budgets or disable synthetic data, but they must not silently make the
+    visible selector stricter than what the user chose.
+    """
+
     named_values: tuple[tuple[PolicyLayerName, AgentPolicyLayer], ...] = (
         ("system_ceiling", layers.system_ceiling),
         ("administrator", layers.administrator),
@@ -65,41 +68,38 @@ def intersect_agent_policy(layers: AgentPolicyLayers) -> EffectiveAgentPolicy:
         ("conversation", layers.conversation),
     )
     values = tuple(value for _, value in named_values)
-    mode = min(values, key=lambda value: _MODE_ORDER[value.confirmation_mode]).confirmation_mode
-    max_risk = min(values, key=lambda value: _RISK_ORDER[value.max_auto_risk]).max_auto_risk
+    user = layers.user
     payload = AgentPolicyLayer(
-        confirmation_mode=mode,
-        max_auto_risk=max_risk,
+        confirmation_mode=user.confirmation_mode,
+        max_auto_risk=user.max_auto_risk,
         allow_synthetic_data=all(value.allow_synthetic_data for value in values),
         max_tool_calls_per_turn=min(value.max_tool_calls_per_turn for value in values),
         max_write_steps_per_plan=min(value.max_write_steps_per_plan for value in values),
         max_replans=min(value.max_replans for value in values),
         max_consecutive_failures=min(value.max_consecutive_failures for value in values),
     )
+    constrained: list[PolicyLayerName] = ["user"]
+    for name, value in named_values:
+        if name == "user":
+            continue
+        if (
+            (not payload.allow_synthetic_data and not value.allow_synthetic_data)
+            or value.max_tool_calls_per_turn == payload.max_tool_calls_per_turn
+            and value.max_tool_calls_per_turn < user.max_tool_calls_per_turn
+            or value.max_write_steps_per_plan == payload.max_write_steps_per_plan
+            and value.max_write_steps_per_plan < user.max_write_steps_per_plan
+            or value.max_replans == payload.max_replans
+            and value.max_replans < user.max_replans
+            or value.max_consecutive_failures == payload.max_consecutive_failures
+            and value.max_consecutive_failures < user.max_consecutive_failures
+        ):
+            constrained.append(name)
     fingerprint = agent_policy_fingerprint(payload)
-    autonomy_varies = (
-        len({value.confirmation_mode for value in values}) > 1
-        or len({value.max_auto_risk for value in values}) > 1
-        or len({value.allow_synthetic_data for value in values}) > 1
-    )
-    constrained_by: tuple[PolicyLayerName, ...] = tuple(
-        name
-        for name, value in named_values
-        if (value.confirmation_mode == mode and len({item.confirmation_mode for item in values}) > 1)
-        or (value.max_auto_risk == max_risk and len({item.max_auto_risk for item in values}) > 1)
-        or (
-            not payload.allow_synthetic_data
-            and not value.allow_synthetic_data
-            and len({item.allow_synthetic_data for item in values}) > 1
-        )
-    )
-    if not autonomy_varies:
-        constrained_by = ("system_ceiling",)
     return EffectiveAgentPolicy(
         **payload.model_dump(),
         revision=POLICY_REVISION,
         fingerprint=fingerprint,
-        constrained_by=constrained_by,
+        constrained_by=tuple(dict.fromkeys(constrained)),
     )
 
 
@@ -188,10 +188,10 @@ def _derive_metadata(
         needs_read=any(not step.is_write for step in steps),
         needs_schema=any(step.is_write and "schema_id" in step.arguments for step in steps),
         needs_write=bool(write_steps),
-        needs_business_action=any(step.is_business_action for step in steps),
-        has_external_effect=any(step.effect_scope is EffectScope.EXTERNAL for step in steps),
+        needs_business_action=any(step.is_business_action for step in write_steps),
+        has_external_effect=any(step.effect_scope is EffectScope.EXTERNAL for step in write_steps),
         has_irreversible_effect=any(
-            step.effect_scope is EffectScope.INTERNAL_IRREVERSIBLE for step in steps
+            step.effect_scope is EffectScope.INTERNAL_IRREVERSIBLE for step in write_steps
         ),
         is_atomic=not write_steps or len(write_steps) == 1 and write_steps[0].atomic,
         estimated_blast_radius=sum(step.estimated_records for step in write_steps),
