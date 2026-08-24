@@ -7,3 +7,4 @@ from . import assistant_maintenance as assistant_maintenance
 from . import chat_preferences as chat_preferences
 from . import delegation_replay as delegation_replay
 from . import res_config_settings as res_config_settings
+from . import user_preferences as user_preferences
