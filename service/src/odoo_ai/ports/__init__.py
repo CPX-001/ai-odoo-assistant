@@ -14,6 +14,7 @@ from odoo_ai.ports.agent_plans import (
     StoredAgentPlan,
     StoredAgentPlanStepResult,
 )
+from odoo_ai.ports.batch import BatchMutationGateway
 from odoo_ai.ports.knowledge import KnowledgeProvider
 from odoo_ai.ports.logs import LogProvider
 from odoo_ai.ports.odoo import (
@@ -37,6 +38,7 @@ __all__ = [
     "AgentPlanTransitionResult",
     "AgentReasoningEngine",
     "ActionDecisionOutcome",
+    "BatchMutationGateway",
     "LogProvider",
     "ModelMetadataGateway",
     "OdooGateway",
