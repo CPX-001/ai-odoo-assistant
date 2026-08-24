@@ -70,6 +70,7 @@
             <div t-if="!ui.isMinimized" class="o_ai_assistant_history_toolbar mt-2">
                 <button t-if="!state.historyView" type="button"
                     class="btn btn-sm btn-outline-secondary o_ai_assistant_history_button"
+                    t-att-disabled="state.loading or state.historyLoading or state.decisionLoading"
                     t-on-click="showHistory">
                     <i class="fa fa-history me-1" aria-hidden="true"/> Historial
                 </button>
