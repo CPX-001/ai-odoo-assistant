@@ -23,6 +23,7 @@ from odoo_ai.contracts.agent_turn import (
 )
 
 POLICY_REVISION = "agent-policy-v3"
+_BATCH_PREVIEW_TOOL = "odoo.preview_batch_mutation"
 _RISK_ORDER = {
     RiskLevel.LOW: 0,
     RiskLevel.MODERATE: 1,
@@ -141,6 +142,7 @@ def evaluate_agent_candidate(
         }
         binding = bindings.get(proposed.step_id)
         estimated_records = _observed_records(spec, binding)
+        effect_scope = _typed_effect_scope(spec, proposed.arguments)
         normalized.append(
             AgentPlanStep(
                 step_id=proposed.step_id,
@@ -149,7 +151,7 @@ def evaluate_agent_candidate(
                 arguments=proposed.arguments,
                 depends_on=proposed.depends_on,
                 risk=_typed_action_risk(spec, proposed.arguments),
-                effect_scope=spec.effect_scope,
+                effect_scope=effect_scope,
                 is_write=spec.is_write,
                 is_business_action=spec.is_business_action,
                 atomic=spec.atomic,
@@ -209,7 +211,7 @@ def _derive_metadata(
 ) -> AgentPlanMetadata:
     return AgentPlanMetadata(
         needs_read=any(not step.is_write for step in steps),
-        needs_schema=any(step.is_write and "schema_id" in step.arguments for step in steps),
+        needs_schema=any(_step_needs_schema(step) for step in steps),
         needs_write=bool(write_steps),
         needs_business_action=any(step.is_business_action for step in write_steps),
         has_external_effect=any(step.effect_scope is EffectScope.EXTERNAL for step in write_steps),
@@ -221,10 +223,35 @@ def _derive_metadata(
     )
 
 
+def _step_needs_schema(step: AgentPlanStep) -> bool:
+    if not step.is_write:
+        return False
+    if "schema_id" in step.arguments:
+        return True
+    return (
+        step.tool_name == _BATCH_PREVIEW_TOOL
+        and step.arguments.get("operation") in {"create", "patch"}
+    )
+
+
+def _typed_effect_scope(
+    spec: HostToolPolicySpec,
+    arguments: Mapping[str, object],
+) -> EffectScope:
+    if spec.tool_name == _BATCH_PREVIEW_TOOL:
+        operation = arguments.get("operation")
+        if operation == "delete":
+            return EffectScope.INTERNAL_IRREVERSIBLE
+        if operation in {"create", "patch"}:
+            return EffectScope.INTERNAL_REVERSIBLE
+        raise AgentPolicyError("agent_batch_binding_invalid")
+    return spec.effect_scope
+
+
 def _typed_action_risk(
     spec: HostToolPolicySpec, arguments: Mapping[str, object]
 ) -> RiskLevel:
-    """Apply the registered whole-flow risk for versioned typed business actions."""
+    """Apply whole-flow risk for versioned typed actions and sealed batch handles."""
 
     if spec.tool_name == "odoo.preview_sale_order_build_flow":
         end_state = arguments.get("end_state")
@@ -235,6 +262,13 @@ def _typed_action_risk(
             "sale_order": RiskLevel.MODERATE,
             "invoice_draft": RiskLevel.HIGH,
         }.get(end_state, RiskLevel.HIGH)
+    if spec.tool_name == _BATCH_PREVIEW_TOOL:
+        operation = arguments.get("operation")
+        if operation == "delete":
+            return RiskLevel.PROTECTED
+        if operation in {"create", "patch"}:
+            return spec.risk_floor
+        raise AgentPolicyError("agent_batch_binding_invalid")
     return spec.risk_floor
 
 
