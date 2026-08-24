@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
@@ -118,8 +119,16 @@ class AgentWriteStepDispatcher:
         if step.proposal_id is not None or step.proposal_fingerprint is not None:
             raise AgentEffectExecutionError("agent_batch_binding_invalid", 503)
         try:
-            handle = BatchProposalHandle.model_validate(step.arguments)
-        except ValidationError:
+            handle = BatchProposalHandle.model_validate_json(
+                json.dumps(
+                    step.arguments,
+                    allow_nan=False,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+        except (ValidationError, TypeError, ValueError):
             raise AgentEffectExecutionError("agent_batch_binding_invalid", 503) from None
         if step.estimated_records != handle.item_count:
             raise AgentEffectExecutionError("agent_batch_binding_mismatch", 503)
