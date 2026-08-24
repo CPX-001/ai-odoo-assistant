@@ -8,6 +8,8 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID
 
+from pydantic import ValidationError
+
 from odoo_ai.application.agent_execution import (
     AgentExecutionError,
     AgentPlanExecutionService,
@@ -27,6 +29,7 @@ from odoo_ai.application.context_read import (
     validate_agent_turn_request,
 )
 from odoo_ai.contracts import (
+    ActionProposalTrace,
     ActionToolReport,
     AgentCandidateOutput,
     AgentPlanExecutionRequest,
@@ -43,6 +46,7 @@ from odoo_ai.contracts import (
     TurnLimits,
     UserRequest,
 )
+from odoo_ai.contracts.batch_job import BatchProposalHandle, BatchProposalTrace
 from odoo_ai.ports import AgentReasoningEngine
 
 AgentHistoryLoader = Callable[[AgentTurnRequest], str | Awaitable[str]]
@@ -68,6 +72,7 @@ _PREVIEW_TOOLS = frozenset(
         "odoo.preview_sale_order_build_flow",
     }
 )
+_BATCH_PREVIEW_TOOL = "odoo.preview_batch_mutation"
 _EXECUTION_FAILURE_MESSAGES = {
     "access_denied": "Odoo no permite esta operación con los permisos actuales.",
     "business_rule_rejected": (
@@ -85,6 +90,10 @@ _EXECUTION_FAILURE_MESSAGES = {
     "verification_unavailable": (
         "No se pudo verificar el resultado de forma fiable, así que no afirmo que haya "
         "quedado aplicado."
+    ),
+    "batch_execution_outcome_unknown": (
+        "El resultado del lote quedó ambiguo y se conservará el mismo intento para una "
+        "recuperación idempotente; no se inicia un segundo lote."
     ),
 }
 
@@ -275,6 +284,7 @@ def _execution_answer(status) -> str:
 
     plan = status.plan
     completed = sum(step.state == "completed" for step in plan.steps)
+    partial = sum(step.state == "partial" for step in plan.steps)
     failed = sum(step.state == "failed" for step in plan.steps)
     skipped = sum(step.state == "skipped" for step in plan.steps)
     if plan.state is PlanState.COMPLETED:
@@ -282,11 +292,17 @@ def _execution_answer(status) -> str:
             return "**Hecho.** La operación se ejecutó y Odoo verificó el resultado."
         return f"**Hecho.** Odoo ejecutó y verificó {completed} operaciones."
     if plan.state is PlanState.PARTIAL:
-        parts = [f"{completed} completadas"]
+        parts = []
+        if completed:
+            parts.append(f"{completed} completadas")
+        if partial:
+            parts.append(f"{partial} parciales")
         if failed:
             parts.append(f"{failed} fallidas")
         if skipped:
             parts.append(f"{skipped} omitidas")
+        if not parts:
+            parts.append("resultado parcial")
         return (
             "**Completado parcialmente.** "
             + ", ".join(parts)
@@ -328,11 +344,55 @@ def _reconcile_previews(
 ) -> tuple[AgentCandidateOutput, Mapping[str, AgentProposalBinding]]:
     if len(report.proposals) != len(report.proposal_traces):
         raise AgentTurnError("agent_preview_report_corrupt", 502)
-    if len(candidate.steps) != len(report.proposal_traces):
+    traces = report.preview_traces
+    if traces:
+        observed_actions = tuple(
+            trace for trace in traces if isinstance(trace, ActionProposalTrace)
+        )
+        observed_batches = tuple(
+            trace for trace in traces if isinstance(trace, BatchProposalTrace)
+        )
+        if (
+            observed_actions != report.proposal_traces
+            or observed_batches != report.batch_traces
+        ):
+            raise AgentTurnError("agent_preview_report_corrupt", 502)
+    else:
+        if report.batch_traces:
+            raise AgentTurnError("agent_preview_report_corrupt", 502)
+        traces = report.proposal_traces
+    if len(candidate.steps) != len(traces):
         raise AgentTurnError("agent_preview_plan_mismatch", 502)
+
     bindings: dict[str, AgentProposalBinding] = {}
     normalized_steps = []
-    for step, trace in zip(candidate.steps, report.proposal_traces, strict=True):
+    for step, trace in zip(candidate.steps, traces, strict=True):
+        if isinstance(trace, BatchProposalTrace):
+            if trace.tool_name != _BATCH_PREVIEW_TOOL:
+                raise AgentTurnError("agent_preview_report_corrupt", 502)
+            try:
+                handle = BatchProposalHandle.model_validate(trace.arguments)
+            except ValidationError:
+                raise AgentTurnError("agent_preview_report_corrupt", 502) from None
+            if (
+                handle.turn_id != turn_id
+                or handle.job_id != trace.job_id
+                or handle.job_fingerprint != trace.job_fingerprint
+            ):
+                raise AgentTurnError("agent_preview_report_corrupt", 502)
+            bindings[step.step_id] = AgentProposalBinding(
+                estimated_records=handle.item_count,
+            )
+            normalized_steps.append(
+                step.model_copy(
+                    update={
+                        "tool_name": trace.tool_name,
+                        "arguments": trace.arguments,
+                    }
+                )
+            )
+            continue
+
         if trace.tool_name not in _PREVIEW_TOOLS:
             raise AgentTurnError("agent_preview_report_corrupt", 502)
         proposal = next(
