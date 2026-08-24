@@ -109,6 +109,14 @@ class AgentPlanStore(Protocol):
         started_at: datetime,
     ) -> AgentPlanTransitionResult: ...
 
+    def prepare_execution_recovery(
+        self,
+        *,
+        plan_id: UUID,
+        error_code: str,
+        occurred_at: datetime,
+    ) -> StoredAgentPlan: ...
+
     def complete(
         self,
         *,
