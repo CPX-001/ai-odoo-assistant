@@ -1,4 +1,4 @@
-"""Port for executing already-normalized bulk mutations against Odoo."""
+"""Ports for executing already-normalized bulk mutations against Odoo."""
 
 from __future__ import annotations
 
@@ -11,14 +11,21 @@ from odoo_ai.contracts.batch import (
     BatchItemResult,
     BatchPatchItem,
 )
+from odoo_ai.contracts.batch_job import BatchExecutionContext
 
 
 class BatchMutationGateway(Protocol):
-    """Execute one host-planned chunk and return exactly one result per source row."""
+    """Execute one host-planned chunk and return exactly one result per source row.
+
+    Implementations must be idempotent for one ``BatchExecutionContext``. Repeating a
+    chunk after a transport failure must recover the prior result instead of applying
+    the mutation a second time.
+    """
 
     async def create_many(
         self,
         *,
+        context: BatchExecutionContext,
         model: str,
         schema_id: str,
         items: tuple[BatchCreateItem, ...],
@@ -28,6 +35,7 @@ class BatchMutationGateway(Protocol):
     async def patch_many(
         self,
         *,
+        context: BatchExecutionContext,
         model: str,
         schema_id: str,
         items: tuple[BatchPatchItem, ...],
@@ -37,6 +45,7 @@ class BatchMutationGateway(Protocol):
     async def delete_many(
         self,
         *,
+        context: BatchExecutionContext,
         model: str,
         items: tuple[BatchDeleteItem, ...],
         failure_mode: BatchFailureMode,
