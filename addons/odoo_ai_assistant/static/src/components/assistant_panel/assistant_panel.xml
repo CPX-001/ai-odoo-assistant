@@ -187,17 +187,15 @@
 
             <form t-if="!ui.isMinimized"
                 class="o_ai_assistant_composer border-top p-3" t-on-submit.prevent="submit">
-                <textarea id="o_ai_assistant_question" class="form-control mb-2"
-                    rows="3" maxlength="4000"
-                    placeholder="Pregunta o pide una operación en Odoo…"
-                    t-att-value="state.draft"
-                    t-on-input="onDraftInput"
-                    t-att-disabled="state.loading or state.decisionLoading"/>
-                <div class="d-flex align-items-center gap-2">
-                    <small class="text-muted flex-grow-1">
-                        El contexto de pantalla es una pista; no limita lo que puedes preguntar.
-                    </small>
-                    <button type="submit" class="btn btn-primary"
+                <div class="o_ai_assistant_composer_row d-flex align-items-end gap-2">
+                    <textarea id="o_ai_assistant_question" class="form-control flex-grow-1"
+                        rows="1" maxlength="4000"
+                        placeholder="Pregunta o pide una operación en Odoo…"
+                        t-att-value="state.draft"
+                        t-on-input="onDraftInput"
+                        t-on-keydown="onComposerKeydown"
+                        t-att-disabled="state.loading or state.decisionLoading"/>
+                    <button type="submit" class="btn btn-primary o_ai_assistant_send_button"
                         t-att-disabled="state.loading or state.decisionLoading or !state.draft.trim()">
                         <i t-if="state.loading" class="fa fa-spinner fa-spin me-1" aria-hidden="true"/>
                         <i t-else="" class="fa fa-paper-plane" aria-hidden="true"/>
