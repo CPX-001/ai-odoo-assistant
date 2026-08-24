@@ -90,8 +90,9 @@ def query_tool_specs() -> tuple[ToolSpec, ...]:
         ToolSpec(
             name=ODOO_GET_EFFECTIVE_SCHEMA,
             description=(
-                "Get the bounded runtime schema for the current screen model. "
-                "Use its exact schema_id and fields in subsequent QUERY calls."
+                "Get the bounded runtime schema for the current screen model under the "
+                "authenticated Odoo user. Use its exact schema_id and fields in subsequent "
+                "QUERY calls. Field visibility comes from Odoo, not from model assumptions."
             ),
             input_schema=GetEffectiveSchemaRequest.model_json_schema(),
             risk=ToolRisk.METADATA,
@@ -100,8 +101,12 @@ def query_tool_specs() -> tuple[ToolSpec, ...]:
         ToolSpec(
             name=ODOO_QUERY_RECORDS,
             description=(
-                "Search and read bounded Odoo records with a flat typed filter, "
-                "structured sort, and the exact effective schema_id."
+                "Search and read bounded Odoo records with a flat typed filter, structured "
+                "sort, and the exact effective schema_id. The host already executes as the "
+                "authenticated Odoo user and applies Odoo ACLs, record rules, field access, "
+                "and active-company context. Never add owner, salesperson, assigned-user, "
+                "user_id, or create_uid filters as an authorization measure; use ownership "
+                "filters only when the user's business question explicitly requests them."
             ),
             input_schema=QueryRecordsRequest.model_json_schema(),
             risk=ToolRisk.READ,
@@ -110,8 +115,11 @@ def query_tool_specs() -> tuple[ToolSpec, ...]:
         ToolSpec(
             name=ODOO_AGGREGATE_RECORDS,
             description=(
-                "Run bounded count/sum/min/max aggregation under the effective "
-                "Odoo user's ACL, record rules, and company context."
+                "Run bounded count/sum/min/max aggregation as the authenticated Odoo user. "
+                "Odoo itself applies ACLs, record rules, field access, and active-company "
+                "context. Never narrow by owner, salesperson, assigned user, user_id, or "
+                "create_uid merely to emulate permissions; apply such filters only when the "
+                "user explicitly asks for that business scope."
             ),
             input_schema=AggregateRecordsRequest.model_json_schema(),
             risk=ToolRisk.READ,
