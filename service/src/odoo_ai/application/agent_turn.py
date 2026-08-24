@@ -32,11 +32,13 @@ from odoo_ai.contracts import (
     AgentPlanExecutionRequest,
     AgentTurnRequest,
     AgentTurnResponse,
+    ConfirmationMode,
     ContextPack,
     ConversationState,
     HostToolPolicySpec,
     InstanceProfileSummary,
     PlanState,
+    RiskLevel,
     ToolSpec,
     TurnLimits,
     UserRequest,
@@ -116,6 +118,13 @@ class AgentTurnService:
             history = await _maybe_await_history(self._history_loader, request)
             instance = self._instance()
             capabilities = list(instance.capabilities)
+            capabilities.extend(
+                [
+                    "assistant_host_owns_risk_confirmation",
+                    "assistant_explicit_user_scope_is_not_confirmation",
+                    _autonomy_capability(policy.confirmation_mode, policy.max_auto_risk),
+                ]
+            )
             if request.synthetic_data_authorized and policy.allow_synthetic_data:
                 capabilities.append("synthetic_test_data_allowed")
             context = ContextPack(
@@ -226,6 +235,16 @@ class AgentTurnService:
             if isinstance(value, InstanceProfileSummary)
             else InstanceProfileSummary(instance_id="unknown")
         )
+
+
+def _autonomy_capability(mode: ConfirmationMode, risk: RiskLevel) -> str:
+    if mode is ConfirmationMode.ALWAYS_CONFIRM:
+        return "assistant_autonomy_strict"
+    if mode is ConfirmationMode.PROTECTED_ONLY and risk is RiskLevel.PROTECTED:
+        return "assistant_autonomy_full_access"
+    if mode is ConfirmationMode.PROTECTED_ONLY:
+        return "assistant_autonomy_autonomous"
+    return "assistant_autonomy_balanced"
 
 
 async def _maybe_await_history(
