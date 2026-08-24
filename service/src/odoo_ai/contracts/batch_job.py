@@ -98,6 +98,7 @@ class BatchMutationJobSnapshot(BaseModel):
     item_count: int = Field(strict=True, ge=1, le=MAX_BATCH_ITEMS)
     applied_count: int = Field(strict=True, ge=0, le=MAX_BATCH_ITEMS)
     failed_count: int = Field(strict=True, ge=0, le=MAX_BATCH_ITEMS)
+    attempt_id: UUID | None = None
     created_at: datetime
     execution_started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -111,13 +112,25 @@ class BatchMutationJobSnapshot(BaseModel):
             BatchJobState.FAILED,
         }
         if self.state is BatchJobState.PREPARED:
-            if self.execution_started_at is not None or self.completed_at is not None:
-                raise ValueError("prepared batch job has execution timestamps")
+            if (
+                self.attempt_id is not None
+                or self.execution_started_at is not None
+                or self.completed_at is not None
+            ):
+                raise ValueError("prepared batch job has execution state")
         elif self.state is BatchJobState.EXECUTING:
-            if self.execution_started_at is None or self.completed_at is not None:
-                raise ValueError("executing batch job timestamps are invalid")
-        elif terminal and (self.execution_started_at is None or self.completed_at is None):
-            raise ValueError("terminal batch job requires execution timestamps")
+            if (
+                self.attempt_id is None
+                or self.execution_started_at is None
+                or self.completed_at is not None
+            ):
+                raise ValueError("executing batch job state is invalid")
+        elif terminal and (
+            self.attempt_id is None
+            or self.execution_started_at is None
+            or self.completed_at is None
+        ):
+            raise ValueError("terminal batch job requires execution state")
         if self.applied_count + self.failed_count > self.item_count:
             raise ValueError("batch job result counts exceed item count")
         if terminal and self.applied_count + self.failed_count != self.item_count:
@@ -149,12 +162,45 @@ class BatchProposalHandle(BaseModel):
     source_display_name: str | None = Field(default=None, min_length=1, max_length=255)
 
 
+class BatchExecutionContext(BaseModel):
+    """Opaque host authority binding passed to an idempotent batch gateway.
+
+    The gateway must treat ``job_id + attempt_id`` as the execution identity and must
+    never create a second effect for a row/chunk already completed under that identity.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    job_id: UUID
+    attempt_id: UUID
+    authorization_id: UUID
+    job_fingerprint: Fingerprint
+    instance_id: str = Field(min_length=1, max_length=255)
+    database: str = Field(min_length=1, max_length=128)
+    uid: int = Field(strict=True, gt=0)
+    company_id: int = Field(strict=True, gt=0)
+    allowed_company_ids: tuple[int, ...] = Field(min_length=1, max_length=16)
+    policy_revision: Revision
+
+    @model_validator(mode="after")
+    def validate_actor(self) -> Self:
+        if (
+            self.database != self.database.strip()
+            or any(ord(character) < 32 for character in self.database)
+            or self.company_id not in self.allowed_company_ids
+            or self.allowed_company_ids != tuple(sorted(set(self.allowed_company_ids)))
+        ):
+            raise ValueError("batch execution actor binding is invalid")
+        return self
+
+
 class BatchCommandReceipt(BaseModel):
     """Compact plan receipt; complete per-row detail remains in the batch store."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     job_id: UUID
+    attempt_id: UUID
     job_fingerprint: Fingerprint
     state: BatchJobState
     total_items: int = Field(strict=True, ge=1, le=MAX_BATCH_ITEMS)
