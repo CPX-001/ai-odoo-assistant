@@ -29,7 +29,7 @@ class UserRequest(BaseModel):
 
 
 class UserExecutionContext(BaseModel):
-    """Effective Odoo identity derived and validated server-side."""
+    """Effective Odoo identity and bounded per-user reasoning preference."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -37,6 +37,12 @@ class UserExecutionContext(BaseModel):
     company_id: int
     allowed_company_ids: list[int] = Field(default_factory=list)
     lang: str | None = None
+    reasoning_model: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9_.:-]+$",
+    )
 
 
 class InstanceProfileSummary(BaseModel):
