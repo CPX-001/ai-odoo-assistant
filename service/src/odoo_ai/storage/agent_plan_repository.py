@@ -12,7 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from odoo_ai.application.agent_plans import _plan_fingerprint
+from odoo_ai.application.agent_plans import (
+    RECOVERABLE_EXECUTION_ERROR,
+    _plan_fingerprint,
+)
 from odoo_ai.application.agent_policy import POLICY_REVISION, agent_policy_fingerprint
 from odoo_ai.contracts import (
     AgentPlanMetadata,
@@ -207,7 +210,14 @@ class SqlAgentPlanStore:
                 )
             if record.state != PlanState.AUTHORIZED.value:
                 return AgentPlanTransitionResult(AgentPlanTransitionOutcome.INVALID_STATE)
-            if started_at >= record.expires_at:
+            is_recovery = record.error_code == RECOVERABLE_EXECUTION_ERROR
+            if record.error_code is not None and not is_recovery:
+                return AgentPlanTransitionResult(AgentPlanTransitionOutcome.CORRUPT)
+            # The original preview TTL prevents stale first execution. Once the exact
+            # authorization has already been exercised and only its idempotent batch
+            # outcome is unknown, recovery must remain possible without minting fresh
+            # authority or rebuilding the plan.
+            if not is_recovery and started_at >= record.expires_at:
                 record.state = PlanState.EXPIRED.value
                 record.state_version += 1
                 record.updated_at = started_at
@@ -218,14 +228,52 @@ class SqlAgentPlanStore:
                 )
             record.state = PlanState.EXECUTING.value
             record.execution_started_at = started_at
+            record.error_code = None
             record.state_version += 1
             record.updated_at = started_at
             session.flush()
-            _audit(session, record, "execution_claimed", started_at)
+            _audit(
+                session,
+                record,
+                "execution_recovery_claimed" if is_recovery else "execution_claimed",
+                started_at,
+            )
             return AgentPlanTransitionResult(
                 AgentPlanTransitionOutcome.APPLIED,
                 _snapshot(session, record),
             )
+
+    def prepare_execution_recovery(
+        self,
+        *,
+        plan_id: UUID,
+        error_code: str,
+        occurred_at: datetime,
+    ) -> StoredAgentPlan:
+        if error_code != RECOVERABLE_EXECUTION_ERROR:
+            raise AgentPlanStoreError("agent_recovery_error_invalid")
+        with session_scope(self._session_factory) as session:
+            record = session.scalar(
+                select(AgentPlanRecord)
+                .where(AgentPlanRecord.plan_id == plan_id)
+                .with_for_update()
+            )
+            if (
+                record is None
+                or record.state != PlanState.EXECUTING.value
+                or record.authorization_id is None
+                or record.authorization_source is None
+                or record.completed_at is not None
+            ):
+                raise AgentPlanStoreError("agent_plan_invalid_state")
+            record.state = PlanState.AUTHORIZED.value
+            record.execution_started_at = None
+            record.error_code = error_code
+            record.state_version += 1
+            record.updated_at = occurred_at
+            session.flush()
+            _audit(session, record, "execution_recovery_pending", occurred_at)
+            return _snapshot(session, record)
 
     def complete(
         self,
@@ -259,7 +307,7 @@ class SqlAgentPlanStore:
         *,
         plan_id: UUID,
         step_id: str,
-        state: Literal["completed", "failed", "skipped"],
+        state: Literal["completed", "partial", "failed", "skipped"],
         occurred_at: datetime,
         receipt: dict[str, object] | None = None,
         error_code: str | None = None,
@@ -400,6 +448,7 @@ def _snapshot(session: Session, record: AgentPlanRecord) -> StoredAgentPlan:
                         "previewed",
                         "executing",
                         "completed",
+                        "partial",
                         "failed",
                         "skipped",
                     ],
@@ -432,12 +481,17 @@ def _state_shape_valid(
                 record.authorization_source
                 == AuthorizationSource.USER_CONFIRMATION.value
             )
+            and record.execution_started_at is None
+            and record.completed_at is None
+            and record.error_code in {None, RECOVERABLE_EXECUTION_ERROR}
         )
     if state is PlanState.EXECUTING:
         return (
             record.authorization_id is not None
             and record.authorization_source is not None
             and record.execution_started_at is not None
+            and record.completed_at is None
+            and record.error_code is None
         )
     if state in {PlanState.COMPLETED, PlanState.PARTIAL, PlanState.FAILED}:
         if record.completed_at is None:
