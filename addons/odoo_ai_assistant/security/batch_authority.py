@@ -21,6 +21,7 @@ from .delegation import DelegationTokenError
 
 _PREFIX: Final = "b1"
 _PURPOSE: Final = b"odoo-ai-assistant/batch-authority/v1"
+MAX_BATCH_FIELDS: Final = 64
 _MODEL = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
 _FIELD = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _JTI = re.compile(r"^[A-Za-z0-9_-]{22,64}$")
@@ -133,7 +134,7 @@ class BatchAuthorityPayload:
             or self.company_id not in self.allowed_company_ids
             or self.operation not in {"create", "patch", "delete"}
             or self.fields != tuple(sorted(set(self.fields)))
-            or len(self.fields) > 16
+            or len(self.fields) > MAX_BATCH_FIELDS
             or any(not _FIELD.fullmatch(field) for field in self.fields)
             or self.failure_mode not in {"continue_on_error", "atomic_chunk"}
             or not 1 <= self.row_count <= 200
