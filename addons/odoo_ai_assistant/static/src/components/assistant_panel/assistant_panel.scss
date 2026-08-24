@@ -156,6 +156,10 @@
     }
 
     .o_ai_assistant_composer textarea {
+        field-sizing: content;
+        min-height: 4.5rem;
+        max-height: 11rem;
+        overflow-y: auto;
         resize: none;
         border-radius: var(--o-ai-control-radius);
         transition: border-color 140ms ease, box-shadow 140ms ease;
