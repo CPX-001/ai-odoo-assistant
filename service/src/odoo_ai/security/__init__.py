@@ -5,6 +5,7 @@ from odoo_ai.security.action_authority import (
     ActionAuthorityCodec,
     ActionAuthorityError,
 )
+from odoo_ai.security.batch_authority import BatchAuthorityCodec, BatchAuthorityError
 from odoo_ai.security.shared_secret import (
     SHARED_SECRET_HEADER,
     SharedSecretError,
@@ -16,6 +17,8 @@ __all__ = [
     "ACTION_AUTHORITY_SECRET_FILE_ENV",
     "ActionAuthorityCodec",
     "ActionAuthorityError",
+    "BatchAuthorityCodec",
+    "BatchAuthorityError",
     "SHARED_SECRET_HEADER",
     "SharedSecretError",
     "load_shared_secret",
