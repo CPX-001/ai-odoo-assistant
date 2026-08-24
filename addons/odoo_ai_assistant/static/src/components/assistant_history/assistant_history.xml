@@ -61,6 +61,11 @@
 
     <t t-name="odoo_ai_assistant.AssistantPanelHistoryUX"
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
+        <xpath expr="//button[@title='Nuevo chat']" position="attributes">
+            <attribute name="t-if">!state.historyView</attribute>
+            <attribute name="t-att-disabled">state.loading or state.historyLoading or state.decisionLoading</attribute>
+        </xpath>
+
         <xpath expr="//div[select[@aria-label='Historial de chats']]" position="replace">
             <div t-if="!ui.isMinimized" class="o_ai_assistant_history_toolbar mt-2">
                 <button t-if="!state.historyView" type="button"
