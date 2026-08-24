@@ -30,6 +30,7 @@ def load_chat_history(
     *,
     actor: ChatActor,
     conversation_id: UUID | None,
+    max_conversations: int,
     max_messages: int,
 ) -> ChatHistoryResponse:
     conversations = tuple(
@@ -40,7 +41,7 @@ def load_chat_history(
                 ChatConversation.uid == actor.uid,
             )
             .order_by(ChatConversation.updated_at.desc(), ChatConversation.created_at.desc())
-            .limit(50)
+            .limit(max_conversations)
         )
     )
     selected = None
