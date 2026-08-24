@@ -96,5 +96,6 @@ test("current view id is resolved for developer UI without entering screen conte
         },
     };
     expect(currentViewId(fallback)).toBe(271);
+    expect(currentViewId({ currentController: {} }, { view_id: "512" })).toBe(512);
     expect(currentViewId({ currentController: {} })).toBe(null);
 });
