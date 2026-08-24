@@ -1,70 +1,30 @@
-"""Read-only general chat orchestration for source, knowledge and conversation context."""
+"""Provider-neutral orchestration for the read-only general chat workflow."""
 
 from __future__ import annotations
 
 import asyncio
-import re
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy.exc import SQLAlchemyError
-
-from odoo_ai.adapters.codex_engine import CodexAppServerEngine, CodexEngineError
-from odoo_ai.adapters.codex_runtime import CodexRuntimeSettings
-from odoo_ai.adapters.source_tools import SourceToolExecutorFactory, source_tool_specs
 from odoo_ai.contracts import (
     AnswerEnvelope,
     ContextPack,
     ConversationState,
     Evidence,
     InstanceProfileSummary,
-    KnowledgeReadExcerptRequest,
-    KnowledgeSearchRequest,
+    ToolSpec,
     TurnLimits,
     UserRequest,
     Workflow,
 )
 from odoo_ai.contracts.chat import GeneralTurnRequest, GeneralTurnResponse
-from odoo_ai.knowledge import (
-    KnowledgeRetrievalError,
-    KnowledgeRetrievalService,
-    SqlAlchemyKnowledgeRetrievalStore,
-)
-from odoo_ai.storage import (
-    DatabaseConfigurationError,
-    DatabaseSettings,
-    create_database_engine,
-    create_session_factory,
-    get_instance_profile,
-    session_scope,
-)
-from odoo_ai.storage.chat_repository import ChatStoreError, recent_chat_text
+from odoo_ai.ports.reasoning import ReasoningEngine, ReasoningEngineError
 
 _GENERAL_MAX_TOOL_CALLS = 8
 _GENERAL_MAX_EVIDENCE = 16
-_STOP_WORDS = frozenset(
-    {
-        "como",
-        "cómo",
-        "para",
-        "porque",
-        "porqué",
-        "donde",
-        "dónde",
-        "cuando",
-        "cuándo",
-        "esta",
-        "este",
-        "esto",
-        "that",
-        "this",
-        "what",
-        "where",
-        "when",
-        "with",
-        "from",
-        "odoo",
-    }
-)
+
+HistoryLoader = Callable[[GeneralTurnRequest], Awaitable[str]]
+KnowledgeLoader = Callable[[GeneralTurnRequest], Awaitable[tuple[Evidence, ...]]]
 
 
 class GeneralChatError(RuntimeError):
@@ -75,19 +35,27 @@ class GeneralChatError(RuntimeError):
 
 
 class GeneralChatService:
-    """Give Codex broad read context without granting broad Odoo authority."""
+    """Give a reasoning engine broad read context without broad Odoo authority."""
 
-    def __init__(self, *, database_settings: DatabaseSettings) -> None:
-        self._database_settings = database_settings
-
-    @classmethod
-    def from_env(cls) -> GeneralChatService:
-        return cls(database_settings=DatabaseSettings.from_env())
+    def __init__(
+        self,
+        *,
+        reasoning_engine: ReasoningEngine,
+        history_loader: HistoryLoader,
+        knowledge_loader: KnowledgeLoader,
+        tools: Sequence[ToolSpec] = (),
+        fallback_engine: ReasoningEngine | None = None,
+    ) -> None:
+        self._reasoning_engine = reasoning_engine
+        self._history_loader = history_loader
+        self._knowledge_loader = knowledge_loader
+        self._tools = tuple(tools)
+        self._fallback_engine = fallback_engine
 
     async def run(self, request: GeneralTurnRequest) -> GeneralTurnResponse:
         history, knowledge = await asyncio.gather(
-            asyncio.to_thread(self._history_sync, request),
-            asyncio.to_thread(self._knowledge_sync, request),
+            self._history_loader(request),
+            self._knowledge_loader(request),
         )
         context = ContextPack(
             request=UserRequest(message=request.message),
@@ -107,33 +75,17 @@ class GeneralChatService:
         )
 
         try:
-            settings = CodexRuntimeSettings.from_env()
-        except (OSError, RuntimeError, ValueError):
-            raise GeneralChatError("engine_unavailable") from None
-
-        source_factory: SourceToolExecutorFactory | None = None
-        try:
-            source_factory = SourceToolExecutorFactory.from_env()
-        except (OSError, RuntimeError, ValueError):
-            pass
-
-        if source_factory is not None:
-            engine = CodexAppServerEngine(
-                settings,
-                tool_executor_factory=source_factory,
+            answer = await self._reasoning_engine.run_turn(
+                context,
+                list(self._tools),
+                AnswerEnvelope.model_json_schema(),
             )
-            try:
-                answer = await engine.run_turn(
-                    context,
-                    list(source_tool_specs()),
-                    AnswerEnvelope.model_json_schema(),
-                )
-            except CodexEngineError as error:
-                if not error.code.startswith("source_"):
-                    raise GeneralChatError(_engine_code(error.code)) from None
-                answer = await self._run_without_source(settings, context)
-        else:
-            answer = await self._run_without_source(settings, context)
+        except ReasoningEngineError as error:
+            if not (
+                error.code.startswith("source_") and self._fallback_engine is not None
+            ):
+                raise GeneralChatError(_engine_code(error.code)) from None
+            answer = await self._run_fallback(context)
 
         if answer.workflow is Workflow.ACTION or answer.proposed_action is not None:
             raise GeneralChatError("invalid_response", 502)
@@ -149,97 +101,17 @@ class GeneralChatService:
             completed_at=datetime.now(UTC),
         )
 
-    async def _run_without_source(
-        self, settings: CodexRuntimeSettings, context: ContextPack
-    ) -> AnswerEnvelope:
-        fallback = CodexAppServerEngine(settings)
+    async def _run_fallback(self, context: ContextPack) -> AnswerEnvelope:
+        if self._fallback_engine is None:
+            raise GeneralChatError("engine_unavailable")
         try:
-            return await fallback.run_turn(
+            return await self._fallback_engine.run_turn(
                 context,
                 [],
                 AnswerEnvelope.model_json_schema(),
             )
-        except CodexEngineError as error:
+        except ReasoningEngineError as error:
             raise GeneralChatError(_engine_code(error.code)) from None
-
-    def _history_sync(self, request: GeneralTurnRequest) -> str:
-        if request.conversation_id is None:
-            return ""
-        engine = None
-        try:
-            engine = create_database_engine(self._database_settings)
-            factory = create_session_factory(engine)
-            with session_scope(factory) as session:
-                return recent_chat_text(
-                    session,
-                    actor=request.actor,
-                    conversation_id=request.conversation_id,
-                )
-        except ChatStoreError:
-            return ""
-        except (DatabaseConfigurationError, SQLAlchemyError, OSError, ValueError):
-            return ""
-        finally:
-            if engine is not None:
-                engine.dispose()
-
-    def _knowledge_sync(self, request: GeneralTurnRequest) -> tuple[Evidence, ...]:
-        query = _knowledge_query(request.message)
-        if query is None:
-            return ()
-        engine = None
-        try:
-            engine = create_database_engine(self._database_settings)
-            factory = create_session_factory(engine)
-            with session_scope(factory) as session:
-                profile = get_instance_profile(
-                    session,
-                    instance_id=f"odoo:{request.actor.database}",
-                )
-                if profile is None:
-                    return ()
-                retrieval = KnowledgeRetrievalService(
-                    store=SqlAlchemyKnowledgeRetrievalStore(session)
-                )
-                result = retrieval.search(
-                    instance_profile_id=profile.id,
-                    request=KnowledgeSearchRequest(query=query, top_k=3),
-                )
-                evidence: list[Evidence] = []
-                for candidate in result.candidates[:2]:
-                    excerpt = retrieval.read_excerpt(
-                        instance_profile_id=profile.id,
-                        request=KnowledgeReadExcerptRequest(
-                            ref=candidate.ref,
-                            max_lines=30,
-                            max_chars=3_000,
-                            max_bytes=6_000,
-                        ),
-                    )
-                    evidence.append(excerpt.evidence)
-                return tuple(evidence)
-        except (
-            DatabaseConfigurationError,
-            KnowledgeRetrievalError,
-            SQLAlchemyError,
-            OSError,
-            ValueError,
-        ):
-            return ()
-        finally:
-            if engine is not None:
-                engine.dispose()
-
-
-def _knowledge_query(message: str) -> str | None:
-    words = [
-        value.casefold()
-        for value in re.findall(r"[A-Za-zÀ-ÿ_][A-Za-zÀ-ÿ0-9_.-]{2,}", message)
-    ]
-    candidates = [value for value in words if value not in _STOP_WORDS]
-    if not candidates:
-        return None
-    return max(candidates, key=len)[:256]
 
 
 def _engine_code(code: str) -> str:

@@ -7,7 +7,11 @@ from odoo.exceptions import AccessError
 from odoo.tests import TransactionCase, tagged
 
 from ..security import DelegationCodec, DelegationPayload
-from ..services.orm_tools import DelegatedOrmToolExecutor, OrmToolError
+from ..services.orm_tools import (
+    DelegatedOrmToolExecutor,
+    OrmToolError,
+    collect_model_metadata,
+)
 
 NOW = 1_787_337_600
 SECRET = b"odoo-m2-03-delegation-secret-" + b"s" * 48
@@ -66,6 +70,18 @@ class TestDelegatedOrmTools(TransactionCase):
 
     def _codec(self, now=NOW):
         return DelegationCodec(SECRET, clock=lambda: now)
+
+    def test_one_oversized_dynamic_selection_does_not_hide_the_model_schema(self):
+        metadata = collect_model_metadata(
+            self.env,
+            model="res.partner",
+            max_fields=64,
+            observed_at=datetime.now(UTC),
+        )
+
+        self.assertEqual(metadata["model"], "res.partner")
+        self.assertIn("name", metadata["fields"])
+        self.assertNotIn("tz", metadata["fields"])
 
     def _token(
         self,

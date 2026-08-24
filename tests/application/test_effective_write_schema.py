@@ -208,3 +208,26 @@ def test_unsupported_field_type_is_omitted_instead_of_becoming_writeable() -> No
 
     assert result.schema.fields == {}
     assert "payload" not in result.evidence.payload["fields"]
+
+
+def test_dynamic_selection_without_runtime_options_is_omitted_not_global_failure() -> None:
+    fields: dict[str, JsonValue] = {
+        "invoice_edi_format": {
+            "readonly": False,
+            "required": False,
+            "selection": [],
+            "string": "eInvoice format",
+            "type": "selection",
+        },
+        "user_id": {
+            "readonly": False,
+            "relation": "res.users",
+            "required": False,
+            "string": "Salesperson",
+            "type": "many2one",
+        },
+    }
+
+    result = _result(FakeGateway(fields=fields))
+
+    assert tuple(result.schema.fields) == ("user_id",)

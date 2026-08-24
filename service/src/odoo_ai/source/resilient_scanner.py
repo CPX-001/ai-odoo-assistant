@@ -9,20 +9,20 @@ from uuid import UUID
 from odoo_ai.contracts import SourceCapabilityState, SourceProvenance
 from odoo_ai.source.scanner import (
     FileScanContext,
-    _PreparedFile,
     RootSelection,
     ScanError,
-    _ScanLimitError,
     SourceExtractionError,
     SourceScanMetrics,
-    SourceScanner as _BaseSourceScanner,
     SourceScanResult,
     _check_time,
     _failed_root_state,
     _iter_module_files,
+    _PreparedFile,
+    _ScanLimitError,
     locate_installed_modules,
     resolve_source_roots,
 )
+from odoo_ai.source.scanner import SourceScanner as _BaseSourceScanner
 
 
 class ResilientSourceScanner(_BaseSourceScanner):

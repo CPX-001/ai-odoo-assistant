@@ -11,17 +11,28 @@ usuario escribe una petición
         ↓
 Odoo añade identidad efectiva + contexto de pantalla
         ↓
-routing automático server-side
+routing semántico multilingüe sin tools
         ↓
 Codex + tools mínimas necesarias
         ↓
 respuesta en el mismo chat
 ```
 
-El browser no envía una identidad confiable ni selecciona un workflow. `ScreenContext` sigue
-siendo una pista: una pregunta puede referirse a otro modelo distinto al que está abierto. Para
-consultas de datos, Odoo puede inferir un modelo candidato usando únicamente modelos realmente
-visibles/legibles para el usuario y después crea la delegación QUERY habitual para ese modelo.
+El browser no envía una identidad confiable ni selecciona un workflow. El router pide a Codex una
+decisión estructurada usando el texto original, el idioma efectivo, un historial reciente acotado,
+la pantalla actual y exclusivamente los modelos que Odoo acaba de comprobar como visibles y
+legibles para el usuario. Esta fase no recibe tools, registros, secretos ni autoridad de ejecución.
+No usa diccionarios de palabras por idioma: interpreta semánticamente la petición en el idioma en
+que llegue y devuelve `workflow + target_model` junto con una reformulación autocontenida en el
+mismo idioma. Esa reformulación sólo resuelve pronombres o referencias acreditadas por el historial
+reciente; Odoo guarda como mensaje del usuario el texto original.
+
+Odoo valida de nuevo ambas decisiones contra su allowlist antes de crear cualquier delegación.
+`ScreenContext` sigue siendo una pista: una pregunta puede referirse a otro modelo distinto al que
+está abierto, pero nunca a uno que las ACL/record rules hayan dejado fuera. La respuesta se redacta
+en el idioma de la petición o, si no está claro, en el idioma efectivo del usuario; los nombres
+técnicos de modelo/campo se traducen a operaciones Odoo mediante metadata runtime, no con clases o
+aliases específicos de una versión o lengua.
 
 Las peticiones generales de código, módulos, arquitectura o documentación usan un turno de
 lectura que puede consultar el índice persistente de source y conocimiento sin exigir un registro
@@ -56,6 +67,12 @@ ACTION existente:
 ```text
 proposal → preview → approval → commit → verification
 ```
+
+ACTION tampoco recorta familias de preview mediante expresiones regulares dependientes del idioma.
+Codex puede elegir entre todas las familias preview allowlisted; el host impone el modelo/registro
+actual, schemas efectivos, budgets y validaciones. Una corrección del registro abierto debe usar
+`record_patch`, nunca degradarse a `record_create`. El texto libre (incluido “sí, hazlo”) no equivale
+a aprobación: el commit sólo nace del endpoint explícito de decisión de Odoo.
 
 No se añaden `sudo()`, SQL directo contra Odoo, shell libre, Python arbitrario ni métodos ORM
 genéricos para el modelo. Las ACL, record rules, compañías y restricciones de campos del usuario

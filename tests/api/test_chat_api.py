@@ -7,6 +7,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from odoo_ai.api import create_app
+from odoo_ai.application.chat_routing import ChatRoutingService
 from odoo_ai.application.general_chat import GeneralChatService
 from odoo_ai.contracts.chat import (
     ChatAppendRequest,
@@ -15,6 +16,8 @@ from odoo_ai.contracts.chat import (
     ChatHistoryRequest,
     ChatHistoryResponse,
     ChatMessageView,
+    ChatRouteRequest,
+    ChatRouteResponse,
     GeneralTurnRequest,
     GeneralTurnResponse,
 )
@@ -73,6 +76,20 @@ class StubGeneralService(GeneralChatService):
         )
 
 
+class StubRoutingService(ChatRoutingService):
+    def __init__(self) -> None:
+        self.request: ChatRouteRequest | None = None
+
+    async def run(self, request: ChatRouteRequest) -> ChatRouteResponse:
+        self.request = request
+        return ChatRouteResponse(
+            turn_id=request.turn_id,
+            workflow="QUERY",
+            target_model="account.move",
+            resolved_message=request.message,
+        )
+
+
 @pytest.fixture(autouse=True)
 def configured_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     secret_file = tmp_path / "shared-secret"
@@ -84,22 +101,27 @@ def configured_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 async def _post(path: str, payload: object, *, secret: str | None = SECRET):
     history = StubHistoryService()
     general = StubGeneralService()
-    app = create_app(chat_history_service=history, general_chat_service=general)
+    routing = StubRoutingService()
+    app = create_app(
+        chat_history_service=history,
+        general_chat_service=general,
+        chat_routing_service=routing,
+    )
     headers = {"X-Odoo-AI-Shared-Secret": secret} if secret is not None else {}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(path, json=payload, headers=headers)
-    return response, history, general
+    return response, history, general, routing
 
 
 def test_chat_history_requires_machine_auth() -> None:
     payload = {"actor": {"database": "customer", "uid": 7}}
-    response, _, _ = asyncio.run(_post("/v1/chat/history", payload, secret=None))
+    response, _, _, _ = asyncio.run(_post("/v1/chat/history", payload, secret=None))
     assert response.status_code == 401
 
 
 def test_chat_history_is_scoped_by_odoo_actor() -> None:
     payload = {"actor": {"database": "customer", "uid": 7}}
-    response, _, _ = asyncio.run(_post("/v1/chat/history", payload))
+    response, _, _, _ = asyncio.run(_post("/v1/chat/history", payload))
     assert response.status_code == 200
     assert response.json()["active_conversation_id"] == str(CONVERSATION_ID)
     assert response.json()["messages"][0]["role"] == "user"
@@ -113,7 +135,7 @@ def test_chat_append_persists_only_sanitized_exchange() -> None:
         "assistant_message": "Respuesta",
         "internal_workflow": "GENERAL",
     }
-    response, history, _ = asyncio.run(_post("/v1/chat/append", payload))
+    response, history, _, _ = asyncio.run(_post("/v1/chat/append", payload))
     assert response.status_code == 200
     assert history.appended is not None
     assert history.appended.actor.uid == 7
@@ -144,8 +166,38 @@ def test_general_turn_does_not_require_active_model_or_record() -> None:
             "lang": "es_ES",
         },
     }
-    response, _, general = asyncio.run(_post("/v1/turns/general", payload))
+    response, _, general, _ = asyncio.run(_post("/v1/turns/general", payload))
     assert response.status_code == 200
     assert response.json()["turn_id"] == turn_id
     assert general.request is not None
     assert general.request.screen.model is None
+
+
+def test_chat_route_accepts_multilingual_text_and_host_candidates() -> None:
+    turn_id = str(uuid4())
+    payload = {
+        "turn_id": turn_id,
+        "actor": {"database": "customer", "uid": 7},
+        "conversation_id": None,
+        "message": "Quels clients ont les factures les plus en retard ?",
+        "current_model": "sale.order",
+        "has_current_record": True,
+        "user_language": "fr_FR",
+        "candidates": [
+            {"model": "sale.order", "labels": ["Sales / Orders"]},
+            {"model": "account.move", "labels": ["Invoicing / Customers / Invoices"]},
+        ],
+    }
+
+    response, _, _, routing = asyncio.run(_post("/v1/chat/route", payload))
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "turn_id": turn_id,
+        "workflow": "QUERY",
+        "target_model": "account.move",
+        "resolved_message": payload["message"],
+    }
+    assert routing.request is not None
+    assert routing.request.user_language == "fr_FR"

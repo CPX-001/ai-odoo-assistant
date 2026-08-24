@@ -7,6 +7,7 @@ from unittest.mock import patch
 from odoo import Command
 from odoo.tests import TransactionCase, tagged
 
+from ..models.assistant_chat_bridge import _routing_candidates, _validated_route
 from ..security import (
     ActionPreviewDelegationCodec,
     DelegationCodec,
@@ -189,6 +190,30 @@ class FakeContextReadClient:
             "status": "ok",
             "turn_id": payload["turn_id"],
             "workflow": "ACTION",
+        }
+
+
+class FakeProductChatClient:
+    def __init__(self, *, workflow, target_model, resolved_message=None):
+        self.workflow = workflow
+        self.target_model = target_model
+        self.resolved_message = resolved_message
+        self.append_payload = None
+
+    def route_chat(self, payload):
+        return {
+            "resolved_message": self.resolved_message or payload["message"],
+            "status": "ok",
+            "target_model": self.target_model,
+            "turn_id": payload["turn_id"],
+            "workflow": self.workflow,
+        }
+
+    def chat_append(self, payload):
+        self.append_payload = payload
+        return {
+            "conversation_id": "99999999-9999-4999-8999-999999999999",
+            "created": True,
         }
 
 
@@ -395,6 +420,14 @@ class TestAssistantBridge(TransactionCase):
                 {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
             ),
             patch.object(type(bridge), "_client", return_value=client),
+            patch.object(
+                type(bridge),
+                "_chat_client",
+                return_value=FakeProductChatClient(
+                    workflow="QUERY",
+                    target_model="res.partner",
+                ),
+            ),
         ):
             result = bridge.submit_turn("¿Cuántos?", self._screen(), "QUERY")
 
@@ -403,19 +436,89 @@ class TestAssistantBridge(TransactionCase):
         claims = QueryDelegationCodec(SECRET).decode(client.payload["delegation_token"])
         self.assertEqual(claims.scopes, ("query_schema", "query_records", "aggregate_records"))
 
-    def test_explicit_router_rejects_unknown_workflow_before_client_creation(self):
-        bridge = self.env(user=self.user.id, su=False)["odoo.ai.assistant.bridge"]
-        with patch.object(
-            type(bridge),
-            "_client",
-            side_effect=AssertionError("client must not be constructed"),
+    def test_chat_routing_candidates_are_runtime_visible_models_not_language_aliases(self):
+        navigation = {
+            "nodes": [
+                {
+                    "action": {"target_model": "account.move"},
+                    "path": ["Invoicing", "Customers", "Invoices"],
+                }
+            ]
+        }
+        with patch(
+            "odoo.addons.odoo_ai_assistant.models.assistant_chat_bridge.collect_visible_navigation",
+            return_value=navigation,
         ):
-            result = bridge.submit_turn("Hazlo", self._screen(), "DIAGNOSE")
+            candidates = _routing_candidates(self.env, "sale.order")
 
-        self.assertEqual(
-            result,
-            {"error": {"code": "invalid_workflow"}, "ok": False},
+        self.assertIn(
+            {
+                "labels": ["Invoicing / Customers / Invoices"],
+                "model": "account.move",
+            },
+            candidates,
         )
+
+    def test_chat_route_decision_rejects_a_model_not_allowed_by_odoo(self):
+        with self.assertRaisesRegex(AssistantServiceError, "invalid_response"):
+            _validated_route(
+                {
+                    "resolved_message": "Consulta facturas reales",
+                    "status": "ok",
+                    "target_model": "res.users",
+                    "turn_id": "11111111-1111-4111-8111-111111111111",
+                    "workflow": "QUERY",
+                },
+                route_id="11111111-1111-4111-8111-111111111111",
+                allowed_models={"sale.order", "account.move"},
+                current_model="sale.order",
+                has_current_record=True,
+            )
+
+    def test_chat_uses_resolved_message_but_persists_the_original_user_text(self):
+        client = FakeContextReadClient()
+        routing = FakeProductChatClient(
+            workflow="QUERY",
+            target_model="res.partner",
+            resolved_message="Cuenta los contactos que mencionamos antes.",
+        )
+        bridge = self.env(user=self.user.id, su=False)["odoo.ai.assistant.bridge"]
+        with (
+            patch.dict(
+                os.environ,
+                {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
+            ),
+            patch.object(type(bridge), "_client", return_value=client),
+            patch.object(type(bridge), "_chat_client", return_value=routing),
+        ):
+            result = bridge.submit_chat("¿Y esos?", self._screen())
+
+        self.assertTrue(result.get("ok"), result)
+        self.assertEqual(client.payload["message"], routing.resolved_message)
+        self.assertEqual(routing.append_payload["user_message"], "¿Y esos?")
+
+    def test_browser_workflow_is_ignored_in_favor_of_internal_routing(self):
+        client = FakeContextReadClient()
+        bridge = self.env(user=self.user.id, su=False)["odoo.ai.assistant.bridge"]
+        with (
+            patch.dict(
+                os.environ,
+                {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
+            ),
+            patch.object(type(bridge), "_client", return_value=client),
+            patch.object(
+                type(bridge),
+                "_chat_client",
+                return_value=FakeProductChatClient(
+                    workflow="QUERY",
+                    target_model="res.partner",
+                ),
+            ),
+        ):
+            result = bridge.submit_turn("¿Cuántos?", self._screen(), "DIAGNOSE")
+
+        self.assertTrue(result.get("ok"), result)
+        self.assertEqual(result["workflow"], "QUERY")
 
     def test_action_router_uses_preview_only_p1_and_returns_exact_safe_diff(self):
         client = FakeContextReadClient()
@@ -435,6 +538,14 @@ class TestAssistantBridge(TransactionCase):
                 {"ODOO_AI_DELEGATION_SECRET_FILE": str(self.secret_path)},
             ),
             patch.object(type(bridge), "_client", return_value=client),
+            patch.object(
+                type(bridge),
+                "_chat_client",
+                return_value=FakeProductChatClient(
+                    workflow="ACTION",
+                    target_model="res.partner",
+                ),
+            ),
         ):
             result = bridge.submit_turn("Cambia el nombre", self._screen(), "ACTION")
 

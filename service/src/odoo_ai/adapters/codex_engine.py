@@ -21,6 +21,7 @@ from odoo_ai.adapters.codex_runtime import (
     CodexRuntimeSettings,
 )
 from odoo_ai.contracts import AnswerEnvelope, ContextPack, Evidence, ToolSpec, Workflow
+from odoo_ai.ports.reasoning import ReasoningEngineError
 from odoo_ai.tools import ToolCall, ToolExecutor, ToolExecutorError
 
 ENGINE_NAME = "codex"
@@ -56,6 +57,10 @@ _WORKFLOW_TOOL_INSTRUCTIONS = {
 odoo_get_effective_schema for the exact current screen model, then call exactly the needed
 odoo_query_records or odoo_aggregate_records tool. Base the answer on that checked
 result and cite its returned evidence_id; do not cite schema metadata as query evidence.
+If the read tool rejects malformed input, correct the arguments and retry that same read
+operation; do not switch operations merely as a fallback.
+If any checked result has truncated=true, include an explicit limitation about that bounded
+result in the same language as the answer.
 If the request asks for any write or action, call no tool and return no evidence refs.""",
     Workflow.HOW_TO: """For HOW_TO, use the supplied checked navigation and schema
 evidence. You must also call knowledge_search and then knowledge_read_excerpt when relevant
@@ -84,8 +89,14 @@ _EXPECTED_SCHEMA_PROPERTIES = frozenset(
 _ALLOWED_COMPLETED_ITEM_TYPES = frozenset({"agentMessage", "reasoning", "userMessage"})
 _RECOVERABLE_TOOL_ERRORS = frozenset(
     {
+        "aggregate_not_allowed",
+        "field_not_groupable",
+        "field_not_in_schema",
+        "field_not_sortable",
         "knowledge_ref_stale",
         "knowledge_tool_unavailable",
+        "operator_not_allowed",
+        "query_value_invalid",
         "source_ref_invalid",
         "source_too_large",
         "source_tool_unavailable",
@@ -100,12 +111,10 @@ ToolExecutorFactory = Callable[
 ]
 
 
-class CodexEngineError(RuntimeError):
+class CodexEngineError(ReasoningEngineError):
     """Sanitized, typed failure at the reasoning-provider boundary."""
 
-    def __init__(self, code: str) -> None:
-        super().__init__(code)
-        self.code = code
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,6 +289,117 @@ class CodexAppServerEngine:
             provider=provider,
         )
         return answer
+
+    async def run_structured_output(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        output_schema: dict[str, object],
+    ) -> dict[str, object]:
+        """Run a host-owned, tool-free structured interpretation turn."""
+
+        started = monotonic()
+        model: str | None = None
+        provider: str | None = None
+        try:
+            if not self._settings.experimental_api:
+                raise CodexEngineError("codex_experimental_api_required")
+            if (
+                not 128 <= len(instructions) <= 16_384
+                or "\0" in instructions
+                or not 1 <= len(input_text) <= self._limits.max_context_bytes
+                or "\0" in input_text
+            ):
+                raise CodexEngineError("codex_context_invalid")
+            schema = _validated_structured_output_schema(output_schema, self._limits)
+            client = await CodexAppServerClient.start(self._settings)
+            async with client:
+                turn_deadline = monotonic() + self._settings.turn_timeout_seconds
+                thread_result = await client.request(
+                    "thread/start",
+                    {
+                        **client.thread_policy.start_params(),
+                        "baseInstructions": instructions,
+                        "dynamicTools": [],
+                    },
+                    timeout_seconds=_remaining_seconds(turn_deadline),
+                )
+                thread_id, model, provider = _validate_thread_result(thread_result)
+                turn_id = await self._start_turn(
+                    client,
+                    thread_id=thread_id,
+                    turn_input=input_text,
+                    output_schema=schema,
+                    deadline=turn_deadline,
+                )
+                try:
+                    completed_turn, _ = await self._wait_for_completion(
+                        client,
+                        thread_id=thread_id,
+                        turn_id=turn_id,
+                        executor=None,
+                        dynamic_tool_names={},
+                        deadline=turn_deadline,
+                    )
+                except BaseException:
+                    await _best_effort_interrupt(
+                        client,
+                        thread_id=thread_id,
+                        turn_id=turn_id,
+                    )
+                    raise
+                result = _parse_structured_object(
+                    completed_turn,
+                    limits=self._limits,
+                )
+        except CodexEngineError as error:
+            self._set_metadata(
+                started,
+                status="error",
+                error_code=error.code,
+                model=model,
+                provider=provider,
+            )
+            raise
+        except CodexRuntimeError as error:
+            wrapped = CodexEngineError(error.code)
+            self._set_metadata(
+                started,
+                status="error",
+                error_code=wrapped.code,
+                model=model,
+                provider=provider,
+            )
+            raise wrapped from None
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            self._set_metadata(
+                started,
+                status="interrupted",
+                error_code="codex_turn_interrupted",
+                model=model,
+                provider=provider,
+            )
+            raise
+        except Exception:
+            wrapped = CodexEngineError("codex_engine_failed")
+            self._set_metadata(
+                started,
+                status="error",
+                error_code=wrapped.code,
+                model=model,
+                provider=provider,
+            )
+            raise wrapped from None
+
+        self._set_metadata(
+            started,
+            status="ok",
+            error_code=None,
+            model=model,
+            provider=provider,
+        )
+        return result
 
     @asynccontextmanager
     async def _executor_context(
@@ -510,7 +630,10 @@ def _action_tool_policy(tool_names: frozenset[str]) -> str:
     return (
         "Choose exactly one preview family matching the user's requested operation. Schema is "
         "required before record_patch or record_create, but not before the curated business "
-        "action. Set proposed_action.action_type to the family actually returned by the host. "
+        "action. A request to change the concrete current record is record_patch, never "
+        "record_create. If one preview call rejects malformed input, correct the arguments and "
+        "retry that same family; never switch families as a fallback. Set "
+        "proposed_action.action_type to the family actually returned by the host. "
         + common
     )
 
@@ -607,6 +730,27 @@ def _validated_output_schema(
     if isinstance(definitions, dict):
         definitions.pop("JsonValue", None)
         definitions.pop("ProposedAction", None)
+    return provider_schema
+
+
+def _validated_structured_output_schema(
+    output_schema: dict[str, object],
+    limits: CodexEngineLimits,
+) -> dict[str, object]:
+    serialized = _canonical_json(output_schema, error_code="codex_output_schema_invalid")
+    if len(serialized.encode("utf-8")) > limits.max_output_schema_bytes:
+        raise CodexEngineError("codex_output_schema_too_large")
+    properties = output_schema.get("properties")
+    if (
+        output_schema.get("type") != "object"
+        or output_schema.get("additionalProperties") is not False
+        or not isinstance(properties, dict)
+        or not 1 <= len(properties) <= 16
+        or any(not isinstance(key, str) or not key for key in properties)
+    ):
+        raise CodexEngineError("codex_output_schema_invalid")
+    provider_schema = cast(dict[str, object], json.loads(serialized))
+    provider_schema["required"] = sorted(properties)
     return provider_schema
 
 
@@ -959,6 +1103,40 @@ def _parse_answer(
     if any(reference not in allowed_evidence_ids for reference in answer.evidence_refs):
         raise CodexEngineError("codex_evidence_ref_unknown")
     return answer
+
+
+def _parse_structured_object(
+    turn: Mapping[str, object],
+    *,
+    limits: CodexEngineLimits,
+) -> dict[str, object]:
+    items = turn.get("items")
+    if not isinstance(items, list):
+        raise CodexEngineError("codex_turn_items_invalid")
+    messages: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise CodexEngineError("codex_turn_items_invalid")
+        item_type = item.get("type")
+        if item_type not in _ALLOWED_COMPLETED_ITEM_TYPES:
+            raise CodexEngineError("codex_tool_call_not_allowed")
+        if item_type == "agentMessage":
+            text = item.get("text")
+            if not isinstance(text, str):
+                raise CodexEngineError("codex_answer_invalid")
+            messages.append(text)
+    if not messages:
+        raise CodexEngineError("codex_answer_missing")
+    raw_answer = messages[-1]
+    if len(raw_answer.encode("utf-8")) > limits.max_answer_bytes:
+        raise CodexEngineError("codex_answer_too_large")
+    try:
+        decoded = json.loads(raw_answer)
+    except (UnicodeError, ValueError):
+        raise CodexEngineError("codex_answer_schema_invalid") from None
+    if not isinstance(decoded, dict):
+        raise CodexEngineError("codex_answer_schema_invalid")
+    return cast(dict[str, object], decoded)
 
 
 async def _best_effort_interrupt(

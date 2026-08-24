@@ -43,8 +43,7 @@ class FakeEngine:
     async def run_turn(self, context, tools, output_schema):
         self.context = context
         assert [tool.name for tool in tools] == [
-            "odoo.get_effective_write_schema",
-            "odoo.preview_record_patch",
+            tool.name for tool in action_tool_specs()
         ]
         assert output_schema == AnswerEnvelope.model_json_schema()
         return self.answer
@@ -224,33 +223,17 @@ def test_no_preview_requires_low_confidence_and_explicit_limitation() -> None:
 
 
 @pytest.mark.parametrize(
-    ("message", "model", "expected"),
+    ("message", "model"),
     [
-        (
-            "Create a new customer record",
-            "res.partner",
-            ["odoo.get_effective_write_schema", "odoo.preview_record_create"],
-        ),
-        (
-            "Confirma este pedido",
-            "sale.order",
-            ["odoo.preview_business_action"],
-        ),
-        (
-            "Change only the reference",
-            "sale.order",
-            ["odoo.get_effective_write_schema", "odoo.preview_record_patch"],
-        ),
-        (
-            "Ayúdame con este registro",
-            "res.partner",
-            [tool.name for tool in action_tool_specs()],
-        ),
+        ("Create a new customer record", "res.partner"),
+        ("Confirma este pedido", "sale.order"),
+        ("Ändere nur die Referenz", "sale.order"),
+        ("新しい連絡先を作成してください", "res.partner"),
     ],
 )
-def test_action_registry_is_minimized_only_for_explicit_intent(
-    message: str, model: str, expected: list[str]
+def test_action_registry_does_not_hide_preview_families_by_prompt_language(
+    message: str, model: str
 ) -> None:
     selected = _select_action_tools(action_tool_specs(), message=message, model=model)
 
-    assert [tool.name for tool in selected] == expected
+    assert [tool.name for tool in selected] == [tool.name for tool in action_tool_specs()]

@@ -266,6 +266,8 @@ def _effective_write_field(
             raise EffectiveWriteSchemaError("invalid_metadata")
     elif relation is not None:
         raise EffectiveWriteSchemaError("invalid_metadata")
+    if value_kind is ActionValueKind.SELECTION and raw.get("selection") in (None, []):
+        return None
     selection = _selection_values(raw.get("selection"), value_kind=value_kind)
     try:
         return EffectiveWriteFieldSchema(

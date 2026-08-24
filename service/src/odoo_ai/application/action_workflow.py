@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -38,21 +37,12 @@ from odoo_ai.contracts import (
 )
 from odoo_ai.ports import ReasoningEngine
 
-# Schema + one invalid preview selection + one corrected preview. Each registered
-# preview remains one-shot and commit authority is still absent from reasoning.
+# Schema + one invalid preview selection + one corrected preview. The global budget
+# remains three calls and commit authority is still absent from reasoning.
 MAX_ACTION_TOOL_CALLS = 3
 MAX_ACTION_EVIDENCE_ITEMS = 8
 MAX_ANSWER_BYTES = 32 * 1024
 MAX_ANSWER_CHARS = 16_384
-
-_CREATE_INTENT = re.compile(r"\b(?:create|crear|crea|cree|new|nuevo|nueva|alta)\b", re.IGNORECASE)
-_UPDATE_INTENT = re.compile(
-    r"\b(?:change|update|modify|set|cambia|cambiar|actualiza|modifica)\b",
-    re.IGNORECASE,
-)
-_CONFIRM_INTENT = re.compile(
-    r"\b(?:confirm|confirmation|confirma|confirmar|confirmación)\b", re.IGNORECASE
-)
 
 ActionReportLoader = Callable[[], ActionToolReport]
 
@@ -258,24 +248,10 @@ class ActionService:
 def _select_action_tools(
     tools: Sequence[ToolSpec], *, message: str, model: str
 ) -> tuple[ToolSpec, ...]:
-    """Narrow a turn only for explicit high-confidence action-family intent."""
+    """Let multilingual reasoning choose among preview-only host-validated families."""
 
-    normalized = message.casefold()
-    names: frozenset[str] | None = None
-    if "sale.order.confirm.v1" in normalized or (
-        model == "sale.order"
-        and _CONFIRM_INTENT.search(normalized)
-        and not _CREATE_INTENT.search(normalized)
-    ):
-        names = frozenset({"odoo.preview_business_action"})
-    elif _CREATE_INTENT.search(normalized):
-        names = frozenset({"odoo.get_effective_write_schema", "odoo.preview_record_create"})
-    elif _UPDATE_INTENT.search(normalized):
-        names = frozenset({"odoo.get_effective_write_schema", "odoo.preview_record_patch"})
-    if names is None:
-        return tuple(tools)
-    selected = tuple(tool for tool in tools if tool.name in names)
-    return selected if selected else tuple(tools)
+    del message, model
+    return tuple(tools)
 
 
 def _validated_answer(

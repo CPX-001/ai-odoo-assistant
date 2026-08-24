@@ -14,7 +14,7 @@ def test_browser_assets_use_only_the_authenticated_odoo_bridge() -> None:
     assert '"web"' in manifest
     assert '"web.assets_backend"' in manifest
     assert '"web.assets_unit_tests"' in manifest
-    assert 'rpcCall("/odoo_ai/v1/turn"' in static_text
+    assert 'rpcCall("/odoo_ai/v1/chat"' in static_text
     assert 'rpcCall("/odoo_ai/v1/action-decision"' in static_text
     assert "orm.call(" not in static_text
     assert "fetch(" not in static_text

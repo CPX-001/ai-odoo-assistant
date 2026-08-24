@@ -43,6 +43,31 @@ QUERY_MAX_FIELDS: Final = 16
 QUERY_MAX_CONDITIONS: Final = 8
 QUERY_MAX_GROUPS: Final = 50
 QUERY_MAX_AGGREGATES: Final = 8
+QUERY_FIELD_PRIORITY: Final = (
+    "id",
+    "name",
+    "state",
+    "active",
+    "company_id",
+    "partner_id",
+    "user_id",
+    "currency_id",
+    "date",
+    "create_date",
+    "write_date",
+    "amount_total",
+    "amount_untaxed",
+    "amount_tax",
+    "amount_residual",
+    "amount_residual_signed",
+    "invoice_date",
+    "invoice_date_due",
+    "invoice_payment_term_id",
+    "payment_state",
+    "move_type",
+    "journal_id",
+    "display_name",
+)
 QUERY_ALLOWED_FIELD_TYPES: Final = frozenset(
     {
         "boolean",
@@ -724,7 +749,10 @@ def _visible_query_fields(env: OdooEnvironment, model: str) -> tuple[str, ...]:
         and isinstance(description, dict)
         and description.get("type") in QUERY_ALLOWED_FIELD_TYPES
     ]
-    ordered = tuple(sorted(set(allowed), key=lambda item: (item != "id", item)))
+    unique = set(allowed)
+    priority = [name for name in QUERY_FIELD_PRIORITY if name in unique]
+    selected = (priority + sorted(unique - set(priority)))[:64]
+    ordered = tuple(sorted(selected, key=lambda item: (item != "id", item)))
     if not ordered or len(ordered) > 64:
         ordered = ordered[:64]
     if not ordered:

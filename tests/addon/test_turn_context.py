@@ -231,6 +231,36 @@ def test_query_authority_is_runtime_field_bounded_and_separate_from_m2() -> None
         _codec().decode(prepared.delegation_token)
 
 
+def test_query_authority_keeps_common_runtime_fields_within_the_existing_cap() -> None:
+    class BroadModel(FakeModel):
+        def fields_get(self, *, attributes: list[str]) -> dict[str, dict[str, object]]:
+            assert attributes == ["type"]
+            values = {
+                f"custom_field_{index:03d}": {"type": "char"}
+                for index in range(80)
+            }
+            values.update(
+                {
+                    "id": {"type": "integer"},
+                    "invoice_date": {"type": "date"},
+                    "invoice_date_due": {"type": "date"},
+                    "partner_id": {"type": "many2one"},
+                }
+            )
+            return values
+
+    class BroadEnv(QueryFakeEnv):
+        def __getitem__(self, model: str) -> BroadModel:
+            assert model == "sale.order"
+            return BroadModel()
+
+    fields = turn_context._visible_query_fields(BroadEnv(), "sale.order")
+
+    assert len(fields) == 64
+    assert {"id", "partner_id", "invoice_date", "invoice_date_due"} <= set(fields)
+    assert fields == tuple(sorted(fields, key=lambda item: (item != "id", item)))
+
+
 def test_action_preview_authority_is_record_bound_and_non_writing() -> None:
     prepared = _action_preview_preparer().prepare(
         env=QueryFakeEnv(), screen_payload=_screen(), message="Change reference"

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -38,11 +37,11 @@ from odoo_ai.contracts import (
 )
 from odoo_ai.ports import ReasoningEngine
 
-MAX_QUERY_TOOL_CALLS = 3
+# Schema + the needed read operation + at most one corrected read call.
+MAX_QUERY_TOOL_CALLS = 4
 MAX_QUERY_EVIDENCE_ITEMS = 8
 MAX_ANSWER_BYTES = 32 * 1024
 MAX_ANSWER_CHARS = 16_384
-_TRUNCATION_WORD = re.compile(r"(?:trunc|l[ií]mit|parcial|primer)", re.IGNORECASE)
 
 ReportLoader = Callable[[], ToolExecutionReport]
 
@@ -280,9 +279,7 @@ def _validated_answer(
     if any(evidence.status is not EvidenceStatus.CHECKED for evidence in cited):
         raise QueryTurnError("evidence_not_checked", 502)
     citations = tuple(_citation(evidence, screen_model=screen_model) for evidence in cited)
-    if any(citation.truncated for citation in citations) and not any(
-        _TRUNCATION_WORD.search(value) for value in limitations
-    ):
+    if any(citation.truncated for citation in citations) and not limitations:
         raise QueryTurnError("answer_truncation_unacknowledged", 502)
     return (
         answer.model_copy(

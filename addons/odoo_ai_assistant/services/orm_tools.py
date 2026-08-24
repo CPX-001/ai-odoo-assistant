@@ -383,9 +383,18 @@ def collect_model_metadata(
     ][:max_fields]
     if not names:
         raise OrmToolError("access_denied", 403)
-    fields_payload = {
-        name: _normalize_field_definition(descriptions[name]) for name in names
-    }
+    fields_payload: dict[str, JsonValue] = {}
+    for name in names:
+        try:
+            fields_payload[name] = _normalize_field_definition(descriptions[name])
+        except OrmToolError as error:
+            if error.code != "limit_exceeded":
+                raise
+            # One enormous dynamic selection (for example the timezone list) must not
+            # make every other safe field on a broad business model unavailable.
+            continue
+    if not fields_payload:
+        raise OrmToolError("access_denied", 403)
     label = getattr(model_set, "_description", None)
     if not isinstance(label, str) or not 1 <= len(label) <= 256:
         label = None

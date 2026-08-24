@@ -10,6 +10,7 @@ from odoo_ai.api.app import create_app as _base_create_app
 from odoo_ai.api.chat import install_chat_routes
 from odoo_ai.api.configuration import install_configuration_routes
 from odoo_ai.api.maintenance import install_maintenance_routes
+from odoo_ai.application.chat_routing import ChatRoutingService
 from odoo_ai.application.general_chat import GeneralChatService
 from odoo_ai.runtime.admin_diagnostics import RuntimeAdminDiagnosticsService
 from odoo_ai.runtime.chat import RuntimeChatHistoryService
@@ -24,6 +25,7 @@ def create_app(
     maintenance_service: RuntimeMaintenanceService | None = None,
     chat_history_service: RuntimeChatHistoryService | None = None,
     general_chat_service: GeneralChatService | None = None,
+    chat_routing_service: ChatRoutingService | None = None,
     **kwargs: Any,
 ) -> FastAPI:
     """Build the core API plus isolated administrative and chat boundaries."""
@@ -44,6 +46,7 @@ def create_app(
         application,
         history_service=chat_history_service,
         general_service=general_chat_service,
+        routing_service=chat_routing_service,
     )
 
 

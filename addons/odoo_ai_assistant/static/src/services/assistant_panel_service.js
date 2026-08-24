@@ -523,6 +523,7 @@ export const assistantPanelService = {
                 saveDraft(storage, state.conversationId, state.draft);
             },
             async submit(message) {
+                const draftConversationId = state.conversationId;
                 const sent = await submitAssistantRequest({
                     state,
                     screenContext,
@@ -531,6 +532,7 @@ export const assistantPanelService = {
                 });
                 if (sent) {
                     state.draft = "";
+                    saveDraft(storage, draftConversationId, "");
                     saveDraft(storage, state.conversationId, "");
                 }
                 return sent;

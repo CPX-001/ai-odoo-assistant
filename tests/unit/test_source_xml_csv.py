@@ -268,8 +268,9 @@ def test_partial_scan_preserves_previous_index_and_valid_scan_deletes_stale(
     partial = scanner.run(**arguments)
 
     assert first.capability is SourceCapabilityState.DETECTED
-    assert partial.capability is SourceCapabilityState.ERROR
+    assert partial.capability is SourceCapabilityState.DETECTED
     assert any(error.code == "xml_parse_error" for error in partial.errors)
+    assert any(error.code == "partial_scan" for error in partial.errors)
     assert store.files[indexed_key] == original
 
     view.unlink()

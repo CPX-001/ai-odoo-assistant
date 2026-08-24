@@ -194,7 +194,7 @@ def build_query_tool_registry(
                     input_model=QueryRecordsRequest,
                     output_model=QueryRecordsToolData,
                     handler=_records_handler(backend),
-                    max_calls=1,
+                    max_calls=2,
                     max_input_bytes=16 * 1024,
                     max_output_bytes=128 * 1024,
                 )
@@ -207,7 +207,7 @@ def build_query_tool_registry(
                     input_model=AggregateRecordsRequest,
                     output_model=AggregateRecordsToolData,
                     handler=_aggregate_handler(backend),
-                    max_calls=1,
+                    max_calls=2,
                     max_input_bytes=16 * 1024,
                     max_output_bytes=128 * 1024,
                 )

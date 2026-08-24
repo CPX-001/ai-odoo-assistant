@@ -18,7 +18,7 @@
                             help="Only HTTP loopback endpoints are accepted."
                         >
                             <div class="content-group">
-                                <field name="assistant_service_url" placeholder="http://127.0.0.1:8079"/>
+                            <field name="assistant_service_url"/>
                                 <div class="text-muted">
                                     Effective:
                                     <field name="assistant_service_url_effective" class="oe_inline"/>

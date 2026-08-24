@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
-import unicodedata
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -34,31 +32,9 @@ from .assistant_bridge import (
     _turn_timeout,
 )
 
-_ACTION_WORDS = re.compile(
-    r"\b(cambia|cambiar|actualiza|actualizar|modifica|modificar|pon|establece|crea|crear|"
-    r"confirma|confirmar|cancela|cancelar|elimina|eliminar|borra|borrar|change|update|set|"
-    r"create|confirm|cancel|delete|remove)\b",
-    re.IGNORECASE,
-)
-_HOW_TO = re.compile(
-    r"(^|\b)(como|cómo|como puedo|cómo puedo|donde|dónde|pasos para|how do|how can|where do)\b",
-    re.IGNORECASE,
-)
-_QUERY = re.compile(
-    r"\b(cuantos|cuántos|cuantas|cuántas|lista|listame|lístame|muestra|muéstrame|dime|busca|"
-    r"encuentra|total|suma|promedio|count|list|show|find|search|total|sum|average)\b",
-    re.IGNORECASE,
-)
-_SELECTOR_QUESTION = re.compile(
-    r"^\s*[¿?]?(que|qué|cual|cuál|cuales|cuáles|which|what)\b",
-    re.IGNORECASE,
-)
-_EXPLAIN = re.compile(
-    r"\b(por que|por qué|explica|explicame|explícame|que significa|qué significa|que es esto|"
-    r"qué es esto|why|explain|what does)\b",
-    re.IGNORECASE,
-)
-_MODEL_NAME = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+\b")
+_CHAT_WORKFLOWS = frozenset({"GENERAL", "EXPLAIN", "QUERY", "HOW_TO", "ACTION"})
+_MAX_ROUTE_MODELS = 128
+_MAX_ROUTE_LABELS = 6
 
 
 class AssistantChatBridge(models.AbstractModel):
@@ -81,39 +57,27 @@ class AssistantChatBridge(models.AbstractModel):
             normalized_message = _chat_message(message)
             conversation_id = _optional_uuid(conversation_id)
             validated = validate_how_to_screen(screen)
-            query_screen, query_score = self._query_screen(
+            route = self._route_chat(
                 normalized_message,
                 validated.to_mapping(),
+                conversation_id,
             )
+            internal_workflow = route["workflow"]
+            target_model = route["target_model"]
+            routed_message = route["resolved_message"]
+            routed_screen = _screen_for_model(validated.to_mapping(), target_model)
 
-            if _HOW_TO.search(normalized_message):
-                internal_workflow = "HOW_TO"
-                response = self.submit_how_to(normalized_message, screen)
-            elif (
-                _ACTION_WORDS.search(normalized_message)
-                and validated.model is not None
-                and validated.res_id is not None
-                and (query_score == 0 or query_screen.get("model") == validated.model)
-            ):
-                internal_workflow = "ACTION"
-                response = self.submit_action(normalized_message, screen)
-            elif query_screen.get("model") is not None and (
-                _QUERY.search(normalized_message)
-                or (_SELECTOR_QUESTION.search(normalized_message) and query_score > 0)
-            ):
-                internal_workflow = "QUERY"
-                response = self.submit_query(normalized_message, query_screen)
-            elif (
-                _EXPLAIN.search(normalized_message)
-                and validated.model is not None
-                and validated.res_id is not None
-            ):
-                internal_workflow = "EXPLAIN"
-                response = self.submit_explain(normalized_message, screen)
+            if internal_workflow == "HOW_TO":
+                response = self.submit_how_to(routed_message, routed_screen)
+            elif internal_workflow == "ACTION":
+                response = self.submit_action(routed_message, screen)
+            elif internal_workflow == "QUERY":
+                response = self.submit_query(routed_message, routed_screen)
+            elif internal_workflow == "EXPLAIN":
+                response = self.submit_explain(routed_message, screen)
             else:
-                internal_workflow = "GENERAL"
                 response = self._submit_general(
-                    normalized_message,
+                    routed_message,
                     validated.to_mapping(),
                     conversation_id,
                 )
@@ -204,23 +168,34 @@ class AssistantChatBridge(models.AbstractModel):
             result["conversation_id"] = conversation_id
         return result
 
-    def _query_screen(self, message: str, screen: dict[str, object]):
-        current_model = screen.get("model") if isinstance(screen.get("model"), str) else None
-        target, score = _infer_target_model(self.env, message, current_model)
-        if target is None:
-            return screen, 0
-        if target == current_model:
-            return screen, score
-        return {
-            "action_id": None,
-            "allowed_context_subset": {},
-            "captured_at": screen["captured_at"],
-            "menu_id": None,
-            "model": target,
-            "res_id": None,
-            "selected_ids": [],
-            "view_type": None,
-        }, score
+    def _route_chat(self, message, screen, conversation_id):
+        candidates = _routing_candidates(self.env, screen.get("model"))
+        allowed_models = {candidate["model"] for candidate in candidates}
+        current_model = screen.get("model")
+        if not isinstance(current_model, str) or current_model not in allowed_models:
+            current_model = None
+        route_id = uuid4()
+        response = self._chat_client().route_chat(
+            {
+                "actor": self._chat_actor(),
+                "candidates": candidates,
+                "conversation_id": conversation_id,
+                "current_model": current_model,
+                "has_current_record": current_model is not None
+                and isinstance(screen.get("res_id"), int),
+                "message": message,
+                "turn_id": str(route_id),
+                "user_language": self.env.user.lang or "en_US",
+            }
+        )
+        return _validated_route(
+            response,
+            route_id=route_id,
+            allowed_models=allowed_models,
+            current_model=current_model,
+            has_current_record=current_model is not None
+            and isinstance(screen.get("res_id"), int),
+        )
 
     def _chat_actor(self):
         return {"database": self.env.cr.dbname, "uid": self.env.uid}
@@ -249,14 +224,10 @@ class AssistantChatBridge(models.AbstractModel):
         )
 
 
-def _infer_target_model(env, message: str, current_model: str | None):
-    for candidate in _MODEL_NAME.findall(message):
-        if _readable_model(env, candidate):
-            return candidate, 100
-
-    message_tokens = _tokens(message)
-    best_model = None
-    best_score = 0
+def _routing_candidates(env, current_model) -> list[dict[str, object]]:
+    labels_by_model: dict[str, list[str]] = {}
+    if isinstance(current_model, str) and _readable_model(env, current_model):
+        labels_by_model[current_model] = []
     try:
         navigation = collect_visible_navigation(env, captured_at=datetime.now(UTC))
         nodes = navigation.get("nodes")
@@ -271,20 +242,22 @@ def _infer_target_model(env, message: str, current_model: str | None):
                 target = action.get("target_model")
                 if not isinstance(target, str) or not _readable_model(env, target):
                     continue
-                label_tokens = _tokens(" ".join(value for value in path if isinstance(value, str)))
-                model_tokens = set(target.replace(".", " ").replace("_", " ").split())
-                score = 4 * len(message_tokens & label_tokens) + len(message_tokens & model_tokens)
-                if score > best_score:
-                    best_model = target
-                    best_score = score
+                labels = labels_by_model.setdefault(target, [])
+                label = " / ".join(value.strip() for value in path if isinstance(value, str))
+                if (
+                    1 <= len(label) <= 240
+                    and label not in labels
+                    and len(labels) < _MAX_ROUTE_LABELS
+                ):
+                    labels.append(label)
+                if len(labels_by_model) >= _MAX_ROUTE_MODELS:
+                    break
     except NavigationMetadataError:
         pass
-
-    if best_model is not None:
-        return best_model, best_score
-    if current_model is not None and _readable_model(env, current_model):
-        return current_model, 0
-    return None, 0
+    return [
+        {"labels": labels, "model": model}
+        for model, labels in list(labels_by_model.items())[:_MAX_ROUTE_MODELS]
+    ]
 
 
 def _readable_model(env, model: str) -> bool:
@@ -297,13 +270,60 @@ def _readable_model(env, model: str) -> bool:
         return False
 
 
-def _tokens(value: str) -> set[str]:
-    folded = unicodedata.normalize("NFKD", value.casefold())
-    ascii_value = "".join(char for char in folded if not unicodedata.combining(char))
+def _screen_for_model(screen: dict[str, object], target_model) -> dict[str, object]:
+    if target_model == screen.get("model"):
+        return screen
     return {
-        token
-        for token in re.findall(r"[a-z0-9_]{3,}", ascii_value)
-        if token not in {"para", "como", "esta", "este", "esto", "with", "from", "that"}
+        "action_id": None,
+        "allowed_context_subset": {},
+        "captured_at": screen["captured_at"],
+        "menu_id": None,
+        "model": target_model,
+        "res_id": None,
+        "selected_ids": [],
+        "view_type": None,
+    }
+
+
+def _validated_route(
+    response,
+    *,
+    route_id,
+    allowed_models,
+    current_model,
+    has_current_record,
+):
+    expected = {"resolved_message", "status", "target_model", "turn_id", "workflow"}
+    if not isinstance(response, dict) or set(response) != expected:
+        raise AssistantServiceError("invalid_response")
+    workflow = response.get("workflow")
+    target_model = response.get("target_model")
+    resolved_message = response.get("resolved_message")
+    if (
+        response.get("status") != "ok"
+        or response.get("turn_id") != str(route_id)
+        or workflow not in _CHAT_WORKFLOWS
+        or (target_model is not None and target_model not in allowed_models)
+        or not isinstance(resolved_message, str)
+        or not 1 <= len(resolved_message) <= 4_000
+        or resolved_message != resolved_message.strip()
+        or "\0" in resolved_message
+    ):
+        raise AssistantServiceError("invalid_response")
+    if workflow == "QUERY" and target_model is None:
+        raise AssistantServiceError("invalid_response")
+    if workflow in {"ACTION", "EXPLAIN"} and (
+        not has_current_record
+        or target_model is None
+        or target_model != current_model
+    ):
+        raise AssistantServiceError("invalid_response")
+    if workflow == "GENERAL" and target_model is not None:
+        raise AssistantServiceError("invalid_response")
+    return {
+        "resolved_message": resolved_message,
+        "target_model": target_model,
+        "workflow": workflow,
     }
 
 

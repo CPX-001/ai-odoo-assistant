@@ -262,6 +262,17 @@ def test_invented_ref_action_and_unacknowledged_truncation_are_rejected() -> Non
     with pytest.raises(QueryTurnError, match="answer_truncation_unacknowledged"):
         asyncio.run(service.run(_request()))
 
+    service, _ = _service(
+        lambda context: _answer(
+            limitations=["Das Ergebnis ist auf die ersten Datensätze begrenzt."]
+        ),
+        _record_evidence(truncated=True),
+    )
+    response = asyncio.run(service.run(_request()))
+    assert response.limitations == (
+        "Das Ergebnis ist auf die ersten Datensätze begrenzt.",
+    )
+
 
 def test_provider_proposed_action_maps_to_query_rejected() -> None:
     service, _ = _service(

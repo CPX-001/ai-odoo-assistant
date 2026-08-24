@@ -429,7 +429,7 @@ def build_action_tool_registry(
                     input_model=PreviewRecordPatchRequest,
                     output_model=ActionPreviewToolData,
                     handler=_preview_handler(backend),
-                    max_calls=1,
+                    max_calls=2,
                     max_input_bytes=16 * 1024,
                     max_output_bytes=96 * 1024,
                 )
@@ -442,7 +442,7 @@ def build_action_tool_registry(
                     input_model=PreviewRecordCreateRequest,
                     output_model=ActionPreviewToolData,
                     handler=_create_preview_handler(backend),
-                    max_calls=1,
+                    max_calls=2,
                     max_input_bytes=16 * 1024,
                     max_output_bytes=96 * 1024,
                 )

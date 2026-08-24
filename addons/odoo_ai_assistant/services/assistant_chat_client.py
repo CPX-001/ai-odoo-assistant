@@ -18,6 +18,9 @@ CHAT_MAX_RESPONSE_BYTES = 512 * 1024
 
 
 class AssistantChatServiceClient(AssistantServiceClient):
+    def route_chat(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._chat_post("/v1/chat/route", payload)
+
     def general_chat(self, payload: dict[str, object]) -> dict[str, object]:
         return self._chat_post("/v1/turns/general", payload)
 

@@ -8,21 +8,29 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from odoo_ai.application.chat_routing import ChatRoutingError, ChatRoutingService
 from odoo_ai.application.general_chat import GeneralChatError, GeneralChatService
 from odoo_ai.contracts.chat import (
     ChatAppendRequest,
     ChatAppendResponse,
     ChatHistoryRequest,
     ChatHistoryResponse,
+    ChatRouteRequest,
+    ChatRouteResponse,
     GeneralTurnRequest,
     GeneralTurnResponse,
 )
-from odoo_ai.runtime.chat import RuntimeChatError, RuntimeChatHistoryService
+from odoo_ai.runtime.chat import (
+    RuntimeChatError,
+    RuntimeChatHistoryService,
+    create_runtime_chat_routing_service,
+    create_runtime_general_chat_service,
+)
 from odoo_ai.security import require_shared_secret
 
 MAX_CHAT_REQUEST_BYTES: Final = 32 * 1024
 _CHAT_POST_PATHS: Final = frozenset(
-    {"/v1/chat/history", "/v1/chat/append", "/v1/turns/general"}
+    {"/v1/chat/history", "/v1/chat/append", "/v1/chat/route", "/v1/turns/general"}
 )
 
 
@@ -103,6 +111,21 @@ async def chat_append(
 
 
 @router.post(
+    "/v1/chat/route",
+    response_model=ChatRouteResponse,
+    dependencies=[Depends(require_shared_secret)],
+)
+async def chat_route(
+    payload: ChatRouteRequest,
+    request: Request,
+) -> ChatRouteResponse | JSONResponse:
+    try:
+        return await _routing_service(request).run(payload)
+    except ChatRoutingError as error:
+        return _error(error.code, error.status_code)
+
+
+@router.post(
     "/v1/turns/general",
     response_model=GeneralTurnResponse,
     dependencies=[Depends(require_shared_secret)],
@@ -122,11 +145,14 @@ def install_chat_routes(
     *,
     history_service: RuntimeChatHistoryService | None = None,
     general_service: GeneralChatService | None = None,
+    routing_service: ChatRoutingService | None = None,
 ) -> FastAPI:
     if history_service is not None:
         application.state.chat_history_service = history_service
     if general_service is not None:
         application.state.general_chat_service = general_service
+    if routing_service is not None:
+        application.state.chat_routing_service = routing_service
     if getattr(application.state, "chat_routes_installed", False):
         return application
     application.state.chat_routes_installed = True
@@ -152,10 +178,22 @@ def _general_service(request: Request) -> GeneralChatService:
     if isinstance(configured, GeneralChatService):
         return configured
     try:
-        configured = GeneralChatService.from_env()
-    except (OSError, ValueError):
+        configured = create_runtime_general_chat_service()
+    except (OSError, RuntimeError, ValueError):
         raise GeneralChatError("engine_unavailable", 503) from None
     request.app.state.general_chat_service = configured
+    return configured
+
+
+def _routing_service(request: Request) -> ChatRoutingService:
+    configured = getattr(request.app.state, "chat_routing_service", None)
+    if isinstance(configured, ChatRoutingService):
+        return configured
+    try:
+        configured = create_runtime_chat_routing_service()
+    except (OSError, RuntimeError, ValueError):
+        raise ChatRoutingError("engine_unavailable", 503) from None
+    request.app.state.chat_routing_service = configured
     return configured
 
 

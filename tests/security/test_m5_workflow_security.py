@@ -59,13 +59,13 @@ def test_browser_routing_and_citations_are_text_only_and_have_no_authority_data(
         / "assistant_panel.xml"
     ).read_text(encoding="utf-8")
 
-    assert 'rpcCall("/odoo_ai/v1/turn"' in service
+    assert 'rpcCall("/odoo_ai/v1/chat"' in service
     for workflow in ("EXPLAIN", "QUERY", "HOW_TO", "ACTION"):
         assert f'"{workflow}"' in service
     assert 'rpcCall("/odoo_ai/v1/action-decision", {' in service
     assert "proposal_id: proposalId" in service
     assert "decision," in service
-    assert "WORKFLOW_CITATION_KINDS" in service
+    assert "CHAT_WORKFLOWS" in service
     assert "t-esc" in template
     assert "t-raw" not in template
     assert "innerHTML" not in service

@@ -313,3 +313,52 @@ def test_operator_manipulation_is_rejected_against_effective_schema() -> None:
         assert gateway.record_requests == []
 
     asyncio.run(run())
+
+
+def test_invalid_aggregate_arguments_can_be_corrected_once() -> None:
+    async def run() -> None:
+        gateway = FakeQueryGateway()
+        factory = QueryToolExecutorFactory(
+            gateway=gateway, user_id=17, model="sale.order"
+        )
+        async with factory(_context(max_tool_calls=4), query_tool_specs()) as executor:
+            schema = await executor.execute(
+                ToolCall(
+                    call_id="schema-retry",
+                    tool_name=ODOO_GET_EFFECTIVE_SCHEMA,
+                    arguments={"model": "sale.order"},
+                )
+            )
+            schema_id = schema.data["effective_schema"]["schema_id"]
+            with pytest.raises(ToolExecutorError, match="aggregate_not_allowed"):
+                await executor.execute(
+                    ToolCall(
+                        call_id="aggregate-invalid",
+                        tool_name=ODOO_AGGREGATE_RECORDS,
+                        arguments={
+                            "model": "sale.order",
+                            "schema_id": schema_id,
+                            "metrics": [{"operation": "sum", "field": "name"}],
+                            "filter": {"match": "all", "conditions": []},
+                            "group_by": [],
+                            "group_limit": 20,
+                        },
+                    )
+                )
+            result = await executor.execute(
+                ToolCall(
+                    call_id="aggregate-corrected",
+                    tool_name=ODOO_AGGREGATE_RECORDS,
+                    arguments={
+                        "model": "sale.order",
+                        "schema_id": schema_id,
+                        "metrics": [{"operation": "count", "field": None}],
+                        "filter": {"match": "all", "conditions": []},
+                        "group_by": [],
+                        "group_limit": 20,
+                    },
+                )
+            )
+        assert result.data["result"]["groups"][0]["metrics"][0]["value"] == 0
+
+    asyncio.run(run())

@@ -8,7 +8,9 @@ automatic chat facade in front of those boundaries: the user does **not** choose
 
 The browser sends only the message, the untrusted `ScreenContext` hint and an optional
 conversation id to `/odoo_ai/v1/chat`. Odoo derives the effective user server-side and
-chooses the narrow internal boundary before granting any authority:
+builds a bounded candidate list from models that are actually visible and readable under
+that actor. A tool-free Codex structured-output turn interprets the original message,
+effective locale, recent bounded history, current screen and those candidates:
 
 ```text
 single chat
@@ -19,9 +21,17 @@ single chat
     └─ code/docs/general       -> GENERAL read-only boundary
 ```
 
-The routing decision is internal product behavior, not browser authority. Existing
-legacy endpoints remain for compatibility, but the standard panel uses only the chat
-facade and action-decision endpoint.
+The router is semantic and multilingual; it does not maintain language-specific keyword
+or model-alias dictionaries. Its output is restricted to `workflow + target_model` plus a
+self-contained same-language reformulation that may only resolve references supported by
+bounded recent history. It has no tools or execution authority and must select a target
+from the Odoo-provided list. Odoo persists the original user text, not the reformulation.
+Odoo validates both values again before signing a workflow delegation. Responses follow
+the request language, falling back to the effective Odoo locale when it is ambiguous.
+
+The routing decision is internal product behavior, not browser authority. Existing legacy
+endpoints remain for compatibility, but the standard panel uses only the chat facade and
+action-decision endpoint.
 
 `ScreenContext` remains a navigation hint. QUERY may resolve a different visible/readable
 model from Odoo navigation metadata instead of being mechanically tied to the model that
@@ -47,6 +57,13 @@ saved-record context. Persistent knowledge is retrieved from Assistant PostgreSQ
 the reasoning turn; source tools use the persistent source index and revalidate excerpts.
 No boundary exposes shell, arbitrary SQL, Python execution, `sudo()`, generic
 `execute_method` or generic `execute_kw`.
+
+ACTION exposes all registered preview-only families instead of selecting them with
+prompt-language regular expressions. Codex chooses the semantic family, while the host
+still enforces the three-call global budget, per-tool caps, effective write schema,
+current-record target and proposal reconciliation. A patch of the current record cannot
+fall back to record creation after malformed arguments. Free-form chat text never grants
+approval; only the explicit Odoo action-decision route can start commit and verification.
 
 ## Conversation state
 
