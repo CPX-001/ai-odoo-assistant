@@ -17,7 +17,6 @@ from odoo_ai.adapters.action_tools import (
     build_action_tool_registry,
 )
 from odoo_ai.adapters.codex_engine import (
-    CodexAppServerEngine,
     CodexEngineError,
     CodexEngineLimits,
     CodexEngineMetadata,
@@ -89,6 +88,9 @@ from odoo_ai.adapters.source_tools import (
     SourceToolExecutorFactory,
     build_source_tool_registry,
     source_tool_specs,
+)
+from odoo_ai.adapters.user_model_engine import (
+    UserSelectableCodexAppServerEngine as CodexAppServerEngine,
 )
 from odoo_ai.ports import OdooGatewayError
 
