@@ -11,6 +11,12 @@ from ..services import AssistantServiceError
 
 _MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _MAX_MODEL_OPTIONS = 50
+_AUTONOMY_PROFILES = {
+    "strict": ("always_confirm", "low"),
+    "balanced": ("risk_based", "moderate"),
+    "autonomous": ("protected_only", "high"),
+    "full_access": ("protected_only", "protected"),
+}
 
 
 class AssistantUserPreference(models.Model):
@@ -26,6 +32,18 @@ class AssistantUserPreference(models.Model):
         default=lambda self: self.env.user,
     )
     reasoning_model = fields.Char(string="Preferred Codex model")
+    agent_autonomy_profile = fields.Selection(
+        selection=[
+            ("strict", "Strict"),
+            ("balanced", "Balanced"),
+            ("autonomous", "Autonomous"),
+            ("full_access", "Full access"),
+        ],
+        default="balanced",
+        string="Assistant autonomy",
+    )
+    # Legacy fields remain stored so existing databases upgrade without a destructive
+    # migration. They are synchronized from the visible autonomy profile.
     agent_confirmation_mode = fields.Selection(
         selection=[
             ("always_confirm", "Always confirm"),
@@ -36,9 +54,14 @@ class AssistantUserPreference(models.Model):
         default="risk_based",
     )
     agent_max_auto_risk = fields.Selection(
-        selection=[("low", "Low"), ("moderate", "Moderate"), ("high", "High")],
+        selection=[
+            ("low", "Low"),
+            ("moderate", "Moderate"),
+            ("high", "High"),
+            ("protected", "Protected"),
+        ],
         required=True,
-        default="low",
+        default="moderate",
     )
     agent_allow_synthetic_data = fields.Boolean(required=True, default=True)
 
@@ -79,11 +102,44 @@ class AssistantUserPreference(models.Model):
         return normalized or None
 
     @api.model
+    def current_agent_profile(self):
+        preference = self.search([("user_id", "=", self.env.uid)], limit=1)
+        if not preference:
+            return "balanced"
+        profile = preference.agent_autonomy_profile
+        if profile in _AUTONOMY_PROFILES:
+            return profile
+        return _profile_from_legacy(
+            preference.agent_confirmation_mode,
+            preference.agent_max_auto_risk,
+        )
+
+    @api.model
+    def set_current_agent_profile(self, profile):
+        if profile not in _AUTONOMY_PROFILES:
+            raise ValidationError("Invalid Assistant autonomy profile.")
+        mode, risk = _AUTONOMY_PROFILES[profile]
+        preference = self.search([("user_id", "=", self.env.uid)], limit=1)
+        values = {
+            "agent_autonomy_profile": profile,
+            "agent_confirmation_mode": mode,
+            "agent_max_auto_risk": risk,
+        }
+        if preference:
+            preference.write(values)
+        else:
+            values["user_id"] = self.env.uid
+            preference = self.create(values)
+        return preference.agent_autonomy_profile
+
+    @api.model
     def current_agent_policy(self):
         preference = self.search([("user_id", "=", self.env.uid)], limit=1)
+        profile = self.current_agent_profile()
+        mode, risk = _AUTONOMY_PROFILES[profile]
         return {
-            "confirmation_mode": preference.agent_confirmation_mode or "risk_based",
-            "max_auto_risk": preference.agent_max_auto_risk or "low",
+            "confirmation_mode": mode,
+            "max_auto_risk": risk,
             "allow_synthetic_data": (
                 preference.agent_allow_synthetic_data if preference else True
             ),
@@ -186,6 +242,25 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
         }
 
     @api.model
+    def agent_autonomy_preferences(self):
+        if not self.env.user._is_internal():
+            return _error("access_denied")
+        return {
+            "ok": True,
+            "profile": self.env["odoo.ai.user.preference"].current_agent_profile(),
+        }
+
+    @api.model
+    def set_agent_autonomy_preference(self, profile):
+        if not self.env.user._is_internal() or profile not in _AUTONOMY_PROFILES:
+            return _error("invalid_context")
+        try:
+            selected = self.env["odoo.ai.user.preference"].set_current_agent_profile(profile)
+        except ValidationError:
+            return _error("invalid_context")
+        return {"ok": True, "profile": selected}
+
+    @api.model
     def agent_policy_preferences(self):
         if not self.env.user._is_internal():
             return _error("access_denied")
@@ -200,30 +275,27 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
     def set_agent_policy_preferences(self, confirmation_mode, max_auto_risk):
         if not self.env.user._is_internal():
             return _error("access_denied")
-        if confirmation_mode not in {
-            "always_confirm",
-            "risk_based",
-            "protected_only",
-        } or max_auto_risk not in {"low", "moderate", "high"}:
+        profile = _profile_from_legacy(confirmation_mode, max_auto_risk)
+        try:
+            selected = self.env["odoo.ai.user.preference"].set_current_agent_profile(profile)
+        except ValidationError:
             return _error("invalid_context")
-        preference = self.env["odoo.ai.user.preference"].search(
-            [("user_id", "=", self.env.uid)],
-            limit=1,
-        )
-        values = {
-            "agent_confirmation_mode": confirmation_mode,
-            "agent_max_auto_risk": max_auto_risk,
-        }
-        if preference:
-            preference.write(values)
-        else:
-            values["user_id"] = self.env.uid
-            self.env["odoo.ai.user.preference"].create(values)
+        mode, risk = _AUTONOMY_PROFILES[selected]
         return {
             "ok": True,
-            "confirmation_mode": confirmation_mode,
-            "max_auto_risk": max_auto_risk,
+            "confirmation_mode": mode,
+            "max_auto_risk": risk,
         }
+
+
+def _profile_from_legacy(mode, risk):
+    if mode == "always_confirm":
+        return "strict"
+    if mode == "protected_only" and risk == "protected":
+        return "full_access"
+    if mode == "protected_only":
+        return "autonomous"
+    return "balanced"
 
 
 def _validated_model_catalog(payload):
