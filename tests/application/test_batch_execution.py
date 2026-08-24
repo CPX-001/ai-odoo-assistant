@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from odoo_ai.application.batch_execution import (
@@ -73,8 +75,7 @@ class FakeBatchGateway:
         return self._results(items)
 
 
-@pytest.mark.asyncio
-async def test_one_failed_row_does_not_stop_later_chunks() -> None:
+def test_one_failed_row_does_not_stop_later_chunks() -> None:
     gateway = FakeBatchGateway(fail_refs={"row:17"})
     service = BatchMutationExecutionService(
         gateway,
@@ -89,7 +90,7 @@ async def test_one_failed_row_does_not_stop_later_chunks() -> None:
         ),
     )
 
-    result = await service.execute(request)
+    result = asyncio.run(service.execute(request))
 
     assert result.total_items == 25
     assert result.applied_items == 24
@@ -100,8 +101,7 @@ async def test_one_failed_row_does_not_stop_later_chunks() -> None:
     assert all(call[4] is BatchFailureMode.CONTINUE_ON_ERROR for call in gateway.calls)
 
 
-@pytest.mark.asyncio
-async def test_create_results_keep_source_row_to_created_record_mapping() -> None:
+def test_create_results_keep_source_row_to_created_record_mapping() -> None:
     gateway = FakeBatchGateway(fail_refs={"sheet1:3"})
     service = BatchMutationExecutionService(gateway)
     request = BatchMutationRequest(
@@ -115,7 +115,7 @@ async def test_create_results_keep_source_row_to_created_record_mapping() -> Non
         ),
     )
 
-    result = await service.execute(request)
+    result = asyncio.run(service.execute(request))
 
     assert tuple(item.source_ref for item in result.results) == (
         "sheet1:2",
@@ -127,8 +127,7 @@ async def test_create_results_keep_source_row_to_created_record_mapping() -> Non
     assert result.results[2].record_id is not None
 
 
-@pytest.mark.asyncio
-async def test_patch_planner_grouping_is_used_by_execution_service() -> None:
+def test_patch_planner_grouping_is_used_by_execution_service() -> None:
     gateway = FakeBatchGateway()
     service = BatchMutationExecutionService(gateway)
     request = BatchMutationRequest(
@@ -154,7 +153,7 @@ async def test_patch_planner_grouping_is_used_by_execution_service() -> None:
         ),
     )
 
-    result = await service.execute(request)
+    result = asyncio.run(service.execute(request))
 
     assert result.applied_items == 3
     assert [call[3] for call in gateway.calls] == [2, 1]
@@ -172,8 +171,7 @@ class CorruptBatchGateway(FakeBatchGateway):
         )
 
 
-@pytest.mark.asyncio
-async def test_gateway_must_return_exactly_one_result_per_row() -> None:
+def test_gateway_must_return_exactly_one_result_per_row() -> None:
     service = BatchMutationExecutionService(CorruptBatchGateway())
     request = BatchMutationRequest(
         operation=BatchMutationKind.DELETE,
@@ -185,4 +183,4 @@ async def test_gateway_must_return_exactly_one_result_per_row() -> None:
     )
 
     with pytest.raises(BatchExecutionError, match="batch_gateway_result_corrupt"):
-        await service.execute(request)
+        asyncio.run(service.execute(request))
