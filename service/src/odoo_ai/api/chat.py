@@ -26,6 +26,10 @@ from odoo_ai.runtime.chat import (
     create_runtime_chat_routing_service,
     create_runtime_general_chat_service,
 )
+from odoo_ai.runtime.model_catalog import (
+    RuntimeModelCatalogError,
+    load_codex_model_catalog,
+)
 from odoo_ai.security import require_shared_secret
 
 MAX_CHAT_REQUEST_BYTES: Final = 32 * 1024
@@ -78,6 +82,17 @@ class ChatRequestLimitMiddleware:
 
 
 router = APIRouter()
+
+
+@router.get(
+    "/v1/chat/models",
+    dependencies=[Depends(require_shared_secret)],
+)
+async def chat_models() -> dict[str, object] | JSONResponse:
+    try:
+        return load_mapping := (await load_codex_model_catalog()).to_mapping()
+    except RuntimeModelCatalogError as error:
+        return _error(error.code, 503)
 
 
 @router.post(
@@ -174,14 +189,14 @@ def _history_service(request: Request) -> RuntimeChatHistoryService:
 
 
 def _general_service(request: Request) -> GeneralChatService:
-    configured = getattr(request.app.state, "general_chat_service", None)
+    configured = getattr(request.app.state, "chat_general_service", None)
     if isinstance(configured, GeneralChatService):
         return configured
     try:
         configured = create_runtime_general_chat_service()
     except (OSError, RuntimeError, ValueError):
         raise GeneralChatError("engine_unavailable", 503) from None
-    request.app.state.general_chat_service = configured
+    request.app.state.chat_general_service = configured
     return configured
 
 
