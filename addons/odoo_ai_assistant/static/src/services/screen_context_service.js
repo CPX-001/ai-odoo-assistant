@@ -36,6 +36,45 @@ function selectedIds(value) {
 }
 
 /**
+ * Resolve the concrete Odoo view id for developer-facing UI only.
+ * It is deliberately kept out of buildScreenContext(), so it is never promoted from a
+ * browser hint into Assistant authority or sent to the Assistant Service.
+ */
+export function currentViewId(actionService, routerState = {}) {
+    const controller = actionService?.currentController;
+    const props = controller?.props || {};
+    const currentState = controller?.currentState || {};
+    const action = controller?.action || {};
+    const directCandidates = [
+        props.viewId,
+        currentState.viewId,
+        controller?.viewId,
+        controller?.config?.viewId,
+        routerState.view_id,
+    ];
+    for (const candidate of directCandidates) {
+        const resolved = positiveId(candidate);
+        if (resolved !== null) {
+            return resolved;
+        }
+    }
+
+    const viewType = props.type || routerState.view_type;
+    if (Array.isArray(action.views) && typeof viewType === "string") {
+        for (const entry of action.views) {
+            if (!Array.isArray(entry) || entry.length < 2 || entry[1] !== viewType) {
+                continue;
+            }
+            const resolved = positiveId(entry[0]);
+            if (resolved !== null) {
+                return resolved;
+            }
+        }
+    }
+    return null;
+}
+
+/**
  * Build an untrusted navigation hint from Odoo 18 action/menu/router state.
  * Identity, companies, sessions and credentials are deliberately absent.
  */
@@ -84,6 +123,9 @@ export const screenContextService = {
         return {
             capture() {
                 return buildScreenContext(action, menu, router.current);
+            },
+            currentViewId() {
+                return currentViewId(action, router.current);
             },
         };
     },
