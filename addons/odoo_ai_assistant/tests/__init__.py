@@ -8,3 +8,4 @@ from . import test_query_odoo_permissions as test_query_odoo_permissions
 from . import test_query_tools as test_query_tools
 from . import test_settings as test_settings
 from . import test_turn_context as test_turn_context
+from . import test_user_preferences as test_user_preferences
