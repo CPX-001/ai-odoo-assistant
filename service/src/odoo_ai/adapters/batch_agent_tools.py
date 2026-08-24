@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
+from typing import Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from odoo_ai.application.batch_jobs import BatchMutationJobService
 from odoo_ai.application.batch_preflight import (
@@ -42,6 +43,20 @@ class BatchPreviewToolData(BaseModel):
         default=(), max_length=MAX_BATCH_ISSUE_PREVIEW
     )
     issues_truncated: bool = False
+
+    @model_validator(mode="after")
+    def validate_summary(self) -> Self:
+        if (self.proposal is None) != (self.accepted_count == 0):
+            raise ValueError("batch preview proposal count is inconsistent")
+        if self.proposal is not None and self.proposal.item_count != self.accepted_count:
+            raise ValueError("batch preview proposal count is inconsistent")
+        if len(self.issues) > self.rejected_count:
+            raise ValueError("batch preview issue count is inconsistent")
+        if self.issues_truncated != (len(self.issues) < self.rejected_count):
+            raise ValueError("batch preview truncation marker is inconsistent")
+        if self.accepted_count + self.rejected_count < 1:
+            raise ValueError("batch preview cannot be empty")
+        return self
 
 
 class BatchToolBackend:
@@ -169,8 +184,9 @@ def build_batch_tool_binding(
         raise ToolExecutorError("agent_tool_spec_mismatch")
 
     async def handler(value: BaseModel) -> ToolHandlerOutput:
-        request = BatchMutationRequest.model_validate(value)
-        result = await backend.preview(request)
+        if not isinstance(value, BatchMutationRequest):
+            raise ToolExecutorError("tool_input_invalid")
+        result = await backend.preview(value)
         return ToolHandlerOutput(data=result)
 
     return RegisteredTool(
