@@ -90,7 +90,7 @@ router = APIRouter()
 )
 async def chat_models() -> dict[str, object] | JSONResponse:
     try:
-        return load_mapping := (await load_codex_model_catalog()).to_mapping()
+        return (await load_codex_model_catalog()).to_mapping()
     except RuntimeModelCatalogError as error:
         return _error(error.code, 503)
 
@@ -165,7 +165,7 @@ def install_chat_routes(
     if history_service is not None:
         application.state.chat_history_service = history_service
     if general_service is not None:
-        application.state.general_chat_service = general_service
+        application.state.chat_general_service = general_service
     if routing_service is not None:
         application.state.chat_routing_service = routing_service
     if getattr(application.state, "chat_routes_installed", False):
