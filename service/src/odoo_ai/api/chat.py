@@ -86,6 +86,7 @@ router = APIRouter()
 
 @router.get(
     "/v1/chat/models",
+    response_model=None,
     dependencies=[Depends(require_shared_secret)],
 )
 async def chat_models() -> dict[str, object] | JSONResponse:
