@@ -30,3 +30,25 @@ class BrowserChatController(http.Controller):
         if unexpected:
             return {"error": {"code": "invalid_context"}, "ok": False}
         return request.env["odoo.ai.assistant.bridge"].chat_history(conversation_id)
+
+    @http.route(
+        "/odoo_ai/v1/chat-models",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def models(self, **unexpected):
+        if unexpected:
+            return {"error": {"code": "invalid_context"}, "ok": False}
+        return request.env["odoo.ai.assistant.bridge"].chat_model_preferences()
+
+    @http.route(
+        "/odoo_ai/v1/chat-model",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def set_model(self, model=None, **unexpected):
+        if unexpected:
+            return {"error": {"code": "invalid_context"}, "ok": False}
+        return request.env["odoo.ai.assistant.bridge"].set_chat_model_preference(model)
