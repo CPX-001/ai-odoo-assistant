@@ -30,7 +30,7 @@ modelo y construye el schema efectivo antes de leer o preparar un write.
 | Crear un registro | Schema create efectivo + `default_get` real |
 | Cambiar campos escalares/many2one | Schema write efectivo, máximo 16 campos |
 | Archivar | Acción reversible tipada sobre un registro elegible |
-| Borrar | Un registro por proposal, con ACL `unlink` y preview |
+| Borrar | Un registro por proposal ACTION actual, con ACL `unlink` y preview |
 | Ejecutar un método empresarial | Sólo business action tipada/versionada |
 
 Los campos x2many, binary, HTML de escritura, referencias polimórficas, JSON y
@@ -39,26 +39,43 @@ lists de Odoo desde texto libre.
 
 ### Evolución batch
 
-ADR-015 define la evolución de create/patch/delete hacia mutaciones masivas. La
-primera fase ya aporta contratos normalizados y un planner determinista de
-chunks, pero todavía no sustituye el proposal individual en el tool registry.
+ADR-015 define la evolución de create/patch/delete hacia mutaciones masivas. Ya
+existen cuatro piezas separadas:
 
-Defaults iniciales del planner para servidores self-hosted modestos:
+1. contratos provider-neutral de filas/resultados (`contracts/batch.py`);
+2. planner determinista de chunks (`application/batching.py`);
+3. orquestador provider-neutral con resultado por fila (`application/batch_execution.py`);
+4. helper ORM Odoo que intenta el camino bulk y, si falla, aísla filas mediante
+   savepoints (`addons/.../services/batch_tools.py`).
+
+Defaults iniciales para servidores self-hosted modestos:
 
 - create: 50 filas por chunk;
 - patch: 50 filas por chunk;
 - delete: 100 ids por chunk;
-- máximo host-side: 200 filas por chunk.
+- máximo host-side: 200 filas por chunk;
+- un `BatchMutationRequest` en memoria: máximo 500 filas.
 
-Los patches con valores idénticos se agrupan para que el futuro adapter Odoo
-pueda ejecutar un `recordset.write(vals)`. Creates podrán usar multi-create y
-deletes `recordset.unlink()` por chunk. Una importación grande no se modelará
-como miles de AgentPlanSteps: se persistirá como job y alimentará batches
-acotados.
+Los patches con valores idénticos se agrupan para poder ejecutar un
+`recordset.write(vals)`. Creates usan como estrategia objetivo multi-create y
+deletes `recordset.unlink()` por chunk.
 
-El pipeline de archivos futuro será parser determinista/streaming -> perfil y
-muestra -> mapping semántico asistido por Codex -> validación Odoo -> filas
-normalizadas persistidas -> ejecución batch. Codex no será el parser de volumen.
+El modo genérico por defecto es `continue_on_error`: primero se intenta la
+operación optimizada del chunk; si Odoo la rechaza, se revierte únicamente ese
+savepoint y se reintentan sus filas de forma aislada. Una fila fallida queda sin
+aplicar, el resto continúa y el resultado conserva `source_ref` para notificar
+exactamente qué dato falló. `atomic_chunk` queda reservado para operaciones cuya
+semántica empresarial requiera todo-o-nada.
+
+Una importación grande no se modelará como miles de AgentPlanSteps: se persistirá
+como job y alimentará batches acotados. El pipeline de archivos futuro será
+parser determinista/streaming -> perfil y muestra -> mapping semántico asistido
+por Codex -> validación Odoo -> filas normalizadas persistidas -> ejecución
+batch. Codex no será el parser de volumen.
+
+Estas piezas todavía no convierten el tool ACTION individual en un proposal
+batch de primera clase; falta cablear preview, authority, receipt y plan como una
+única operación masiva antes de exponerlo al ReasoningEngine.
 
 ## Resolución de una petición
 
@@ -81,18 +98,30 @@ si corresponde confirmar según el perfil de autonomía del usuario.
 
 ## Decisión y commit
 
-`AgentTurnService` normaliza el plan. El Policy Engine calcula el riesgo y el
-perfil efectivo de autonomía. Un plan autorizado automáticamente pasa al
-executor; si no, la UI muestra una única confirmación compacta. El navegador no
-recibe argumentos ejecutables, tokens ni autoridad.
+`AgentTurnService` normaliza el plan. El Policy Engine calcula el riesgo y
+resuelve los límites host-side. La confirmación del Assistant se deriva del
+**perfil visible del usuario**, no de una intersección oculta que pueda volver
+más estricto el selector. Las capas de sistema/administrador/conversación pueden
+seguir reduciendo budgets técnicos o desactivar datos sintéticos, pero no
+cambiar silenciosamente `confirmation_mode`/`max_auto_risk` elegidos por el
+usuario.
 
-Perfiles de usuario:
+Perfiles:
 
 - `strict`: confirma cualquier escritura;
 - `balanced`: autoejecuta hasta riesgo moderado;
 - `autonomous`: autoejecuta hasta riesgo alto y confirma efectos protegidos;
-- `full_access`: no añade confirmaciones del Assistant, conservando permisos
-  reales de Odoo y límites host-side.
+- `full_access`: no añade confirmaciones del Assistant, incluso para riesgo
+  protegido, conservando permisos/reglas reales de Odoo y límites host-side.
+
+Un plan autoautorizado se ejecuta en el mismo turn. Después del commit, la
+respuesta mostrada al usuario se deriva del estado host-side real: completado y
+verificado, parcial o fallido. El texto previo de Codex no puede afirmar que una
+operación sigue "sólo previsualizada" después de que el host ya la ejecutó.
+
+Una denegación ACL/record rule y una `UserError`/`ValidationError` de negocio son
+causas distintas de fallo y se reportan como tales; ninguna se presenta como si
+faltara otra confirmación.
 
 Estados persistidos:
 
@@ -118,6 +147,11 @@ real:
 salvo que el usuario la pida o la intención completa la implique claramente.
 Contabilizar, pagar o comunicar fuera de Odoo requiere otra acción protegida;
 esas capabilities no se exponen por inferencia.
+
+`full_access` no salta reglas de negocio del modelo. Por ejemplo, si Odoo no
+permite `unlink()` en el estado actual de un documento, el commit devuelve
+`business_rule_rejected`; para automatizar esa intención hace falta una business
+action tipada que realice la transición válida, no `sudo()` ni SQL.
 
 ## Diagnóstico de modelos de terceros
 
