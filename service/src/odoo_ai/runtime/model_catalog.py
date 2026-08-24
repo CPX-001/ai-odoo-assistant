@@ -16,7 +16,7 @@ from odoo_ai.adapters.configured_codex import ConfiguredCodexRuntimeSettings
 
 MODEL_CATALOG_TTL_SECONDS: Final = 300.0
 MAX_MODEL_OPTIONS: Final = 50
-_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
+_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
 
 
 class RuntimeModelCatalogError(RuntimeError):
@@ -71,8 +71,8 @@ async def load_codex_model_catalog() -> ModelCatalog:
 
 
 async def _fetch_catalog() -> ModelCatalog:
-    settings = ConfiguredCodexRuntimeSettings.from_env()
     try:
+        settings = ConfiguredCodexRuntimeSettings.from_env()
         client = await CodexAppServerClient.start(settings)
         async with client:
             payload = await client.request(
