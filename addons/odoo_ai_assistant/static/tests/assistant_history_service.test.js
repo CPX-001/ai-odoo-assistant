@@ -1,14 +1,20 @@
 import { expect, test } from "@odoo/hoot";
 import {
     ACTIVE_CHAT_TTL_MS,
+    RECOVERY_PLAN_TTL_MS,
     activeChatStorageKey,
     clearRecentActiveChat,
+    clearRecoveryPlanId,
     loadRecentActiveChat,
+    loadRecoveryPlanId,
+    recoveryPlanStorageKey,
     saveRecentActiveChat,
+    saveRecoveryPlanId,
 } from "@odoo_ai_assistant/services/assistant_history_service";
 import { assistantPanelService } from "@odoo_ai_assistant/services/assistant_panel_service";
 
 const CONVERSATION_ID = "22345678-1234-4678-9234-567812345678";
+const PLAN_ID = "32345678-1234-4678-9234-567812345678";
 const SCREEN_CONTEXT = {
     capture() {
         return {
@@ -35,6 +41,7 @@ function memoryStorage() {
 
 test("history is the initial view without a recent same-tab conversation", () => {
     clearRecentActiveChat(globalThis.sessionStorage);
+    clearRecoveryPlanId(globalThis.localStorage);
     const panel = assistantPanelService.start({}, { odoo_ai_screen_context: SCREEN_CONTEXT });
 
     expect(panel.state.historyView).toBe(true);
@@ -57,6 +64,7 @@ test("recent active chat cache is restored only while fresh", () => {
 
 test("a recent conversation in this tab starts as active", () => {
     clearRecentActiveChat(globalThis.sessionStorage);
+    clearRecoveryPlanId(globalThis.localStorage);
     saveRecentActiveChat(globalThis.sessionStorage, CONVERSATION_ID);
 
     const panel = assistantPanelService.start({}, { odoo_ai_screen_context: SCREEN_CONTEXT });
@@ -64,4 +72,25 @@ test("a recent conversation in this tab starts as active", () => {
     expect(panel.state.historyView).toBe(false);
     expect(panel.state.conversationId).toBe(CONVERSATION_ID);
     clearRecentActiveChat(globalThis.sessionStorage);
+});
+
+test("pending recovery plan cache survives browser sessions while bounded", () => {
+    const storage = memoryStorage();
+    const now = 2_000_000;
+
+    expect(saveRecoveryPlanId(storage, PLAN_ID, now)).toBe(true);
+    expect(loadRecoveryPlanId(storage, now + RECOVERY_PLAN_TTL_MS - 1)).toBe(PLAN_ID);
+    expect(loadRecoveryPlanId(storage, now + RECOVERY_PLAN_TTL_MS + 1)).toBe(null);
+    expect(storage.getItem(recoveryPlanStorageKey())).toBe(null);
+});
+
+test("invalid recovery cache never becomes a plan handle", () => {
+    const storage = memoryStorage();
+    storage.setItem(
+        recoveryPlanStorageKey(),
+        JSON.stringify({ version: 1, planId: "not-a-uuid", touchedAt: 2_000_000 })
+    );
+
+    expect(loadRecoveryPlanId(storage, 2_000_001)).toBe(null);
+    expect(storage.getItem(recoveryPlanStorageKey())).toBe(null);
 });
