@@ -3,6 +3,8 @@
 const MAX_STREAM_BYTES = 1024 * 1024;
 const MAX_FRAME_CHARS = 128 * 1024;
 const MAX_DELTA_CHARS = 4096;
+const MAX_POLL_ATTEMPTS = 360;
+const POLL_DELAY_MS = 500;
 
 function exactKeys(value, expected) {
     return (
@@ -141,37 +143,115 @@ export async function readAssistantStream(response, onDelta = () => {}) {
     }
 }
 
-export async function streamAssistantChat({ payload, onDelta, fetchCall = globalThis.fetch }) {
-    if (typeof fetchCall !== "function") {
-        throw new Error("stream_unavailable");
-    }
-    const csrfToken = globalThis.odoo?.csrf_token;
-    if (typeof csrfToken !== "string" || !csrfToken) {
-        throw new Error("csrf_unavailable");
-    }
-    let screen;
-    try {
-        screen = JSON.stringify(payload.screen);
-    } catch {
-        throw new Error("invalid_context");
-    }
-    if (!screen || screen.length > 16 * 1024) {
-        throw new Error("invalid_context");
-    }
-    const body = new URLSearchParams();
-    body.set("csrf_token", csrfToken);
-    body.set("message", String(payload.message || ""));
-    body.set("screen", screen);
-    body.set("conversation_id", payload.conversation_id || "");
-
-    const response = await fetchCall("/odoo_ai/v1/chat/stream", {
+async function jsonRoute(fetchCall, route, params) {
+    const response = await fetchCall(route, {
         method: "POST",
         credentials: "same-origin",
         headers: {
-            Accept: "text/event-stream",
-            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+            Accept: "application/json",
+            "Content-Type": "application/json",
         },
-        body,
+        body: JSON.stringify({
+            jsonrpc: "2.0",
+            method: "call",
+            params,
+            id: Date.now(),
+        }),
     });
-    return readAssistantStream(response, onDelta);
+    if (!response?.ok || typeof response.json !== "function") {
+        throw new Error("runtime_unavailable");
+    }
+    const envelope = await response.json();
+    if (envelope?.error || !Object.prototype.hasOwnProperty.call(envelope || {}, "result")) {
+        throw new Error("runtime_unavailable");
+    }
+    return envelope.result;
+}
+
+function requestId() {
+    const uuid = globalThis.crypto?.randomUUID?.();
+    if (typeof uuid === "string" && uuid.length >= 8) {
+        return uuid;
+    }
+    return `web-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+async function emitProgress(events, onDelta, emitted) {
+    if (!Array.isArray(events)) {
+        return;
+    }
+    const labels = {
+        queued: "Petición en cola…\n",
+        started: "Procesando petición…\n",
+        "reasoning.started": "Analizando petición…\n",
+        "tool.started": "Consultando datos…\n",
+        "reasoning.completed": "Preparando respuesta…\n",
+    };
+    for (const event of events) {
+        const text = labels[event?.type];
+        if (text && !emitted.has(text)) {
+            emitted.add(text);
+            await onDelta(text);
+        }
+    }
+}
+
+export async function streamAssistantChat({
+    payload,
+    onDelta = () => {},
+    fetchCall = globalThis.fetch,
+    waitCall = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+}) {
+    if (typeof fetchCall !== "function") {
+        throw new Error("stream_unavailable");
+    }
+    if (
+        typeof payload?.message !== "string" ||
+        !payload.message.trim() ||
+        payload.message.length > 4000 ||
+        payload.screen === null ||
+        typeof payload.screen !== "object"
+    ) {
+        throw new Error("invalid_context");
+    }
+    const emitted = new Set();
+    const queued = await jsonRoute(fetchCall, "/odoo_ai/v1/turn", {
+        message: payload.message,
+        screen: payload.screen,
+        conversation_id: payload.conversation_id || null,
+        client_request_id: requestId(),
+    });
+    if (queued?.ok !== true || typeof queued.turn_id !== "string") {
+        throw new Error(queued?.error?.code || "runtime_unavailable");
+    }
+    await emitProgress(queued.events, onDelta, emitted);
+    let afterSequence = Number.isSafeInteger(queued.last_sequence) ? queued.last_sequence : 0;
+    if (queued.state === "completed" && queued.response) {
+        return queued.response;
+    }
+
+    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
+        await waitCall(POLL_DELAY_MS);
+        const status = await jsonRoute(fetchCall, "/odoo_ai/v1/turn/status", {
+            turn_id: queued.turn_id,
+            after_sequence: afterSequence,
+        });
+        if (status?.ok !== true || status.turn_id !== queued.turn_id) {
+            throw new Error(status?.error?.code || "runtime_unavailable");
+        }
+        await emitProgress(status.events, onDelta, emitted);
+        if (Number.isSafeInteger(status.last_sequence)) {
+            afterSequence = status.last_sequence;
+        }
+        if (status.state === "completed") {
+            if (status.response?.ok !== true) {
+                throw new Error("invalid_response");
+            }
+            return status.response;
+        }
+        if (["failed", "cancelled", "recovery_required"].includes(status.state)) {
+            throw new Error(status.error_code || "runtime_unavailable");
+        }
+    }
+    throw new Error("engine_timeout");
 }
