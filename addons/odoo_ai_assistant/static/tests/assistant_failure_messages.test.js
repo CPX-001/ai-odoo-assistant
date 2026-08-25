@@ -1,4 +1,5 @@
 import { expect, test } from "@odoo/hoot";
+import { patchTranslations } from "@web/../tests/web_test_helpers";
 import { failureMessage } from "@odoo_ai_assistant/components/assistant_panel/assistant_failure_messages";
 
 for (const code of [
@@ -11,6 +12,7 @@ for (const code of [
     "service_unavailable",
 ]) {
     test(`failure ${code} is presented as a plain assistant fallback`, () => {
+        patchTranslations();
         const message = failureMessage(code);
 
         expect(message.length).toBeGreaterThan(20);
@@ -24,12 +26,14 @@ for (const code of [
 }
 
 test("context failures explicitly avoid screen-based authorization advice", () => {
+    patchTranslations();
     expect(failureMessage("invalid_context")).toInclude(
         "No necesitas abrir una pantalla concreta"
     );
 });
 
 test("transport ambiguity warns before repeating a write", () => {
+    patchTranslations();
     for (const code of ["service_unavailable", "invalid_response", "engine_timeout"]) {
         const message = failureMessage(code);
 
@@ -40,6 +44,7 @@ test("transport ambiguity warns before repeating a write", () => {
 });
 
 test("unknown failures admit when the cause is not known", () => {
+    patchTranslations();
     expect(failureMessage("some_new_internal_failure")).toInclude(
         "no voy a inventarla"
     );

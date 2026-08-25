@@ -6,7 +6,10 @@ import {
 
 const encoder = new TextEncoder();
 
-function responseFromStrings(strings, { contentType = "text/event-stream" } = {}) {
+function responseFromStrings(
+    strings,
+    { contentType = "text/event-stream", onCancel = () => {} } = {}
+) {
     const chunks = strings.map((value) => encoder.encode(value));
     let index = 0;
     return {
@@ -23,7 +26,9 @@ function responseFromStrings(strings, { contentType = "text/event-stream" } = {}
                         index += 1;
                         return { done: false, value };
                     },
-                    async cancel() {},
+                    async cancel() {
+                        onCancel();
+                    },
                     releaseLock() {},
                 };
             },
@@ -73,6 +78,46 @@ test("browser stream rejects unknown events and incomplete streams", async () =>
         incompleteFailed = true;
     }
     expect(incompleteFailed).toBe(true);
+});
+
+test("browser stream cancels its reader after the single authoritative final", async () => {
+    let cancelCalls = 0;
+    const response = responseFromStrings(
+        [event("final", { type: "final", response: { ok: true } })],
+        { onCancel: () => (cancelCalls += 1) }
+    );
+
+    expect(await readAssistantStream(response)).toEqual({ ok: true });
+    expect(cancelCalls).toBe(1);
+});
+
+test("browser stream rejects a second final in the same received frame batch", async () => {
+    const terminal = event("final", { type: "final", response: { ok: true } });
+    let failed = false;
+
+    try {
+        await readAssistantStream(responseFromStrings([terminal + terminal]));
+    } catch {
+        failed = true;
+    }
+
+    expect(failed).toBe(true);
+});
+
+test("browser stream enforces delta, frame, and total-byte limits", async () => {
+    const oversizedDelta = event("delta", { type: "delta", text: "x".repeat(4097) });
+    const oversizedFrame = `event: delta\ndata: ${"x".repeat(128 * 1024)}\n\n`;
+    const oversizedStream = "x".repeat(1024 * 1024 + 1);
+
+    for (const payload of [oversizedDelta, oversizedFrame, oversizedStream]) {
+        let failed = false;
+        try {
+            await readAssistantStream(responseFromStrings([payload]));
+        } catch {
+            failed = true;
+        }
+        expect(failed).toBe(true);
+    }
 });
 
 test("browser streaming request keeps Odoo session CSRF and never needs assistant secret", async () => {
