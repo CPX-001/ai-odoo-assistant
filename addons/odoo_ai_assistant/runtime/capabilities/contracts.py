@@ -1,4 +1,4 @@
-"""Contracts for the addon-local capability framework."""
+"""Transport-neutral contracts for the addon-local capability framework."""
 
 from __future__ import annotations
 
@@ -12,13 +12,12 @@ JsonValue: TypeAlias = (
     None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 )
 CapabilityEventSink: TypeAlias = Callable[[str, str, Mapping[str, JsonValue]], None]
-CapabilityHandler: TypeAlias = Callable[
-    ["CapabilityContext", Mapping[str, JsonValue]], Any
-]
+CapabilityHandler: TypeAlias = Callable[["CapabilityContext", Mapping[str, JsonValue]], Any]
 CapabilityGuard: TypeAlias = Callable[["CapabilityContext"], bool]
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _VERSION_RE = re.compile(r"^[1-9][0-9]*$")
+_SETTING_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
 class CapabilityError(RuntimeError):
@@ -51,6 +50,69 @@ class CapabilityEffect(str, Enum):
     HOST = "host"
 
 
+class CapabilityExposure(str, Enum):
+    """Discovery is not authority: exposure only describes who may learn the capability."""
+
+    REASONING = "reasoning"
+    PLAN = "plan"
+    HOST = "host"
+
+
+class CapabilityApproval(str, Enum):
+    """Human-approval contract independent from model visibility."""
+
+    NONE = "none"
+    POLICY = "policy"
+    ALWAYS = "always"
+
+
+class CapabilitySettingType(str, Enum):
+    BOOLEAN = "boolean"
+    INTEGER = "integer"
+    STRING = "string"
+    CHOICE = "choice"
+    SECRET = "secret"
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityDependency:
+    """Small dependency contract; versions are monotonically increasing integers."""
+
+    name: str
+    minimum_version: str = "1"
+
+    def __post_init__(self) -> None:
+        if not _NAME_RE.fullmatch(self.name):
+            raise CapabilityError("capability_dependency_name_invalid")
+        if not _VERSION_RE.fullmatch(self.minimum_version):
+            raise CapabilityError("capability_dependency_version_invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilitySetting:
+    """Declarative setting rendered/stored by generic configuration adapters."""
+
+    key: str
+    title: str
+    kind: CapabilitySettingType
+    default: JsonValue = None
+    help: str = ""
+    required: bool = False
+    choices: tuple[str, ...] = ()
+    minimum: int | None = None
+    maximum: int | None = None
+
+    def __post_init__(self) -> None:
+        if not _SETTING_KEY_RE.fullmatch(self.key) or not self.title.strip():
+            raise CapabilityError("capability_setting_invalid")
+        if self.kind is CapabilitySettingType.CHOICE and not self.choices:
+            raise CapabilityError("capability_setting_choices_missing")
+        if self.kind is not CapabilitySettingType.CHOICE and self.choices:
+            raise CapabilityError("capability_setting_choices_invalid")
+        if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+            raise CapabilityError("capability_setting_range_invalid")
+
+
 @dataclass(frozen=True, slots=True)
 class CapabilityResult:
     """Bounded transport-neutral result returned by a capability handler."""
@@ -62,19 +124,18 @@ class CapabilityResult:
 
 @dataclass(frozen=True, slots=True)
 class CapabilityContext:
-    """Per-turn host context handed to capability handlers.
+    """Narrow per-turn host services handed to capability handlers.
 
-    ``env`` is the effective Odoo Environment for the originating user. It is an
-    object-capability: handlers can only do what the host intentionally gives them.
-    A deliberately privileged capability may use lower-level Odoo facilities (for
-    example ``env.cr``), but that choice is explicit in that capability's metadata and
-    policy rather than hidden in the framework.
+    ``env`` is the effective non-sudo Odoo Environment. ``settings`` contains only the
+    resolved settings for this capability/turn; providers do not need to know where
+    configuration is persisted. ``metadata`` is bounded host-owned turn metadata.
     """
 
     env: Any
     turn_id: str
     conversation_id: str | None = None
     screen: Mapping[str, JsonValue] = field(default_factory=dict)
+    settings: Mapping[str, JsonValue] = field(default_factory=dict)
     event_sink: CapabilityEventSink | None = None
     metadata: Mapping[str, JsonValue] = field(default_factory=dict)
 
@@ -90,7 +151,7 @@ class CapabilityContext:
 
 @dataclass(frozen=True, slots=True)
 class CapabilityDefinition:
-    """Single source of truth for one model-callable capability."""
+    """Stable source of truth for one executable capability."""
 
     name: str
     description: str
@@ -99,14 +160,22 @@ class CapabilityDefinition:
     risk: CapabilityRisk
     effect: CapabilityEffect
     handler: CapabilityHandler = field(repr=False, compare=False)
+    title: str = ""
     version: str = "1"
+    exposure: CapabilityExposure = CapabilityExposure.REASONING
+    approval: CapabilityApproval = CapabilityApproval.NONE
     tags: tuple[str, ...] = ()
+    dependencies: tuple[CapabilityDependency, ...] = ()
+    settings: tuple[CapabilitySetting, ...] = ()
     required_groups: tuple[str, ...] = ()
     default_enabled: bool = True
-    approval_required: bool = False
+    timeout_seconds: int | None = None
     max_calls: int = 4
     max_input_bytes: int = 16 * 1024
     max_output_bytes: int = 96 * 1024
+    help_text: str = ""
+    audit_metadata: Mapping[str, JsonValue] = field(default_factory=dict)
+    developer_metadata: Mapping[str, JsonValue] = field(default_factory=dict)
     guard: CapabilityGuard | None = field(default=None, repr=False, compare=False)
     source_module: str = ""
     source_qualname: str = ""
@@ -118,6 +187,8 @@ class CapabilityDefinition:
             raise CapabilityError("capability_version_invalid")
         if not self.description.strip() or len(self.description) > 4_000:
             raise CapabilityError("capability_description_invalid")
+        if self.title and len(self.title) > 160:
+            raise CapabilityError("capability_title_invalid")
         if self.input_schema.get("type") != "object":
             raise CapabilityError("capability_input_schema_invalid")
         if self.output_schema.get("type") != "object":
@@ -128,8 +199,18 @@ class CapabilityDefinition:
             CapabilityRisk.HOST,
         }:
             raise CapabilityError("capability_effect_risk_mismatch")
-        if self.risk in {CapabilityRisk.WRITE, CapabilityRisk.ACTION} and not self.approval_required:
-            raise CapabilityError("capability_write_requires_approval")
+        if self.risk in {CapabilityRisk.WRITE, CapabilityRisk.ACTION} and self.approval is CapabilityApproval.NONE:
+            raise CapabilityError("capability_write_approval_invalid")
+        if self.exposure is CapabilityExposure.REASONING and self.risk in {
+            CapabilityRisk.WRITE,
+            CapabilityRisk.ACTION,
+            CapabilityRisk.HOST,
+        }:
+            raise CapabilityError("capability_reasoning_authority_invalid")
+        if self.exposure is CapabilityExposure.HOST and self.approval is CapabilityApproval.ALWAYS:
+            raise CapabilityError("capability_host_approval_invalid")
+        if self.timeout_seconds is not None and not 1 <= self.timeout_seconds <= 600:
+            raise CapabilityError("capability_timeout_invalid")
         if not 1 <= self.max_calls <= 64:
             raise CapabilityError("capability_call_limit_invalid")
         if not 256 <= self.max_input_bytes <= 1024 * 1024:
@@ -138,39 +219,46 @@ class CapabilityDefinition:
             raise CapabilityError("capability_output_limit_invalid")
         if len(set(self.tags)) != len(self.tags):
             raise CapabilityError("capability_tag_duplicate")
+        if len({item.name for item in self.dependencies}) != len(self.dependencies):
+            raise CapabilityError("capability_dependency_duplicate")
+        if len({item.key for item in self.settings}) != len(self.settings):
+            raise CapabilityError("capability_setting_duplicate")
         if len(set(self.required_groups)) != len(self.required_groups):
             raise CapabilityError("capability_group_duplicate")
+
+    @property
+    def namespace(self) -> str:
+        return self.name.rsplit(".", 1)[0]
 
     @property
     def executor_id(self) -> str:
         return f"{self.name}.v{self.version}"
 
     def available_for(self, context: CapabilityContext) -> bool:
-        if not self.default_enabled:
-            enabled = context.metadata.get("enabled_capabilities", [])
-            if not isinstance(enabled, list) or self.name not in enabled:
-                return False
         user = getattr(context.env, "user", None)
-        if self.required_groups:
-            if user is None or any(
-                not user.has_group(group) for group in self.required_groups
-            ):
-                return False
+        if self.required_groups and (
+            user is None or any(not user.has_group(group) for group in self.required_groups)
+        ):
+            return False
         return self.guard(context) if self.guard is not None else True
 
     def wire_descriptor(self) -> dict[str, JsonValue]:
-        """Return the stable MCP-shaped description consumed by adapters."""
+        """Transport-neutral, MCP-shaped descriptor; adapters may further translate it."""
 
         return {
             "name": self.name,
+            "title": self.title or self.name,
             "description": self.description,
             "inputSchema": dict(self.input_schema),
             "outputSchema": dict(self.output_schema),
             "meta": {
+                "namespace": self.namespace,
+                "version": self.version,
                 "executor_id": self.executor_id,
                 "risk": self.risk.value,
                 "effect": self.effect.value,
-                "approval_required": self.approval_required,
+                "exposure": self.exposure.value,
+                "approval": self.approval.value,
                 "tags": list(self.tags),
             },
         }
