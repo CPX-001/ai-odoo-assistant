@@ -23,8 +23,11 @@ from odoo_ai.application.batch_command import BatchCommandService
 from odoo_ai.contracts import (
     AgentPlanExecutionRequest,
     AgentPlanStatusResponse,
+    AgentPlanStep,
     PlanState,
 )
+from odoo_ai.contracts.chat import ChatActor
+from odoo_ai.ports.agent_plans import StoredAgentPlan
 
 
 class AgentExecutionError(RuntimeError):
@@ -156,9 +159,9 @@ class AgentPlanExecutionService:
 
     async def _execute_effect_with_recovery_retry(
         self,
-        step,
+        step: AgentPlanStep,
         *,
-        actor,
+        actor: ChatActor,
         company_id: int,
         allowed_company_ids: tuple[int, ...],
         authorization_id: UUID,
@@ -188,7 +191,7 @@ class AgentPlanExecutionService:
             authorization_id=authorization_id,
         )
 
-    async def _skip_later_writes(self, plan, position: int) -> None:
+    async def _skip_later_writes(self, plan: StoredAgentPlan, position: int) -> None:
         for skipped in plan.steps[position + 1 :]:
             if skipped.is_write:
                 await asyncio.to_thread(

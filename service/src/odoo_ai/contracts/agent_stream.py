@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypeAlias
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -27,4 +27,4 @@ class AgentTurnFinalEvent(BaseModel):
     response: AgentTurnResponse
 
 
-AgentTurnEvent: TypeAlias = AgentTurnDeltaEvent | AgentTurnFinalEvent
+type AgentTurnEvent = AgentTurnDeltaEvent | AgentTurnFinalEvent

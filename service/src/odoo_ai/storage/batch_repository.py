@@ -326,14 +326,14 @@ def _snapshot(
                 BatchMutationJobItem(
                     position=row.position,
                     item=item,
-                    item_fingerprint=cast(str, row.item_fingerprint),
+                    item_fingerprint=row.item_fingerprint,
                     result=result,
                 )
             )
         snapshot = BatchMutationJobSnapshot(
             job_id=record.job_id,
             spec=spec,
-            job_fingerprint=cast(str, record.job_fingerprint),
+            job_fingerprint=record.job_fingerprint,
             state=state,
             item_count=record.item_count,
             applied_count=record.applied_count,
@@ -371,10 +371,10 @@ def _snapshot(
     stored_items = tuple(items)
     if tuple(item.position for item in stored_items) != tuple(range(len(stored_items))):
         raise BatchJobStoreError("batch_job_corrupt")
-    for item in stored_items:
+    for stored_item in stored_items:
         if not hmac.compare_digest(
-            item.item_fingerprint,
-            batch_item_fingerprint(item.item),
+            stored_item.item_fingerprint,
+            batch_item_fingerprint(stored_item.item),
         ):
             raise BatchJobStoreError("batch_job_corrupt")
     expected_job = batch_job_fingerprint(snapshot.job_id, spec, stored_items)

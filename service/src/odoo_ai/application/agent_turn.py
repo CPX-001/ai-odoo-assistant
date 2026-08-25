@@ -9,8 +9,6 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID
 
-from pydantic import ValidationError
-
 from odoo_ai.application.agent_execution import (
     AgentExecutionError,
     AgentPlanExecutionService,
@@ -39,6 +37,8 @@ from odoo_ai.contracts import (
     ActionToolReport,
     AgentCandidateOutput,
     AgentPlanExecutionRequest,
+    AgentPlanStatusResponse,
+    AgentPlanStepView,
     AgentTurnRequest,
     AgentTurnResponse,
     ConfirmationMode,
@@ -285,7 +285,7 @@ def _autonomy_capability(mode: ConfirmationMode, risk: RiskLevel) -> str:
     return "host_autonomy:balanced"
 
 
-def _execution_answer(status) -> str:
+def _execution_answer(status: AgentPlanStatusResponse) -> str:
     """Return host-owned truth after an auto-authorized write plan ran."""
 
     plan = status.plan
@@ -325,15 +325,17 @@ def _execution_answer(status) -> str:
         )
     if plan.state is PlanState.FAILED:
         code = status.error_code or _first_step_error(plan.steps)
-        detail = _EXECUTION_FAILURE_MESSAGES.get(
-            code,
-            "Odoo rechazó la operación o no pudo completarla de forma verificable.",
+        default_detail = (
+            "Odoo rechazó la operación o no pudo completarla de forma verificable."
+        )
+        detail = default_detail if code is None else _EXECUTION_FAILURE_MESSAGES.get(
+            code, default_detail
         )
         return f"**No se pudo completar la operación.** {detail}"
     return status.answer_markdown
 
 
-def _first_step_error(steps) -> str | None:
+def _first_step_error(steps: Sequence[AgentPlanStepView]) -> str | None:
     for step in steps:
         receipt = step.receipt
         if receipt is not None and receipt.error_code:
@@ -395,7 +397,7 @@ def _reconcile_previews(
                         sort_keys=True,
                     )
                 )
-            except (ValidationError, TypeError, ValueError):
+            except (TypeError, ValueError):
                 raise AgentTurnError("agent_preview_report_corrupt", 502) from None
             if (
                 handle.turn_id != turn_id

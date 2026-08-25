@@ -6,12 +6,11 @@ import hashlib
 import json
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
-from typing import cast
 from uuid import UUID, uuid4
 
 from odoo_ai.contracts.action import Fingerprint
 from odoo_ai.contracts.batch import (
-    BatchItemResult,
+    BatchMutationItem,
     BatchMutationRequest,
     BatchMutationResult,
 )
@@ -237,11 +236,9 @@ class BatchMutationJobService:
         return value.astimezone(UTC)
 
 
-def batch_item_fingerprint(item: object) -> Fingerprint:
-    if not hasattr(item, "model_dump"):
-        raise BatchJobError("batch_item_invalid", 422)
-    payload = cast(object, item).model_dump(mode="json")  # type: ignore[attr-defined]
-    return cast(Fingerprint, _fingerprint("batch-item", payload))
+def batch_item_fingerprint(item: BatchMutationItem) -> Fingerprint:
+    payload = item.model_dump(mode="json")
+    return _fingerprint("batch-item", payload)
 
 
 def batch_job_fingerprint(
@@ -254,7 +251,7 @@ def batch_job_fingerprint(
         "spec": spec.model_dump(mode="json"),
         "item_fingerprints": [item.item_fingerprint for item in items],
     }
-    return cast(Fingerprint, _fingerprint("batch-job", payload))
+    return _fingerprint("batch-job", payload)
 
 
 def batch_command_receipt(stored: StoredBatchMutationJob) -> BatchCommandReceipt:

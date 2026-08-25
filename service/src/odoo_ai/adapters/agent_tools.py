@@ -48,6 +48,7 @@ from odoo_ai.contracts import (
     EffectScope,
     HostToolPolicySpec,
     RiskLevel,
+    ToolExecutionEvent,
     ToolExecutionReport,
     ToolRisk,
     ToolSpec,
@@ -489,10 +490,10 @@ class UnifiedAgentToolExecutorFactory:
 
 
 def _ordered_preview_traces(
-    events,
+    events: tuple[ToolExecutionEvent, ...],
     action_traces: tuple[ActionProposalTrace, ...],
     batch_trace_slots: tuple[BatchProposalTrace | None, ...],
-):
+) -> tuple[ActionProposalTrace | BatchProposalTrace, ...]:
     ordered: list[ActionProposalTrace | BatchProposalTrace] = []
     action_index = 0
     batch_index = 0

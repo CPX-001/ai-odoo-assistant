@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+from collections.abc import Iterator
 from dataclasses import replace
 from time import monotonic
 
@@ -26,9 +27,9 @@ from odoo_ai.adapters.codex_engine import (
 from odoo_ai.adapters.codex_runtime import CodexAppServerClient, CodexRuntimeError
 from odoo_ai.adapters.codex_stream_wait import wait_for_completion_with_deltas
 from odoo_ai.adapters.unified_agent_engine import (
+    _UNIFIED_AGENT_INSTRUCTIONS,
     UnifiedAgentCodexAppServerEngine,
     _serialize_unified_context,
-    _UNIFIED_AGENT_INSTRUCTIONS,
 )
 from odoo_ai.application.agent_events import AgentDeltaSink, current_agent_delta_sink
 from odoo_ai.contracts import AgentCandidateOutput, ContextPack, ToolSpec
@@ -211,7 +212,7 @@ class StreamingUnifiedAgentCodexAppServerEngine(UnifiedAgentCodexAppServerEngine
         return candidate
 
 
-def _chunk_visible_text(value: str):
+def _chunk_visible_text(value: str) -> Iterator[str]:
     for start in range(0, len(value), _STREAM_CHUNK_CHARS):
         chunk = value[start : start + _STREAM_CHUNK_CHARS]
         if chunk:

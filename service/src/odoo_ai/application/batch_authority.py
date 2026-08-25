@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import cast
 
 from odoo_ai.contracts.action import Fingerprint
 from odoo_ai.contracts.batch import BatchMutationRequest
@@ -25,7 +24,4 @@ def batch_chunk_fingerprint(request: BatchMutationRequest) -> Fingerprint:
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
-    return cast(
-        Fingerprint,
-        f"batch-chunk:v1:sha256:{hashlib.sha256(body).hexdigest()}",
-    )
+    return f"batch-chunk:v1:sha256:{hashlib.sha256(body).hexdigest()}"

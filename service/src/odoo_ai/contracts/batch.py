@@ -130,7 +130,13 @@ class BatchMutationRequest(BaseModel):
         elif self.schema_id is not None:
             raise ValueError("delete batches do not carry a write schema id")
         if self.operation is not BatchMutationKind.CREATE:
-            record_ids = tuple(item.record_id for item in self.items)  # type: ignore[attr-defined]
+            record_ids = tuple(
+                item.record_id
+                for item in self.items
+                if isinstance(item, (BatchPatchItem, BatchDeleteItem))
+            )
+            if len(record_ids) != len(self.items):
+                raise ValueError("non-create batches require record ids")
             if len(record_ids) != len(set(record_ids)):
                 raise ValueError("batch record ids must be unique")
         return self

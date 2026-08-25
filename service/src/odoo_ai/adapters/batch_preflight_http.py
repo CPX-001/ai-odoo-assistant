@@ -11,10 +11,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
 
-from odoo_ai.adapters.odoo_http import OdooGatewayError, OdooGatewaySettings
+from odoo_ai.adapters.odoo_http import OdooGatewaySettings
 from odoo_ai.contracts.action import ModelName
 from odoo_ai.contracts.batch import BatchMutationKind, BatchMutationRequest, SourceRef
 from odoo_ai.contracts.batch_preflight import BatchPreflightIssue, BatchPreflightResult
+from odoo_ai.ports import OdooGatewayError
 from odoo_ai.security.shared_secret import (
     SHARED_SECRET_HEADER,
     SharedSecretError,

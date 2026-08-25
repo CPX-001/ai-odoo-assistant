@@ -48,6 +48,13 @@ _FORBIDDEN_VISIBLE_MARKERS = (
 
 InstanceLoader = Callable[[], InstanceProfileSummary]
 Clock = Callable[[], datetime]
+AdminDiagnosticsFactory = Callable[[], RuntimeAdminDiagnosticsService]
+DiagnosticsFactory = Callable[[], RuntimeDiagnosticsService]
+SettingsFactory = Callable[[], ConfiguredCodexRuntimeSettings]
+EngineFactory = Callable[
+    [ConfiguredCodexRuntimeSettings],
+    UnifiedAgentCodexAppServerEngine,
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,10 +92,12 @@ class RuntimeAgentFailureDiagnoser:
         *,
         instance_loader: InstanceLoader,
         self_repair_actions: Sequence[str] = (),
-        admin_diagnostics_factory=RuntimeAdminDiagnosticsService.from_env,
-        diagnostics_factory=RuntimeDiagnosticsService.from_env,
-        settings_factory=ConfiguredCodexRuntimeSettings.from_env,
-        engine_factory=UnifiedAgentCodexAppServerEngine,
+        admin_diagnostics_factory: AdminDiagnosticsFactory = (
+            RuntimeAdminDiagnosticsService.from_env
+        ),
+        diagnostics_factory: DiagnosticsFactory = RuntimeDiagnosticsService.from_env,
+        settings_factory: SettingsFactory = ConfiguredCodexRuntimeSettings.from_env,
+        engine_factory: EngineFactory = UnifiedAgentCodexAppServerEngine,
         clock: Clock = lambda: datetime.now(UTC),
     ) -> None:
         self._instance_loader = instance_loader

@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from odoo_ai.adapters.agent_timing import log_agent_timing
 from odoo_ai.adapters.codex_engine import (
     CodexEngineError,
+    CodexEngineLimits,
     _best_effort_interrupt,
     _codex_dynamic_tool_bindings,
     _decode_agent_candidate_arguments,
@@ -147,7 +148,7 @@ or execute the plan."""
 def _serialize_unified_context(
     context: ContextPack,
     *,
-    limits,
+    limits: CodexEngineLimits,
     tool_names: list[str],
 ) -> str:
     """Add host-validated model capabilities without treating the screen as authority."""

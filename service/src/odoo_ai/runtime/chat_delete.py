@@ -30,7 +30,7 @@ class RuntimeChatDeleteService:
         self._database_settings = database_settings
 
     @classmethod
-    def from_env(cls) -> "RuntimeChatDeleteService":
+    def from_env(cls) -> RuntimeChatDeleteService:
         return cls(database_settings=DatabaseSettings.from_env())
 
     async def delete(self, request: ChatDeleteRequest) -> ChatDeleteResponse:

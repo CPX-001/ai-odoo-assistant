@@ -12,6 +12,7 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from odoo_ai.adapters.odoo_http import OdooGatewaySettings
 from odoo_ai.application.batch_authority import batch_chunk_fingerprint
 from odoo_ai.contracts.batch import (
     BatchCreateItem,
@@ -24,13 +25,13 @@ from odoo_ai.contracts.batch import (
 )
 from odoo_ai.contracts.batch_authority import BatchAuthorityClaims
 from odoo_ai.contracts.batch_job import BatchExecutionContext
+from odoo_ai.ports import OdooGatewayError
 from odoo_ai.security.batch_authority import BatchAuthorityCodec, BatchAuthorityError
 from odoo_ai.security.shared_secret import (
     SHARED_SECRET_HEADER,
     SharedSecretError,
     load_shared_secret,
 )
-from odoo_ai.adapters.odoo_http import OdooGatewayError, OdooGatewaySettings
 
 BATCH_COMMIT_ROUTE: Final = "/odoo_ai/internal/v1/batch-commit"
 DELEGATION_HEADER: Final = "X-Odoo-AI-Delegation"

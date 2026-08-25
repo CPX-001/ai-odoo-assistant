@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Self
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from odoo_ai.contracts.action import ModelName
 from odoo_ai.contracts.batch import (
     MAX_BATCH_ERROR_CODE,
     MAX_BATCH_ITEMS,
-    SourceRef,
     BatchMutationKind,
+    SourceRef,
 )
-from odoo_ai.contracts.action import ModelName
 
 
 class BatchPreflightIssue(BaseModel):
@@ -35,7 +37,7 @@ class BatchPreflightResult(BaseModel):
     issues: tuple[BatchPreflightIssue, ...] = Field(default=(), max_length=MAX_BATCH_ITEMS)
 
     @model_validator(mode="after")
-    def validate_partition(self):
+    def validate_partition(self) -> Self:
         accepted = self.accepted_source_refs
         rejected = tuple(issue.source_ref for issue in self.issues)
         if (

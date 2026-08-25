@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
-from pydantic import ValidationError
-
 from odoo_ai.application.action_command import ActionCommandService
 from odoo_ai.application.batch_command import BatchCommandError, BatchCommandService
 from odoo_ai.contracts import (
@@ -128,7 +126,7 @@ class AgentWriteStepDispatcher:
                     sort_keys=True,
                 )
             )
-        except (ValidationError, TypeError, ValueError):
+        except (TypeError, ValueError):
             raise AgentEffectExecutionError("agent_batch_binding_invalid", 503) from None
         if step.estimated_records != handle.item_count:
             raise AgentEffectExecutionError("agent_batch_binding_mismatch", 503)
@@ -141,12 +139,13 @@ class AgentWriteStepDispatcher:
             )
         except BatchCommandError as error:
             raise AgentEffectExecutionError(error.code, error.status_code) from None
-        state = {
-            BatchJobState.COMPLETED: "completed",
-            BatchJobState.PARTIAL: "partial",
-            BatchJobState.FAILED: "failed",
-        }.get(receipt.state)
-        if state is None:
+        if receipt.state is BatchJobState.COMPLETED:
+            state: Literal["completed", "partial", "failed"] = "completed"
+        elif receipt.state is BatchJobState.PARTIAL:
+            state = "partial"
+        elif receipt.state is BatchJobState.FAILED:
+            state = "failed"
+        else:
             raise AgentEffectExecutionError("agent_batch_receipt_invalid", 503)
         return AgentStepExecutionResult(
             state=state,
