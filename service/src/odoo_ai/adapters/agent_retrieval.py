@@ -10,7 +10,7 @@ from typing import Protocol, cast
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -119,7 +119,15 @@ class AgentModuleInspectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     module: str = Field(pattern=r"^[A-Za-z0-9_]+$", min_length=1, max_length=255)
+    query: str | None = Field(default=None, min_length=1, max_length=128)
     max_results: int = Field(default=40, strict=True, ge=1, le=50)
+
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, value: str | None) -> str | None:
+        if value is not None and value != value.strip():
+            raise ValueError("module inspection query must be normalized")
+        return value
 
 
 class AgentModuleSymbol(BaseModel):
@@ -139,6 +147,7 @@ class AgentModuleInspectionResult(BaseModel):
 
     module: str = Field(pattern=r"^[A-Za-z0-9_]+$", min_length=1, max_length=255)
     installed: bool
+    indexed: bool
     symbols: tuple[AgentModuleSymbol, ...] = Field(max_length=50)
     truncated: bool
 
@@ -163,9 +172,10 @@ def agent_retrieval_tool_specs() -> tuple[ToolSpec, ...]:
         ToolSpec(
             name=SOURCE_INSPECT_MODULE,
             description=(
-                "List bounded indexed Python/XML structural symbols for one exact installed Odoo "
-                "addon. Use for custom/OCA/third-party modules when the relevant symbol is not yet "
-                "known, then call source.read_excerpt on only the useful returned refs."
+                "List bounded indexed structural symbols for one exact installed Odoo addon, "
+                "optionally filtering names/models/kinds by a short query. Use for custom/OCA/"
+                "third-party modules when the relevant symbol is not yet known, then call "
+                "source.read_excerpt on only the useful returned refs."
             ),
             input_schema=AgentModuleInspectionRequest.model_json_schema(),
             risk=ToolRisk.METADATA,
@@ -395,6 +405,7 @@ class LazySharedSessionSourceBackend:
             return AgentModuleInspectionResult(
                 module=request.module,
                 installed=False,
+                indexed=False,
                 symbols=(),
                 truncated=False,
             )
@@ -593,31 +604,62 @@ def _inspect_module_operation(
 ) -> AgentModuleInspectionResult:
     session = sessions()
     try:
+        indexed_file_id = session.scalar(
+            select(SourceFile.id)
+            .join(ScanRun, ScanRun.id == SourceFile.scan_run_id)
+            .where(
+                SourceFile.instance_profile_id == instance_profile_id,
+                SourceFile.module == request.module,
+                SourceFile.is_stale.is_(False),
+                ScanRun.status == "succeeded",
+            )
+            .limit(1)
+        )
+        if indexed_file_id is None:
+            return AgentModuleInspectionResult(
+                module=request.module,
+                installed=True,
+                indexed=False,
+                symbols=(),
+                truncated=False,
+            )
+
+        statement = (
+            select(SourceSymbol)
+            .join(SourceFile, SourceFile.id == SourceSymbol.source_file_id)
+            .join(ScanRun, ScanRun.id == SourceFile.scan_run_id)
+            .where(
+                SourceFile.instance_profile_id == instance_profile_id,
+                SourceFile.module == request.module,
+                SourceFile.is_stale.is_(False),
+                SourceSymbol.fingerprint == SourceFile.fingerprint,
+                ScanRun.status == "succeeded",
+            )
+        )
+        if request.query is not None:
+            normalized = request.query.casefold()
+            statement = statement.where(
+                or_(
+                    func.lower(SourceSymbol.name).contains(normalized, autoescape=True),
+                    func.lower(SourceSymbol.model).contains(normalized, autoescape=True),
+                    func.lower(SourceSymbol.kind).contains(normalized, autoescape=True),
+                )
+            )
         rows = tuple(
             session.scalars(
-                select(SourceSymbol)
-                .join(SourceFile, SourceFile.id == SourceSymbol.source_file_id)
-                .join(ScanRun, ScanRun.id == SourceFile.scan_run_id)
-                .where(
-                    SourceFile.instance_profile_id == instance_profile_id,
-                    SourceFile.module == request.module,
-                    SourceFile.is_stale.is_(False),
-                    SourceSymbol.fingerprint == SourceFile.fingerprint,
-                    ScanRun.status == "succeeded",
-                )
-                .order_by(
+                statement.order_by(
                     SourceSymbol.kind,
                     SourceSymbol.model,
                     SourceSymbol.name,
                     SourceSymbol.id,
-                )
-                .limit(request.max_results + 1)
+                ).limit(request.max_results + 1)
             )
         )
         selected = rows[: request.max_results]
         return AgentModuleInspectionResult(
             module=request.module,
             installed=True,
+            indexed=True,
             symbols=tuple(
                 AgentModuleSymbol(
                     kind=row.kind,
