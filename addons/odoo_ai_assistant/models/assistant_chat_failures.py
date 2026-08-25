@@ -17,9 +17,15 @@ class AssistantChatFailureBridge(models.AbstractModel):
         result = super().submit_chat(message, screen, conversation_id=conversation_id)
         if not isinstance(result, dict) or result.get("ok") is not False:
             return result
+        code = _error_code(result)
+        # A malformed/tampered provider payload remains rejected at the trusted bridge boundary.
+        # The Owl presentation layer converts even this stable code into a conversational
+        # diagnostic, so fail-closed validation is preserved without showing a raw error to users.
+        if code == "invalid_response":
+            return result
         failure = _failure_chat_result(
             self,
-            code=_error_code(result),
+            code=code,
             message=message,
             conversation_id=conversation_id,
         )
@@ -107,7 +113,9 @@ def _failure_plan(bridge, message, conversation_id):
 def _failure_answer(code):
     normalized = str(code or "service_unavailable").casefold()
     if normalized in {"access_denied", "query_rejected", "action_rejected"}:
-        diagnosis = "Odoo ha rechazado el acceso o la operación necesaria para completar la petición."
+        diagnosis = (
+            "Odoo ha rechazado el acceso o la operación necesaria para completar la petición."
+        )
         reason = (
             "El asistente usa tu usuario real y respeta sus permisos, reglas de registro, campos "
             "accesibles y compañías activas."
@@ -128,7 +136,9 @@ def _failure_answer(code):
             "petición pequeña, revisa Diagnostics y los tiempos del Assistant/Codex."
         )
     elif any(marker in normalized for marker in ("budget", "limit", "repeated")):
-        diagnosis = "El agente activó un límite de seguridad durante una cadena de comprobaciones."
+        diagnosis = (
+            "El agente activó un límite de seguridad durante una cadena de comprobaciones."
+        )
         reason = (
             "Se agotó un presupuesto de herramientas o intentos antes de obtener un resultado "
             "suficientemente fiable."
@@ -138,7 +148,9 @@ def _failure_answer(code):
             "a llegar a este límite, debe revisarse como un problema del runtime en Diagnostics."
         )
     elif normalized in {"engine_unavailable", "authentication_failed", "service_unavailable"}:
-        diagnosis = "El Assistant no ha podido mantener disponible el motor necesario para este turno."
+        diagnosis = (
+            "El Assistant no ha podido mantener disponible el motor necesario para este turno."
+        )
         reason = (
             "La conexión, autenticación o proceso del servicio se interrumpió antes de producir una "
             "respuesta verificable."
@@ -149,7 +161,9 @@ def _failure_answer(code):
         )
     elif normalized == "evidence_unavailable":
         diagnosis = "No he podido reunir evidencia suficiente para responder con fiabilidad."
-        reason = "La fuente necesaria para verificar esa parte de la respuesta no estaba disponible."
+        reason = (
+            "La fuente necesaria para verificar esa parte de la respuesta no estaba disponible."
+        )
         solution = (
             "No voy a sustituir esa evidencia por una suposición. Comprueba Source/Knowledge en "
             "Diagnostics y reindexa sólo si la fuente aparece desactualizada o sin indexar."
@@ -165,7 +179,10 @@ def _failure_answer(code):
         )
     else:
         diagnosis = "No he podido completar esta petición de forma verificable."
-        reason = "El turno se interrumpió antes de producir un resultado que pudiera validarse con seguridad."
+        reason = (
+            "El turno se interrumpió antes de producir un resultado que pudiera validarse con "
+            "seguridad."
+        )
         solution = (
             "No doy la operación por completada. Reintenta una vez; si vuelve a ocurrir, revisa "
             "Diagnostics para localizar el componente que está fallando."
