@@ -183,6 +183,46 @@ def test_instance_facts_are_checked_cached_and_do_not_expose_host_paths() -> Non
     assert '"database":"customer"' not in serialized
 
 
+def test_instance_facts_maximum_contract_stays_inside_tool_output_budget() -> None:
+    modules = tuple(
+        f"module_{index:02d}_" + "x" * 238
+        for index in range(64)
+    )
+    inventory = InstanceInventory(
+        database="customer",
+        server_version="18.0",
+        installed_modules=modules,
+        addons_roots=("/srv/odoo/addons",),
+        captured_at=NOW,
+    )
+    gateway = FakeInventoryGateway(inventory)
+
+    def sessions():
+        raise AssertionError("instance facts must not open the Assistant database")
+
+    executor = _executor(
+        AgentRetrievalBindingFactory(
+            sessions=sessions,
+            inventory_gateway_loader=lambda: gateway,
+            knowledge_backend_factory=lambda context: FakeKnowledgeBackend(),
+        )
+    )
+
+    result = asyncio.run(
+        executor.execute(
+            ToolCall(
+                call_id="instance-facts-max",
+                tool_name=ODOO_GET_INSTANCE_FACTS,
+                arguments={"max_modules": 64},
+            )
+        )
+    )
+
+    assert len(result.data["installed_modules"]) == 64
+    assert result.data["modules_truncated"] is False
+    assert gateway.calls == 1
+
+
 def test_uninstalled_module_inspection_stops_before_source_database_access() -> None:
     inventory = InstanceInventory(
         database="customer",
@@ -317,3 +357,48 @@ def test_indexed_module_inspection_exposes_xml_view_refs() -> None:
     assert xml.ref.end_line == 46
     assert session.rolled_back is True
     assert session.closed is True
+
+
+def test_module_inspection_truncation_keeps_python_and_xml_discoverable() -> None:
+    fingerprint = "sha256:" + "c" * 64
+    source_rows = tuple(
+        SimpleNamespace(
+            source_file_id=uuid4(),
+            fingerprint=fingerprint,
+            start_line=10 + index,
+            end_line=11 + index,
+            kind="field",
+            model="res.config.settings",
+            name=f"setting_{index}",
+            logical_path="custom_billing/models/res_config_settings.py",
+        )
+        for index in range(3)
+    )
+    xml_rows = tuple(
+        SimpleNamespace(
+            source_file_id=uuid4(),
+            fingerprint=fingerprint,
+            start_line=30 + index,
+            end_line=35 + index,
+            model="ir.ui.view",
+            xml_id=f"custom_billing.settings_view_{index}",
+            logical_path="custom_billing/views/res_config_settings_views.xml",
+        )
+        for index in range(3)
+    )
+    session = FakeSourceSession((source_rows, xml_rows))
+
+    result = _inspect_module_operation(
+        lambda: session,
+        uuid4(),
+        AgentModuleInspectionRequest(
+            module="custom_billing",
+            query="settings",
+            max_results=2,
+        ),
+    )
+
+    assert result.truncated is True
+    assert len(result.symbols) == 2
+    assert result.symbols[0].kind == "field"
+    assert result.symbols[1].kind == "xml_id"
