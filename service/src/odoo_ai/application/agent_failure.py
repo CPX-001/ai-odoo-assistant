@@ -28,25 +28,25 @@ def agent_failure_answer(code: str) -> str:
     ):
         return (
             "No he podido continuar porque Odoo no me ha permitido acceder a algo que necesitaba. "
-            "No he hecho ningún cambio. Si ese acceso debería estar permitido, habrá que revisar "
-            "los permisos de tu usuario."
+            "No doy ningún cambio por realizado. Si ese acceso debería estar permitido, habrá que "
+            "revisar los permisos de tu usuario."
         )
     if any(marker in normalized for marker in ("timeout", "deadline")):
         return (
-            "La petición se ha quedado sin tiempo antes de terminar. No he dado nada por hecho ni "
-            "por aplicado. Puedes reintentarlo; si vuelve a pasar con una petición sencilla, habrá "
-            "que revisar qué parte está tardando demasiado."
+            "La petición se ha quedado sin tiempo antes de terminar. No doy ningún resultado ni "
+            "cambio por confirmado. Puedes reintentarlo si era una consulta; si pedías modificar "
+            "datos, conviene comprobar primero su estado actual para no repetir un cambio a ciegas."
         )
     if any(marker in normalized for marker in ("budget", "limit", "repeated")):
         return (
             "He tenido que parar antes de terminar porque el proceso entró en demasiadas "
-            "comprobaciones o intentos. No he dado la petición por completada. Puedes reintentarlo "
-            "una vez; si se repite, habrá que revisar por qué se está atascando."
+            "comprobaciones o intentos. No doy la petición por completada ni ningún cambio por "
+            "confirmado. Si se repite con una petición sencilla, habrá que revisar por qué se atasca."
         )
     if any(marker in normalized for marker in ("evidence", "source", "knowledge")):
         return (
             "No he encontrado información suficiente para darte una respuesta fiable y prefiero no "
-            "inventarla. No he dado nada por completado. Si vuelve a ocurrir, habrá que comprobar "
+            "inventarla. No doy la petición por completada. Si vuelve a ocurrir, habrá que comprobar "
             "que la información que usa el Assistant esté disponible y actualizada."
         )
     if any(
@@ -63,7 +63,6 @@ def agent_failure_answer(code: str) -> str:
         for marker in (
             "codex",
             "engine_unavailable",
-            "agent_unavailable",
             "runtime_not",
             "runtime_start",
             "authentication",
@@ -72,12 +71,12 @@ def agent_failure_answer(code: str) -> str:
         return (
             "No he podido terminar esta petición porque el sistema que la analiza no estaba "
             "disponible. En este caso tampoco puedo darte una causa más concreta sin inventarla. "
-            "No he hecho ningún cambio. Puedes reintentarlo; si se repite, habrá que revisar el "
-            "estado interno del Assistant."
+            "No doy ningún cambio por confirmado. Puedes reintentarlo si era una consulta."
         )
     return (
-        "No he podido completar la petición de forma fiable. No tengo suficiente información para "
-        "afirmar la causa y no voy a inventarla. No he dado nada por completado."
+        "No he podido completar la petición de forma fiable y no tengo suficiente información para "
+        "afirmar la causa. No doy ningún cambio por confirmado. Si pedías modificar datos, comprueba "
+        "su estado actual antes de repetir la operación."
     )
 
 
