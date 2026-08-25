@@ -142,3 +142,58 @@ def test_cache_hit_does_not_allow_duplicate_call_id() -> None:
 
     with pytest.raises(ToolExecutorError, match="tool_call_duplicate"):
         asyncio.run(executor.execute(call))
+
+
+def test_cache_hit_resets_consecutive_failure_streak() -> None:
+    read_calls = 0
+
+    async def read_handler(value):
+        nonlocal read_calls
+        read_calls += 1
+        return ToolHandlerOutput(data={"value": value.value, "calls": read_calls})
+
+    async def failing_handler(value):
+        del value
+        raise ToolExecutorError("tool_input_invalid")
+
+    executor = _executor(
+        _binding("test.read", read_handler),
+        _binding("test.fail", failing_handler),
+    )
+    asyncio.run(
+        executor.execute(
+            ToolCall(call_id="read-1", tool_name="test.read", arguments={"value": 4})
+        )
+    )
+    for index in (1, 2):
+        with pytest.raises(ToolExecutorError, match="tool_input_invalid"):
+            asyncio.run(
+                executor.execute(
+                    ToolCall(
+                        call_id=f"fail-{index}",
+                        tool_name="test.fail",
+                        arguments={"value": index},
+                    )
+                )
+            )
+
+    cached = asyncio.run(
+        executor.execute(
+            ToolCall(call_id="read-2", tool_name="test.read", arguments={"value": 4})
+        )
+    )
+    assert cached.data == {"value": 4, "calls": 1}
+    assert read_calls == 1
+
+    # Without the reset on the cache hit this third failure would be rewritten to
+    # tool_consecutive_failure_limit by the base executor.
+    with pytest.raises(ToolExecutorError, match="tool_input_invalid"):
+        asyncio.run(
+            executor.execute(
+                ToolCall(
+                    call_id="fail-3",
+                    tool_name="test.fail",
+                    arguments={"value": 3},
+                )
+            )
+        )
