@@ -27,15 +27,17 @@
         flex: 1 1 auto;
         width: 100%;
         min-width: 5rem;
-        min-height: 3.4rem;
-        max-height: 8rem;
+        height: 3rem;
+        min-height: 3rem;
+        max-height: 3rem;
         margin: 0;
-        padding: 0.15rem 0.2rem 0.35rem;
+        padding: 0.15rem 0.2rem;
         border: 0;
         border-radius: 0;
         background: transparent;
         line-height: 1.35;
         overflow-y: auto;
+        resize: none;
         box-shadow: none;
     }
 
