@@ -218,20 +218,7 @@ def _single_failure_stream(bridge, code, message, conversation_id):
             conversation_id,
         )
     except Exception:  # noqa: BLE001 - never expose a controller exception to chat
-        result = {
-            "ok": True,
-            "turn_id": "00000000-0000-4000-8000-000000000001",
-            "workflow": "AGENT",
-            "answer": (
-                "No he podido completar la petición de forma fiable. No tengo suficiente "
-                "información para afirmar la causa y no voy a inventarla."
-            ),
-            "confidence": "low",
-            "limitations": [],
-            "citations": [],
-            "plan": None,
-            "conversation_id": None,
-        }
+        result = _emergency_failure_result()
     return _stream_response(
         iter(
             (
@@ -242,6 +229,51 @@ def _single_failure_stream(bridge, code, message, conversation_id):
             )
         )
     )
+
+
+def _emergency_failure_result():
+    """Return a final envelope that remains valid even if every richer fallback failed."""
+
+    return {
+        "ok": True,
+        "turn_id": "00000000-0000-4000-8000-000000000001",
+        "workflow": "AGENT",
+        "answer": (
+            "No he podido completar la petición de forma fiable. No tengo suficiente "
+            "información para afirmar la causa y no voy a inventarla. Si pedías modificar "
+            "datos, comprueba su estado actual antes de repetir la operación."
+        ),
+        "confidence": "low",
+        "limitations": [],
+        "citations": [],
+        "plan": {
+            "plan_id": "00000000-0000-4000-8000-000000000002",
+            "state": "failed",
+            "risk": "low",
+            "metadata": {
+                "needs_read": False,
+                "needs_schema": False,
+                "needs_write": False,
+                "needs_business_action": False,
+                "has_external_effect": False,
+                "has_irreversible_effect": False,
+                "is_atomic": True,
+                "estimated_blast_radius": 0,
+            },
+            "policy": {
+                "confirmation_mode": "risk_based",
+                "max_auto_risk": "low",
+                "allow_synthetic_data": False,
+                "constrained_by": [],
+            },
+            "goal": "Explicar que no se pudo completar la petición.",
+            "assumptions": [],
+            "steps": [],
+            "requires_confirmation": False,
+            "expires_at": None,
+        },
+        "conversation_id": None,
+    }
 
 
 def _stream_response(iterator):
