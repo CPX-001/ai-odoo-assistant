@@ -1,3 +1,4 @@
+# ruff: noqa: B018 - Odoo manifests are a top-level dictionary expression.
 {
     "name": "Odoo AI M5 Guided Items Fixture",
     "version": "18.0.1.0.0",

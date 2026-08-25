@@ -4,7 +4,6 @@ from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from odoo_ai.api import create_app
 from odoo_ai.contracts import (
     Evidence,

@@ -1,5 +1,4 @@
 import pytest
-
 from odoo_ai.application.agent_policy import (
     evaluate_agent_candidate,
     intersect_agent_policy,

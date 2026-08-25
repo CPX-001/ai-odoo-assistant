@@ -2,7 +2,6 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.contracts.chat import ChatActor
 from odoo_ai.storage.chat_delete_repository import delete_chat_conversations
 from odoo_ai.storage.chat_repository import ChatStoreError

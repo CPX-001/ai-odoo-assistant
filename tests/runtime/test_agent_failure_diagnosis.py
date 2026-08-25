@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import ClassVar
 from uuid import UUID
 
 from odoo_ai.contracts import (
@@ -32,7 +33,7 @@ class _Settings:
 
 
 class _Engine:
-    instances: list["_Engine"] = []
+    instances: ClassVar[list[_Engine]] = []
 
     def __init__(self, settings: _Settings) -> None:
         self.settings = settings

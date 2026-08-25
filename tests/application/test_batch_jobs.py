@@ -5,8 +5,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-from pydantic import ValidationError
-
 from odoo_ai.application.batch_jobs import (
     BatchJobError,
     BatchMutationJobService,
@@ -30,6 +28,7 @@ from odoo_ai.ports.batch_jobs import (
     BatchJobTransitionResult,
     StoredBatchMutationJob,
 )
+from pydantic import ValidationError
 
 NOW = datetime(2026, 8, 25, 0, 0, tzinfo=UTC)
 ACTOR = ChatActor(database="odoo-test", uid=7)

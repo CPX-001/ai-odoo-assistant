@@ -4,7 +4,6 @@ from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from odoo_ai.api import create_app
 from odoo_ai.contracts.chat_delete import ChatDeleteRequest, ChatDeleteResponse
 from odoo_ai.runtime.chat_delete import RuntimeChatDeleteService

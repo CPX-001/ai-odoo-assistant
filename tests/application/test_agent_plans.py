@@ -3,7 +3,6 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.application.agent_plans import (
     PLAN_RECOVERY_TTL,
     RECOVERABLE_EXECUTION_ERROR,

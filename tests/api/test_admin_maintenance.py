@@ -5,7 +5,6 @@ from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient, Response
-
 from odoo_ai.api import create_app
 from odoo_ai.contracts.maintenance import (
     MaintenanceActor,
@@ -14,7 +13,10 @@ from odoo_ai.contracts.maintenance import (
     MaintenanceResult,
     MaintenanceStatus,
 )
-from odoo_ai.runtime.maintenance import RuntimeMaintenanceError, RuntimeMaintenanceService
+from odoo_ai.runtime.maintenance import (
+    RuntimeMaintenanceError,
+    RuntimeMaintenanceService,
+)
 
 ADMIN_SECRET = "m7-maintenance-secret-" + "s" * 48
 JOB_ID = UUID("12345678-1234-5678-1234-567812345678")

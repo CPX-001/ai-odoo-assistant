@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.application.batch_command import BatchCommandError, BatchCommandService
 from odoo_ai.application.batch_execution import BatchExecutionError
 from odoo_ai.application.batch_jobs import BatchJobError
@@ -144,7 +143,6 @@ class FakeJobs:
         assert attempt_id == ATTEMPT_ID
         assert error_code == "batch_execution_outcome_unknown"
         self.mark_unknown_calls += 1
-        return None
 
 
 class FakeExecution:

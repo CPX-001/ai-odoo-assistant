@@ -2,8 +2,6 @@ import json
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
-
 from odoo_ai.contracts import KnowledgeDocument, KnowledgeMediaType
 from odoo_ai.knowledge import (
     KNOWLEDGE_SOURCES_ENV,
@@ -15,6 +13,7 @@ from odoo_ai.knowledge import (
     chunk_document,
     knowledge_sources_from_env,
 )
+from pydantic import ValidationError
 
 
 def test_nondefault_root_and_unicode_markdown_are_bounded_and_logical(

@@ -3,7 +3,6 @@ from __future__ import annotations
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.application.agent_turn import AgentTurnError, _reconcile_previews
 from odoo_ai.contracts import ActionToolReport, AgentCandidateOutput, AgentCandidateStep
 from odoo_ai.contracts.batch import BatchFailureMode, BatchMutationKind

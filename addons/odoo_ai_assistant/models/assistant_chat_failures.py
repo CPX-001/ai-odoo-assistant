@@ -77,7 +77,10 @@ def _failure_plan(bridge, message, conversation_id):
         )
         constrained_by = ["user"]
     except Exception:  # noqa: BLE001 - display policy is best-effort only
-        pass
+        mode = "risk_based"
+        risk = "low"
+        allow_synthetic = False
+        constrained_by = []
     if mode not in {"always_confirm", "risk_based", "protected_only"}:
         mode = "risk_based"
     if risk not in {"low", "moderate", "high", "protected"}:

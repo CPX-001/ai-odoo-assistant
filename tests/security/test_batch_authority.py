@@ -3,7 +3,6 @@ from __future__ import annotations
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.contracts.batch import BatchFailureMode, BatchMutationKind
 from odoo_ai.contracts.batch_authority import BatchAuthorityClaims
 from odoo_ai.security.action_authority import ActionAuthorityCodec, ActionAuthorityError

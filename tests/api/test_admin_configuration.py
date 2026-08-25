@@ -3,15 +3,20 @@ from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient, Response
-
 from odoo_ai.api import create_app
 from odoo_ai.contracts.admin_configuration import (
     AdminConfigurationActor,
     AdminConfigurationAuthorized,
     AdminConfigurationResponse,
 )
-from odoo_ai.contracts.configuration import AssistantAdminOverrides, resolve_config_snapshot
-from odoo_ai.runtime.configuration import RuntimeConfigurationError, RuntimeConfigurationService
+from odoo_ai.contracts.configuration import (
+    AssistantAdminOverrides,
+    resolve_config_snapshot,
+)
+from odoo_ai.runtime.configuration import (
+    RuntimeConfigurationError,
+    RuntimeConfigurationService,
+)
 
 ADMIN_SECRET = "m7-admin-secret-" + "s" * 48
 

@@ -9,10 +9,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+
+import tomllib
 
 from installer.bootstrap.bootstrap import BootstrapError
 

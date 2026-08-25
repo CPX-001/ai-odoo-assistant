@@ -49,7 +49,7 @@ def _conversation_ids(value) -> list[str]:
     parsed: list[str] = []
     for item in value:
         if not isinstance(item, str):
-            raise ValueError
+            raise TypeError
         parsed.append(str(UUID(item)))
     if len(set(parsed)) != len(parsed):
         raise ValueError

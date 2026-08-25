@@ -7,14 +7,20 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, text
-from sqlalchemy.orm import Session
-
 from odoo_ai.contracts import SourceScanDiagnostics, SourceScanMetricsView
 from odoo_ai.contracts.maintenance import MaintenanceActor
-from odoo_ai.runtime.maintenance import RuntimeMaintenanceError, RuntimeMaintenanceService
-from odoo_ai.storage import DatabaseSettings, create_database_engine, create_instance_profile
+from odoo_ai.runtime.maintenance import (
+    RuntimeMaintenanceError,
+    RuntimeMaintenanceService,
+)
+from odoo_ai.storage import (
+    DatabaseSettings,
+    create_database_engine,
+    create_instance_profile,
+)
 from odoo_ai.storage.config import DATABASE_NAME_ENV, DATABASE_URL_ENV
+from sqlalchemy import Engine, text
+from sqlalchemy.orm import Session
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_DATABASE_URL_ENV = "ODOO_AI_TEST_DATABASE_URL"

@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters import CodexEngineError, query_tool_specs
 from odoo_ai.application import QueryService, QueryTurnError, TraceEventData
 from odoo_ai.contracts import (

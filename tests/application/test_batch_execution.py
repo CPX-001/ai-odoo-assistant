@@ -4,7 +4,6 @@ import asyncio
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.application.batch_execution import (
     BatchExecutionError,
     BatchMutationExecutionService,

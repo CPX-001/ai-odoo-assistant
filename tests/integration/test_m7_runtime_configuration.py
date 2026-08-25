@@ -6,12 +6,13 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, text
-
 from odoo_ai.adapters.configured_codex import ConfiguredCodexRuntimeSettings
 from odoo_ai.contracts.admin_configuration import AdminConfigurationActor
 from odoo_ai.contracts.configuration import AssistantAdminOverrides
-from odoo_ai.logs.configured import journal_unit_override_from_env, log_file_override_from_env
+from odoo_ai.logs.configured import (
+    journal_unit_override_from_env,
+    log_file_override_from_env,
+)
 from odoo_ai.runtime.configuration import (
     LOG_FILE_ENV,
     SOURCE_ROOTS_ENV,
@@ -30,6 +31,7 @@ from odoo_ai.storage.configuration_repository import (
     list_runtime_config_audit_events,
     read_runtime_configuration,
 )
+from sqlalchemy import Engine, text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_CONFIG = REPO_ROOT / "alembic.ini"

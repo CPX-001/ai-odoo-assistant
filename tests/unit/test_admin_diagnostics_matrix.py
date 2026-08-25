@@ -3,7 +3,6 @@
 from datetime import UTC, datetime
 
 import pytest
-
 from odoo_ai.contracts.admin_diagnostics import (
     DiagnosticRemediationKind,
     DiagnosticState,

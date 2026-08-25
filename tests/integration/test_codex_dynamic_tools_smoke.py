@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 import pytest
-
 from odoo_ai.adapters import (
     SOURCE_FIND_SYMBOL,
     CodexAppServerEngine,

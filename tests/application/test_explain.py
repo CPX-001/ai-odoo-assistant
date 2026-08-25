@@ -4,7 +4,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters import OdooGatewayError, source_tool_specs
 from odoo_ai.application import ExplainService, ExplainTurnError, TraceEventData
 from odoo_ai.contracts import (

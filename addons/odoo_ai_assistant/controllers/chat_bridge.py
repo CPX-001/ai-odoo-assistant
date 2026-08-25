@@ -56,7 +56,7 @@ class BrowserChatController(http.Controller):
                 raise ValueError
             screen_payload = json.loads(screen)
             if not isinstance(screen_payload, dict):
-                raise ValueError
+                raise TypeError
         except (TypeError, ValueError):
             return _single_failure_stream(
                 bridge,
@@ -297,4 +297,4 @@ def _sse_event(event, payload):
         separators=(",", ":"),
         sort_keys=True,
     )
-    return f"event: {event}\ndata: {encoded}\n\n".encode("utf-8")
+    return f"event: {event}\ndata: {encoded}\n\n".encode()

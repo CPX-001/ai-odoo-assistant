@@ -2,8 +2,6 @@ import asyncio
 from uuid import UUID
 
 import pytest
-from pydantic import BaseModel, ConfigDict, Field
-
 from odoo_ai.contracts import (
     Evidence,
     EvidenceKind,
@@ -24,6 +22,7 @@ from odoo_ai.tools import (
     ToolHandlerOutput,
     ToolRegistry,
 )
+from pydantic import BaseModel, ConfigDict, Field
 
 EVIDENCE_ID = UUID("12345678-1234-5678-1234-567812345678")
 OTHER_EVIDENCE_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")

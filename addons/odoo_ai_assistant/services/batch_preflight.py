@@ -6,8 +6,8 @@ from odoo.exceptions import AccessError, MissingError, ValidationError
 
 from .action_tools import (
     _BLOCKED_FIELDS,
-    _BLOCKED_MODELS,
     _BLOCKED_MODEL_PREFIXES,
+    _BLOCKED_MODELS,
     _SENSITIVE_FIELD_PARTS,
     _VALUE_KIND_BY_FIELD_TYPE,
 )

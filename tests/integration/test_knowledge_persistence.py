@@ -5,9 +5,6 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, inspect, text
-from sqlalchemy.orm import Session
-
 from odoo_ai.knowledge import (
     FilesystemKnowledgeLimits,
     FilesystemKnowledgeProvider,
@@ -23,6 +20,8 @@ from odoo_ai.storage import (
     list_knowledge_chunks,
 )
 from odoo_ai.storage.config import DATABASE_NAME_ENV, DATABASE_URL_ENV
+from sqlalchemy import Engine, inspect, text
+from sqlalchemy.orm import Session
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_DATABASE_URL_ENV = "ODOO_AI_TEST_DATABASE_URL"

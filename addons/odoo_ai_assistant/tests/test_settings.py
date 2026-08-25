@@ -168,9 +168,11 @@ class TestM7Settings(TransactionCase):
             }
         )
 
-        with patch.object(type(record), "_client_for_url", return_value=fake):
-            with self.assertRaises(ValidationError):
-                record.set_values()
+        with (
+            patch.object(type(record), "_client_for_url", return_value=fake),
+            self.assertRaises(ValidationError),
+        ):
+            record.set_values()
 
         self.assertEqual(self.parameters._get_param(SERVICE_URL_PARAM), original)
         self.assertFalse(fake.applied)
@@ -184,10 +186,12 @@ class TestM7Settings(TransactionCase):
             }
         )
 
-        with self.assertRaises(ValidationError):
-            with self.env.cr.savepoint():
-                with patch.object(type(record), "_client_for_url", return_value=fake):
-                    record.set_values()
+        with (
+            self.assertRaises(ValidationError),
+            self.env.cr.savepoint(),
+            patch.object(type(record), "_client_for_url", return_value=fake),
+        ):
+            record.set_values()
 
         self.assertEqual(fake.applied[-1]["expected_revision"], 2)
 

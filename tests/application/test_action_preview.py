@@ -3,7 +3,6 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.application.action_policy import (
     ACTION_POLICY_REVISION,
     action_payload_fingerprint,

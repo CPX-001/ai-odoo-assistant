@@ -4,7 +4,6 @@ import asyncio
 import os
 
 import pytest
-
 from odoo_ai.adapters import CodexProbeState, CodexRuntimeSettings, probe_codex_runtime
 
 

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+
 from installer.bootstrap.bootstrap import BootstrapError
 from installer.bootstrap.postgres import PostgresBootstrapper, PostgresSettings
 

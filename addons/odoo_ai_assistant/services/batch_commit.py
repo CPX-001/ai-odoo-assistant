@@ -14,15 +14,13 @@ from ..security.batch_authority import BatchAuthorityCodec, BatchAuthorityPayloa
 from ..security.delegation import DelegationTokenError
 from .action_tools import (
     _BLOCKED_FIELDS,
-    _BLOCKED_MODELS,
     _BLOCKED_MODEL_PREFIXES,
+    _BLOCKED_MODELS,
     _SENSITIVE_FIELD_PARTS,
     _VALUE_KIND_BY_FIELD_TYPE,
     _orm_write_value,
 )
 from .batch_payload import (
-    MAX_BATCH_FIELDS,
-    MAX_BATCH_ROWS,
     batch_fields,
     canonical_json,
     chunk_fingerprint,

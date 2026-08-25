@@ -5,7 +5,6 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from odoo_ai.api import create_app
 from odoo_ai.application.agent_turn import AgentTurnError
 from odoo_ai.contracts import (

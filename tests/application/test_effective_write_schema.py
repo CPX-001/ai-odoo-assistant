@@ -4,8 +4,6 @@ from typing import cast
 from uuid import UUID
 
 import pytest
-from pydantic import JsonValue
-
 from odoo_ai.application.action_policy import ActionPolicy
 from odoo_ai.application.effective_write_schema import (
     EffectiveWriteSchemaError,
@@ -18,6 +16,7 @@ from odoo_ai.contracts import (
     EvidenceSensitivity,
     EvidenceStatus,
 )
+from pydantic import JsonValue
 
 NOW = datetime(2026, 8, 23, 12, 0, tzinfo=UTC)
 

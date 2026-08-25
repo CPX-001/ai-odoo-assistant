@@ -2,8 +2,6 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-
 from odoo_ai.contracts.maintenance import (
     MaintenanceActor,
     MaintenanceJob,
@@ -11,6 +9,7 @@ from odoo_ai.contracts.maintenance import (
     MaintenanceRequest,
     MaintenanceResult,
 )
+from pydantic import ValidationError
 
 
 def test_maintenance_request_is_closed_and_actor_is_bounded() -> None:

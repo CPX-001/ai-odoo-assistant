@@ -7,8 +7,6 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient, Response
-from sqlalchemy import Engine, text
-
 from odoo_ai.api import create_app
 from odoo_ai.runtime.status import (
     AdminStatusService,
@@ -27,6 +25,7 @@ from odoo_ai.storage import (
     session_scope,
 )
 from odoo_ai.storage.config import DATABASE_NAME_ENV, DATABASE_URL_ENV
+from sqlalchemy import Engine, text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_CONFIG = REPO_ROOT / "alembic.ini"

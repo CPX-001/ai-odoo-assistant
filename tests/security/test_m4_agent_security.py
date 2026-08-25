@@ -6,8 +6,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from pydantic import BaseModel, ConfigDict
-
 from odoo_ai.adapters import (
     CodexAppServerEngine,
     CodexEngineError,
@@ -42,6 +40,7 @@ from odoo_ai.tools import (
     ToolHandlerOutput,
     ToolRegistry,
 )
+from pydantic import BaseModel, ConfigDict
 
 EVIDENCE_ID = UUID("12345678-1234-5678-1234-567812345678")
 

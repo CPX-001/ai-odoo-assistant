@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
 from installer.bootstrap.systemd import SystemdInstaller, SystemdSettings
 
 

@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters import CodexAppServerEngine, CodexRuntimeSettings
 from odoo_ai.contracts import (
     AnswerEnvelope,

@@ -3,7 +3,6 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-
 from odoo_ai.contracts import SourceCapabilityState, SourceFileKind
 from odoo_ai.source import (
     FileExtraction,

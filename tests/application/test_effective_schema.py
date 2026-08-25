@@ -7,8 +7,6 @@ from typing import cast
 from uuid import UUID
 
 import pytest
-from pydantic import JsonValue
-
 from odoo_ai.application import (
     EffectiveSchemaError,
     EffectiveSchemaPolicy,
@@ -24,6 +22,7 @@ from odoo_ai.contracts import (
     RecordSnapshot,
     export_public_json_schemas,
 )
+from pydantic import JsonValue
 
 CAPTURED_AT = datetime(2026, 8, 22, 10, 30, tzinfo=UTC)
 SOURCE_ROOT = Path(__file__).resolve().parents[2] / "service" / "src" / "odoo_ai"

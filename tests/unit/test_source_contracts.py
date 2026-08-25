@@ -2,8 +2,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-from pydantic import ValidationError
-
 from odoo_ai.contracts import (
     InstanceInventory,
     ScanRun,
@@ -15,6 +13,7 @@ from odoo_ai.contracts import (
     XmlRecord,
     export_public_json_schemas,
 )
+from pydantic import ValidationError
 
 SCAN_ID = UUID("12345678-1234-5678-1234-567812345678")
 FILE_ID = UUID("22345678-1234-5678-1234-567812345678")

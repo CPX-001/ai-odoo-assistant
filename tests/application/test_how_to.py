@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters import knowledge_tool_specs
 from odoo_ai.application import HowToService, HowToTurnError
 from odoo_ai.contracts import (
@@ -206,12 +205,18 @@ def _document_evidence() -> Evidence:
     )
 
 
-def _service(gateway, engine, *, report=ToolExecutionReport()) -> HowToService:
+def _service(
+    gateway,
+    engine,
+    *,
+    report: ToolExecutionReport | None = None,
+) -> HowToService:
+    execution_report = report or ToolExecutionReport()
     return HowToService(
         gateway_factory=FakeGatewayFactory(gateway),
         reasoning_engine=engine,
         knowledge_tools=knowledge_tool_specs(),
-        report_loader=lambda: report,
+        report_loader=lambda: execution_report,
         instance_loader=lambda: InstanceProfileSummary(instance_id="dev-odoo"),
         clock=lambda: NOW,
     )

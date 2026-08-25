@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-
 from odoo_ai.contracts import LogCapabilityState, LogCorrelation, LogSearchRequest
 from odoo_ai.logs import (
     FileLogLimits,

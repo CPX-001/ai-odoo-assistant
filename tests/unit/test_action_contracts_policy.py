@@ -1,8 +1,6 @@
 from uuid import UUID
 
 import pytest
-from pydantic import ValidationError
-
 from odoo_ai.application.action_policy import (
     ACTION_POLICY_REVISION,
     ActionPolicy,
@@ -21,6 +19,7 @@ from odoo_ai.contracts.action import (
     BusinessActionProposalPayload,
     RecordCreateProposalPayload,
 )
+from pydantic import ValidationError
 
 PROPOSAL_ID = UUID("11111111-1111-4111-8111-111111111111")
 TURN_ID = UUID("22222222-2222-4222-8222-222222222222")

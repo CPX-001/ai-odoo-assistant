@@ -7,7 +7,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters import (
     SOURCE_FIND_MODEL_EXTENSIONS,
     SOURCE_FIND_SYMBOL,

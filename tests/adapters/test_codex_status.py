@@ -1,7 +1,6 @@
 import asyncio
 
 import pytest
-
 from odoo_ai.adapters import (
     APP_SERVER_PROTOCOL,
     CachedCodexReasoningStatus,

@@ -5,14 +5,16 @@ import json
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters.batch_preflight_http import (
     BatchPreflightOdooGatewayFactory,
     HttpBatchPreflightGateway,
 )
 from odoo_ai.adapters.odoo_http import OdooGatewayError, OdooGatewaySettings
-from odoo_ai.contracts.batch import BatchDeleteItem, BatchMutationKind, BatchMutationRequest
-
+from odoo_ai.contracts.batch import (
+    BatchDeleteItem,
+    BatchMutationKind,
+    BatchMutationRequest,
+)
 
 SETTINGS = OdooGatewaySettings(base_url="http://127.0.0.1:8069")
 TURN_ID = UUID(int=7)

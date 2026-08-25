@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from odoo_ai.application.agent_policy import AgentProposalBinding, evaluate_agent_candidate
+from odoo_ai.application.agent_policy import (
+    AgentProposalBinding,
+    evaluate_agent_candidate,
+)
 from odoo_ai.contracts import (
     AgentCandidateOutput,
     AgentCandidateStep,

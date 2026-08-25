@@ -12,7 +12,12 @@ from odoo import api, models
 from ..services import AssistantServiceError, TurnContextError, prepare_agent_turn
 from ..services.assistant_chat_client import AssistantChatServiceClient
 from .assistant_bridge import _client_error_code
-from .assistant_chat_bridge import _browser_agent, _chat_message, _is_uuid, _optional_uuid
+from .assistant_chat_bridge import (
+    _browser_agent,
+    _chat_message,
+    _is_uuid,
+    _optional_uuid,
+)
 from .assistant_chat_failures import _failure_answer, _failure_plan
 
 _BROWSER_STREAM_DELTA_MAX_CHARS = 4096
@@ -151,7 +156,7 @@ class AssistantChatStreamBridge(models.AbstractModel):
             raise ChatStreamPreparationError("invalid_context") from None
         except AssistantServiceError as error:
             raise ChatStreamPreparationError(_client_error_code(error.code)) from None
-        except Exception:
+        except Exception:  # noqa: BLE001 - sanitize the browser preparation boundary
             raise ChatStreamPreparationError("service_unavailable") from None
 
         return PreparedBrowserChatStream(
@@ -241,7 +246,7 @@ def _sse_event(event: str, payload: dict[str, object]) -> bytes:
         separators=(",", ":"),
         sort_keys=True,
     )
-    return f"event: {event}\ndata: {encoded}\n\n".encode("utf-8")
+    return f"event: {event}\ndata: {encoded}\n\n".encode()
 
 
 def _safe_message(value) -> str:

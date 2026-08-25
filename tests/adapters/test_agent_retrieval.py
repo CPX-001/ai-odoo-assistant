@@ -2,7 +2,6 @@ import asyncio
 from datetime import UTC, datetime
 
 import pytest
-
 from odoo_ai.adapters.agent_retrieval import (
     AgentRetrievalBindingFactory,
     agent_retrieval_tool_specs,

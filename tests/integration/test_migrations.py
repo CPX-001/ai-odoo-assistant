@@ -5,10 +5,9 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import text
-
 from odoo_ai.storage import DatabaseSettings, create_database_engine
 from odoo_ai.storage.config import DATABASE_NAME_ENV, DATABASE_URL_ENV
+from sqlalchemy import text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_DATABASE_URL_ENV = "ODOO_AI_TEST_DATABASE_URL"

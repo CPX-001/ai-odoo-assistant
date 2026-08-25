@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
 from installer.bootstrap.bootstrap import BootstrapError
 from installer.bootstrap.runtime import RuntimeInstaller, RuntimeInstallSettings
 

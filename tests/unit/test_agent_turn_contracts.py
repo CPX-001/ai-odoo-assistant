@@ -2,8 +2,6 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-
 from odoo_ai.contracts import (
     AgentCandidateOutput,
     AgentCandidateStep,
@@ -18,6 +16,7 @@ from odoo_ai.contracts import (
     UserExecutionContext,
 )
 from odoo_ai.contracts.chat import ChatActor
+from pydantic import ValidationError
 
 
 def test_candidate_steps_cannot_reference_future_steps() -> None:

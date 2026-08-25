@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters import (
     KNOWLEDGE_READ_EXCERPT,
     KNOWLEDGE_SEARCH,

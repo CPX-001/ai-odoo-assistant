@@ -3,7 +3,6 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters import action_tool_specs
 from odoo_ai.application import ActionService, ActionTurnError
 from odoo_ai.application.action_workflow import _select_action_tools

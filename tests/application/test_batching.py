@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from odoo_ai.application.batching import (
     BatchPlannerLimits,
     BatchPlanningError,
@@ -18,6 +16,7 @@ from odoo_ai.contracts.batch import (
     BatchMutationRequest,
     BatchPatchItem,
 )
+from pydantic import ValidationError
 
 SCHEMA_ID = "schema:v1:sha256:" + "a" * 64
 

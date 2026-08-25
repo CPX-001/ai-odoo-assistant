@@ -1,7 +1,6 @@
 from unittest.mock import patch
 
 import pytest
-
 from odoo_ai.api.__main__ import DEFAULT_HOST, DEFAULT_PORT, main, runtime_bind
 
 

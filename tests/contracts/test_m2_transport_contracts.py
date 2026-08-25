@@ -3,8 +3,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-from pydantic import ValidationError
-
 from odoo_ai.contracts import (
     ContextReadTurnRequest,
     DelegationClaims,
@@ -14,6 +12,7 @@ from odoo_ai.contracts import (
     UserExecutionContext,
     export_public_json_schemas,
 )
+from pydantic import ValidationError
 
 TURN_ID = UUID("12345678-1234-5678-1234-567812345678")
 

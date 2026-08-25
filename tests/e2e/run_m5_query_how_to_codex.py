@@ -16,7 +16,7 @@ import psycopg
 from psycopg import sql
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_m4_sale_order_codex import (  # noqa: E402
+from run_m4_sale_order_codex import (
     GateError,
     _database_uri,
     _free_port,

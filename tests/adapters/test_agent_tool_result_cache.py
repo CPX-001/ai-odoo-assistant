@@ -1,8 +1,6 @@
 import asyncio
 
 import pytest
-from pydantic import BaseModel, ConfigDict, Field
-
 from odoo_ai.adapters.agent_timing import TimedToolExecutor
 from odoo_ai.contracts import ToolRisk, ToolSpec, TurnLimits
 from odoo_ai.tools import (
@@ -14,6 +12,7 @@ from odoo_ai.tools import (
     ToolHandlerOutput,
     ToolRegistry,
 )
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class InputModel(BaseModel):

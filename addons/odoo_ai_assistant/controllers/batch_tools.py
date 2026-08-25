@@ -8,7 +8,11 @@ from typing import Final
 from odoo import http
 from odoo.http import request
 
-from ..security import SHARED_SECRET_HEADER, MachineAuthenticationError, require_machine_secret
+from ..security import (
+    SHARED_SECRET_HEADER,
+    MachineAuthenticationError,
+    require_machine_secret,
+)
 from ..security.batch_authority import BatchAuthorityCodec
 from ..services.batch_commit import ApprovedBatchMutationExecutor
 from ..services.batch_preflight import DelegatedBatchPreflightExecutor

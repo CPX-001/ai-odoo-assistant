@@ -7,7 +7,6 @@ from types import ModuleType
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.contracts import ContextReadTurnRequest
 
 NOW = 1_787_337_600

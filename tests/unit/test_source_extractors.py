@@ -2,7 +2,6 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-
 from odoo_ai.contracts import (
     ManifestStatus,
     SourceCapabilityState,

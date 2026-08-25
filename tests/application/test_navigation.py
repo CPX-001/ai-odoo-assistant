@@ -3,8 +3,6 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from pydantic import ValidationError
-
 from odoo_ai.application import NavigationService
 from odoo_ai.contracts import (
     Evidence,
@@ -20,6 +18,7 @@ from odoo_ai.contracts import (
     RecordSnapshot,
     export_public_json_schemas,
 )
+from pydantic import ValidationError
 
 
 class FakeNavigationGateway:
