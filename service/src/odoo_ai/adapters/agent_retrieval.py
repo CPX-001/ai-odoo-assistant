@@ -63,7 +63,7 @@ from odoo_ai.source import (
     resolve_source_roots,
 )
 from odoo_ai.storage import get_instance_profile
-from odoo_ai.storage.models import ScanRun, SourceFile, SourceSymbol
+from odoo_ai.storage.models import ScanRun, SourceFile, SourceSymbol, XmlRecord
 from odoo_ai.tools import (
     EvidenceLedger,
     RegisteredTool,
@@ -81,7 +81,7 @@ ODOO_GET_INSTANCE_FACTS = "odoo.get_instance_facts"
 SOURCE_INSPECT_MODULE = "source.inspect_module"
 _INSTANCE_FACTS_EXECUTOR_ID = "odoo.get_instance_facts.v1"
 _INSPECT_MODULE_EXECUTOR_ID = "source.inspect_module.v1"
-_MAX_INSTANCE_MODULES = 512
+_MAX_INSTANCE_MODULES = 64
 
 
 class AgentInstanceFactsRequest(BaseModel):
@@ -90,7 +90,7 @@ class AgentInstanceFactsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     module_query: str | None = Field(default=None, min_length=1, max_length=128)
-    max_modules: int = Field(default=256, strict=True, ge=1, le=_MAX_INSTANCE_MODULES)
+    max_modules: int = Field(default=64, strict=True, ge=1, le=_MAX_INSTANCE_MODULES)
 
     @field_validator("module_query")
     @classmethod
@@ -137,7 +137,7 @@ class AgentModuleSymbol(BaseModel):
 
     kind: str = Field(min_length=1, max_length=64)
     model: str | None = Field(default=None, min_length=1, max_length=255)
-    name: str = Field(min_length=1, max_length=255)
+    name: str = Field(min_length=1, max_length=512)
     logical_path: str = Field(min_length=1, max_length=1024)
     ref: SourceRef
 
@@ -172,9 +172,10 @@ def agent_retrieval_tool_specs() -> tuple[ToolSpec, ...]:
         ToolSpec(
             name=SOURCE_INSPECT_MODULE,
             description=(
-                "List bounded indexed structural symbols for one exact installed Odoo addon, "
-                "optionally filtering names/models/kinds by a short query. Use for custom/OCA/"
-                "third-party modules when the relevant symbol is not yet known, then call "
+                "List bounded indexed Python structural symbols and XML records for one exact "
+                "installed Odoo addon, optionally filtering names/models/kinds/logical paths by "
+                "a short query. XML records are returned as kind=xml_id. Use when the relevant "
+                "symbol or Settings/view implementation is not yet known, then call "
                 "source.read_excerpt on only the useful returned refs."
             ),
             input_schema=AgentModuleInspectionRequest.model_json_schema(),
@@ -624,7 +625,7 @@ def _inspect_module_operation(
                 truncated=False,
             )
 
-        statement = (
+        symbol_statement = (
             select(SourceSymbol)
             .join(SourceFile, SourceFile.id == SourceSymbol.source_file_id)
             .join(ScanRun, ScanRun.id == SourceFile.scan_run_id)
@@ -636,18 +637,43 @@ def _inspect_module_operation(
                 ScanRun.status == "succeeded",
             )
         )
+        xml_statement = (
+            select(XmlRecord)
+            .join(SourceFile, SourceFile.id == XmlRecord.source_file_id)
+            .join(ScanRun, ScanRun.id == SourceFile.scan_run_id)
+            .where(
+                SourceFile.instance_profile_id == instance_profile_id,
+                SourceFile.module == request.module,
+                SourceFile.is_stale.is_(False),
+                XmlRecord.fingerprint == SourceFile.fingerprint,
+                XmlRecord.start_line.is_not(None),
+                XmlRecord.end_line.is_not(None),
+                ScanRun.status == "succeeded",
+            )
+        )
         if request.query is not None:
             normalized = request.query.casefold()
-            statement = statement.where(
+            symbol_statement = symbol_statement.where(
                 or_(
                     func.lower(SourceSymbol.name).contains(normalized, autoescape=True),
                     func.lower(SourceSymbol.model).contains(normalized, autoescape=True),
                     func.lower(SourceSymbol.kind).contains(normalized, autoescape=True),
+                    func.lower(SourceSymbol.logical_path).contains(
+                        normalized, autoescape=True
+                    ),
                 )
             )
-        rows = tuple(
+            xml_statement = xml_statement.where(
+                or_(
+                    func.lower(XmlRecord.xml_id).contains(normalized, autoescape=True),
+                    func.lower(XmlRecord.model).contains(normalized, autoescape=True),
+                    func.lower(XmlRecord.logical_path).contains(normalized, autoescape=True),
+                )
+            )
+
+        source_rows = tuple(
             session.scalars(
-                statement.order_by(
+                symbol_statement.order_by(
                     SourceSymbol.kind,
                     SourceSymbol.model,
                     SourceSymbol.name,
@@ -655,31 +681,81 @@ def _inspect_module_operation(
                 ).limit(request.max_results + 1)
             )
         )
-        selected = rows[: request.max_results]
+        xml_rows = tuple(
+            session.scalars(
+                xml_statement.order_by(
+                    XmlRecord.model,
+                    XmlRecord.xml_id,
+                    XmlRecord.id,
+                ).limit(request.max_results + 1)
+            )
+        )
+        source_entries = tuple(
+            AgentModuleSymbol(
+                kind=row.kind,
+                model=row.model,
+                name=row.name,
+                logical_path=row.logical_path,
+                ref=SourceRef(
+                    source_file_id=row.source_file_id,
+                    fingerprint=row.fingerprint,
+                    start_line=row.start_line,
+                    end_line=row.end_line,
+                ),
+            )
+            for row in source_rows
+        )
+        xml_entries = tuple(
+            AgentModuleSymbol(
+                kind="xml_id",
+                model=row.model,
+                name=row.xml_id,
+                logical_path=row.logical_path,
+                ref=SourceRef(
+                    source_file_id=row.source_file_id,
+                    fingerprint=row.fingerprint,
+                    start_line=cast(int, row.start_line),
+                    end_line=cast(int, row.end_line),
+                ),
+            )
+            for row in xml_rows
+        )
+        selected = _interleave_module_entries(
+            source_entries,
+            xml_entries,
+            limit=request.max_results,
+        )
         return AgentModuleInspectionResult(
             module=request.module,
             installed=True,
             indexed=True,
-            symbols=tuple(
-                AgentModuleSymbol(
-                    kind=row.kind,
-                    model=row.model,
-                    name=row.name,
-                    logical_path=row.logical_path,
-                    ref=SourceRef(
-                        source_file_id=row.source_file_id,
-                        fingerprint=row.fingerprint,
-                        start_line=row.start_line,
-                        end_line=row.end_line,
-                    ),
-                )
-                for row in selected
-            ),
-            truncated=len(rows) > len(selected),
+            symbols=selected,
+            truncated=len(source_entries) + len(xml_entries) > len(selected),
         )
     finally:
         session.rollback()
         session.close()
+
+
+def _interleave_module_entries(
+    source_entries: tuple[AgentModuleSymbol, ...],
+    xml_entries: tuple[AgentModuleSymbol, ...],
+    *,
+    limit: int,
+) -> tuple[AgentModuleSymbol, ...]:
+    """Keep both Python and XML discoverable inside one bounded result."""
+
+    selected: list[AgentModuleSymbol] = []
+    for index in range(max(len(source_entries), len(xml_entries))):
+        if index < len(source_entries):
+            selected.append(source_entries[index])
+            if len(selected) >= limit:
+                break
+        if index < len(xml_entries):
+            selected.append(xml_entries[index])
+            if len(selected) >= limit:
+                break
+    return tuple(selected)
 
 
 def _run_source_operation(
