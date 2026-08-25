@@ -51,6 +51,8 @@ from odoo_ai.storage import (
     SqlBatchMutationJobStore,
     create_database_engine,
     create_session_factory,
+    get_latest_capability_snapshot,
+    get_latest_instance_profile,
 )
 from odoo_ai.storage.chat_repository import ChatStoreError, recent_chat_text
 from odoo_ai.storage.database import session_scope
@@ -65,16 +67,16 @@ class RuntimeAgentFactory:
         *,
         database_settings: DatabaseSettings,
         gateway_factory: OdooGatewayFactory,
-        instance_loader: Callable[[], InstanceProfileSummary],
+        instance_loader: Callable[[], InstanceProfileSummary] | None = None,
         batch_preflight_factory: BatchPreflightOdooGatewayFactory | None = None,
         batch_gateway_factory: BatchOdooGatewayFactory | None = None,
     ) -> None:
         self._database_settings = database_settings
         self._gateway_factory = gateway_factory
-        self._instance_loader = instance_loader
         self._batch_preflight_factory = batch_preflight_factory
         self._database_engine = create_database_engine(self._database_settings)
         self._sessions = create_session_factory(self._database_engine)
+        self._instance_loader = instance_loader or self._load_instance_summary_shared
         action_store = SqlActionApprovalStore(self._sessions)
         self._approvals = ActionApprovalService(action_store)
         self._plans = AgentPlanService(SqlAgentPlanStore(self._sessions))
@@ -112,7 +114,7 @@ class RuntimeAgentFactory:
         cls,
         *,
         gateway_factory: OdooGatewayFactory | None = None,
-        instance_loader: Callable[[], InstanceProfileSummary],
+        instance_loader: Callable[[], InstanceProfileSummary] | None = None,
         batch_preflight_factory: BatchPreflightOdooGatewayFactory | None = None,
         batch_gateway_factory: BatchOdooGatewayFactory | None = None,
     ) -> RuntimeAgentFactory:
@@ -232,6 +234,30 @@ class RuntimeAgentFactory:
                 )
         except (ChatStoreError, OSError, RuntimeError, ValueError):
             return ""
+
+    def _load_instance_summary_shared(self) -> InstanceProfileSummary:
+        with session_scope(self._sessions) as session:
+            profile = get_latest_instance_profile(session)
+            if profile is None:
+                return InstanceProfileSummary(instance_id="unknown")
+            snapshot = get_latest_capability_snapshot(
+                session,
+                instance_profile_id=profile.id,
+            )
+            capabilities = (
+                sorted(
+                    name
+                    for name, available in snapshot.capabilities.items()
+                    if available
+                )
+                if snapshot is not None
+                else []
+            )
+            return InstanceProfileSummary(
+                instance_id=profile.instance_id,
+                profile_revision=profile.fingerprint,
+                capabilities=capabilities,
+            )
 
     def _timed_instance(self) -> InstanceProfileSummary:
         started = monotonic()
