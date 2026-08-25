@@ -30,7 +30,7 @@ from odoo_ai.security import require_shared_secret
 
 MAX_CHAT_REQUEST_BYTES: Final = 32 * 1024
 _CHAT_POST_PATHS: Final = frozenset(
-    {"/v1/chat/history", "/v1/chat/append", "/v1/turns/general"}
+    {"/v1/chat/history", "/v1/chat/append", "/v1/chat/delete", "/v1/turns/general"}
 )
 
 
