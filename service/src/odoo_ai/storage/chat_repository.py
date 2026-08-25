@@ -148,31 +148,39 @@ def recent_chat_text(
     )
     if conversation is None:
         raise ChatStoreError("conversation_not_found")
-    items = tuple(
-        reversed(
-            tuple(
-                session.scalars(
-                    select(ChatMessage)
-                    .where(ChatMessage.conversation_id == conversation_id)
-                    .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
-                    .limit(max_messages)
-                )
-            )
+    newest = tuple(
+        session.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.conversation_id == conversation_id)
+            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+            .limit(max_messages)
         )
     )
-    parts: list[str] = []
+    return _bounded_recent_chat_text(newest, max_chars=max_chars)
+
+
+def _bounded_recent_chat_text(
+    newest: tuple[ChatMessage, ...],
+    *,
+    max_chars: int,
+) -> str:
+    """Keep the newest bounded slice, then present the retained slice chronologically."""
+
+    retained: list[str] = []
     used = 0
-    for item in items:
+    for item in newest:
         prefix = "User" if item.role == "user" else "Assistant"
-        line = f"{prefix}: {item.content.strip()}"
-        remaining = max_chars - used
+        full_line = f"{prefix}: {item.content.strip()}"
+        separator = 1 if retained else 0
+        remaining = max_chars - used - separator
         if remaining <= 0:
             break
-        if len(line) > remaining:
-            line = line[:remaining]
-        parts.append(line)
-        used += len(line) + 1
-    return "\n".join(parts)
+        line = full_line[:remaining]
+        retained.append(line)
+        used += separator + len(line)
+        if len(line) < len(full_line):
+            break
+    return "\n".join(reversed(retained))
 
 
 def _conversation_view(value: ChatConversation) -> ChatConversationView:
