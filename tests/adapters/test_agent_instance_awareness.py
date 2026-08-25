@@ -1,10 +1,14 @@
 import asyncio
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from uuid import uuid4
 
 from odoo_ai.adapters.agent_retrieval import (
     ODOO_GET_INSTANCE_FACTS,
     SOURCE_INSPECT_MODULE,
+    AgentModuleInspectionRequest,
     AgentRetrievalBindingFactory,
+    _inspect_module_operation,
     agent_retrieval_tool_specs,
 )
 from odoo_ai.adapters.knowledge_tools import KnowledgeToolBackend
@@ -52,6 +56,27 @@ class FakeInventoryGateway:
         return self.inventory
 
 
+class FakeSourceSession:
+    def __init__(self, rows) -> None:
+        self.rows = rows
+        self.rolled_back = False
+        self.closed = False
+
+    def scalar(self, statement):
+        del statement
+        return uuid4()
+
+    def scalars(self, statement):
+        del statement
+        return self.rows
+
+    def rollback(self):
+        self.rolled_back = True
+
+    def close(self):
+        self.closed = True
+
+
 def _context() -> ContextPack:
     screen = ScreenContext(model="account.move", view_type="form", captured_at=NOW)
     return ContextPack(
@@ -82,10 +107,11 @@ def _executor(factory: AgentRetrievalBindingFactory) -> ToolExecutor:
 
 
 def test_unified_agent_exposes_instance_and_module_discovery_tools() -> None:
-    names = tuple(spec.name for spec in agent_retrieval_tool_specs())
+    specs = {spec.name: spec for spec in agent_retrieval_tool_specs()}
 
-    assert ODOO_GET_INSTANCE_FACTS in names
-    assert SOURCE_INSPECT_MODULE in names
+    assert ODOO_GET_INSTANCE_FACTS in specs
+    assert SOURCE_INSPECT_MODULE in specs
+    assert "query" in specs[SOURCE_INSPECT_MODULE].input_schema["properties"]
     assert "odoo.get_instance_facts" in _UNIFIED_AGENT_INSTRUCTIONS
     assert "source.inspect_module" in _UNIFIED_AGENT_INSTRUCTIONS
     assert "Never invent an exact menu" in _UNIFIED_AGENT_INSTRUCTIONS
@@ -170,7 +196,11 @@ def test_uninstalled_module_inspection_stops_before_source_database_access() -> 
             ToolCall(
                 call_id="inspect-missing",
                 tool_name=SOURCE_INSPECT_MODULE,
-                arguments={"module": "custom_billing", "max_results": 20},
+                arguments={
+                    "module": "custom_billing",
+                    "query": "analytic",
+                    "max_results": 20,
+                },
             )
         )
     )
@@ -178,7 +208,51 @@ def test_uninstalled_module_inspection_stops_before_source_database_access() -> 
     assert result.data == {
         "module": "custom_billing",
         "installed": False,
+        "indexed": False,
         "symbols": [],
         "truncated": False,
     }
     assert gateway.calls == 1
+
+
+def test_indexed_module_inspection_returns_readable_source_refs() -> None:
+    source_file_id = uuid4()
+    fingerprint = "sha256:" + "a" * 64
+    session = FakeSourceSession(
+        (
+            SimpleNamespace(
+                source_file_id=source_file_id,
+                fingerprint=fingerprint,
+                start_line=20,
+                end_line=28,
+                kind="field",
+                model="res.config.settings",
+                name="analytic_accounting",
+                logical_path="custom_billing/models/res_config_settings.py",
+            ),
+        )
+    )
+
+    result = _inspect_module_operation(
+        lambda: session,
+        uuid4(),
+        AgentModuleInspectionRequest(
+            module="custom_billing",
+            query="analytic",
+            max_results=20,
+        ),
+    )
+
+    assert result.installed is True
+    assert result.indexed is True
+    assert result.truncated is False
+    assert len(result.symbols) == 1
+    symbol = result.symbols[0]
+    assert symbol.model == "res.config.settings"
+    assert symbol.name == "analytic_accounting"
+    assert symbol.ref.source_file_id == source_file_id
+    assert symbol.ref.fingerprint == fingerprint
+    assert symbol.ref.start_line == 20
+    assert symbol.ref.end_line == 28
+    assert session.rolled_back is True
+    assert session.closed is True
