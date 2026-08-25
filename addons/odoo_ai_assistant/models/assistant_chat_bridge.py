@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Mapping
+from time import monotonic
 from uuid import UUID
 
 from odoo import api, models
@@ -52,26 +53,33 @@ class AssistantChatBridge(models.AbstractModel):
         try:
             normalized_message = _chat_message(message)
             conversation_id = _optional_uuid(conversation_id)
-            prepared = prepare_agent_turn(
-                env=self.env,
-                screen_payload=screen,
-                message=normalized_message,
-            )
-            payload = prepared.to_assistant_payload()
-            policy = self._agent_policy_layers(
-                conversation_id,
-                normalized_message,
-            )
-            payload.update(
-                {
-                    "actor": self._chat_actor(),
-                    "conversation_id": conversation_id,
-                    "policy_layers": policy["layers"],
-                    "synthetic_data_authorized": policy[
-                        "synthetic_data_authorized"
-                    ],
-                }
-            )
+            prepare_started = monotonic()
+            try:
+                prepared = prepare_agent_turn(
+                    env=self.env,
+                    screen_payload=screen,
+                    message=normalized_message,
+                )
+                payload = prepared.to_assistant_payload()
+                policy = self._agent_policy_layers(
+                    conversation_id,
+                    normalized_message,
+                )
+                payload.update(
+                    {
+                        "actor": self._chat_actor(),
+                        "conversation_id": conversation_id,
+                        "policy_layers": policy["layers"],
+                        "synthetic_data_authorized": policy[
+                            "synthetic_data_authorized"
+                        ],
+                    }
+                )
+            finally:
+                _logger.info(
+                    "odoo_ai_timing phase=odoo_prepare duration_ms=%d",
+                    max(0, round((monotonic() - prepare_started) * 1000)),
+                )
             response = _browser_agent(
                 self._chat_client().agent_turn(payload),
                 prepared.turn_id,
