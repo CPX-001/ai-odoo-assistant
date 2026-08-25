@@ -5,9 +5,12 @@ from __future__ import annotations
 import re
 
 from odoo import api, fields, models
+from odoo.exceptions import ValidationError
 
 _MODES = {"always_confirm", "risk_based", "protected_only"}
 _RISKS = {"low", "moderate", "high", "protected"}
+_MODE_RANK = {"always_confirm": 0, "risk_based": 1, "protected_only": 2}
+_RISK_RANK = {"low": 0, "moderate": 1, "high": 2, "protected": 3}
 _PERMISSIVE_MODE = "protected_only"
 _PERMISSIVE_RISK = "protected"
 _SYSTEM_LAYER = {
@@ -134,6 +137,92 @@ class AssistantChatPolicy(models.Model):
             risk=_PERMISSIVE_RISK,
             synthetic=str(raw_synthetic).strip().lower() in {"1", "true", "yes"},
         )
+
+
+def resolve_capability_policy(snapshot):
+    """Resolve the stored chat-policy snapshot into one capability-policy input.
+
+    The policy layers remain the source of user/admin/conversation configuration. The
+    capability framework consumes only this normalized result and therefore does not
+    duplicate layer precedence or autonomy-profile rules.
+    """
+
+    if not isinstance(snapshot, dict) or set(snapshot) != {
+        "layers",
+        "synthetic_data_authorized",
+    }:
+        raise ValidationError("Invalid Assistant policy snapshot")
+    layers = snapshot.get("layers")
+    if not isinstance(layers, dict) or set(layers) != {
+        "system_ceiling",
+        "administrator",
+        "user",
+        "conversation",
+    }:
+        raise ValidationError("Invalid Assistant policy layers")
+
+    normalized = [_validated_layer(layers[name]) for name in (
+        "system_ceiling",
+        "administrator",
+        "user",
+        "conversation",
+    )]
+    mode = min(
+        (layer["confirmation_mode"] for layer in normalized),
+        key=_MODE_RANK.__getitem__,
+    )
+    risk = min(
+        (layer["max_auto_risk"] for layer in normalized),
+        key=_RISK_RANK.__getitem__,
+    )
+    return {
+        "confirmation_mode": mode,
+        "max_auto_risk": risk,
+        "allow_synthetic_data": all(
+            layer["allow_synthetic_data"] for layer in normalized
+        ),
+        "synthetic_data_authorized": bool(snapshot["synthetic_data_authorized"]),
+        "max_tool_calls_per_turn": min(
+            layer["max_tool_calls_per_turn"] for layer in normalized
+        ),
+        "max_write_steps_per_plan": min(
+            layer["max_write_steps_per_plan"] for layer in normalized
+        ),
+        "max_replans": min(layer["max_replans"] for layer in normalized),
+        "max_consecutive_failures": min(
+            layer["max_consecutive_failures"] for layer in normalized
+        ),
+    }
+
+
+def _validated_layer(value):
+    if not isinstance(value, dict):
+        raise ValidationError("Invalid Assistant policy layer")
+    required = {
+        "confirmation_mode",
+        "max_auto_risk",
+        "allow_synthetic_data",
+        "max_tool_calls_per_turn",
+        "max_write_steps_per_plan",
+        "max_replans",
+        "max_consecutive_failures",
+    }
+    if set(value) != required:
+        raise ValidationError("Invalid Assistant policy layer")
+    if value["confirmation_mode"] not in _MODES or value["max_auto_risk"] not in _RISKS:
+        raise ValidationError("Invalid Assistant policy layer")
+    if type(value["allow_synthetic_data"]) is not bool:
+        raise ValidationError("Invalid Assistant policy layer")
+    limits = {
+        "max_tool_calls_per_turn": (1, 32),
+        "max_write_steps_per_plan": (0, 12),
+        "max_replans": (0, 2),
+        "max_consecutive_failures": (1, 3),
+    }
+    for key, (minimum, maximum) in limits.items():
+        if type(value[key]) is not int or not minimum <= value[key] <= maximum:
+            raise ValidationError("Invalid Assistant policy layer")
+    return dict(value)
 
 
 def _policy_layer(*, mode, risk, synthetic):
