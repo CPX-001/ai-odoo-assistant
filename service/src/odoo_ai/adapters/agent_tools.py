@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from uuid import UUID
 
@@ -20,6 +20,7 @@ from odoo_ai.adapters.action_tools import (
     action_tool_specs,
     build_action_tool_registry,
 )
+from odoo_ai.adapters.agent_timing import TimedToolExecutor
 from odoo_ai.adapters.batch_agent_tools import (
     ODOO_PREVIEW_BATCH_MUTATION,
     BatchToolBackend,
@@ -80,6 +81,10 @@ _ACTION_PREVIEW_TOOL_NAMES = frozenset(
         ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW,
     }
 )
+RetrievalBindingLoader = Callable[
+    [ContextPack, Sequence[ToolSpec]],
+    tuple[RegisteredTool, ...],
+]
 
 
 class AgentModelSearchToolData(BaseModel):
@@ -242,7 +247,7 @@ def agent_tool_policy_specs(
 
 
 class UnifiedAgentToolExecutorFactory:
-    """Compose query and write-preview handlers without exposing any commit handler."""
+    """Compose Odoo and lazy retrieval handlers without exposing commit authority."""
 
     def __init__(
         self,
@@ -262,6 +267,7 @@ class UnifiedAgentToolExecutorFactory:
         conversation_id: UUID | None = None,
         policy_revision: str | None = None,
         limits: ToolExecutionLimits | None = None,
+        retrieval_binding_loader: RetrievalBindingLoader | None = None,
     ) -> None:
         self._query_gateway = query_gateway
         self._action_gateway = action_gateway
@@ -281,6 +287,7 @@ class UnifiedAgentToolExecutorFactory:
             max_calls=32,
             max_consecutive_failures=3,
         )
+        self._retrieval_binding_loader = retrieval_binding_loader
         self._last_report = ActionToolReport()
 
     @property
@@ -308,12 +315,18 @@ class UnifiedAgentToolExecutorFactory:
         ):
             raise ToolExecutorError("agent_context_mismatch")
         advertised = {spec.name: spec for spec in advertised_specs}
+        if len(advertised) != len(advertised_specs):
+            raise ToolExecutorError("agent_tool_name_duplicate")
         batch_advertised = ODOO_PREVIEW_BATCH_MUTATION in advertised
         if batch_advertised != self.batch_enabled:
             raise ToolExecutorError("agent_batch_runtime_mismatch")
         query_specs = tuple(
             advertised[name]
-            for name in (ODOO_GET_EFFECTIVE_SCHEMA, ODOO_QUERY_RECORDS, ODOO_AGGREGATE_RECORDS)
+            for name in (
+                ODOO_GET_EFFECTIVE_SCHEMA,
+                ODOO_QUERY_RECORDS,
+                ODOO_AGGREGATE_RECORDS,
+            )
             if name in advertised
         )
         action_specs = tuple(
@@ -329,6 +342,15 @@ class UnifiedAgentToolExecutorFactory:
             )
             if name in advertised
         )
+        canonical_odoo_names = {
+            spec.name for spec in agent_tool_specs(batch_enabled=True)
+        }
+        retrieval_specs = tuple(
+            spec for spec in advertised_specs if spec.name not in canonical_odoo_names
+        )
+        if retrieval_specs and self._retrieval_binding_loader is None:
+            raise ToolExecutorError("agent_retrieval_runtime_unavailable")
+
         query_backend = QueryToolBackend(
             QueryPrimitiveService(self._query_gateway),
             user_id=self._user_id,
@@ -406,22 +428,31 @@ class UnifiedAgentToolExecutorFactory:
                     max_output_bytes=32 * 1024,
                 )
             )
+        retrieval_bindings = (
+            self._retrieval_binding_loader(context, retrieval_specs)
+            if retrieval_specs and self._retrieval_binding_loader is not None
+            else ()
+        )
         bindings = [
             *search_bindings,
             *build_query_tool_registry(query_backend, query_specs).bindings,
             *build_action_tool_registry(action_backend, action_specs).bindings,
             *batch_bindings,
+            *retrieval_bindings,
         ]
         registry = ToolRegistry(bindings, allowed_risks=_AGENT_TOOL_RISKS)
         if registry.specs != tuple(advertised_specs):
             raise ToolExecutorError("agent_tool_registry_mismatch")
         ledger = EvidenceLedger(
-            max_items=min(context.limits.max_evidence_items, self._limits.max_evidence_items),
+            max_items=min(
+                context.limits.max_evidence_items,
+                self._limits.max_evidence_items,
+            ),
             max_payload_bytes=self._limits.max_evidence_bytes,
             live=context.live_evidence,
             retrieved=context.retrieved_evidence,
         )
-        executor = ToolExecutor(
+        executor = TimedToolExecutor(
             registry=registry,
             ledger=ledger,
             turn_limits=context.limits,
