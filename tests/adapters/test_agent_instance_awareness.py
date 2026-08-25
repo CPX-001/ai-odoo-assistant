@@ -57,8 +57,8 @@ class FakeInventoryGateway:
 
 
 class FakeSourceSession:
-    def __init__(self, rows) -> None:
-        self.rows = rows
+    def __init__(self, rows_by_call) -> None:
+        self.rows_by_call = list(rows_by_call)
         self.rolled_back = False
         self.closed = False
 
@@ -68,7 +68,9 @@ class FakeSourceSession:
 
     def scalars(self, statement):
         del statement
-        return self.rows
+        if not self.rows_by_call:
+            raise AssertionError("unexpected additional source query")
+        return self.rows_by_call.pop(0)
 
     def rollback(self):
         self.rolled_back = True
@@ -112,6 +114,11 @@ def test_unified_agent_exposes_instance_and_module_discovery_tools() -> None:
     assert ODOO_GET_INSTANCE_FACTS in specs
     assert SOURCE_INSPECT_MODULE in specs
     assert "query" in specs[SOURCE_INSPECT_MODULE].input_schema["properties"]
+    assert (
+        specs[ODOO_GET_INSTANCE_FACTS].input_schema["properties"]["max_modules"]["maximum"]
+        == 64
+    )
+    assert "XML records" in specs[SOURCE_INSPECT_MODULE].description
     assert "odoo.get_instance_facts" in _UNIFIED_AGENT_INSTRUCTIONS
     assert "source.inspect_module" in _UNIFIED_AGENT_INSTRUCTIONS
     assert "Never invent an exact menu" in _UNIFIED_AGENT_INSTRUCTIONS
@@ -220,16 +227,19 @@ def test_indexed_module_inspection_returns_readable_source_refs() -> None:
     fingerprint = "sha256:" + "a" * 64
     session = FakeSourceSession(
         (
-            SimpleNamespace(
-                source_file_id=source_file_id,
-                fingerprint=fingerprint,
-                start_line=20,
-                end_line=28,
-                kind="field",
-                model="res.config.settings",
-                name="analytic_accounting",
-                logical_path="custom_billing/models/res_config_settings.py",
+            (
+                SimpleNamespace(
+                    source_file_id=source_file_id,
+                    fingerprint=fingerprint,
+                    start_line=20,
+                    end_line=28,
+                    kind="field",
+                    model="res.config.settings",
+                    name="analytic_accounting",
+                    logical_path="custom_billing/models/res_config_settings.py",
+                ),
             ),
+            (),
         )
     )
 
@@ -254,5 +264,51 @@ def test_indexed_module_inspection_returns_readable_source_refs() -> None:
     assert symbol.ref.fingerprint == fingerprint
     assert symbol.ref.start_line == 20
     assert symbol.ref.end_line == 28
+    assert session.rolled_back is True
+    assert session.closed is True
+
+
+def test_indexed_module_inspection_exposes_xml_view_refs() -> None:
+    source_file_id = uuid4()
+    fingerprint = "sha256:" + "b" * 64
+    session = FakeSourceSession(
+        (
+            (),
+            (
+                SimpleNamespace(
+                    source_file_id=source_file_id,
+                    fingerprint=fingerprint,
+                    start_line=8,
+                    end_line=46,
+                    model="ir.ui.view",
+                    xml_id="custom_billing.res_config_settings_view_form",
+                    logical_path="custom_billing/views/res_config_settings_views.xml",
+                ),
+            ),
+        )
+    )
+
+    result = _inspect_module_operation(
+        lambda: session,
+        uuid4(),
+        AgentModuleInspectionRequest(
+            module="custom_billing",
+            query="settings",
+            max_results=20,
+        ),
+    )
+
+    assert result.indexed is True
+    assert result.truncated is False
+    assert len(result.symbols) == 1
+    xml = result.symbols[0]
+    assert xml.kind == "xml_id"
+    assert xml.model == "ir.ui.view"
+    assert xml.name == "custom_billing.res_config_settings_view_form"
+    assert xml.logical_path == "custom_billing/views/res_config_settings_views.xml"
+    assert xml.ref.source_file_id == source_file_id
+    assert xml.ref.fingerprint == fingerprint
+    assert xml.ref.start_line == 8
+    assert xml.ref.end_line == 46
     assert session.rolled_back is True
     assert session.closed is True
