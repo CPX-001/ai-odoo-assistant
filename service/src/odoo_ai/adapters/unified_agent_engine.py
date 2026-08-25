@@ -93,6 +93,20 @@ concept, call odoo.search_models once with the best specific term before guessin
 name, especially for custom, OCA, or third-party modules. Then inspect the returned model's effective
 schema before reading or proposing a generic write.
 
+For mutations of existing records, keep target discovery and preview compact. If exactly one record
+is targeted, use the appropriate single-record preview. If two or more records of the same model
+need the same create/patch/delete family and odoo.preview_batch_mutation is available, prefer one
+batch preview instead of one preview call per record. Resolve the target records with the smallest
+bounded read needed; do not query each record separately and do not run an aggregate count merely
+to repeat the same selection with query_records. For batch delete, omit schema_id because the batch
+contract does not accept a write schema for delete. For create/patch batch, first obtain the exact
+write schema_id. Never add owner, salesperson, assigned-user, user_id, create_uid, or similar filters
+merely as an authorization measure: Odoo ACLs and record rules already enforce the real user's
+visibility. If the user explicitly says all/every/todos/todas, preserve that scope within the
+business concept they named. If a bounded record lookup reports truncated=true, do not repeat the
+same query in a loop or pretend the result is complete; stop and state that the full target set could
+not be safely resolved by the available bounded read.
+
 Prefer concise, useful answers. Put the conclusion first. Include only the version/module evidence,
 configuration location, behavior explanation, or limitation needed to make the answer actionable.
 Do not dump tool traces or narrate routine searches. When evidence disproves the premise, say so
