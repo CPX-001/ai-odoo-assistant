@@ -11,9 +11,20 @@ const PROFILE_LABELS = {
     full_access: _t("Acceso completo"),
 };
 
+const PROFILE_ICONS = {
+    strict: "fa-hand-paper-o",
+    balanced: "fa-balance-scale",
+    autonomous: "fa-bolt",
+    full_access: "fa-unlock-alt",
+};
+
 patch(AssistantPanel.prototype, {
     get autonomyProfileLabel() {
         return PROFILE_LABELS[this.state.autonomyProfile] || PROFILE_LABELS.balanced;
+    },
+
+    get autonomyProfileIconClass() {
+        return PROFILE_ICONS[this.state.autonomyProfile] || PROFILE_ICONS.balanced;
     },
 
     get recoveryPending() {

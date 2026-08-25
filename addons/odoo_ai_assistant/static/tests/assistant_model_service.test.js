@@ -1,7 +1,16 @@
 /** @odoo-module **/
 
 import { expect, test } from "@odoo/hoot";
-import { normalizeModelPreferences } from "@odoo_ai_assistant/services/assistant_model_service";
+import {
+    compactModelLabel,
+    normalizeModelPreferences,
+} from "@odoo_ai_assistant/services/assistant_model_service";
+
+test("compact model label keeps the useful version and family", () => {
+    expect(compactModelLabel("GPT-5.6 Codex")).toBe("5.6 Codex");
+    expect(compactModelLabel("gpt-5.6-sol-medium")).toBe("5.6 Sol medium");
+    expect(compactModelLabel(null)).toBe("Predeterminado");
+});
 
 test("model preferences accept a bounded per-user catalog", () => {
     const result = normalizeModelPreferences({

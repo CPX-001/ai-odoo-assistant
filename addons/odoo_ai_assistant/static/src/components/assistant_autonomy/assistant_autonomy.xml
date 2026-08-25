@@ -11,7 +11,9 @@
                         t-att-title="'Autonomía: ' + autonomyProfileLabel">
                     <i t-if="state.autonomyLoading or state.autonomySaving"
                         class="fa fa-spinner fa-spin" aria-hidden="true"/>
-                    <i t-else="" class="fa fa-shield" aria-hidden="true"/>
+                    <i t-else="" t-att-class="'fa ' + autonomyProfileIconClass"
+                        aria-hidden="true"/>
+                    <span class="o_ai_assistant_picker_label" t-esc="autonomyProfileLabel"/>
                     </button>
                     <t t-set-slot="content">
                     <div class="o_ai_assistant_picker_menu_title small text-muted">

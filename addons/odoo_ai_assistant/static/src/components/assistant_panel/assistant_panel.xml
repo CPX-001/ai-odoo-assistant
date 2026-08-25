@@ -160,10 +160,10 @@
                         t-on-keydown="onComposerKeydown"
                         t-att-disabled="state.loading or state.decisionLoading or recoveryPending"/>
                     <button type="submit" class="btn btn-primary o_ai_assistant_send_button"
+                        aria-label="Enviar mensaje" title="Enviar mensaje"
                         t-att-disabled="state.loading or state.decisionLoading or recoveryPending or !state.draft.trim()">
-                        <i t-if="state.loading" class="fa fa-spinner fa-spin me-1" aria-hidden="true"/>
+                        <i t-if="state.loading" class="fa fa-spinner fa-spin" aria-hidden="true"/>
                         <i t-else="" class="fa fa-paper-plane" aria-hidden="true"/>
-                        <span class="ms-1">Enviar</span>
                     </button>
                 </div>
             </form>

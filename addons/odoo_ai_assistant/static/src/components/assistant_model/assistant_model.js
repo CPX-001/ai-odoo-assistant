@@ -2,6 +2,7 @@
 
 import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
+import { compactModelLabel } from "@odoo_ai_assistant/services/assistant_model_service";
 
 patch(AssistantPanel.prototype, {
     get reasoningModelLabel() {
@@ -9,6 +10,10 @@ patch(AssistantPanel.prototype, {
             (item) => item.model === this.state.selectedReasoningModel
         );
         return selected?.display_name || this.state.defaultReasoningModel || "Predeterminado";
+    },
+
+    get reasoningModelCompactLabel() {
+        return compactModelLabel(this.reasoningModelLabel);
     },
 
     async selectReasoningModel(model) {

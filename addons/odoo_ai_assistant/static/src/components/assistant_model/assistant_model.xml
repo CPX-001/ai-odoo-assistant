@@ -12,6 +12,10 @@
                         <i t-if="state.modelLoading or state.modelSaving"
                             class="fa fa-spinner fa-spin" aria-hidden="true"/>
                         <i t-else="" class="fa fa-code" aria-hidden="true"/>
+                        <span class="o_ai_assistant_picker_label"
+                            t-esc="reasoningModelCompactLabel"/>
+                        <i class="fa fa-angle-down o_ai_assistant_picker_caret"
+                            aria-hidden="true"/>
                     </button>
                     <t t-set-slot="content">
                         <div class="o_ai_assistant_picker_menu_title small text-muted">

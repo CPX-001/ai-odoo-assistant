@@ -7,6 +7,19 @@ import { assistantPanelService } from "@odoo_ai_assistant/services/assistant_pan
 const MODEL_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 const MODEL_CATALOG_TTL_MS = 5 * 60 * 1000;
 
+export function compactModelLabel(value) {
+    if (typeof value !== "string" || !value.trim()) {
+        return "Predeterminado";
+    }
+    return value
+        .trim()
+        .replace(/^gpt[- ]?/i, "")
+        .replace(/[-_:/]+/g, " ")
+        .replace(/\bcodex\b/gi, "Codex")
+        .replace(/\bsol\b/gi, "Sol")
+        .replace(/\s+/g, " ");
+}
+
 export function normalizeModelPreferences(response) {
     if (
         response?.ok !== true ||

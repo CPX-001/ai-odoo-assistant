@@ -9,33 +9,58 @@
 
     .o_ai_assistant_composer_row {
         min-width: 0;
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        grid-template-areas:
+            "input input input"
+            "autonomy model send";
+        gap: 0.4rem 0.45rem !important;
+        padding: 0.6rem;
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        border-radius: 0.9rem;
+        background-color: var(--o-ai-surface, var(--bs-body-bg, #fff));
+        box-shadow: 0 0.25rem 0.8rem color-mix(in srgb, var(--bs-body-color) 7%, transparent);
     }
 
     .o_ai_assistant_composer .o_ai_assistant_composer_row textarea {
+        grid-area: input;
         flex: 1 1 auto;
+        width: 100%;
         min-width: 5rem;
-        min-height: 2.65rem;
+        min-height: 3.4rem;
         max-height: 8rem;
         margin: 0;
-        padding: 0.55rem 0.7rem;
+        padding: 0.15rem 0.2rem 0.35rem;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
         line-height: 1.35;
         overflow-y: auto;
+        box-shadow: none;
     }
 
-    .o_ai_assistant_composer .o_ai_assistant_model_picker,
     .o_ai_assistant_composer .o_ai_assistant_autonomy_picker {
-        flex: 0 0 2.65rem;
-        width: auto;
-        min-width: 2.65rem;
-        max-width: 2.65rem;
-        min-height: 2.65rem;
+        grid-area: autonomy;
+        justify-self: start;
+    }
+
+    .o_ai_assistant_composer .o_ai_assistant_model_picker {
+        grid-area: model;
+        justify-self: end;
     }
 
     .o_ai_assistant_send_button {
+        grid-area: send;
         flex: 0 0 auto;
-        min-height: 2.65rem;
+        width: 2.3rem;
+        height: 2.3rem;
+        min-height: 2.3rem;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         align-self: flex-end;
-        white-space: nowrap;
+        border-radius: 50%;
     }
 }
 
@@ -45,17 +70,8 @@
             padding: var(--o-ai-space-2, 0.5rem) !important;
         }
 
-        .o_ai_assistant_send_button {
-            padding-left: 0.65rem;
-            padding-right: 0.65rem;
-        }
-
-        .o_ai_assistant_send_button span {
-            display: none;
-        }
-
-        .o_ai_assistant_send_button .fa {
-            margin-right: 0 !important;
+        .o_ai_assistant_composer_row {
+            padding: 0.5rem;
         }
     }
 }

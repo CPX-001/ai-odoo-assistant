@@ -161,6 +161,12 @@
     }
 
     .o_ai_assistant_composer textarea:focus {
+        border-color: transparent;
+        box-shadow: none;
+        outline: none;
+    }
+
+    .o_ai_assistant_composer_row:focus-within {
         border-color: color-mix(in srgb, var(--o-ai-accent) 55%, var(--bs-border-color, #dee2e6));
         box-shadow: 0 0 0 0.12rem color-mix(in srgb, var(--o-ai-accent) 14%, transparent);
     }
