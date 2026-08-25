@@ -29,6 +29,16 @@ test("context failures explicitly avoid screen-based authorization advice", () =
     );
 });
 
+test("transport ambiguity warns before repeating a write", () => {
+    for (const code of ["service_unavailable", "invalid_response", "engine_timeout"]) {
+        const message = failureMessage(code);
+
+        expect(message).toInclude("comprueba");
+        expect(message).toInclude("antes de repetir");
+        expect(message).not.toInclude("No he hecho ningún cambio");
+    }
+});
+
 test("unknown failures admit when the cause is not known", () => {
     expect(failureMessage("some_new_internal_failure")).toInclude(
         "no voy a inventarla"
