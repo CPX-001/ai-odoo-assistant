@@ -24,7 +24,8 @@
                     </div>
                     <div class="d-flex gap-1">
                         <button type="button" class="btn btn-sm btn-outline-secondary"
-                            title="Nuevo chat" aria-label="Nuevo chat" t-on-click="newConversation">
+                            title="Nuevo chat" aria-label="Nuevo chat"
+                            t-att-disabled="recoveryPending" t-on-click="newConversation">
                             <i class="fa fa-plus" aria-hidden="true"/>
                         </button>
                         <button type="button" class="btn btn-sm btn-link text-body"
@@ -42,7 +43,7 @@
                 </div>
                 <div t-if="!ui.isMinimized" class="mt-2">
                     <select class="form-select form-select-sm" aria-label="Historial de chats"
-                        t-att-disabled="state.loading or state.historyLoading or state.decisionLoading"
+                        t-att-disabled="state.loading or state.historyLoading or state.decisionLoading or recoveryPending"
                         t-on-change="selectConversation">
                         <option value="" t-att-selected="!state.conversationId">Nuevo chat</option>
                         <option t-foreach="state.conversations" t-as="conversation"
@@ -121,7 +122,20 @@
                     </div>
                 </section>
 
-                <div t-if="state.actionReceipt" t-att-class="'alert mt-3 ' + actionDecisionClass"
+                <section t-if="recoveryPending" class="alert alert-warning mt-3 mb-0" role="status">
+                    <div class="fw-semibold mb-1">Recuperación pendiente</div>
+                    <div class="small mb-2">
+                        El resultado del lote quedó ambiguo. Se conservarán la misma autorización y el mismo intento para recuperar el resultado sin duplicar cambios.
+                    </div>
+                    <button type="button" class="btn btn-warning btn-sm"
+                        t-att-disabled="state.decisionLoading" t-on-click="retryAction">
+                        <i t-if="state.decisionLoading" class="fa fa-spinner fa-spin me-1"
+                            aria-hidden="true"/> Reintentar recuperación
+                    </button>
+                </section>
+
+                <div t-if="state.actionReceipt and !recoveryPending"
+                    t-att-class="'alert mt-3 ' + actionDecisionClass"
                     role="status" t-esc="actionDecisionMessage"/>
             </div>
 
@@ -134,9 +148,9 @@
                         t-att-value="state.draft"
                         t-on-input="onDraftInput"
                         t-on-keydown="onComposerKeydown"
-                        t-att-disabled="state.loading or state.decisionLoading"/>
+                        t-att-disabled="state.loading or state.decisionLoading or recoveryPending"/>
                     <button type="submit" class="btn btn-primary o_ai_assistant_send_button"
-                        t-att-disabled="state.loading or state.decisionLoading or !state.draft.trim()">
+                        t-att-disabled="state.loading or state.decisionLoading or recoveryPending or !state.draft.trim()">
                         <i t-if="state.loading" class="fa fa-spinner fa-spin me-1" aria-hidden="true"/>
                         <i t-else="" class="fa fa-paper-plane" aria-hidden="true"/>
                         <span class="ms-1">Enviar</span>
