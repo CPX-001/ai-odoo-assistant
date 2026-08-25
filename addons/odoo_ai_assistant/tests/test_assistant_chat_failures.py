@@ -22,7 +22,7 @@ class _PolicyBridge:
 
 
 class TestAssistantChatFailures(TestCase):
-    def test_failure_answers_are_actionable_and_hide_internal_codes(self):
+    def test_failure_answers_are_plain_and_hide_internal_codes(self):
         for code in (
             "access_denied",
             "engine_timeout",
@@ -32,9 +32,12 @@ class TestAssistantChatFailures(TestCase):
         ):
             answer = _failure_answer(code)
 
-            self.assertIn("**Diagnóstico.**", answer)
-            self.assertIn("**Motivo.**", answer)
-            self.assertIn("**Solución.**", answer)
+            self.assertGreater(len(answer), 20)
+            self.assertNotIn("**Diagnóstico.**", answer)
+            self.assertNotIn("**Motivo.**", answer)
+            self.assertNotIn("**Solución.**", answer)
+            self.assertNotIn("ACL", answer)
+            self.assertNotIn("App Server", answer)
             self.assertNotIn(code, answer)
 
     def test_failure_envelope_cannot_be_confirmed_or_executed(self):
@@ -58,3 +61,9 @@ class TestAssistantChatFailures(TestCase):
         answer = _failure_answer("invalid_context")
 
         self.assertIn("No necesitas abrir una pantalla concreta", answer)
+
+    def test_service_failure_does_not_invent_a_root_cause(self):
+        answer = _failure_answer("service_unavailable")
+
+        self.assertIn("No sé todavía por qué", answer)
+        self.assertIn("no voy a inventarlo", answer)
