@@ -29,13 +29,6 @@
                             <i class="fa fa-plus" aria-hidden="true"/>
                         </button>
                         <button type="button" class="btn btn-sm btn-link text-body"
-                            t-att-title="ui.isMinimized ? 'Restaurar' : 'Minimizar'"
-                            t-att-aria-label="ui.isMinimized ? 'Restaurar AI Assistant' : 'Minimizar AI Assistant'"
-                            t-on-click="toggleMinimized">
-                            <i t-att-class="'fa ' + (ui.isMinimized ? 'fa-window-maximize' : 'fa-minus')"
-                                aria-hidden="true"/>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-link text-body"
                             aria-label="Cerrar AI Assistant" title="Cerrar" t-on-click="closePanel">
                             <i class="fa fa-times" aria-hidden="true"/>
                         </button>
@@ -153,7 +146,7 @@
                 class="o_ai_assistant_composer border-top p-3" t-on-submit.prevent="submit">
                 <div class="o_ai_assistant_composer_row d-flex align-items-end gap-2">
                     <textarea id="o_ai_assistant_question" class="form-control flex-grow-1"
-                        rows="1" maxlength="4000"
+                        rows="2" maxlength="4000"
                         placeholder="Pregunta o pide una operación en Odoo…"
                         t-att-value="state.draft"
                         t-on-input="onDraftInput"
