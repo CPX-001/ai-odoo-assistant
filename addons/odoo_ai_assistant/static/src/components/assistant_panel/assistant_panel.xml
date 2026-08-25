@@ -75,7 +75,14 @@
                     </div>
                 </div>
 
-                <div t-if="state.loading" class="o_ai_assistant_message o_ai_assistant_message_assistant mt-3">
+                <div t-if="state.loading and state.streamingText"
+                    class="o_ai_assistant_message o_ai_assistant_message_assistant mt-3">
+                    <div class="small text-muted mb-1">Assistant</div>
+                    <div class="o_ai_assistant_message_content text-break" t-esc="state.streamingText"/>
+                </div>
+
+                <div t-if="state.loading and !state.streamingText"
+                    class="o_ai_assistant_message o_ai_assistant_message_assistant mt-3">
                     <div class="small text-muted mb-1">Assistant</div>
                     <div><i class="fa fa-spinner fa-spin me-1" aria-hidden="true"/> Pensando…</div>
                 </div>
