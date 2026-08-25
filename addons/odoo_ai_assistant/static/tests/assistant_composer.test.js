@@ -30,7 +30,7 @@ test("enter submits while shift-enter keeps a newline", () => {
     expect(shouldSubmitComposerKey({ key: "a", shiftKey: false, isComposing: false })).toBe(false);
 });
 
-test("composer shows the user message immediately and keeps it on success", async () => {
+test("composer delegates the optimistic user message to the panel service", async () => {
     const state = {
         draft: "  Revisa este pedido  ",
         loading: false,
@@ -48,13 +48,11 @@ test("composer shows the user message immediately and keeps it on success", asyn
             async submit(message) {
                 expect(message).toBe("Revisa este pedido");
                 expect(state.draft).toBe("");
-                expect(state.messages).toHaveLength(1);
-                expect(state.messages[0].role).toBe("user");
-                expect(state.messages[0].content).toBe("Revisa este pedido");
+                expect(state.messages).toEqual([]);
                 state.messages = [
                     ...state.messages,
                     {
-                        message_id: "local-user-turn-1",
+                        message_id: "local-user-pending-turn-1",
                         role: "user",
                         content: message,
                         created_at: "2026-08-25T12:00:00Z",
@@ -74,11 +72,12 @@ test("composer shows the user message immediately and keeps it on success", asyn
     expect(await submitComposerMessage(component)).toBe(true);
     expect(state.draft).toBe("");
     expect(state.messages).toHaveLength(2);
-    expect(state.messages[0].message_id).toBe("local-user-turn-1");
+    expect(state.messages[0].role).toBe("user");
+    expect(state.messages[0].content).toBe("Revisa este pedido");
     expect(state.messages[1].role).toBe("assistant");
 });
 
-test("composer rolls back the optimistic message and restores the draft on failure", async () => {
+test("composer restores the draft on failure without mutating chat messages", async () => {
     const state = {
         draft: "  mensaje pendiente  ",
         loading: false,
@@ -96,7 +95,7 @@ test("composer rolls back the optimistic message and restores the draft on failu
                 draftChanges.push(value);
             },
             async submit() {
-                expect(state.messages).toHaveLength(1);
+                expect(state.messages).toEqual([]);
                 return false;
             },
         },

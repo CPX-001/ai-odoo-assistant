@@ -34,18 +34,8 @@ export async function submitComposerMessage(component) {
         return false;
     }
 
-    const pendingMessageId = `local-user-pending-${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}`;
-    component.state.messages = [
-        ...component.state.messages,
-        {
-            message_id: pendingMessageId,
-            role: "user",
-            content: question,
-            created_at: new Date().toISOString(),
-        },
-    ];
+    // The panel service owns optimistic chat messages. Keeping that state transition
+    // in one layer avoids rendering the same user message twice while streaming.
     component.panel.setDraft("");
 
     let sent = false;
@@ -57,9 +47,6 @@ export async function submitComposerMessage(component) {
         }
     }
 
-    component.state.messages = component.state.messages.filter(
-        (message) => message.message_id !== pendingMessageId
-    );
     if (!sent) {
         component.panel.setDraft(draft);
     }
