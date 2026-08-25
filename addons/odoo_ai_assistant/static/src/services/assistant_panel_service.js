@@ -183,6 +183,7 @@ function validAgentPlan(plan) {
         "previewed",
         "executing",
         "completed",
+        "partial",
         "failed",
         "skipped",
     ]);
@@ -270,6 +271,10 @@ function validCitation(value) {
     );
 }
 
+export function recoveryPending(state) {
+    return state?.result?.plan?.state === "authorized";
+}
+
 export function normalizeChatResponse(response) {
     const limitations = response?.limitations;
     const citations = response?.citations || [];
@@ -308,7 +313,7 @@ export function normalizeChatResponse(response) {
 }
 
 export function normalizeActionDecisionResponse(response, planId) {
-    const states = new Set(["completed", "partial", "failed", "rejected"]);
+    const states = new Set(["authorized", "completed", "partial", "failed", "rejected"]);
     if (
         exactKeys(response, ["ok", "plan", "plan_id", "state"]) &&
         response.ok === true &&
@@ -405,7 +410,7 @@ export function resetForNewConversation(state, storage) {
 }
 
 export async function submitAssistantRequest({ state, screenContext, rpcCall, message }) {
-    if (state.loading || state.decisionLoading) {
+    if (state.loading || state.decisionLoading || recoveryPending(state)) {
         return false;
     }
     const normalized = typeof message === "string" ? message.trim() : "";
@@ -568,6 +573,7 @@ export async function submitActionDecision({ state, rpcCall, decision }) {
     if (
         state.loading ||
         state.decisionLoading ||
+        recoveryPending(state) ||
         typeof planId !== "string" ||
         !["approve", "reject"].includes(decision)
     ) {
@@ -598,6 +604,38 @@ export async function submitActionDecision({ state, rpcCall, decision }) {
         state.decisionLoading = false;
     }
     return true;
+}
+
+export async function submitActionRetry({ state, rpcCall }) {
+    const planId = state.result?.plan?.plan_id;
+    if (
+        state.loading ||
+        state.decisionLoading ||
+        !recoveryPending(state) ||
+        typeof planId !== "string"
+    ) {
+        return false;
+    }
+    state.decisionLoading = true;
+    state.errorCode = null;
+    try {
+        const response = await rpcCall("/odoo_ai/v1/agent-plan-execute", {
+            plan_id: planId,
+        });
+        const normalized = normalizeActionDecisionResponse(response, planId);
+        state.actionReceipt = normalized.receipt;
+        state.errorCode = normalized.errorCode;
+        if (normalized.plan && state.result) {
+            state.result = { ...state.result, plan: normalized.plan };
+        }
+        return normalized.receipt !== null;
+    } catch {
+        state.actionReceipt = null;
+        state.errorCode = "service_unavailable";
+        return false;
+    } finally {
+        state.decisionLoading = false;
+    }
 }
 
 export const assistantPanelService = {
@@ -660,10 +698,19 @@ export const assistantPanelService = {
             refreshContext,
             loadHistory,
             newConversation() {
+                if (recoveryPending(state)) {
+                    return false;
+                }
                 resetForNewConversation(state, storage);
+                return true;
             },
             async selectConversation(conversationId) {
-                if (state.loading || state.decisionLoading || !conversationId) {
+                if (
+                    state.loading ||
+                    state.decisionLoading ||
+                    recoveryPending(state) ||
+                    !conversationId
+                ) {
                     return false;
                 }
                 saveDraft(storage, state.conversationId, state.draft);
@@ -692,6 +739,9 @@ export const assistantPanelService = {
             },
             async decide(decision) {
                 return submitActionDecision({ state, rpcCall: rpc, decision });
+            },
+            async retry() {
+                return submitActionRetry({ state, rpcCall: rpc });
             },
             async setAgentPolicy(confirmationMode, maxAutoRisk) {
                 return saveAgentPolicy({
