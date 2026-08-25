@@ -6,7 +6,8 @@ It does not redefine the Source of Truth and does not reopen batch/recovery.
 ## What changed
 
 - `RuntimeAgentFactory` keeps one SQLAlchemy Engine/sessionmaker and reuses that infrastructure for
-  chat history and agent retrieval. A fresh `Session` still scopes each DB operation/transaction.
+  chat history, instance-summary reads, plan stores, and agent retrieval. A fresh `Session` still
+  scopes each DB operation/transaction.
 - The unified agent advertises the existing knowledge and structural-source tools alongside Odoo
   tools. They are lazy: registering them performs no knowledge query, source inventory request, or
   filesystem scan.
@@ -70,6 +71,7 @@ is still deterministic:
 | Cost | Before | After |
 | --- | ---: | ---: |
 | New Assistant SQLAlchemy Engine for history | 1 per turn with history | 0 |
+| New Assistant SQLAlchemy Engine for instance summary | 1 per turn | 0 |
 | New Assistant SQLAlchemy Engine for unified knowledge/source | unavailable in unified agent | 0; shared pool |
 | Source inventory/root preparation | not available in unified agent | only after first `source.*` call |
 | Source filesystem scan in normal turn | 0 | 0 |
