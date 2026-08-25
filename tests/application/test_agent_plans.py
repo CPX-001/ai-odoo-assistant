@@ -1,8 +1,15 @@
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from odoo_ai.application.agent_plans import AgentPlanService
+import pytest
+
+from odoo_ai.application.agent_plans import (
+    PLAN_RECOVERY_TTL,
+    RECOVERABLE_EXECUTION_ERROR,
+    AgentPlanError,
+    AgentPlanService,
+)
 from odoo_ai.application.agent_policy import evaluate_agent_candidate
 from odoo_ai.application.agent_turn import _reconcile_previews
 from odoo_ai.contracts import (
@@ -12,6 +19,7 @@ from odoo_ai.contracts import (
     AgentCandidateStep,
     AgentModelCandidate,
     AgentPlanDecisionRequest,
+    AgentPlanExecutionRequest,
     AgentPolicyLayer,
     AgentPolicyLayers,
     AgentTurnRequest,
@@ -41,6 +49,7 @@ AUTH_ID = UUID("10000000-0000-4000-8000-000000000002")
 class MemoryPlanStore:
     def __init__(self) -> None:
         self.plan: StoredAgentPlan | None = None
+        self.claim_calls = 0
 
     def create(self, plan: StoredAgentPlan) -> None:
         self.plan = plan
@@ -76,8 +85,28 @@ class MemoryPlanStore:
         )
         return AgentPlanTransitionResult(AgentPlanTransitionOutcome.APPLIED, self.plan)
 
-    def claim_execution(self, **kwargs):  # pragma: no cover - protocol fixture
-        raise NotImplementedError
+    def claim_execution(
+        self,
+        *,
+        plan_id: UUID,
+        actor: ChatActor,
+        started_at: datetime,
+    ) -> AgentPlanTransitionResult:
+        self.claim_calls += 1
+        if self.plan is None or self.plan.plan_id != plan_id:
+            return AgentPlanTransitionResult(AgentPlanTransitionOutcome.NOT_FOUND)
+        if self.plan.actor != actor:
+            return AgentPlanTransitionResult(AgentPlanTransitionOutcome.BINDING_MISMATCH)
+        if self.plan.state is not PlanState.AUTHORIZED:
+            return AgentPlanTransitionResult(AgentPlanTransitionOutcome.INVALID_STATE)
+        self.plan = replace(
+            self.plan,
+            state=PlanState.EXECUTING,
+            execution_started_at=started_at,
+            error_code=None,
+            updated_at=started_at,
+        )
+        return AgentPlanTransitionResult(AgentPlanTransitionOutcome.APPLIED, self.plan)
 
     def complete(self, **kwargs):  # pragma: no cover - protocol fixture
         raise NotImplementedError
@@ -146,6 +175,27 @@ def _evaluated(layers: AgentPolicyLayers):
         ),
         layers=layers,
     )
+
+
+def _recoverable_auto_plan(store: MemoryPlanStore, *, created_at: datetime) -> StoredAgentPlan:
+    layers = _policy_layers(RiskLevel.MODERATE)
+    ids = iter((PLAN_ID, AUTH_ID))
+    service = AgentPlanService(store, clock=lambda: NOW, id_factory=lambda: next(ids))
+    plan = service.create(
+        request=_request(layers),
+        candidate=_candidate(),
+        evaluated=_evaluated(layers),
+    )
+    assert plan.state is PlanState.AUTHORIZED
+    assert plan.authorization_id == AUTH_ID
+    store.plan = replace(
+        plan,
+        created_at=created_at,
+        updated_at=created_at,
+        expires_at=created_at + timedelta(minutes=10),
+        error_code=RECOVERABLE_EXECUTION_ERROR,
+    )
+    return store.plan
 
 
 def test_create_persists_one_immutable_grouped_plan_awaiting_confirmation() -> None:
@@ -238,3 +288,41 @@ def test_approve_creates_opaque_host_authorization_for_the_whole_plan() -> None:
     assert result.authorization_id == AUTH_ID
     assert store.plan is not None
     assert store.plan.authorization_source is AuthorizationSource.USER_CONFIRMATION
+
+
+def test_recoverable_plan_can_be_claimed_just_inside_server_window() -> None:
+    store = MemoryPlanStore()
+    _recoverable_auto_plan(
+        store,
+        created_at=NOW - PLAN_RECOVERY_TTL + timedelta(seconds=1),
+    )
+    service = AgentPlanService(store, clock=lambda: NOW)
+
+    claimed = service.claim_execution(
+        AgentPlanExecutionRequest(
+            plan_id=PLAN_ID,
+            actor=ChatActor(database="odoo", uid=7),
+        )
+    )
+
+    assert claimed.state is PlanState.EXECUTING
+    assert claimed.authorization_id == AUTH_ID
+    assert store.claim_calls == 1
+
+
+def test_recoverable_plan_expires_before_store_claim_at_server_window() -> None:
+    store = MemoryPlanStore()
+    _recoverable_auto_plan(store, created_at=NOW - PLAN_RECOVERY_TTL)
+    service = AgentPlanService(store, clock=lambda: NOW)
+
+    with pytest.raises(AgentPlanError) as raised:
+        service.claim_execution(
+            AgentPlanExecutionRequest(
+                plan_id=PLAN_ID,
+                actor=ChatActor(database="odoo", uid=7),
+            )
+        )
+
+    assert raised.value.code == "agent_plan_expired"
+    assert raised.value.status_code == 410
+    assert store.claim_calls == 0
