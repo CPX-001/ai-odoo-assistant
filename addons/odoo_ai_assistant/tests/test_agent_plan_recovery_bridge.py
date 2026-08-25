@@ -1,6 +1,7 @@
 from odoo.tests.common import TransactionCase
 
 from ..models.assistant_chat_bridge import _browser_plan_execution
+from ..models.assistant_plan_recovery import _browser_plan_status
 from ..services import AssistantServiceError
 
 PLAN_ID = "32345678-1234-4678-9234-567812345678"
@@ -68,6 +69,33 @@ class TestAgentPlanRecoveryBridge(TransactionCase):
                     "completed_at": None,
                     "error_code": None,
                     "plan": _plan(),
+                },
+                PLAN_ID,
+            )
+
+    def test_executing_status_is_safe_for_polling_only(self):
+        result = _browser_plan_status(
+            {
+                "answer_markdown": "Ejecución en curso.",
+                "completed_at": None,
+                "error_code": None,
+                "plan": _plan(state="executing", step_state="planned"),
+            },
+            PLAN_ID,
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["state"], "executing")
+        self.assertEqual(result["plan"]["state"], "executing")
+
+    def test_executing_status_cannot_carry_terminal_error(self):
+        with self.assertRaises(AssistantServiceError):
+            _browser_plan_status(
+                {
+                    "answer_markdown": "Ejecución en curso.",
+                    "completed_at": None,
+                    "error_code": "batch_execution_outcome_unknown",
+                    "plan": _plan(state="executing", step_state="planned"),
                 },
                 PLAN_ID,
             )
