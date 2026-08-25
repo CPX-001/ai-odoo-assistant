@@ -1084,6 +1084,12 @@ def _turn_error_code(code: str) -> str:
 
 
 def _client_error_code(code: str) -> str:
+    agent_engine_codes = {
+        "agent_engine_timeout": "engine_timeout",
+        "agent_engine_unavailable": "engine_unavailable",
+    }
+    if code in agent_engine_codes:
+        return agent_engine_codes[code]
     if code == "access_denied":
         return "access_denied"
     if code in {

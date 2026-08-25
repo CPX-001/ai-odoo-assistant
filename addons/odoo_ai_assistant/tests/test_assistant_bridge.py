@@ -251,6 +251,16 @@ class FakeAgentChatClient:
 
 @tagged("post_install", "-at_install")
 class TestAssistantBridge(TransactionCase):
+    def test_unified_engine_error_is_not_reported_as_service_unavailable(self):
+        self.assertEqual(
+            _client_error_code("agent_engine_unavailable"),
+            "engine_unavailable",
+        )
+        self.assertEqual(
+            _client_error_code("agent_engine_timeout"),
+            "engine_timeout",
+        )
+
     def test_tool_budget_error_is_not_reported_as_service_unavailable(self):
         self.assertEqual(
             _client_error_code("tool_per_name_budget_exceeded"),
