@@ -9,8 +9,16 @@
     }
 
     .o_ai_assistant_history_intro {
-        min-height: 1.75rem;
+        min-height: 2rem;
         padding-inline: var(--o-ai-space-1, 0.25rem);
+    }
+
+    .o_ai_assistant_history_bulk {
+        flex: 0 0 auto;
+
+        .btn-secondary {
+            white-space: nowrap;
+        }
     }
 
     .o_ai_assistant_history_search {
@@ -73,6 +81,58 @@
         }
     }
 
+    .o_ai_assistant_history_item_chat {
+        gap: 0.3rem;
+        padding: 0.35rem 0.45rem;
+        overflow: visible;
+    }
+
+    .o_ai_assistant_history_item_open {
+        display: flex;
+        align-items: center;
+        gap: var(--o-ai-space-3, 0.75rem);
+        min-height: 3.45rem;
+        padding: 0.35rem 0.25rem;
+        border-radius: 0.5rem;
+        background: transparent;
+        color: inherit;
+        outline: none;
+
+        &:disabled {
+            cursor: default;
+            opacity: 0.65;
+        }
+
+        &:focus-visible {
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--o-ai-accent) 24%, transparent);
+        }
+    }
+
+    .o_ai_assistant_history_selector {
+        flex: 0 0 auto;
+        padding-left: 0.2rem;
+    }
+
+    .o_ai_assistant_history_more {
+        flex: 0 0 auto;
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        border-radius: 0.45rem;
+        color: var(--bs-secondary-color, #6c757d) !important;
+
+        &:hover,
+        &:focus-visible,
+        &[aria-expanded="true"] {
+            background-color: var(--o-ai-surface-subtle);
+            color: var(--bs-body-color) !important;
+        }
+    }
+
+    .o_ai_assistant_history_action_menu {
+        min-width: 10rem;
+    }
+
     .o_ai_assistant_history_item_new {
         min-height: 4.6rem;
         border-color: color-mix(in srgb, var(--o-ai-accent) 62%, var(--bs-border-color, #dee2e6)) !important;
@@ -98,6 +158,11 @@
             background-color: var(--o-ai-accent);
             content: "";
         }
+    }
+
+    .o_ai_assistant_history_item_selected {
+        border-color: color-mix(in srgb, var(--o-ai-accent) 70%, var(--bs-border-color, #dee2e6)) !important;
+        background-color: color-mix(in srgb, var(--o-ai-surface) 90%, var(--o-ai-accent) 10%);
     }
 
     .o_ai_assistant_history_icon {
@@ -159,7 +224,8 @@
         .o_ai_assistant_history,
         .o_ai_assistant_history_item,
         .o_ai_assistant_history_icon,
-        .o_ai_assistant_history_button {
+        .o_ai_assistant_history_button,
+        .o_ai_assistant_history_more {
             animation: none !important;
             transition: none !important;
         }
