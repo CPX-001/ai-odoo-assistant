@@ -139,6 +139,18 @@ class TestAssistantChatStream(TestCase):
         self.assertEqual(len(client.append_calls), 1)
         self.assertEqual(client.append_calls[0]["internal_workflow"], "AGENT_FAILURE")
 
+    def test_inner_eof_without_final_still_emits_one_failed_final(self):
+        client = _StreamingClient(
+            [("delta", {"type": "delta", "text": "Texto provisional"})]
+        )
+
+        raw, events = _events(_prepared(client).iter_sse())
+
+        self.assertEqual([name for name, _ in events], ["delta", "final"])
+        self.assertEqual(events[-1][1]["response"]["plan"]["state"], "failed")
+        self.assertNotIn("invalid_response", raw)
+        self.assertNotIn("event: error", raw)
+
     def test_invalid_final_is_fail_closed_and_replaced_by_failed_final(self):
         client = _StreamingClient(
             [
