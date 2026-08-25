@@ -2,6 +2,7 @@ import json
 from unittest import TestCase
 from uuid import UUID
 
+from ..controllers.chat_bridge import _emergency_failure_result
 from ..models.assistant_chat_stream import PreparedBrowserChatStream
 from ..services import AssistantServiceError
 
@@ -170,3 +171,19 @@ class TestAssistantChatStream(TestCase):
         final = events[0][1]["response"]
         self.assertEqual(final["plan"]["state"], "failed")
         self.assertNotIn("invalid_response", raw)
+
+    def test_emergency_controller_fallback_is_a_valid_non_executable_chat_envelope(self):
+        result = _emergency_failure_result()
+        plan = result["plan"]
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["workflow"], "AGENT")
+        self.assertEqual(result["confidence"], "low")
+        self.assertIsInstance(plan, dict)
+        self.assertEqual(plan["state"], "failed")
+        self.assertEqual(plan["steps"], [])
+        self.assertFalse(plan["requires_confirmation"])
+        self.assertFalse(plan["metadata"]["needs_write"])
+        self.assertFalse(plan["metadata"]["has_external_effect"])
+        self.assertEqual(plan["policy"]["constrained_by"], [])
+        self.assertIn("antes de repetir", result["answer"])
