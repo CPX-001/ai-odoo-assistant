@@ -36,6 +36,7 @@ _DIAGNOSIS_STARTUP_TIMEOUT_SECONDS = 8.0
 _DIAGNOSIS_TURN_TIMEOUT_SECONDS = 15.0
 
 InstanceLoader = Callable[[], InstanceProfileSummary]
+Clock = Callable[[], datetime]
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,12 +56,16 @@ class RuntimeAgentFailureDiagnoser:
         admin_diagnostics_factory=RuntimeAdminDiagnosticsService.from_env,
         diagnostics_factory=RuntimeDiagnosticsService.from_env,
         settings_factory=ConfiguredCodexRuntimeSettings.from_env,
+        engine_factory=UnifiedAgentCodexAppServerEngine,
+        clock: Clock = lambda: datetime.now(UTC),
     ) -> None:
         self._instance_loader = instance_loader
         self._repairable_tool_names = tuple(dict.fromkeys(repairable_tool_names))[:12]
         self._admin_diagnostics_factory = admin_diagnostics_factory
         self._diagnostics_factory = diagnostics_factory
         self._settings_factory = settings_factory
+        self._engine_factory = engine_factory
+        self._clock = clock
 
     async def diagnose(
         self,
@@ -125,7 +130,7 @@ class RuntimeAgentFailureDiagnoser:
                     _DIAGNOSIS_TURN_TIMEOUT_SECONDS,
                 ),
             )
-            candidate = await UnifiedAgentCodexAppServerEngine(settings).run_agent_turn(
+            candidate = await self._engine_factory(settings).run_agent_turn(
                 context,
                 [],
             )
@@ -170,7 +175,10 @@ class RuntimeAgentFailureDiagnoser:
         ]
 
     async def _correlated_log_summary(self, request: AgentTurnRequest) -> str:
-        now = datetime.now(UTC)
+        now = self._clock()
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=UTC)
+        now = now.astimezone(UTC)
         try:
             result = await asyncio.wait_for(
                 self._diagnostics_factory().test_logs(
