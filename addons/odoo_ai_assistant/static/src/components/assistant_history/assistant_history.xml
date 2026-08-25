@@ -15,9 +15,45 @@
                 <i class="fa fa-chevron-right opacity-50" aria-hidden="true"/>
             </button>
 
-            <div class="o_ai_assistant_history_intro d-flex align-items-center gap-2 mb-2">
-                <i class="fa fa-history text-muted" aria-hidden="true"/>
-                <h3 class="h6 mb-0">Chats recientes</h3>
+            <div class="o_ai_assistant_history_intro d-flex align-items-center justify-content-between gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 min-w-0">
+                    <CheckBox t-if="ui.selectionMode"
+                        value="allVisibleSelected"
+                        className="'d-flex m-0'"
+                        onChange.bind="toggleAll"/>
+                    <i t-else="" class="fa fa-history text-muted" aria-hidden="true"/>
+                    <h3 class="h6 mb-0 text-truncate">
+                        <t t-if="ui.selectionMode">
+                            <t t-esc="selectedCount"/> seleccionados
+                        </t>
+                        <t t-else="">Chats recientes</t>
+                    </h3>
+                </div>
+                <div class="o_ai_assistant_history_bulk d-flex align-items-center gap-1">
+                    <Dropdown position="'bottom-end'" menuClass="'o_ai_assistant_history_action_menu'"
+                        disabled="!ui.selectionMode or !selectedCount or isBusy">
+                        <button type="button" class="btn btn-secondary btn-sm"
+                            t-att-disabled="!ui.selectionMode or !selectedCount or isBusy">
+                            Acciones masivas
+                            <i class="fa fa-angle-down ms-1" aria-hidden="true"/>
+                        </button>
+                        <t t-set-slot="content">
+                            <DropdownItem t-foreach="bulkActions" t-as="historyAction"
+                                t-key="historyAction.id"
+                                class="historyAction.danger ? 'text-danger' : ''"
+                                onSelected="() => this.runBulkAction(historyAction)">
+                                <i t-att-class="'fa ' + historyAction.icon + ' me-2'" aria-hidden="true"/>
+                                <t t-esc="historyAction.label"/>
+                            </DropdownItem>
+                        </t>
+                    </Dropdown>
+                    <button t-if="ui.selectionMode" type="button"
+                        class="btn btn-sm btn-link text-body px-1"
+                        title="Cancelar selección" aria-label="Cancelar selección"
+                        t-att-disabled="isBusy" t-on-click="exitSelection">
+                        <i class="fa fa-times" aria-hidden="true"/>
+                    </button>
+                </div>
             </div>
 
             <div t-if="showSearch" class="o_ai_assistant_history_search mb-2">
@@ -47,23 +83,48 @@
                 </div>
 
                 <t t-else="">
-                    <button t-foreach="conversations" t-as="conversation"
-                        t-key="conversation.conversation_id" type="button"
-                        t-att-data-conversation-id="conversation.conversation_id"
-                        t-att-class="'o_ai_assistant_history_item text-start border' + (conversation.conversation_id === state.conversationId ? ' o_ai_assistant_history_item_active' : '')"
-                        t-att-disabled="isBusy" t-on-click="selectConversation">
-                        <span class="o_ai_assistant_history_icon d-inline-flex align-items-center justify-content-center">
-                            <i class="fa fa-comment-o" aria-hidden="true"/>
-                        </span>
-                        <span class="min-w-0 flex-grow-1">
-                            <span class="o_ai_assistant_history_title d-block fw-semibold text-truncate"
-                                t-esc="conversation.title"/>
-                            <span class="d-block small text-muted">
-                                <t t-esc="formatUpdatedAt(conversation.updated_at)"/>
+                    <div t-foreach="conversations" t-as="conversation"
+                        t-key="conversation.conversation_id"
+                        t-att-class="'o_ai_assistant_history_item o_ai_assistant_history_item_chat border' + (conversation.conversation_id === state.conversationId ? ' o_ai_assistant_history_item_active' : '') + (isSelected(conversation.conversation_id) ? ' o_ai_assistant_history_item_selected' : '')">
+                        <div t-if="ui.selectionMode" class="o_ai_assistant_history_selector d-flex align-items-center">
+                            <CheckBox value="isSelected(conversation.conversation_id)"
+                                className="'d-flex m-0'"
+                                onChange="() => this.toggleSelected(conversation.conversation_id)"/>
+                        </div>
+                        <button type="button"
+                            class="o_ai_assistant_history_item_open text-start border-0 min-w-0 flex-grow-1"
+                            t-att-data-conversation-id="conversation.conversation_id"
+                            t-att-disabled="isBusy" t-on-click="onConversationClick">
+                            <span class="o_ai_assistant_history_icon d-inline-flex align-items-center justify-content-center">
+                                <i class="fa fa-comment-o" aria-hidden="true"/>
                             </span>
-                        </span>
-                        <i class="fa fa-chevron-right opacity-25" aria-hidden="true"/>
-                    </button>
+                            <span class="min-w-0 flex-grow-1">
+                                <span class="o_ai_assistant_history_title d-block fw-semibold text-truncate"
+                                    t-esc="conversation.title"/>
+                                <span class="d-block small text-muted">
+                                    <t t-esc="formatUpdatedAt(conversation.updated_at)"/>
+                                </span>
+                            </span>
+                        </button>
+                        <Dropdown t-if="!ui.selectionMode" position="'bottom-end'"
+                            menuClass="'o_ai_assistant_history_action_menu'" disabled="isBusy">
+                            <button type="button"
+                                class="btn btn-sm btn-link text-body o_ai_assistant_history_more"
+                                aria-label="Acciones del chat" title="Acciones"
+                                t-att-disabled="isBusy">
+                                <i class="fa fa-ellipsis-v" aria-hidden="true"/>
+                            </button>
+                            <t t-set-slot="content">
+                                <DropdownItem t-foreach="itemActions" t-as="historyAction"
+                                    t-key="historyAction.id"
+                                    class="historyAction.danger ? 'text-danger' : ''"
+                                    onSelected="() => this.runItemAction(historyAction, conversation.conversation_id)">
+                                    <i t-att-class="'fa ' + historyAction.icon + ' me-2'" aria-hidden="true"/>
+                                    <t t-esc="historyAction.label"/>
+                                </DropdownItem>
+                            </t>
+                        </Dropdown>
+                    </div>
                 </t>
             </div>
         </section>
