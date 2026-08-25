@@ -13,7 +13,14 @@ _logger = logging.getLogger(__name__)
 
 class AssistantTurnController(http.Controller):
     @http.route("/odoo_ai/v1/turn", type="json", auth="user", methods=["POST"])
-    def enqueue_turn(self, message=None, screen=None, conversation_id=None, client_request_id=None, **unexpected):
+    def enqueue_turn(
+        self,
+        message=None,
+        screen=None,
+        conversation_id=None,
+        client_request_id=None,
+        **unexpected,
+    ):
         if unexpected:
             return _error("invalid_context")
         try:
@@ -29,7 +36,12 @@ class AssistantTurnController(http.Controller):
             _logger.exception("Assistant turn enqueue failed")
             return _error("runtime_unavailable")
 
-    @http.route("/odoo_ai/v1/turn/status", type="json", auth="user", methods=["POST"])
+    @http.route(
+        "/odoo_ai/v1/turn/status",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
     def turn_status(self, turn_id=None, after_sequence=0, **unexpected):
         if unexpected:
             return _error("invalid_context")
@@ -44,7 +56,12 @@ class AssistantTurnController(http.Controller):
             _logger.exception("Assistant turn status failed")
             return _error("runtime_unavailable")
 
-    @http.route("/odoo_ai/v1/turn/cancel", type="json", auth="user", methods=["POST"])
+    @http.route(
+        "/odoo_ai/v1/turn/cancel",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
     def cancel_turn(self, turn_id=None, **unexpected):
         if unexpected:
             return _error("invalid_context")
@@ -54,6 +71,45 @@ class AssistantTurnController(http.Controller):
             return _error("turn_not_found")
         except Exception:  # noqa: BLE001
             _logger.exception("Assistant turn cancellation failed")
+            return _error("runtime_unavailable")
+
+    @http.route(
+        "/odoo_ai/v1/turn/plan-decision",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def plan_decision(self, plan_id=None, decision=None, **unexpected):
+        if unexpected:
+            return _error("invalid_context")
+        try:
+            return request.env["odoo.ai.turn"].decide_capability_plan_for_current_user(
+                plan_id,
+                decision,
+            )
+        except (AccessError, ValidationError, ValueError, TypeError):
+            return _error("invalid_context")
+        except Exception:  # noqa: BLE001
+            _logger.exception("Assistant plan decision failed")
+            return _error("runtime_unavailable")
+
+    @http.route(
+        "/odoo_ai/v1/turn/plan-status",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def plan_status(self, plan_id=None, **unexpected):
+        if unexpected:
+            return _error("invalid_context")
+        try:
+            return request.env["odoo.ai.turn"].capability_plan_status_for_current_user(
+                plan_id
+            )
+        except (AccessError, ValidationError, ValueError, TypeError):
+            return _error("invalid_context")
+        except Exception:  # noqa: BLE001
+            _logger.exception("Assistant plan status failed")
             return _error("runtime_unavailable")
 
 
