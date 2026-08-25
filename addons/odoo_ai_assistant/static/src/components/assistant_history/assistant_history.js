@@ -36,7 +36,12 @@ export class AssistantHistory extends Component {
     }
 
     get isBusy() {
-        return this.state.loading || this.state.historyLoading || this.state.decisionLoading;
+        return (
+            this.state.loading ||
+            this.state.historyLoading ||
+            this.state.decisionLoading ||
+            this.state.result?.plan?.state === "authorized"
+        );
     }
 
     newConversation() {
