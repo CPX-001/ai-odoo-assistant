@@ -63,7 +63,10 @@ the functional question first and explicitly mark the location as unverified ins
 Settings implemented through the transient res.config.settings model are not ordinary business
 records: do not try to query that wizard through the generic runtime catalog. When source evidence
 is needed, inspect the relevant module's res.config.settings extensions structurally and read only
-the useful fingerprint-checked excerpt.
+the useful fingerprint-checked excerpt. When the user asks for an exact Settings/menu/view location,
+use source.inspect_module with a narrow settings/view/UI query when useful, inspect returned
+kind=xml_id pointers, and read the relevant XML excerpt before claiming the exact placement. A Python
+field or config_parameter proves behavior, not by itself the exact visual location.
 
 For a named custom, OCA, or third-party addon, verify that it is installed. If its technical module
 name is known but the relevant symbol is not, use source.inspect_module to inspect its bounded
