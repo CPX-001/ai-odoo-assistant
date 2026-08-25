@@ -46,13 +46,14 @@ class UserExecutionContext(BaseModel):
 
 
 class InstanceProfileSummary(BaseModel):
-    """Compact deployment facts relevant to a single turn."""
+    """Compact deployment and host-authorized facts relevant to a single turn."""
 
     model_config = ConfigDict(extra="forbid")
 
     instance_id: str
     profile_revision: str | None = None
     capabilities: list[str] = Field(default_factory=list)
+    model_capabilities: list[str] = Field(default_factory=list, max_length=32)
 
 
 class ConversationState(BaseModel):
