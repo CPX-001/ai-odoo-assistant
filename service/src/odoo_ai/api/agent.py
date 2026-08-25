@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Final, Protocol, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, FastAPI, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from odoo_ai.application.agent_events import bind_agent_delta_sink, reset_agent_delta_sink
 from odoo_ai.application.agent_execution import AgentExecutionError, AgentPlanExecutionService
 from odoo_ai.application.agent_failure import agent_failure_response
 from odoo_ai.application.agent_plans import AgentPlanError, AgentPlanService
@@ -23,10 +26,12 @@ from odoo_ai.contracts import (
     AgentTurnRequest,
     AgentTurnResponse,
 )
+from odoo_ai.contracts.agent_stream import AgentTurnDeltaEvent, AgentTurnFinalEvent
 from odoo_ai.runtime.agent import RuntimeAgentFactory
 from odoo_ai.security import require_shared_secret
 
 MAX_AGENT_REQUEST_BYTES: Final = 64 * 1024
+_STREAM_QUEUE_SIZE: Final = 32
 LOGGER = logging.getLogger(__name__)
 
 
@@ -104,6 +109,27 @@ async def agent_turn(
 
 
 @router.post(
+    "/v1/agent/turn/stream",
+    dependencies=[Depends(require_shared_secret)],
+)
+async def agent_turn_stream(
+    payload: AgentTurnRequest,
+    request: Request,
+) -> StreamingResponse:
+    """Stream provisional answer text and finish with one host-validated turn response."""
+
+    service = _factory(request).turn_service(payload)
+    return StreamingResponse(
+        _stream_agent_turn(payload, service),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post(
     "/v1/agent/plans/{plan_id}/decision",
     response_model=AgentPlanDecisionResponse,
     dependencies=[Depends(require_shared_secret)],
@@ -166,6 +192,57 @@ async def agent_plan_status(
         return _error(error.code, error.status_code)
     except Exception:
         return _error("agent_plan_store_unavailable", 503)
+
+
+async def _stream_agent_turn(
+    payload: AgentTurnRequest,
+    service: AgentTurnService,
+) -> AsyncIterator[bytes]:
+    queue: asyncio.Queue[AgentTurnDeltaEvent | AgentTurnFinalEvent | None] = asyncio.Queue(
+        maxsize=_STREAM_QUEUE_SIZE
+    )
+
+    async def delta_sink(text: str) -> None:
+        await queue.put(AgentTurnDeltaEvent(text=text))
+
+    async def produce() -> None:
+        token = bind_agent_delta_sink(delta_sink)
+        try:
+            try:
+                response = await service.run(payload)
+            except AgentTurnError as error:
+                LOGGER.warning("Unified streaming agent turn failed: %s", error.code)
+                response = agent_failure_response(payload, error.code)
+            except Exception:
+                LOGGER.exception("Unified streaming agent turn failed unexpectedly")
+                response = agent_failure_response(payload, "agent_unavailable")
+            await queue.put(AgentTurnFinalEvent(response=response))
+        finally:
+            reset_agent_delta_sink(token)
+            await queue.put(None)
+
+    producer = asyncio.create_task(produce())
+    try:
+        while True:
+            event = await queue.get()
+            if event is None:
+                break
+            yield _sse_event(event.type, event.model_dump(mode="json"))
+    finally:
+        if not producer.done():
+            producer.cancel()
+        await asyncio.gather(producer, return_exceptions=True)
+
+
+def _sse_event(event: str, payload: dict[str, object]) -> bytes:
+    encoded = json.dumps(
+        payload,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return f"event: {event}\ndata: {encoded}\n\n".encode("utf-8")
 
 
 def install_agent_routes(
