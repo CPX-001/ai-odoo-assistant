@@ -83,6 +83,18 @@ class TestDelegatedOrmTools(TransactionCase):
         self.assertIn("name", metadata["fields"])
         self.assertNotIn("tz", metadata["fields"])
 
+    def test_empty_dynamic_selection_does_not_hide_the_model_schema(self):
+        metadata = collect_model_metadata(
+            self.env,
+            model="res.partner",
+            max_fields=64,
+            observed_at=datetime.now(UTC),
+        )
+
+        self.assertIn("name", metadata["fields"])
+        self.assertIn("ref", metadata["fields"])
+        self.assertNotIn("invoice_edi_format", metadata["fields"])
+
     def _token(
         self,
         *,

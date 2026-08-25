@@ -1548,14 +1548,16 @@ def _observed_action_value(kind: str, value: object) -> dict[str, object]:
             raise OrmToolError("unsupported_value", 400)
         normalized = value
     elif kind == "many2one":
-        if (
-            not isinstance(value, (list, tuple))
-            or len(value) != 2
-            or type(value[0]) is not int
-            or value[0] <= 0
-        ):
+        record_id = (
+            value
+            if type(value) is int
+            else value[0]
+            if isinstance(value, (list, tuple)) and len(value) == 2
+            else None
+        )
+        if type(record_id) is not int or record_id <= 0:
             raise OrmToolError("unsupported_value", 400)
-        normalized = value[0]
+        normalized = record_id
     elif kind == "decimal":
         try:
             decimal = Decimal(str(value))

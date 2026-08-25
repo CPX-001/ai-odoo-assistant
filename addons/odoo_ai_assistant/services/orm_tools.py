@@ -44,6 +44,7 @@ METADATA_FIELD_PRIORITY: Final = (
     "id",
     "display_name",
     "name",
+    "ref",
     "state",
     "company_id",
 )
@@ -388,10 +389,10 @@ def collect_model_metadata(
         try:
             fields_payload[name] = _normalize_field_definition(descriptions[name])
         except OrmToolError as error:
-            if error.code != "limit_exceeded":
+            if error.code not in {"limit_exceeded", "unsupported_metadata"}:
                 raise
-            # One enormous dynamic selection (for example the timezone list) must not
-            # make every other safe field on a broad business model unavailable.
+            # One unusable dynamic selection (for example an empty provider-backed
+            # option list or the enormous timezone list) must not hide the model.
             continue
     if not fields_payload:
         raise OrmToolError("access_denied", 403)
@@ -449,6 +450,8 @@ def _normalize_field_definition(value: object) -> JsonValue:
                 continue
             if not isinstance(item, Sequence) or isinstance(item, (str, bytes)):
                 raise OrmToolError("invalid_metadata", 500)
+            if not item:
+                raise OrmToolError("unsupported_metadata", 422)
             if len(item) > 64:
                 raise OrmToolError("limit_exceeded", 413)
             selection: list[JsonValue] = []

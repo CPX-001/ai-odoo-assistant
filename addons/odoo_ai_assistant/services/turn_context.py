@@ -65,6 +65,7 @@ AGENT_HINT_MODELS: Final = (
 QUERY_FIELD_PRIORITY: Final = (
     "id",
     "name",
+    "ref",
     "state",
     "active",
     "company_id",

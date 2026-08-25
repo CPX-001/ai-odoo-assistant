@@ -789,6 +789,13 @@ def test_create_commit_receipt_prevents_duplicate_and_verify_recovers_original_i
     assert verified["matches"] is True
 
 
+def test_many2one_verification_accepts_odoo_load_none_record_id() -> None:
+    assert action_tools._observed_action_value("many2one", 137) == {
+        "kind": "many2one",
+        "value": 137,
+    }
+
+
 def test_business_preview_is_effect_free_and_binds_current_state() -> None:
     env = FakeEnv()
     proposal = _business_proposal()

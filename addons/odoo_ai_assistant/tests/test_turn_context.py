@@ -144,6 +144,7 @@ class TestContextTurnPreparation(TransactionCase):
         self.assertEqual(claims.model, "res.partner")
         self.assertIn("id", claims.allowed_fields)
         self.assertIn("display_name", claims.allowed_fields)
+        self.assertIn("ref", claims.allowed_fields)
         self.assertNotIn("message_ids", claims.allowed_fields)
         self.assertEqual(
             claims.scopes,
