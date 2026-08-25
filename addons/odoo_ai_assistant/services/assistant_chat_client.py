@@ -120,6 +120,10 @@ class AssistantChatServiceClient(AssistantServiceClient):
             raise AssistantServiceError("access_denied")
         if response.status == 404:
             raise AssistantServiceError(code or "conversation_not_found")
+        if response.status == 410:
+            if code == "agent_plan_expired":
+                raise AssistantServiceError("approval_expired")
+            raise AssistantServiceError("invalid_response")
         if response.status == 413:
             raise AssistantServiceError("invalid_request")
         if response.status == 422:
