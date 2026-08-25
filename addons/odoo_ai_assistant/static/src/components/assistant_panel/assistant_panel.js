@@ -240,8 +240,15 @@ export class AssistantPanel extends Component {
         return labels[this.state.result?.confidence] || "";
     }
 
+    get recoveryPending() {
+        return this.state.result?.plan?.state === "authorized";
+    }
+
     get actionDecisionMessage() {
         const messages = {
+            authorized: _t(
+                "El resultado del lote quedó pendiente de recuperar. Se conserva el mismo intento y no se crea una nueva autorización."
+            ),
             completed: _t("Plan completado y verificado en Odoo."),
             rejected: _t("Plan cancelado. No se realizó ningún cambio."),
             partial: _t("El plan terminó parcialmente; revisa el resultado antes de continuar."),
@@ -287,7 +294,7 @@ export class AssistantPanel extends Component {
         if (value === "rejected") {
             return "alert-secondary";
         }
-        if (value === "partial") {
+        if (value === "authorized" || value === "partial") {
             return "alert-warning";
         }
         return "alert-danger";
@@ -466,10 +473,15 @@ export class AssistantPanel extends Component {
     }
 
     newConversation() {
-        this.panel.newConversation();
+        if (!this.recoveryPending) {
+            this.panel.newConversation();
+        }
     }
 
     async selectConversation(event) {
+        if (this.recoveryPending) {
+            return;
+        }
         const value = event.target.value;
         if (value) {
             await this.panel.selectConversation(value);
@@ -503,9 +515,18 @@ export class AssistantPanel extends Component {
         await this.panel.decide("reject");
     }
 
+    async retryAction() {
+        await this.panel.retry();
+    }
+
     async submit() {
         const question = this.state.draft.trim();
-        if (!question || this.state.loading || this.state.decisionLoading) {
+        if (
+            !question ||
+            this.state.loading ||
+            this.state.decisionLoading ||
+            this.recoveryPending
+        ) {
             return;
         }
         await this.panel.submit(question);
