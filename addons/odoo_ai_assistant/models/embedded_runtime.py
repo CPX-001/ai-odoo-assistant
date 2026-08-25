@@ -5,15 +5,17 @@ from __future__ import annotations
 import asyncio
 import re
 
-from odoo import api, models
+from odoo import SUPERUSER_ID, api, fields, models
 from odoo.exceptions import AccessError, ValidationError
+from odoo.modules.registry import Registry
 
 from ..runtime import RuntimePaths, detect_codex
-from ..runtime.agent import AgentTurnService
+from ..runtime.agent import AgentTurnService, CapabilityPlanError, CapabilityPlanService
 from ..runtime.agent.codex import CodexAgentSettings, CodexReasoningEngine
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
+    CapabilityError,
     CapabilityExecutor,
     CapabilityPolicy,
     discover_capabilities,
@@ -21,6 +23,13 @@ from ..runtime.capabilities import (
 from .chat_policy import resolve_capability_policy
 
 _ERROR_CODE = re.compile(r"^[a-z0-9_]{1,128}$")
+_PLAN_ENVELOPE_KEYS = {
+    "format_version",
+    "answer",
+    "confidence",
+    "human_approved",
+    "plan",
+}
 
 
 class EmbeddedAssistantRuntime(models.AbstractModel):
@@ -81,6 +90,20 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
             policy=CapabilityPolicy(),
             config=resolver,
         )
+        plans = CapabilityPlanService(registry=registry, executor=executor)
+
+        envelope = _plan_envelope(turn.capability_plan_payload)
+        if envelope is not None and envelope["plan"]["state"] == "authorized":
+            return asyncio.run(
+                self._execute_plan(
+                    turn,
+                    lease_token=lease_token,
+                    envelope=envelope,
+                    plans=plans,
+                    policy=policy_snapshot,
+                )
+            )
+
         settings = self._codex_settings(turn)
 
         def cancellation_requested():
@@ -109,17 +132,88 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
                 conversation_summary=self._conversation_summary(turn),
             )
         )
-        if result.plan:
-            # Plan capabilities are already registry-validated, but write persistence and
-            # execution must be bound to the existing approval/receipt state machine before
-            # the queue may treat them as completed.
-            raise EmbeddedRuntimeError("agent_plan_runtime_not_migrated")
         event_sink(
             "reasoning.completed",
             "Respuesta preparada",
             {"confidence": result.confidence},
         )
-        return self._read_only_response(turn, result, policy_snapshot)
+        if not result.plan:
+            return self._read_only_response(turn, result, policy_snapshot)
+
+        prepared = asyncio.run(plans.prepare(result.plan))
+        envelope = {
+            "format_version": 1,
+            "answer": result.answer,
+            "confidence": result.confidence,
+            "human_approved": False,
+            "plan": prepared,
+        }
+        if prepared["requires_confirmation"]:
+            response = self._plan_response(turn, envelope, policy_snapshot)
+            self._persist_awaiting_plan(turn, envelope, response)
+            return response
+        return asyncio.run(
+            self._execute_plan(
+                turn,
+                lease_token=lease_token,
+                envelope=envelope,
+                plans=plans,
+                policy=policy_snapshot,
+            )
+        )
+
+    async def _execute_plan(self, turn, *, lease_token, envelope, plans, policy):
+        dbname = self.env.cr.dbname
+        _commit_plan_barrier(
+            dbname,
+            turn.id,
+            lease_token,
+            envelope,
+        )
+        try:
+            executed = await plans.execute(
+                envelope["plan"],
+                human_approved=bool(envelope["human_approved"]),
+            )
+        except (CapabilityPlanError, CapabilityError) as error:
+            raise EmbeddedRuntimeError(error.code) from error
+        completed = dict(envelope)
+        completed["plan"] = executed.payload
+        turn.with_user(SUPERUSER_ID).write({"capability_plan_payload": completed})
+        response = self._plan_response(turn, completed, policy, completed=True)
+        return response
+
+    def _persist_awaiting_plan(self, turn, envelope, response):
+        technical = turn.with_user(SUPERUSER_ID)
+        assistant_message = self.env["odoo.ai.message"].with_user(SUPERUSER_ID).create(
+            {
+                "conversation_id": turn.conversation_id.id,
+                "role": "assistant",
+                "content": response["answer"],
+                "internal_workflow": "AGENT",
+            }
+        )
+        technical.write(
+            {
+                "state": "awaiting_confirmation",
+                "capability_plan_payload": envelope,
+                "result_payload": response,
+                "assistant_message_id": assistant_message.id,
+                "lease_token": False,
+                "lease_expires_at": False,
+                "heartbeat_at": fields.Datetime.now(),
+            }
+        )
+        if turn.conversation_id:
+            turn.conversation_id.with_user(SUPERUSER_ID).write(
+                {"last_message_at": fields.Datetime.now()}
+            )
+        self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            turn=technical,
+            event_type="approval.required",
+            title="Esperando confirmación",
+            payload={"plan_id": turn.turn_uuid},
+        )
 
     def _codex_settings(self, turn):
         parameters = self.env["ir.config_parameter"]
@@ -161,57 +255,133 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
         return "\n".join(reversed(retained))
 
     def _read_only_response(self, turn, result, policy):
-        conversation_id = (
-            turn.conversation_id.conversation_uuid if turn.conversation_id else None
+        return _browser_response(
+            turn,
+            answer=result.answer,
+            confidence=result.confidence,
+            plan=_browser_empty_plan(turn, policy),
         )
-        goal = " ".join((turn.input_message or "").split())[:1_000]
-        return {
-            "ok": True,
-            "turn_id": turn.turn_uuid,
-            "conversation_id": conversation_id,
-            "workflow": "AGENT",
-            "answer": result.answer,
-            "confidence": result.confidence,
-            "limitations": [],
-            "citations": [],
-            "plan": {
-                "plan_id": turn.turn_uuid,
-                "state": "completed",
-                "risk": "low",
-                "metadata": {
-                    "needs_read": True,
-                    "needs_schema": True,
-                    "needs_write": False,
-                    "needs_business_action": False,
-                    "has_external_effect": False,
-                    "has_irreversible_effect": False,
-                    "is_atomic": True,
-                    "estimated_blast_radius": 0,
-                },
-                "policy": {
-                    "confirmation_mode": policy["confirmation_mode"],
-                    "max_auto_risk": policy["max_auto_risk"],
-                    "allow_synthetic_data": policy["allow_synthetic_data"],
-                    "constrained_by": [],
-                },
-                "goal": goal or "Responder a la petición del usuario.",
-                "assumptions": [],
-                "steps": [],
-                "requires_confirmation": False,
-                "expires_at": None,
-            },
-        }
+
+    def _plan_response(self, turn, envelope, policy, *, completed=False):
+        plan = _browser_capability_plan(turn, envelope["plan"], policy)
+        answer = envelope["answer"]
+        confidence = envelope["confidence"]
+        if completed:
+            answer = _completion_answer(envelope["plan"])
+            confidence = "high"
+        return _browser_response(
+            turn,
+            answer=answer,
+            confidence=confidence,
+            plan=plan,
+        )
 
 
 class AssistantTurnEmbeddedStatus(models.Model):
     _inherit = "odoo.ai.turn"
 
+    capability_plan_payload = fields.Json(readonly=True)
+
     def browser_status(self, *, after_sequence=0):
         payload = super().browser_status(after_sequence=after_sequence)
         self.ensure_one()
-        response = self.result_payload if self.state == "completed" else None
+        response = (
+            self.result_payload
+            if self.state in {"awaiting_confirmation", "completed"}
+            else None
+        )
         payload["response"] = dict(response) if isinstance(response, dict) else None
         return payload
+
+    @api.model
+    def decide_capability_plan_for_current_user(self, plan_id, decision):
+        if decision not in {"approve", "reject"}:
+            raise ValidationError("Invalid Assistant plan decision")
+        turn = self._owned_turn(plan_id)
+        if turn.state != "awaiting_confirmation":
+            raise ValidationError("Assistant plan is not awaiting confirmation")
+        envelope = _plan_envelope(turn.capability_plan_payload)
+        if envelope is None or envelope["plan"]["state"] != "awaiting_confirmation":
+            raise ValidationError("Assistant plan is unavailable")
+        technical = turn.with_user(SUPERUSER_ID)
+        if decision == "reject":
+            plan = dict(envelope["plan"])
+            plan["state"] = "rejected"
+            envelope = dict(envelope)
+            envelope["plan"] = plan
+            response = dict(turn.result_payload or {})
+            if isinstance(response.get("plan"), dict):
+                response["plan"] = {**response["plan"], "state": "rejected"}
+            technical.write(
+                {
+                    "state": "completed",
+                    "capability_plan_payload": envelope,
+                    "result_payload": response,
+                    "completed_at": fields.Datetime.now(),
+                    "lease_token": False,
+                    "lease_expires_at": False,
+                }
+            )
+            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+                turn=technical,
+                event_type="approval.rejected",
+                title="Acción rechazada",
+            )
+            return {
+                "ok": True,
+                "plan_id": turn.turn_uuid,
+                "state": "rejected",
+                "plan": response.get("plan"),
+            }
+
+        plan = dict(envelope["plan"])
+        plan["state"] = "authorized"
+        envelope = dict(envelope)
+        envelope["plan"] = plan
+        envelope["human_approved"] = True
+        technical.write(
+            {
+                "state": "queued",
+                "queued_at": fields.Datetime.now(),
+                "capability_plan_payload": envelope,
+                "result_payload": False,
+                "error_code": False,
+                "lease_token": False,
+                "lease_expires_at": False,
+            }
+        )
+        self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            turn=technical,
+            event_type="approval.approved",
+            title="Acción aprobada",
+        )
+        self.env.ref("odoo_ai_assistant.ir_cron_assistant_turn_slot_1")._trigger()
+        self.env.ref("odoo_ai_assistant.ir_cron_assistant_turn_slot_2")._trigger()
+        policy = resolve_capability_policy(turn.policy_payload or {})
+        return {
+            "ok": True,
+            "plan_id": turn.turn_uuid,
+            "state": "authorized",
+            "plan": _browser_capability_plan(turn, plan, policy),
+        }
+
+    @api.model
+    def capability_plan_status_for_current_user(self, plan_id):
+        turn = self._owned_turn(plan_id)
+        response = turn.result_payload if isinstance(turn.result_payload, dict) else {}
+        plan = response.get("plan") if isinstance(response.get("plan"), dict) else None
+        envelope = _plan_envelope(turn.capability_plan_payload)
+        if plan is None and envelope is not None:
+            policy = resolve_capability_policy(turn.policy_payload or {})
+            plan = _browser_capability_plan(turn, envelope["plan"], policy)
+        state = plan.get("state") if isinstance(plan, dict) else turn.state
+        return {
+            "ok": True,
+            "plan_id": turn.turn_uuid,
+            "state": state,
+            "plan": plan,
+            "turn_state": turn.state,
+        }
 
 
 class EmbeddedRuntimeError(RuntimeError):
@@ -223,3 +393,176 @@ class EmbeddedRuntimeError(RuntimeError):
         )
         super().__init__(normalized)
         self.code = normalized
+
+
+def _commit_plan_barrier(dbname, turn_id, lease_token, envelope):
+    """Persist plan + barrier before any mutation transaction can commit."""
+
+    with Registry(dbname).cursor() as cr:
+        env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+        turn = env["odoo.ai.turn"].browse(turn_id).exists()
+        if (
+            not turn
+            or turn.state != "running"
+            or turn.lease_token != lease_token
+        ):
+            raise EmbeddedRuntimeError("agent_turn_lease_lost")
+        turn.write(
+            {
+                "capability_plan_payload": envelope,
+                "write_barrier": True,
+                "heartbeat_at": fields.Datetime.now(),
+            }
+        )
+        env["odoo.ai.turn.event"].append_for_turn(
+            turn=turn,
+            event_type="execution.barrier",
+            title="Ejecutando acción autorizada",
+        )
+        cr.commit()
+
+
+def _plan_envelope(value):
+    if not value:
+        return None
+    if not isinstance(value, dict) or set(value) != _PLAN_ENVELOPE_KEYS:
+        raise EmbeddedRuntimeError("capability_plan_corrupt")
+    if (
+        value.get("format_version") != 1
+        or not isinstance(value.get("answer"), str)
+        or value.get("confidence") not in {"high", "medium", "low"}
+        or type(value.get("human_approved")) is not bool
+        or not isinstance(value.get("plan"), dict)
+    ):
+        raise EmbeddedRuntimeError("capability_plan_corrupt")
+    return dict(value)
+
+
+def _browser_response(turn, *, answer, confidence, plan):
+    return {
+        "ok": True,
+        "turn_id": turn.turn_uuid,
+        "conversation_id": (
+            turn.conversation_id.conversation_uuid if turn.conversation_id else None
+        ),
+        "workflow": "AGENT",
+        "answer": answer,
+        "confidence": confidence,
+        "limitations": [],
+        "citations": [],
+        "plan": plan,
+    }
+
+
+def _browser_empty_plan(turn, policy):
+    return {
+        "plan_id": turn.turn_uuid,
+        "state": "completed",
+        "risk": "low",
+        "metadata": {
+            "needs_read": True,
+            "needs_schema": True,
+            "needs_write": False,
+            "needs_business_action": False,
+            "has_external_effect": False,
+            "has_irreversible_effect": False,
+            "is_atomic": True,
+            "estimated_blast_radius": 0,
+        },
+        "policy": _browser_policy(policy),
+        "goal": _goal(turn),
+        "assumptions": [],
+        "steps": [],
+        "requires_confirmation": False,
+        "expires_at": None,
+    }
+
+
+def _browser_capability_plan(turn, plan, policy):
+    steps = plan.get("steps")
+    if not isinstance(steps, list):
+        raise EmbeddedRuntimeError("capability_plan_corrupt")
+    risk = "low"
+    browser_steps = []
+    for step in steps:
+        if not isinstance(step, dict):
+            raise EmbeddedRuntimeError("capability_plan_corrupt")
+        risk = _max_risk(risk, step.get("risk"))
+        receipt = None
+        result = step.get("result")
+        if isinstance(result, dict):
+            receipt = {
+                "error_code": None,
+                "evidence_id": None,
+                "outcome": "verified" if step.get("verification") is not None else "completed",
+                "record_id": result.get("record_id"),
+                "record_model": result.get("model"),
+            }
+        browser_steps.append(
+            {
+                "step_id": f"{turn.turn_uuid}:{step.get('position')}",
+                "title": step.get("title") or step.get("capability"),
+                "state": step.get("state"),
+                "risk": step.get("risk"),
+                "effect_scope": step.get("effect"),
+                "receipt": receipt,
+            }
+        )
+    state = plan.get("state")
+    if state == "authorized" and plan.get("requires_confirmation"):
+        state = "authorized"
+    return {
+        "plan_id": turn.turn_uuid,
+        "state": state,
+        "risk": risk,
+        "metadata": {
+            "needs_read": False,
+            "needs_schema": False,
+            "needs_write": True,
+            "needs_business_action": any(
+                step.get("risk") in {"high", "protected"} for step in steps
+            ),
+            "has_external_effect": any(step.get("effect") == "external" for step in steps),
+            "has_irreversible_effect": any(
+                step.get("effect") == "internal_irreversible" for step in steps
+            ),
+            "is_atomic": True,
+            "estimated_blast_radius": len(steps),
+        },
+        "policy": _browser_policy(policy),
+        "goal": _goal(turn),
+        "assumptions": [],
+        "steps": browser_steps,
+        "requires_confirmation": bool(plan.get("requires_confirmation")),
+        "expires_at": None,
+    }
+
+
+def _browser_policy(policy):
+    return {
+        "confirmation_mode": policy["confirmation_mode"],
+        "max_auto_risk": policy["max_auto_risk"],
+        "allow_synthetic_data": policy["allow_synthetic_data"],
+        "constrained_by": [],
+    }
+
+
+def _goal(turn):
+    normalized = " ".join((turn.input_message or "").split())[:1_000]
+    return normalized or "Completar la petición del usuario."
+
+
+def _completion_answer(plan):
+    steps = plan.get("steps", []) if isinstance(plan, dict) else []
+    if len(steps) == 1:
+        title = steps[0].get("title") if isinstance(steps[0], dict) else None
+        if isinstance(title, str) and title.strip():
+            return f"He completado y verificado la acción: {title.strip()}"
+    return "He completado y verificado las acciones solicitadas."
+
+
+def _max_risk(left, right):
+    order = {"low": 0, "moderate": 1, "high": 2, "protected": 3}
+    if right not in order:
+        raise EmbeddedRuntimeError("capability_plan_corrupt")
+    return right if order[right] > order[left] else left
