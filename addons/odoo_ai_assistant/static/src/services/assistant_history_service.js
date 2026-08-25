@@ -12,6 +12,14 @@ export const RECOVERY_PLAN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const ACTIVE_CHAT_CACHE_VERSION = 1;
 const RECOVERY_CACHE_VERSION = 1;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const RECOVERY_ACTIVE_STATES = new Set(["authorized", "executing"]);
+const RECOVERY_TERMINAL_STATES = new Set([
+    "completed",
+    "partial",
+    "failed",
+    "rejected",
+    "expired",
+]);
 
 function browserSessionStorage() {
     try {
@@ -150,6 +158,27 @@ export function clearRecoveryPlanId(storage) {
     }
 }
 
+export function normalizeRecoveryStatusResponse(response, planId) {
+    const state = response?.state;
+    const plan = response?.plan;
+    if (
+        response?.ok === true &&
+        response.plan_id === planId &&
+        (RECOVERY_ACTIVE_STATES.has(state) || RECOVERY_TERMINAL_STATES.has(state)) &&
+        plan !== null &&
+        typeof plan === "object" &&
+        plan.plan_id === planId &&
+        plan.state === state
+    ) {
+        return { receipt: response, plan, errorCode: null };
+    }
+    const fallback = normalizeActionDecisionResponse(response, planId);
+    if (fallback.receipt) {
+        return fallback;
+    }
+    return fallback;
+}
+
 patch(assistantPanelService, {
     start(env, dependencies) {
         const panel = super.start(env, dependencies);
@@ -161,7 +190,7 @@ patch(assistantPanelService, {
         panel.state.recoveryPlanId = loadRecoveryPlanId(localStorage);
 
         const recoveryPending = () =>
-            panel.state.result?.plan?.state === "authorized" ||
+            RECOVERY_ACTIVE_STATES.has(panel.state.result?.plan?.state) ||
             typeof panel.state.recoveryPlanId === "string";
         const isBusy = () =>
             panel.state.loading ||
@@ -169,15 +198,22 @@ patch(assistantPanelService, {
             panel.state.decisionLoading ||
             recoveryPending();
 
+        const clearRecovery = () => {
+            panel.state.recoveryPlanId = null;
+            clearRecoveryPlanId(localStorage);
+        };
+
         const syncRecoveryFromPlan = (plan) => {
-            if (plan?.state === "authorized" && UUID_PATTERN.test(plan.plan_id || "")) {
+            if (
+                RECOVERY_ACTIVE_STATES.has(plan?.state) &&
+                UUID_PATTERN.test(plan?.plan_id || "")
+            ) {
                 panel.state.recoveryPlanId = plan.plan_id;
                 saveRecoveryPlanId(localStorage, plan.plan_id);
                 return;
             }
             if (plan) {
-                panel.state.recoveryPlanId = null;
-                clearRecoveryPlanId(localStorage);
+                clearRecovery();
             }
         };
 
@@ -191,24 +227,27 @@ patch(assistantPanelService, {
                 const response = await rpc("/odoo_ai/v1/agent-plan-status", {
                     plan_id: planId,
                 });
-                const normalized = normalizeActionDecisionResponse(response, planId);
+                const normalized = normalizeRecoveryStatusResponse(response, planId);
                 if (!normalized.receipt) {
-                    if (["invalid_context", "invalid_response"].includes(normalized.errorCode)) {
-                        panel.state.recoveryPlanId = null;
-                        clearRecoveryPlanId(localStorage);
+                    if (["invalid_context", "access_denied"].includes(normalized.errorCode)) {
+                        clearRecovery();
                         return false;
                     }
                     panel.state.errorCode = normalized.errorCode;
                     return true;
                 }
-                if (normalized.plan?.state !== "authorized") {
-                    panel.state.recoveryPlanId = null;
-                    clearRecoveryPlanId(localStorage);
+                if (RECOVERY_TERMINAL_STATES.has(normalized.plan?.state)) {
+                    clearRecovery();
                     if (panel.state.result && normalized.plan) {
                         panel.state.result = { ...panel.state.result, plan: normalized.plan };
                         panel.state.actionReceipt = normalized.receipt;
                     }
+                    panel.state.errorCode = null;
                     return false;
+                }
+                if (!RECOVERY_ACTIVE_STATES.has(normalized.plan?.state)) {
+                    panel.state.errorCode = "invalid_response";
+                    return true;
                 }
                 panel.state.result = {
                     ...(panel.state.result || {}),
@@ -332,8 +371,7 @@ patch(assistantPanelService, {
                 const decided = await panel.decide(decision);
                 if (decided) {
                     if (panel.state.actionReceipt?.state === "rejected") {
-                        panel.state.recoveryPlanId = null;
-                        clearRecoveryPlanId(localStorage);
+                        clearRecovery();
                     } else {
                         syncRecoveryFromPlan(panel.state.result?.plan);
                     }
@@ -343,6 +381,14 @@ patch(assistantPanelService, {
             async retry() {
                 if (!recoveryPending()) {
                     return false;
+                }
+                const restored = await restoreRecovery();
+                const state = panel.state.result?.plan?.state;
+                if (state === "executing") {
+                    return restored;
+                }
+                if (state !== "authorized") {
+                    return restored;
                 }
                 const retried = await panel.retry();
                 if (retried) {
