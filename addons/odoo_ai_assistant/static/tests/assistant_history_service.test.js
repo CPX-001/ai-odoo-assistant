@@ -7,6 +7,7 @@ import {
     clearRecoveryPlanId,
     loadRecentActiveChat,
     loadRecoveryPlanId,
+    normalizeRecoveryStatusResponse,
     recoveryPlanStorageKey,
     saveRecentActiveChat,
     saveRecoveryPlanId,
@@ -93,4 +94,38 @@ test("invalid recovery cache never becomes a plan handle", () => {
 
     expect(loadRecoveryPlanId(storage, 2_000_001)).toBe(null);
     expect(storage.getItem(recoveryPlanStorageKey())).toBe(null);
+});
+
+test("in-flight recovery status remains active instead of becoming invalid", () => {
+    const normalized = normalizeRecoveryStatusResponse(
+        {
+            ok: true,
+            plan_id: PLAN_ID,
+            state: "executing",
+            plan: { plan_id: PLAN_ID, state: "executing" },
+        },
+        PLAN_ID
+    );
+
+    expect(normalized.errorCode).toBe(null);
+    expect(normalized.receipt.state).toBe("executing");
+    expect(normalized.plan.state).toBe("executing");
+});
+
+test("recovery status must stay bound to the cached plan id", () => {
+    const normalized = normalizeRecoveryStatusResponse(
+        {
+            ok: true,
+            plan_id: "42345678-1234-4678-9234-567812345678",
+            state: "executing",
+            plan: {
+                plan_id: "42345678-1234-4678-9234-567812345678",
+                state: "executing",
+            },
+        },
+        PLAN_ID
+    );
+
+    expect(normalized.receipt).toBe(null);
+    expect(normalized.errorCode).toBe("invalid_response");
 });
