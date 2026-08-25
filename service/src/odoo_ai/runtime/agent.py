@@ -22,7 +22,9 @@ from odoo_ai.adapters.batch_http import BatchOdooGatewayFactory
 from odoo_ai.adapters.batch_preflight_http import BatchPreflightOdooGatewayFactory
 from odoo_ai.adapters.configured_codex import ConfiguredCodexRuntimeSettings
 from odoo_ai.adapters.odoo_http import OdooGatewayFactory, OdooGatewaySettings
-from odoo_ai.adapters.unified_agent_engine import UnifiedAgentCodexAppServerEngine
+from odoo_ai.adapters.streaming_unified_agent_engine import (
+    StreamingUnifiedAgentCodexAppServerEngine,
+)
 from odoo_ai.application.action_approval import ActionApprovalService
 from odoo_ai.application.action_command import ActionCommandService
 from odoo_ai.application.action_execution import ActionExecutionService
@@ -189,7 +191,7 @@ class RuntimeAgentFactory:
             tool_factory = retrieval_factory
             report_loader = retrieval_factory.take_report
 
-        reasoning = UnifiedAgentCodexAppServerEngine(
+        reasoning = StreamingUnifiedAgentCodexAppServerEngine(
             ConfiguredCodexRuntimeSettings.from_env(),
             tool_executor_factory=tool_factory,
         )
