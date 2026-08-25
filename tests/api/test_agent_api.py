@@ -16,6 +16,7 @@ from odoo_ai.contracts import (
     AnswerConfidence,
     PlanState,
 )
+from odoo_ai.runtime.agent_failure_diagnosis import AgentFailureDiagnosis
 from odoo_ai.security import SHARED_SECRET_HEADER
 
 SECRET = "agent-api-secret-" + "s" * 48
@@ -63,9 +64,15 @@ class StubPlanService:
 
 
 class StubAgentFactory:
-    def __init__(self, turn: object | None = None) -> None:
+    def __init__(
+        self,
+        turn: object | None = None,
+        diagnosis: AgentFailureDiagnosis | None = None,
+    ) -> None:
         self.turn = turn or StubTurnService()
         self.plans = StubPlanService()
+        self.diagnosis = diagnosis
+        self.diagnose_calls: list[tuple[UUID, str]] = []
 
     def turn_service(self, request: AgentTurnRequest) -> object:
         del request
@@ -76,6 +83,14 @@ class StubAgentFactory:
 
     def execution_service(self) -> object:
         return object()
+
+    async def diagnose_failure(
+        self,
+        request: AgentTurnRequest,
+        code: str,
+    ) -> AgentFailureDiagnosis | None:
+        self.diagnose_calls.append((request.turn_id, code))
+        return self.diagnosis
 
 
 @pytest.fixture(autouse=True)
@@ -162,11 +177,11 @@ def test_agent_turn_requires_machine_auth_and_never_accepts_authority_fields() -
     ("code", "expected_fragment"),
     [
         ("access_denied", "permisos"),
-        ("agent_engine_timeout", "tiempo seguro"),
-        ("tool_call_budget_exceeded", "límite de seguridad"),
+        ("agent_engine_timeout", "sin tiempo"),
+        ("tool_call_budget_exceeded", "demasiadas comprobaciones"),
     ],
 )
-def test_agent_turn_failures_are_user_facing_diagnostics(
+def test_agent_turn_has_a_plain_fallback_when_diagnosis_is_unavailable(
     code: str,
     expected_fragment: str,
 ) -> None:
@@ -183,11 +198,38 @@ def test_agent_turn_failures_are_user_facing_diagnostics(
     assert payload["plan"]["state"] == "failed"
     assert payload["plan"]["steps"] == []
     assert payload["plan"]["requires_confirmation"] is False
-    assert "**Diagnóstico.**" in payload["answer_markdown"]
-    assert "**Motivo.**" in payload["answer_markdown"]
-    assert "**Solución.**" in payload["answer_markdown"]
     assert expected_fragment in payload["answer_markdown"]
+    assert "**Diagnóstico.**" not in payload["answer_markdown"]
+    assert "App Server" not in payload["answer_markdown"]
+    assert "ACL" not in payload["answer_markdown"]
     assert code not in response.text
+    assert len(factory.diagnose_calls) == 1
+
+
+def test_agent_turn_prefers_evidence_backed_model_diagnosis() -> None:
+    diagnosis = AgentFailureDiagnosis(
+        answer_markdown=(
+            "He podido comprobar que el intento se interrumpió mientras el servicio interno "
+            "estaba degradado. No se aplicó ningún cambio. Puedo volver a intentarlo si quieres."
+        ),
+        confidence=AnswerConfidence.MEDIUM,
+    )
+    factory = StubAgentFactory(
+        FailingTurnService("tool_call_budget_exceeded"),
+        diagnosis=diagnosis,
+    )
+    app = create_app(agent_service_factory=factory)  # type: ignore[arg-type]
+
+    response = asyncio.run(_post(app, "/v1/agent/turn", _turn_payload()))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["answer_markdown"] == diagnosis.answer_markdown
+    assert payload["confidence"] == "medium"
+    assert payload["plan"]["state"] == "failed"
+    assert payload["plan"]["steps"] == []
+    assert "tool_call_budget_exceeded" not in response.text
+    assert len(factory.diagnose_calls) == 1
 
 
 def test_grouped_decision_is_bound_to_path_plan_and_authenticated_actor() -> None:
