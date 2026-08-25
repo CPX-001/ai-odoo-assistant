@@ -3,7 +3,6 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
-
 from odoo_ai.adapters import (
     ODOO_GET_EFFECTIVE_WRITE_SCHEMA,
     ODOO_PREVIEW_BUSINESS_ACTION,
@@ -15,6 +14,7 @@ from odoo_ai.adapters import (
     ActionToolExecutorFactory,
     action_tool_specs,
 )
+from odoo_ai.adapters.action_tools import PreviewSaleOrderBuildFlowRequest
 from odoo_ai.contracts import (
     ActionCreatePreview,
     ActionCreatePreviewSummary,
@@ -328,6 +328,23 @@ def test_action_registry_is_exact_preview_only_and_persists_real_proposal() -> N
         EvidenceStatus.CHECKED,
         EvidenceStatus.CHECKED,
     ]
+
+
+def test_sale_order_build_preview_normalizes_decimal_text_before_signing() -> None:
+    request = PreviewSaleOrderBuildFlowRequest.model_validate(
+        {
+            "end_state": "invoice_draft",
+            "partner_name": "AI TEST Cliente",
+            "create_synthetic_partner": True,
+            "product_name": "AI TEST Servicio",
+            "create_synthetic_product": True,
+            "quantity": "2.500",
+            "price_unit": "125.00",
+        }
+    )
+
+    assert request.quantity == "2.5"
+    assert request.price_unit == "125"
 
 
 def test_invalid_patch_arguments_can_be_corrected_without_switching_to_create() -> None:

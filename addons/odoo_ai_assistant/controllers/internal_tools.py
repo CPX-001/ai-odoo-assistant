@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 import os
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -59,6 +60,8 @@ ACTION_PREVIEW_ROUTE: Final = "/odoo_ai/internal/v1/action-preview"
 ACTION_COMMIT_ROUTE: Final = "/odoo_ai/internal/v1/action-commit"
 ACTION_VERIFY_ROUTE: Final = "/odoo_ai/internal/v1/action-verify"
 AGENT_MODEL_SEARCH_ROUTE: Final = "/odoo_ai/internal/v1/agent-model-search"
+
+_logger = logging.getLogger(__name__)
 
 
 class InternalOdooToolsController(http.Controller):
@@ -398,6 +401,12 @@ class InternalOdooToolsController(http.Controller):
         except MachineAuthenticationError as error:
             return _error_response(error.code, error.status)
         except OrmToolError as error:
+            _logger.warning(
+                "Odoo AI internal tool rejected operation=%s code=%s status=%s",
+                operation,
+                error.code,
+                error.status,
+            )
             return _error_response(error.code, error.status)
         except InstanceInventoryError as error:
             return _error_response(error.code, error.status)

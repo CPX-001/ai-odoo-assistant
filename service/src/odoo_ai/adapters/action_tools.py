@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from typing import Annotated, Literal, cast
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from odoo_ai.application import (
     ACTION_POLICY_REVISION,
@@ -162,6 +163,16 @@ class PreviewSaleOrderBuildFlowRequest(BaseModel):
         default=None,
         pattern=r"^(?:0|[1-9][0-9]{0,12})(?:\.[0-9]{1,6})?$",
     )
+
+    @field_validator("quantity", "price_unit")
+    @classmethod
+    def normalize_decimal_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = format(Decimal(value), "f")
+        if "." in normalized:
+            normalized = normalized.rstrip("0").rstrip(".")
+        return normalized
 
 
 BusinessPreviewRequest = (

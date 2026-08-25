@@ -101,8 +101,14 @@ class AssistantChatPolicy(models.Model):
         )
         explicit_synthetic = _explicit_synthetic_request(message)
         persisted_synthetic = bool(record and record.synthetic_data_authorized)
-        if synthetic_override.get("synthetic_data_authorized") is True:
+        synthetic_authorization_override = synthetic_override.get(
+            "synthetic_data_authorized"
+        )
+        if synthetic_authorization_override is True:
             persisted_synthetic = True
+        elif synthetic_authorization_override is False:
+            explicit_synthetic = False
+            persisted_synthetic = False
         return {
             "layers": {
                 "system_ceiling": dict(_SYSTEM_LAYER),
@@ -146,10 +152,15 @@ def _synthetic_override(message):
     if not isinstance(message, str):
         return {}
     normalized = " ".join(message.casefold().split())
-    if re.search(r"\bno (?:uses?|crees?)\b.{0,30}\b(?:datos )?sint[eé]tic", normalized):
+    if re.search(
+        r"\bno (?:uses?|crees?)\b.{0,40}\b"
+        r"(?:prueba|demo|demostraci[oó]n|fictici[oa]s?|sint[eé]tic[oa]s?|inventad[oa]s?)\b",
+        normalized,
+    ):
         return {"allow_synthetic_data": False, "synthetic_data_authorized": False}
     if re.search(
-        r"\b(?:puedes|autoriza\w*)\b.{0,35}\b(?:datos )?sint[eé]tic",
+        r"\b(?:puedes|autoriza\w*)\b.{0,50}\b"
+        r"(?:prueba|demo|demostraci[oó]n|fictici[oa]s?|sint[eé]tic[oa]s?|inventad[oa]s?)\b",
         normalized,
     ):
         return {"allow_synthetic_data": True, "synthetic_data_authorized": True}
@@ -162,7 +173,8 @@ def _explicit_synthetic_request(message):
     normalized = " ".join(message.casefold().split())
     return bool(
         re.search(
-            r"\b(prueba|demo|demostraci[oó]n|fictici[oa]s?|sint[eé]tic[oa]s?)\b",
+            r"\b(prueba|demo|demostraci[oó]n|fictici[oa]s?|sint[eé]tic[oa]s?|"
+            r"inventad[oa]s?)\b",
             normalized,
         )
     )
