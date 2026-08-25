@@ -21,12 +21,20 @@ Esto cubre modelos aportados por:
 Un resultado de búsqueda no concede permisos. Odoo repite la comprobación del
 modelo y construye el schema efectivo antes de leer o preparar un write.
 
+El agente dispone además de `odoo.get_instance_facts`, que obtiene mediante el
+endpoint machine-authenticated de inventario la versión real del servidor y los
+nombres técnicos de módulos instalados. No expone la base de datos ni las rutas
+físicas de addons. Esta consulta es lazy: no se ejecuta en todos los turnos, pero
+sí debe usarse cuando una respuesta pueda cambiar según versión o módulos.
+
 ## Capacidad genérica y capacidad tipada
 
 | Necesidad | Cobertura dinámica actual |
 | --- | --- |
+| Detectar versión/módulos instalados | Inventario runtime machine-authenticated |
 | Buscar modelos instalados | Registry runtime + ACL de lectura |
 | Consultar registros/agregados | Schema efectivo, domains y campos acotados |
+| Explorar addon conocido | Índice estructural acotado + refs fingerprinted |
 | Crear un registro | Schema create efectivo + `default_get` real |
 | Cambiar campos escalares/many2one | Schema write efectivo, máximo 16 campos |
 | Archivar | Acción reversible tipada sobre un registro elegible |
@@ -83,8 +91,9 @@ El ReasoningEngine aplica:
 
 ```text
 mensaje -> conversación -> pantalla/registro/compañía
--> búsqueda de modelos y registros -> defaults/schema
--> inferencia segura -> pregunta mínima
+-> versión/módulos si son relevantes
+-> búsqueda de modelos/registros o retrieval mínimo
+-> defaults/schema -> inferencia segura -> pregunta mínima
 ```
 
 El modelo puede pedir lecturas y previews, pero el host vuelve a validar todas
@@ -95,6 +104,38 @@ El riesgo no es por sí mismo una ambigüedad. Si el usuario ha expresado un
 alcance inequívoco (por ejemplo, "todos los pedidos visibles"), Codex no debe
 usar una pregunta conversacional como segunda capa de aprobación; el host decide
 si corresponde confirmar según el perfil de autonomía del usuario.
+
+### Preguntas teóricas, configuración y HOW_TO
+
+Una pregunta teórica no debe convertirse automáticamente en una respuesta
+enciclopédica genérica. Se distingue entre conocimiento realmente general y una
+pregunta sobre **esta instalación**.
+
+Para una petición como "¿hay alguna configuración de facturación que habilite
+opciones adicionales como analítica?", el comportamiento esperado es:
+
+1. comprobar versión y módulos instalados si pueden cambiar la respuesta;
+2. consultar knowledge configurado y leer el excerpt verificado si hay
+   documentación relevante;
+3. usar schema/navigation runtime cuando aporte una ubicación o capacidad real;
+4. si interviene un addon custom/OCA/tercero, verificar que está instalado y,
+   cuando no se conoce el símbolo exacto, usar `source.inspect_module` para
+   obtener la estructura indexada; después abrir sólo los excerpts relevantes
+   mediante refs con fingerprint;
+5. responder primero con la conclusión y después sólo con los detalles útiles.
+
+El agente no debe inventar un menú, sección de Settings, checkbox, dependencia o
+campo exacto. Si puede validar la funcionalidad pero no la ubicación visual,
+debe decirlo expresamente en vez de rellenar el hueco con "seguramente está en
+Ajustes". Si el retrieval necesario está temporalmente indisponible, puede dar
+orientación general claramente marcada como tal y bajar la confianza, pero no
+presentarla como un hecho observado en el servidor.
+
+`source.inspect_module` no concede acceso libre al filesystem: sólo enumera una
+cantidad acotada de símbolos del índice persistente de un módulo técnico exacto.
+El contenido de código sigue requiriendo `source.read_excerpt`, que vuelve a
+validar el fingerprint contra el fichero actual. No se ejecuta shell, grep libre
+ni rescan durante el turno.
 
 ## Decisión y commit
 
