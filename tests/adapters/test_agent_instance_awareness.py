@@ -113,16 +113,21 @@ def test_unified_agent_exposes_instance_and_module_discovery_tools() -> None:
 
     assert ODOO_GET_INSTANCE_FACTS in specs
     assert SOURCE_INSPECT_MODULE in specs
-    assert "query" in specs[SOURCE_INSPECT_MODULE].input_schema["properties"]
+    inspect_properties = specs[SOURCE_INSPECT_MODULE].input_schema["properties"]
+    assert "query" in inspect_properties
+    assert inspect_properties["max_results"]["maximum"] == 24
     assert (
         specs[ODOO_GET_INSTANCE_FACTS].input_schema["properties"]["max_modules"]["maximum"]
         == 64
     )
     assert "XML records" in specs[SOURCE_INSPECT_MODULE].description
+    assert "kind=xml_id" in specs[SOURCE_INSPECT_MODULE].description
     assert "odoo.get_instance_facts" in _UNIFIED_AGENT_INSTRUCTIONS
     assert "source.inspect_module" in _UNIFIED_AGENT_INSTRUCTIONS
     assert "Never invent an exact menu" in _UNIFIED_AGENT_INSTRUCTIONS
     assert "res.config.settings" in _UNIFIED_AGENT_INSTRUCTIONS
+    assert "kind=xml_id" in _UNIFIED_AGENT_INSTRUCTIONS
+    assert "exact visual location" in _UNIFIED_AGENT_INSTRUCTIONS
 
 
 def test_instance_facts_are_checked_cached_and_do_not_expose_host_paths() -> None:
