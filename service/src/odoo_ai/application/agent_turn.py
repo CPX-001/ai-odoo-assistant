@@ -15,7 +15,12 @@ from odoo_ai.application.agent_execution import (
     AgentExecutionError,
     AgentPlanExecutionService,
 )
-from odoo_ai.application.agent_plans import AgentPlanError, AgentPlanService, agent_plan_view
+from odoo_ai.application.agent_plans import (
+    RECOVERABLE_EXECUTION_ERROR,
+    AgentPlanError,
+    AgentPlanService,
+    agent_plan_view,
+)
 from odoo_ai.application.agent_policy import (
     AgentPolicyError,
     AgentProposalBinding,
@@ -92,7 +97,7 @@ _EXECUTION_FAILURE_MESSAGES = {
         "No se pudo verificar el resultado de forma fiable, así que no afirmo que haya "
         "quedado aplicado."
     ),
-    "batch_execution_outcome_unknown": (
+    RECOVERABLE_EXECUTION_ERROR: (
         "El resultado del lote quedó ambiguo y se conservará el mismo intento para una "
         "recuperación idempotente; no se inicia un segundo lote."
     ),
@@ -288,6 +293,15 @@ def _execution_answer(status) -> str:
     partial = sum(step.state == "partial" for step in plan.steps)
     failed = sum(step.state == "failed" for step in plan.steps)
     skipped = sum(step.state == "skipped" for step in plan.steps)
+    if (
+        plan.state is PlanState.AUTHORIZED
+        and status.error_code == RECOVERABLE_EXECUTION_ERROR
+    ):
+        return (
+            "**Recuperación pendiente.** El resultado del lote quedó ambiguo. "
+            "Se conservan la misma autorización y el mismo intento idempotente; "
+            "reintenta la ejecución para recuperar el resultado sin duplicar cambios."
+        )
     if plan.state is PlanState.COMPLETED:
         if completed <= 1:
             return "**Hecho.** La operación se ejecutó y Odoo verificó el resultado."
