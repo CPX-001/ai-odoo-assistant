@@ -42,6 +42,11 @@ def _status(
         )
         for index, step_state in enumerate(step_states, start=1)
     )
+    completed_at = (
+        NOW + timedelta(seconds=1)
+        if state in {PlanState.COMPLETED, PlanState.PARTIAL, PlanState.FAILED}
+        else None
+    )
     return AgentPlanStatusResponse(
         plan=AgentPlanView(
             plan_id=uuid4(),
@@ -70,7 +75,7 @@ def _status(
         ),
         answer_markdown="He preparado una previsualización; todavía no se ha ejecutado.",
         error_code=error_code,
-        completed_at=NOW + timedelta(seconds=1),
+        completed_at=completed_at,
     )
 
 
@@ -120,3 +125,18 @@ def test_partial_execution_reports_applied_and_failed_counts() -> None:
     assert "1 completadas" in answer
     assert "1 fallidas" in answer
     assert "1 omitidas" in answer
+
+
+def test_ambiguous_batch_is_presented_as_recovery_not_failure() -> None:
+    answer = _execution_answer(
+        _status(
+            PlanState.AUTHORIZED,
+            step_states=("completed", "planned"),
+            error_code="batch_execution_outcome_unknown",
+        )
+    )
+
+    assert "Recuperación pendiente" in answer
+    assert "misma autorización" in answer
+    assert "mismo intento idempotente" in answer
+    assert "No se pudo completar" not in answer
