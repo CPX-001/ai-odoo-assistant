@@ -5,7 +5,7 @@
             <button type="button" class="o_nav_entry border-0 px-3" title="AI Assistant"
                 aria-label="Abrir AI Assistant" t-att-aria-expanded="state.isOpen ? 'true' : 'false'"
                 t-on-click="togglePanel">
-                <i class="fa fa-magic" aria-hidden="true"/>
+                <span class="o_ai_assistant_systray_icon" aria-hidden="true"/>
             </button>
         </div>
     </t>

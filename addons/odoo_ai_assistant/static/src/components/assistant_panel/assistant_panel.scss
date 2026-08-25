@@ -1,3 +1,12 @@
+.o_ai_assistant_systray_icon {
+    display: inline-block;
+    width: 1.05rem;
+    height: 1.05rem;
+    background-color: currentColor;
+    -webkit-mask: url("/odoo_ai_assistant/static/src/img/bootstrap-icons-stars.svg") center / contain no-repeat;
+    mask: url("/odoo_ai_assistant/static/src/img/bootstrap-icons-stars.svg") center / contain no-repeat;
+}
+
 .o_ai_assistant_panel {
     --o-ai-accent: #{$o-brand-primary};
     --o-ai-gray-100: #{$o-gray-100};
