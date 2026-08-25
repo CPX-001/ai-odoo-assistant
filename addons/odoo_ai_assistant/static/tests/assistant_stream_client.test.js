@@ -40,6 +40,15 @@ function event(name, payload) {
     return `event: ${name}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
 
+function jsonResponse(result) {
+    return {
+        ok: true,
+        async json() {
+            return { jsonrpc: "2.0", id: 1, result };
+        },
+    };
+}
+
 test("browser stream accepts fragmented deltas and one terminal final", async () => {
     const deltas = [];
     const final = { ok: true, answer: "Hola mundo" };
@@ -120,40 +129,67 @@ test("browser stream enforces delta, frame, and total-byte limits", async () => 
     }
 });
 
-test("browser streaming request keeps Odoo session CSRF and never needs assistant secret", async () => {
-    const previousOdoo = globalThis.odoo;
-    globalThis.odoo = { ...(previousOdoo || {}), csrf_token: "csrf-test-token" };
-    let observedPath;
-    let observedOptions;
-    try {
-        const result = await streamAssistantChat({
-            payload: {
-                message: "Lista presupuestos",
-                screen: { model: "project.task" },
-                conversation_id: null,
-            },
-            onDelta: () => {},
-            fetchCall: async (path, options) => {
-                observedPath = path;
-                observedOptions = options;
-                return responseFromStrings([
-                    event("final", {
-                        type: "final",
-                        response: { ok: true, answer: "5 presupuestos" },
-                    }),
-                ]);
-            },
-        });
+test("product chat uses Odoo-native queue and status without assistant secret", async () => {
+    const calls = [];
+    const progress = [];
+    const final = {
+        ok: true,
+        turn_id: "turn-1",
+        conversation_id: "conversation-1",
+        workflow: "AGENT",
+        answer: "5 presupuestos",
+        confidence: "high",
+        limitations: [],
+        citations: [],
+        plan: {},
+    };
+    const result = await streamAssistantChat({
+        payload: {
+            message: "Lista presupuestos",
+            screen: { model: "project.task" },
+            conversation_id: null,
+        },
+        onDelta: (text) => progress.push(text),
+        waitCall: async () => {},
+        fetchCall: async (path, options) => {
+            calls.push({ path, options });
+            if (path === "/odoo_ai/v1/turn") {
+                return jsonResponse({
+                    ok: true,
+                    turn_id: "turn-1",
+                    state: "queued",
+                    last_sequence: 1,
+                    events: [{ type: "queued" }],
+                });
+            }
+            return jsonResponse({
+                ok: true,
+                turn_id: "turn-1",
+                state: "completed",
+                last_sequence: 4,
+                events: [
+                    { type: "started" },
+                    { type: "reasoning.started" },
+                    { type: "reasoning.completed" },
+                ],
+                response: final,
+            });
+        },
+    });
 
-        expect(result.answer).toBe("5 presupuestos");
-        expect(observedPath).toBe("/odoo_ai/v1/chat/stream");
-        expect(observedOptions.credentials).toBe("same-origin");
-        expect(observedOptions.headers.Accept).toBe("text/event-stream");
-        expect(observedOptions.body.get("csrf_token")).toBe("csrf-test-token");
-        expect(observedOptions.body.get("message")).toBe("Lista presupuestos");
-        expect(observedOptions.body.get("screen")).toInclude("project.task");
-        expect(JSON.stringify(observedOptions)).not.toInclude("Shared-Secret");
-    } finally {
-        globalThis.odoo = previousOdoo;
-    }
+    expect(result.answer).toBe("5 presupuestos");
+    expect(calls.map((item) => item.path)).toEqual([
+        "/odoo_ai/v1/turn",
+        "/odoo_ai/v1/turn/status",
+    ]);
+    expect(calls[0].options.credentials).toBe("same-origin");
+    expect(calls[0].options.headers.Accept).toBe("application/json");
+    expect(JSON.parse(calls[0].options.body).params.message).toBe("Lista presupuestos");
+    expect(JSON.stringify(calls)).not.toInclude("Shared-Secret");
+    expect(progress).toEqual([
+        "Petición en cola…\n",
+        "Procesando petición…\n",
+        "Analizando petición…\n",
+        "Preparando respuesta…\n",
+    ]);
 });
