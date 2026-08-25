@@ -31,6 +31,7 @@ from odoo_ai.ports.agent_plans import (
 )
 
 PLAN_TTL = timedelta(minutes=10)
+PLAN_RECOVERY_TTL = timedelta(days=30)
 RECOVERABLE_EXECUTION_ERROR = "batch_execution_outcome_unknown"
 Clock = Callable[[], datetime]
 
@@ -155,10 +156,23 @@ class AgentPlanService:
         )
 
     def claim_execution(self, request: AgentPlanExecutionRequest) -> StoredAgentPlan:
+        now = self._now()
+        existing = self._store.get(request.plan_id)
+        if (
+            existing is not None
+            and existing.actor == request.actor
+            and existing.state is PlanState.AUTHORIZED
+            and existing.error_code == RECOVERABLE_EXECUTION_ERROR
+            and now >= existing.created_at + PLAN_RECOVERY_TTL
+        ):
+            # Odoo row receipts are retained for a finite period. Never allow an old
+            # browser/client to exercise recoverable authority indefinitely after that
+            # idempotency window has become stale.
+            raise AgentPlanError("agent_plan_expired", 410)
         result = self._store.claim_execution(
             plan_id=request.plan_id,
             actor=request.actor,
-            started_at=self._now(),
+            started_at=now,
         )
         plan = _transition_plan(result.outcome, result.plan)
         if plan.authorization_id is None or plan.authorization_source is None:
