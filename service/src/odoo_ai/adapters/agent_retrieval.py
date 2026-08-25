@@ -382,7 +382,7 @@ class LazySharedSessionSourceBackend:
             except ToolExecutorError:
                 raise
             except (OdooGatewayError, OSError, RuntimeError, ValueError):
-                raise ToolExecutorError("instance_facts_unavailable") from None
+                raise ToolExecutorError("source_tool_unavailable") from None
             self._inventory = inventory
             return inventory
 
