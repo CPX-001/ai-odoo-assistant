@@ -80,8 +80,12 @@
                     <div><i class="fa fa-spinner fa-spin me-1" aria-hidden="true"/> Pensando…</div>
                 </div>
 
-                <div t-if="state.errorCode" class="alert alert-danger mt-3 mb-0" role="alert">
-                    <t t-esc="errorMessage"/>
+                <div t-if="state.errorCode"
+                    class="o_ai_assistant_message o_ai_assistant_message_assistant mt-3"
+                    role="status">
+                    <div class="small text-muted mb-1">Assistant</div>
+                    <div class="o_ai_assistant_message_content o_ai_assistant_failure_message text-break"
+                        t-esc="errorMessage"/>
                 </div>
 
                 <section t-if="state.result and state.result.plan and state.result.plan.state === 'awaiting_confirmation' and !state.actionReceipt"
