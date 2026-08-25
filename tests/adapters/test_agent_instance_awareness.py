@@ -89,6 +89,7 @@ def test_unified_agent_exposes_instance_and_module_discovery_tools() -> None:
     assert "odoo.get_instance_facts" in _UNIFIED_AGENT_INSTRUCTIONS
     assert "source.inspect_module" in _UNIFIED_AGENT_INSTRUCTIONS
     assert "Never invent an exact menu" in _UNIFIED_AGENT_INSTRUCTIONS
+    assert "res.config.settings" in _UNIFIED_AGENT_INSTRUCTIONS
 
 
 def test_instance_facts_are_checked_cached_and_do_not_expose_host_paths() -> None:
