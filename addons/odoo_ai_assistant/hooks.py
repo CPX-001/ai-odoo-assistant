@@ -1,19 +1,26 @@
-"""Install-time product initialization that delegates heavy work to the Assistant Service."""
+"""Install-time initialization for the Odoo-owned Assistant runtime."""
 
 import logging
 
+from .runtime import RuntimePathError, RuntimePaths
 from .services.assistant_client import AssistantServiceError
 
 LOGGER = logging.getLogger(__name__)
 
 
 def post_init_hook(env) -> None:
-    """Build persistent source/knowledge indexes after the addon is installed.
+    """Create the local runtime layout and defer expensive initialization safely.
 
-    Odoo only triggers the local service; filesystem scanning and indexing remain
-    inside the Assistant Service boundary. Installation is not rolled back when
-    the optional reasoning/index service is temporarily unavailable.
+    During the architectural migration the existing Assistant Service refresh is
+    kept as a compatibility bridge. The Odoo-owned runtime directory is created
+    unconditionally so Codex and later embedded scanners never need /opt, /etc,
+    /var/lib, root privileges, or a second Unix identity.
     """
+
+    try:
+        RuntimePaths.from_odoo().ensure()
+    except RuntimePathError as error:
+        LOGGER.warning("Odoo AI runtime directory initialization failed: %s", error)
 
     try:
         client = env["odoo.ai.assistant.bridge"]._client()
@@ -27,6 +34,6 @@ def post_init_hook(env) -> None:
             }
         )
     except AssistantServiceError as error:
-        LOGGER.warning("Odoo AI initial index refresh deferred: %s", error.code)
+        LOGGER.info("Odoo AI legacy index refresh deferred: %s", error.code)
     except Exception:  # noqa: BLE001 - install must not leak deployment details
-        LOGGER.warning("Odoo AI initial index refresh deferred")
+        LOGGER.info("Odoo AI legacy index refresh deferred")

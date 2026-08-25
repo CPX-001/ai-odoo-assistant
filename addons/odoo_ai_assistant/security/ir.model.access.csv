@@ -5,3 +5,6 @@ access_odoo_ai_action_execution_internal,odoo.ai.action.execution internal,model
 access_odoo_ai_batch_execution_internal,odoo.ai.batch.execution internal,model_odoo_ai_batch_execution,base.group_user,1,1,1,0
 access_odoo_ai_user_preference_internal,odoo.ai.user.preference internal,model_odoo_ai_user_preference,base.group_user,1,1,1,1
 access_odoo_ai_chat_policy_internal,odoo.ai.chat.policy internal,model_odoo_ai_chat_policy,base.group_user,1,1,1,1
+access_odoo_ai_conversation_internal,odoo.ai.conversation internal,model_odoo_ai_conversation,base.group_user,1,1,1,1
+access_odoo_ai_message_internal,odoo.ai.message internal,model_odoo_ai_message,base.group_user,1,0,1,1
+access_odoo_ai_turn_internal,odoo.ai.turn internal,model_odoo_ai_turn,base.group_user,1,1,1,0

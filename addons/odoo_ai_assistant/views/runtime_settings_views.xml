@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_odoo_ai_assistant_runtime" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.odoo.ai.assistant.runtime</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="odoo_ai_assistant.res_config_settings_view_form_odoo_ai_assistant"/>
+        <field name="arch" type="xml">
+            <xpath expr="//app[@name='odoo_ai_assistant']/block[1]" position="before">
+                <block title="Embedded runtime">
+                    <setting
+                        string="Codex executable"
+                        help="Leave empty to auto-detect codex from the Odoo service PATH. No binary is downloaded by the addon."
+                    >
+                        <field name="assistant_codex_executable" placeholder="/usr/local/bin/codex"/>
+                        <div class="text-muted">
+                            Detected: <field name="assistant_codex_executable_effective" class="oe_inline"/>
+                            (<field name="assistant_codex_state" class="oe_inline"/>)
+                        </div>
+                    </setting>
+                    <setting
+                        string="Runtime data"
+                        help="Mutable Assistant and CODEX_HOME state lives below Odoo data_dir and inherits the Odoo process identity."
+                    >
+                        <field name="assistant_runtime_directory"/>
+                        <div class="text-muted">
+                            State: <field name="assistant_runtime_state" class="oe_inline"/>
+                        </div>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

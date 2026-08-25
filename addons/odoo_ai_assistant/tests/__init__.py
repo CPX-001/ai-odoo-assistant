@@ -6,6 +6,7 @@ from . import test_batch_preflight as test_batch_preflight
 from . import test_batch_tools as test_batch_tools
 from . import test_chat_policy as test_chat_policy
 from . import test_chat_preferences as test_chat_preferences
+from . import test_chat_storage as test_chat_storage
 from . import test_diagnostics as test_diagnostics
 from . import test_maintenance as test_maintenance
 from . import test_navigation as test_navigation
