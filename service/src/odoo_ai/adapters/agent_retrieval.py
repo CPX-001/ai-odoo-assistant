@@ -82,6 +82,7 @@ SOURCE_INSPECT_MODULE = "source.inspect_module"
 _INSTANCE_FACTS_EXECUTOR_ID = "odoo.get_instance_facts.v1"
 _INSPECT_MODULE_EXECUTOR_ID = "source.inspect_module.v1"
 _MAX_INSTANCE_MODULES = 64
+_MAX_MODULE_INSPECTION_RESULTS = 24
 
 
 class AgentInstanceFactsRequest(BaseModel):
@@ -120,7 +121,12 @@ class AgentModuleInspectionRequest(BaseModel):
 
     module: str = Field(pattern=r"^[A-Za-z0-9_]+$", min_length=1, max_length=255)
     query: str | None = Field(default=None, min_length=1, max_length=128)
-    max_results: int = Field(default=40, strict=True, ge=1, le=50)
+    max_results: int = Field(
+        default=20,
+        strict=True,
+        ge=1,
+        le=_MAX_MODULE_INSPECTION_RESULTS,
+    )
 
     @field_validator("query")
     @classmethod
@@ -148,7 +154,9 @@ class AgentModuleInspectionResult(BaseModel):
     module: str = Field(pattern=r"^[A-Za-z0-9_]+$", min_length=1, max_length=255)
     installed: bool
     indexed: bool
-    symbols: tuple[AgentModuleSymbol, ...] = Field(max_length=50)
+    symbols: tuple[AgentModuleSymbol, ...] = Field(
+        max_length=_MAX_MODULE_INSPECTION_RESULTS
+    )
     truncated: bool
 
 
