@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ...capabilities.contracts import (
+from ....services.turn_context import TurnContextError, search_agent_models
+from ..contracts import (
     CapabilityContext,
     CapabilityEffect,
+    CapabilityError,
     CapabilityRisk,
 )
-from ...capabilities.decorators import tool
-from ....services.turn_context import TurnContextError, search_agent_models
+from ..decorators import tool
 
 
 @tool(
@@ -66,8 +67,6 @@ def search_models(context: CapabilityContext, arguments):
             limit=arguments.get("limit", 20),
         )
     except TurnContextError as error:
-        from ...capabilities.contracts import CapabilityError
-
         raise CapabilityError(error.code) from error
     return {
         "models": models,
