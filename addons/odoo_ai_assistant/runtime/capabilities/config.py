@@ -1,16 +1,17 @@
-"""Generic declarative settings resolution for capabilities."""
+"""Generic declarative settings and enablement resolution for capabilities."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 from .contracts import CapabilityDefinition, CapabilityError, CapabilitySettingType, JsonValue
 
 _CONFIG_PREFIX = "odoo_ai_assistant.capability."
+_ENABLED_PREFIX = "odoo_ai_assistant.capability_enabled."
 
 
 class CapabilityConfigResolver:
-    """Resolve defaults → namespace → capability → turn overrides."""
+    """Resolve global defaults → namespace → capability → turn overrides."""
 
     def __init__(self, parameter_getter=None) -> None:
         self._get = parameter_getter
@@ -41,9 +42,32 @@ class CapabilityConfigResolver:
         _validate_resolved(definition, values)
         return values
 
+    def enabled(self, definition: CapabilityDefinition) -> bool:
+        if self._get is None:
+            return definition.default_enabled
+        enabled = definition.default_enabled
+        for namespace in _namespace_chain(definition.namespace):
+            raw = self._get(f"{_ENABLED_PREFIX}{namespace}.*")
+            if raw not in (None, False, ""):
+                enabled = _decode_bool(raw)
+        raw = self._get(self.enabled_parameter_key(definition.name))
+        if raw not in (None, False, ""):
+            enabled = _decode_bool(raw)
+        return enabled
+
+    def enablement_overrides(
+        self,
+        definitions: Iterable[CapabilityDefinition],
+    ) -> dict[str, bool]:
+        return {definition.name: self.enabled(definition) for definition in definitions}
+
     @staticmethod
     def parameter_key(capability_name: str, setting_key: str) -> str:
         return f"{_CONFIG_PREFIX}{capability_name}.{setting_key}"
+
+    @staticmethod
+    def enabled_parameter_key(capability_name: str) -> str:
+        return f"{_ENABLED_PREFIX}{capability_name}"
 
 
 def _namespace_chain(namespace: str) -> tuple[str, ...]:
@@ -51,14 +75,19 @@ def _namespace_chain(namespace: str) -> tuple[str, ...]:
     return tuple(".".join(parts[:index]) for index in range(1, len(parts) + 1))
 
 
+def _decode_bool(raw: object) -> bool:
+    value = str(raw).lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise CapabilityError("capability_setting_value_invalid")
+
+
 def _decode(kind: CapabilitySettingType, raw: object, choices: tuple[str, ...]) -> JsonValue:
     value = str(raw)
     if kind is CapabilitySettingType.BOOLEAN:
-        if value.lower() in {"1", "true", "yes", "on"}:
-            return True
-        if value.lower() in {"0", "false", "no", "off"}:
-            return False
-        raise CapabilityError("capability_setting_value_invalid")
+        return _decode_bool(raw)
     if kind is CapabilitySettingType.INTEGER:
         try:
             return int(value)
