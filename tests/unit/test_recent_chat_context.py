@@ -22,7 +22,7 @@ def test_recent_chat_text_keeps_newest_messages_when_char_budget_is_tight() -> N
         actor=ChatActor(database="customer", uid=7),
         conversation_id=conversation_id,
         max_messages=8,
-        max_chars=45,
+        max_chars=46,
     )
 
     assert "old context" not in result
