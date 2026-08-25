@@ -1,3 +1,4 @@
+from . import test_agent_plan_recovery_bridge as test_agent_plan_recovery_bridge
 from . import test_assistant_bridge as test_assistant_bridge
 from . import test_batch_commit as test_batch_commit
 from . import test_batch_preflight as test_batch_preflight
