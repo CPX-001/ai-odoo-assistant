@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
+from urllib.parse import urlencode
 
 from .assistant_client import (
     MAX_REQUEST_BYTES,
@@ -34,6 +35,20 @@ class AssistantChatServiceClient(AssistantServiceClient):
         payload: dict[str, object],
     ) -> dict[str, object]:
         return self._chat_post(f"/v1/agent/plans/{plan_id}/execute", payload)
+
+    def agent_plan_status(
+        self,
+        plan_id: str,
+        *,
+        database: str,
+        uid: int,
+    ) -> dict[str, object]:
+        secret = self._read_shared_secret()
+        query = urlencode({"database": database, "uid": uid})
+        return self._get_json(
+            f"/v1/agent/plans/{plan_id}?{query}",
+            headers={SHARED_SECRET_HEADER: secret},
+        )
 
     def chat_history(self, payload: dict[str, object]) -> dict[str, object]:
         return self._chat_post("/v1/chat/history", payload)
