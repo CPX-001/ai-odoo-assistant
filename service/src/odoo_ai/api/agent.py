@@ -98,14 +98,26 @@ async def agent_turn(
     payload: AgentTurnRequest,
     request: Request,
 ) -> AgentTurnResponse:
+    factory = _factory(request)
     try:
-        return await _factory(request).turn_service(payload).run(payload)
+        return await factory.turn_service(payload).run(payload)
     except AgentTurnError as error:
-        LOGGER.warning("Unified agent turn failed: %s", error.code)
-        return agent_failure_response(payload, error.code)
+        LOGGER.warning(
+            "Unified agent turn failed turn_id=%s code=%s",
+            payload.turn_id,
+            error.code,
+        )
+        return await _diagnosed_failure_response(factory, payload, error.code)
     except Exception:
-        LOGGER.exception("Unified agent turn failed unexpectedly")
-        return agent_failure_response(payload, "agent_unavailable")
+        LOGGER.exception(
+            "Unified agent turn failed unexpectedly turn_id=%s",
+            payload.turn_id,
+        )
+        return await _diagnosed_failure_response(
+            factory,
+            payload,
+            "agent_unavailable",
+        )
 
 
 @router.post(
@@ -118,9 +130,10 @@ async def agent_turn_stream(
 ) -> StreamingResponse:
     """Stream provisional answer text and finish with one host-validated turn response."""
 
-    service = _factory(request).turn_service(payload)
+    factory = _factory(request)
+    service = factory.turn_service(payload)
     return StreamingResponse(
-        _stream_agent_turn(payload, service),
+        _stream_agent_turn(payload, service, factory),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -197,6 +210,7 @@ async def agent_plan_status(
 async def _stream_agent_turn(
     payload: AgentTurnRequest,
     service: AgentTurnService,
+    factory: AgentServiceFactory,
 ) -> AsyncIterator[bytes]:
     queue: asyncio.Queue[AgentTurnDeltaEvent | AgentTurnFinalEvent | None] = asyncio.Queue(
         maxsize=_STREAM_QUEUE_SIZE
@@ -211,11 +225,26 @@ async def _stream_agent_turn(
             try:
                 response = await service.run(payload)
             except AgentTurnError as error:
-                LOGGER.warning("Unified streaming agent turn failed: %s", error.code)
-                response = agent_failure_response(payload, error.code)
+                LOGGER.warning(
+                    "Unified streaming agent turn failed turn_id=%s code=%s",
+                    payload.turn_id,
+                    error.code,
+                )
+                response = await _diagnosed_failure_response(
+                    factory,
+                    payload,
+                    error.code,
+                )
             except Exception:
-                LOGGER.exception("Unified streaming agent turn failed unexpectedly")
-                response = agent_failure_response(payload, "agent_unavailable")
+                LOGGER.exception(
+                    "Unified streaming agent turn failed unexpectedly turn_id=%s",
+                    payload.turn_id,
+                )
+                response = await _diagnosed_failure_response(
+                    factory,
+                    payload,
+                    "agent_unavailable",
+                )
             await queue.put(AgentTurnFinalEvent(response=response))
         finally:
             reset_agent_delta_sink(token)
@@ -232,6 +261,31 @@ async def _stream_agent_turn(
         if not producer.done():
             producer.cancel()
         await asyncio.gather(producer, return_exceptions=True)
+
+
+async def _diagnosed_failure_response(
+    factory: AgentServiceFactory,
+    payload: AgentTurnRequest,
+    code: str,
+) -> AgentTurnResponse:
+    diagnose = getattr(factory, "diagnose_failure", None)
+    if callable(diagnose):
+        try:
+            diagnosis = await diagnose(payload, code)
+        except Exception:  # noqa: BLE001 - fallback must survive diagnosis failure
+            LOGGER.exception(
+                "Unified failure diagnosis failed turn_id=%s",
+                payload.turn_id,
+            )
+        else:
+            if diagnosis is not None:
+                return agent_failure_response(
+                    payload,
+                    code,
+                    answer_markdown=diagnosis.answer_markdown,
+                    confidence=diagnosis.confidence,
+                )
+    return agent_failure_response(payload, code)
 
 
 def _sse_event(event: str, payload: dict[str, object]) -> bytes:
