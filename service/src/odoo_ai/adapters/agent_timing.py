@@ -5,7 +5,12 @@ from __future__ import annotations
 import logging
 from time import monotonic
 
-from odoo_ai.tools import ToolCall, ToolExecutor, ValidatedToolResult
+from odoo_ai.tools import (
+    ToolCall,
+    ToolExecutor,
+    ToolExecutorError,
+    ValidatedToolResult,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +33,15 @@ class TimedToolExecutor(ToolExecutor):
     async def execute(self, call: ToolCall) -> ValidatedToolResult:
         started = monotonic()
         try:
-            return await super().execute(call)
-        finally:
-            log_agent_timing("tool_call", started, tool=call.tool_name)
+            result = await super().execute(call)
+        except ToolExecutorError as error:
+            log_agent_timing(
+                "tool_call",
+                started,
+                tool=call.tool_name,
+                status="error",
+                error=error.code,
+            )
+            raise
+        log_agent_timing("tool_call", started, tool=call.tool_name, status="ok")
+        return result
