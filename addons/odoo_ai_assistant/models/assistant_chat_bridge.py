@@ -166,6 +166,30 @@ class AssistantChatBridge(models.AbstractModel):
         except Exception:  # noqa: BLE001 - browser boundary stays sanitized
             return _error("service_unavailable")
 
+    @api.model
+    def agent_plan_status(self, plan_id):
+        """Revalidate a cached plan id against the current Odoo actor."""
+
+        if not self.env.user._is_internal():
+            return _error("access_denied")
+        try:
+            parsed_plan_id = _required_uuid(plan_id)
+            actor = self._chat_actor()
+            status = self._chat_client().agent_plan_status(
+                parsed_plan_id,
+                database=actor["database"],
+                uid=actor["uid"],
+            )
+            return _browser_plan_execution(status, parsed_plan_id)
+        except ValueError:
+            return _error("invalid_context")
+        except AssistantServiceError as error:
+            if error.code in {"conversation_not_found", "diagnostic_not_found"}:
+                return _error("invalid_context")
+            return _error(_client_error_code(error.code))
+        except Exception:  # noqa: BLE001 - browser boundary stays sanitized
+            return _error("service_unavailable")
+
     def _agent_policy_layers(self, conversation_id, message):
         return self.env["odoo.ai.chat.policy"].policy_layers_for_turn(
             conversation_id=conversation_id,
