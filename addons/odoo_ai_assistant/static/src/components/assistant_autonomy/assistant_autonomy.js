@@ -16,6 +16,13 @@ patch(AssistantPanel.prototype, {
         return PROFILE_LABELS[this.state.autonomyProfile] || PROFILE_LABELS.balanced;
     },
 
+    get recoveryPending() {
+        return (
+            this.state.result?.plan?.state === "authorized" ||
+            typeof this.state.recoveryPlanId === "string"
+        );
+    },
+
     get actionDecisionMessage() {
         const messages = {
             authorized: _t(
