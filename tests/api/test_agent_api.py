@@ -7,6 +7,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from odoo_ai.api import create_app
+from odoo_ai.application.agent_turn import AgentTurnError
 from odoo_ai.contracts import (
     AgentPlanDecisionRequest,
     AgentPlanDecisionResponse,
@@ -38,6 +39,15 @@ class StubTurnService:
         )
 
 
+class FailingTurnService:
+    def __init__(self, code: str) -> None:
+        self.code = code
+
+    async def run(self, request: AgentTurnRequest) -> AgentTurnResponse:
+        del request
+        raise AgentTurnError(self.code, 503)
+
+
 class StubPlanService:
     def __init__(self) -> None:
         self.decisions: list[AgentPlanDecisionRequest] = []
@@ -53,11 +63,11 @@ class StubPlanService:
 
 
 class StubAgentFactory:
-    def __init__(self) -> None:
-        self.turn = StubTurnService()
+    def __init__(self, turn: object | None = None) -> None:
+        self.turn = turn or StubTurnService()
         self.plans = StubPlanService()
 
-    def turn_service(self, request: AgentTurnRequest) -> StubTurnService:
+    def turn_service(self, request: AgentTurnRequest) -> object:
         del request
         return self.turn
 
@@ -144,7 +154,40 @@ def test_agent_turn_requires_machine_auth_and_never_accepts_authority_fields() -
     assert valid.json()["state"] == "completed"
     assert "capability_token" not in valid.text
     assert injected.status_code == 422
+    assert isinstance(factory.turn, StubTurnService)
     assert len(factory.turn.requests) == 1
+
+
+@pytest.mark.parametrize(
+    ("code", "expected_fragment"),
+    [
+        ("access_denied", "permisos"),
+        ("agent_engine_timeout", "tiempo seguro"),
+        ("tool_call_budget_exceeded", "límite de seguridad"),
+    ],
+)
+def test_agent_turn_failures_are_user_facing_diagnostics(
+    code: str,
+    expected_fragment: str,
+) -> None:
+    factory = StubAgentFactory(FailingTurnService(code))
+    app = create_app(agent_service_factory=factory)  # type: ignore[arg-type]
+
+    response = asyncio.run(_post(app, "/v1/agent/turn", _turn_payload()))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["state"] == "failed"
+    assert payload["confidence"] == "low"
+    assert payload["plan"]["state"] == "failed"
+    assert payload["plan"]["steps"] == []
+    assert payload["plan"]["requires_confirmation"] is False
+    assert "**Diagnóstico.**" in payload["answer_markdown"]
+    assert "**Motivo.**" in payload["answer_markdown"]
+    assert "**Solución.**" in payload["answer_markdown"]
+    assert expected_fragment in payload["answer_markdown"]
+    assert code not in response.text
 
 
 def test_grouped_decision_is_bound_to_path_plan_and_authenticated_actor() -> None:
