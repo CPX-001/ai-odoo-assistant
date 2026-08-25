@@ -3,9 +3,11 @@ import {
     loadChatHistory,
     loadDraft,
     normalizeChatResponse,
+    recoveryPending,
     resetForNewConversation,
     saveDraft,
     submitActionDecision,
+    submitActionRetry,
     submitAssistantRequest,
 } from "@odoo_ai_assistant/services/assistant_panel_service";
 
@@ -90,6 +92,28 @@ test("chat accepts a unified-agent response without exposing a category selector
     expect(normalized.result.answer).toBe("Checked answer");
     expect(normalized.result.workflow).toBe("AGENT");
     expect(normalized.result.plan.state).toBe("completed");
+});
+
+test("chat accepts a partial batch step returned by the service", () => {
+    const plan = agentPlan("partial", false);
+    plan.steps = [
+        {
+            step_id: "bulk_update",
+            title: "Actualizar lote",
+            state: "partial",
+            risk: "moderate",
+            effect_scope: "internal_reversible",
+            receipt: null,
+        },
+    ];
+    plan.metadata.needs_write = true;
+    plan.metadata.is_atomic = false;
+    plan.metadata.estimated_blast_radius = 10;
+
+    const normalized = normalizeChatResponse(chatResponse(plan));
+
+    expect(normalized.errorCode).toBe(null);
+    expect(normalized.result.plan.steps[0].state).toBe("partial");
 });
 
 test("chat sends no workflow and works without an active model", async () => {
@@ -235,4 +259,43 @@ test("action decision remains explicit and one-shot from the UI", async () => {
     await first;
     expect(panelState.actionReceipt.state).toBe("completed");
     expect(panelState.result.plan.state).toBe("completed");
+});
+
+test("pending recovery blocks new chat and retries the same plan id", async () => {
+    const panelState = state();
+    panelState.result = chatResponse(agentPlan("authorized", false));
+    let observedPath;
+    let observedPayload;
+
+    expect(recoveryPending(panelState)).toBe(true);
+    expect(
+        await submitAssistantRequest({
+            state: panelState,
+            screenContext: { capture: () => SCREEN },
+            rpcCall: async () => {
+                throw new Error("must not submit a new chat");
+            },
+            message: "Otra operación",
+        })
+    ).toBe(false);
+
+    const retried = await submitActionRetry({
+        state: panelState,
+        rpcCall: async (path, payload) => {
+            observedPath = path;
+            observedPayload = payload;
+            return {
+                ok: true,
+                plan_id: panelState.result.plan.plan_id,
+                state: "completed",
+                plan: agentPlan("completed", false),
+            };
+        },
+    });
+
+    expect(retried).toBe(true);
+    expect(observedPath).toBe("/odoo_ai/v1/agent-plan-execute");
+    expect(observedPayload.plan_id).toBe("32345678-1234-5678-9234-567812345678");
+    expect(recoveryPending(panelState)).toBe(false);
+    expect(panelState.actionReceipt.state).toBe("completed");
 });
