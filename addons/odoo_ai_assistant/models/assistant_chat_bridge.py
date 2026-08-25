@@ -28,6 +28,8 @@ from .assistant_bridge import (
 )
 from .chat_preferences import recent_chat_limit
 
+RECOVERABLE_BATCH_ERROR = "batch_execution_outcome_unknown"
+
 
 class AssistantChatBridge(models.AbstractModel):
     _inherit = "odoo.ai.assistant.bridge"
@@ -131,6 +133,27 @@ class AssistantChatBridge(models.AbstractModel):
             )
             if decision == "reject":
                 return _browser_plan_decision(decided, parsed_plan_id)
+            executed = self._chat_client().agent_plan_execute(
+                parsed_plan_id,
+                {"actor": actor, "plan_id": parsed_plan_id},
+            )
+            return _browser_plan_execution(executed, parsed_plan_id)
+        except ValueError:
+            return _error("invalid_context")
+        except AssistantServiceError as error:
+            return _error(_client_error_code(error.code))
+        except Exception:  # noqa: BLE001 - browser boundary stays sanitized
+            return _error("service_unavailable")
+
+    @api.model
+    def execute_agent_plan(self, plan_id):
+        """Resume an already-authorized plan without issuing a second approval."""
+
+        if not self.env.user._is_internal():
+            return _error("access_denied")
+        try:
+            parsed_plan_id = _required_uuid(plan_id)
+            actor = self._chat_actor()
             executed = self._chat_client().agent_plan_execute(
                 parsed_plan_id,
                 {"actor": actor, "plan_id": parsed_plan_id},
@@ -396,16 +419,22 @@ def _browser_plan_execution(response, plan_id):
     ):
         raise AssistantServiceError("invalid_response")
     plan = _validated_plan(response.get("plan"))
+    state = plan.get("state")
     if (
         plan.get("plan_id") != plan_id
-        or plan.get("state") not in {"completed", "partial", "failed"}
+        or state not in {"authorized", "completed", "partial", "failed"}
         or response.get("completed_at") is not None
         and not isinstance(response.get("completed_at"), str)
         or response.get("error_code") is not None
         and not isinstance(response.get("error_code"), str)
+        or state == "authorized"
+        and (
+            response.get("error_code") != RECOVERABLE_BATCH_ERROR
+            or response.get("completed_at") is not None
+        )
     ):
         raise AssistantServiceError("invalid_response")
-    return {"ok": True, "plan_id": plan_id, "state": plan["state"], "plan": plan}
+    return {"ok": True, "plan_id": plan_id, "state": state, "plan": plan}
 
 
 def _browser_history(payload):
