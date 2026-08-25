@@ -175,10 +175,13 @@ def batch_tool_spec() -> ToolSpec:
     return ToolSpec(
         name=ODOO_PREVIEW_BATCH_MUTATION,
         description=(
-            "Validate and prepare a bounded bulk create, uniform patch, or delete against "
-            "the real Odoo user. This tool never commits. For create/patch, first obtain "
-            "the effective write schema and use its exact schema_id. source_ref values "
-            "must uniquely identify the normalized rows."
+            "Validate and prepare one bounded multi-record create, uniform patch, or delete "
+            "against the real Odoo user. Prefer this for two or more targets of the same model "
+            "and operation; this tool never commits. For delete, omit schema_id and send one "
+            "item per resolved record with operation='delete', a unique source_ref such as "
+            "'record:<id>', and record_id. For create/patch, first obtain the effective write "
+            "schema and use its exact schema_id. Every item repeats the same operation value and "
+            "source_ref values must be unique."
         ),
         input_schema=BatchMutationRequest.model_json_schema(),
         risk=ToolRisk.WRITE_PREVIEW,
