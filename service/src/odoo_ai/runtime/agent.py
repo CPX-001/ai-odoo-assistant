@@ -136,6 +136,7 @@ class RuntimeAgentFactory:
         limits = ToolExecutionLimits(
             max_calls=policy.max_tool_calls_per_turn,
             max_total_input_bytes=1024 * 1024 if self._batch_enabled else 64 * 1024,
+            max_total_output_bytes=2 * 1024 * 1024,
             per_tool_timeout_seconds=30.0 if self._batch_enabled else 5.0,
             max_consecutive_failures=policy.max_consecutive_failures,
         )
