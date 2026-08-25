@@ -119,11 +119,7 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
             "Respuesta preparada",
             {"confidence": result.confidence},
         )
-        return {
-            "answer": result.answer,
-            "confidence": result.confidence,
-            "plan": [],
-        }
+        return self._read_only_response(turn, result, policy_snapshot)
 
     def _codex_settings(self, turn):
         parameters = self.env["ir.config_parameter"]
@@ -164,9 +160,66 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
             used += len(retained[-1]) + (1 if len(retained) > 1 else 0)
         return "\n".join(reversed(retained))
 
+    def _read_only_response(self, turn, result, policy):
+        conversation_id = (
+            turn.conversation_id.conversation_uuid if turn.conversation_id else None
+        )
+        goal = " ".join((turn.input_message or "").split())[:1_000]
+        return {
+            "ok": True,
+            "turn_id": turn.turn_uuid,
+            "conversation_id": conversation_id,
+            "workflow": "AGENT",
+            "answer": result.answer,
+            "confidence": result.confidence,
+            "limitations": [],
+            "citations": [],
+            "plan": {
+                "plan_id": turn.turn_uuid,
+                "state": "completed",
+                "risk": "low",
+                "metadata": {
+                    "needs_read": True,
+                    "needs_schema": True,
+                    "needs_write": False,
+                    "needs_business_action": False,
+                    "has_external_effect": False,
+                    "has_irreversible_effect": False,
+                    "is_atomic": True,
+                    "estimated_blast_radius": 0,
+                },
+                "policy": {
+                    "confirmation_mode": policy["confirmation_mode"],
+                    "max_auto_risk": policy["max_auto_risk"],
+                    "allow_synthetic_data": policy["allow_synthetic_data"],
+                    "constrained_by": [],
+                },
+                "goal": goal or "Responder a la petición del usuario.",
+                "assumptions": [],
+                "steps": [],
+                "requires_confirmation": False,
+                "expires_at": None,
+            },
+        }
+
+
+class AssistantTurnEmbeddedStatus(models.Model):
+    _inherit = "odoo.ai.turn"
+
+    def browser_status(self, *, after_sequence=0):
+        payload = super().browser_status(after_sequence=after_sequence)
+        self.ensure_one()
+        response = self.result_payload if self.state == "completed" else None
+        payload["response"] = dict(response) if isinstance(response, dict) else None
+        return payload
+
 
 class EmbeddedRuntimeError(RuntimeError):
     def __init__(self, code):
-        normalized = code if isinstance(code, str) and _ERROR_CODE.fullmatch(code) else "runtime_unavailable"
+        normalized = (
+            code
+            if isinstance(code, str) and _ERROR_CODE.fullmatch(code)
+            else "runtime_unavailable"
+        )
         super().__init__(normalized)
         self.code = normalized
