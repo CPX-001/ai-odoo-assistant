@@ -123,14 +123,24 @@
                 </section>
 
                 <section t-if="recoveryPending" class="alert alert-warning mt-3 mb-0" role="status">
-                    <div class="fw-semibold mb-1">Recuperación pendiente</div>
+                    <div class="fw-semibold mb-1">
+                        <t t-if="recoveryExecuting">Ejecución en curso</t>
+                        <t t-else="">Recuperación pendiente</t>
+                    </div>
                     <div class="small mb-2">
-                        El resultado del lote quedó ambiguo. Se conservarán la misma autorización y el mismo intento para recuperar el resultado sin duplicar cambios.
+                        <t t-if="recoveryExecuting">
+                            El plan sigue ejecutándose. No se volverá a lanzar: sólo se consultará su estado hasta que Odoo confirme el resultado o habilite una recuperación segura.
+                        </t>
+                        <t t-else="">
+                            El resultado del lote quedó ambiguo. Se conservarán la misma autorización y el mismo intento para recuperar el resultado sin duplicar cambios.
+                        </t>
                     </div>
                     <button type="button" class="btn btn-warning btn-sm"
                         t-att-disabled="state.decisionLoading" t-on-click="retryAction">
                         <i t-if="state.decisionLoading" class="fa fa-spinner fa-spin me-1"
-                            aria-hidden="true"/> Reintentar recuperación
+                            aria-hidden="true"/>
+                        <t t-if="recoveryExecuting">Comprobar estado</t>
+                        <t t-else="">Reintentar recuperación</t>
                     </button>
                 </section>
 
