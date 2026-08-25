@@ -102,6 +102,17 @@ class BrowserChatController(http.Controller):
             return {"error": {"code": "invalid_context"}, "ok": False}
         return request.env["odoo.ai.assistant.bridge"].execute_agent_plan(plan_id)
 
+    @http.route(
+        "/odoo_ai/v1/agent-plan-status",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def agent_plan_status(self, plan_id=None, **unexpected):
+        if unexpected:
+            return {"error": {"code": "invalid_context"}, "ok": False}
+        return request.env["odoo.ai.assistant.bridge"].agent_plan_status(plan_id)
+
     # Legacy policy endpoints remain available for older cached assets during module
     # upgrades. New clients use the single autonomy-profile endpoints above.
     @http.route(
