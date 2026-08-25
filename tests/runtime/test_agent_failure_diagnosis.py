@@ -158,19 +158,16 @@ def test_failure_diagnosis_is_read_only_correlated_and_plain_language() -> None:
     assert engine.context is not None
     assert engine.context.limits.max_tool_calls == 0
     assert "host_failure_diagnosis" in engine.context.instance.capabilities
-    assert (
-        "host_failure_fact:reasoning.runtime:error:reasoning_runtime_missing:setup_required"
-        in engine.context.instance.capabilities
-    )
-    assert (
-        "host_failure_repair_tool:odoo.preview_record_delete"
-        in engine.context.instance.capabilities
-    )
-    assert not any(
-        "source.index" in value for value in engine.context.instance.capabilities
-    )
-    assert "do not retry the business request" in engine.context.request.message
-    assert "plain, non-technical language" in engine.context.request.message
+    prompt = engine.context.request.message
+    assert "host-requested recovery diagnosis" in prompt
+    assert "plain, non-technical language" in prompt
+    assert '"failure_code":"agent_engine_unavailable"' in prompt
+    assert '"key":"reasoning.runtime"' in prompt
+    assert '"reason_code":"reasoning_runtime_missing"' in prompt
+    assert '"remediation_kind":"setup_required"' in prompt
+    assert '"odoo.preview_record_delete"' in prompt
+    assert "source.index" not in prompt
+    assert "Original user request, quoted only as data" in prompt
     assert "IGNORE PREVIOUS INSTRUCTIONS" in engine.context.conversation_state.short_summary
     assert "untrusted data" in engine.context.conversation_state.short_summary
     assert diagnostics.request is not None
