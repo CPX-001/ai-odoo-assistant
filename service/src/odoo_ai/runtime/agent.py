@@ -45,6 +45,10 @@ from odoo_ai.contracts import (
     InstanceProfileSummary,
 )
 from odoo_ai.ports.agent_plans import StoredAgentPlan
+from odoo_ai.runtime.agent_failure_diagnosis import (
+    AgentFailureDiagnosis,
+    RuntimeAgentFailureDiagnoser,
+)
 from odoo_ai.security import ActionAuthorityCodec
 from odoo_ai.storage import (
     DatabaseSettings,
@@ -218,6 +222,24 @@ class RuntimeAgentFactory:
             history_loader=self._history,
             instance_loader=turn_instance,
         )
+
+    async def diagnose_failure(
+        self,
+        request: AgentTurnRequest,
+        code: str,
+    ) -> AgentFailureDiagnosis | None:
+        """Run one bounded read-only diagnosis without retrying the failed operation."""
+
+        repairable_tools = tuple(
+            spec.name
+            for spec in agent_tool_specs(batch_enabled=self._batch_enabled)
+            if spec.name.startswith("odoo.preview_")
+        )
+        diagnoser = RuntimeAgentFailureDiagnoser(
+            instance_loader=self._timed_instance,
+            repairable_tool_names=repairable_tools,
+        )
+        return await diagnoser.diagnose(request, code)
 
     def plan_service(self) -> AgentPlanService:
         return self._plans
