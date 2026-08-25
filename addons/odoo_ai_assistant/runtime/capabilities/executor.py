@@ -28,7 +28,7 @@ class CapabilityExecutor:
         self._registry = registry
         self._context = context
         self._policy = policy or CapabilityPolicy()
-        self._config = config or CapabilityConfigResolver()
+        self._config = config or CapabilityConfigResolver.from_env(context.env)
         self._calls: dict[str, int] = {}
 
     async def execute(
