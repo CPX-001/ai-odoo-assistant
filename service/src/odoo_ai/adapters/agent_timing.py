@@ -79,6 +79,10 @@ class TimedToolExecutor(ToolExecutor):
                     data=previous.data,
                     evidence=previous.evidence,
                 )
+                # A host-validated cache hit has the same anti-loop semantics as a fresh
+                # successful tool execution. Do not let unrelated prior failures accumulate
+                # into a false consecutive-failure limit.
+                self._consecutive_failures = 0
                 log_agent_timing(
                     "tool_call",
                     started,
