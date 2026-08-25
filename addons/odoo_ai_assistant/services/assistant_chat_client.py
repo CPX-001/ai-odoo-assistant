@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import http.client
 import json
+import logging
+from time import monotonic
 from urllib.parse import urlencode
 
 from .assistant_client import (
@@ -16,6 +18,7 @@ from .assistant_client import (
 
 CHAT_MAX_REQUEST_BYTES = max(MAX_REQUEST_BYTES, 64 * 1024)
 CHAT_MAX_RESPONSE_BYTES = 512 * 1024
+LOGGER = logging.getLogger(__name__)
 
 
 class AssistantChatServiceClient(AssistantServiceClient):
@@ -104,6 +107,7 @@ class AssistantChatServiceClient(AssistantServiceClient):
             self._port,
             timeout=self._timeout,
         )
+        started = monotonic()
         try:
             connection.request("POST", path, body=body, headers=headers)
             response = connection.getresponse()
@@ -112,6 +116,11 @@ class AssistantChatServiceClient(AssistantServiceClient):
             raise AssistantServiceError("service_unavailable") from error
         finally:
             connection.close()
+            if path == "/v1/agent/turn":
+                LOGGER.info(
+                    "odoo_ai_timing phase=odoo_assistant_http duration_ms=%d",
+                    max(0, round((monotonic() - started) * 1000)),
+                )
 
         code = _response_error_code(response_body)
         if response.status == 401:
