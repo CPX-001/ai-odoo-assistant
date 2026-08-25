@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from odoo import api, models
 
@@ -37,9 +37,8 @@ class PreparedBrowserChatStream:
     failure_plan: dict[str, object]
 
     def iter_sse(self) -> Iterator[bytes]:
-        """Relay only visible deltas and one browser-validated terminal envelope."""
+        """Relay only visible deltas and exactly one browser-validated terminal envelope."""
 
-        emitted_final = False
         try:
             for event_name, event in self.client.agent_turn_stream(self.payload):
                 if event_name == "delta":
@@ -70,23 +69,24 @@ class PreparedBrowserChatStream:
                     "final",
                     {"type": "final", "response": persisted},
                 )
-                emitted_final = True
                 return
+
+            # EOF without the mandatory terminal event is an invalid inner stream.
+            raise AssistantServiceError("invalid_response")
         except AssistantServiceError as error:
             failure = self.failure_result(_client_error_code(error.code))
         except Exception:  # noqa: BLE001 - the browser boundary remains sanitized
             failure = self.failure_result("service_unavailable")
 
-        if not emitted_final:
-            persisted = _persist_captured_chat_result(
-                self,
-                failure,
-                internal_workflow="AGENT_FAILURE",
-            )
-            yield _sse_event(
-                "final",
-                {"type": "final", "response": persisted},
-            )
+        persisted = _persist_captured_chat_result(
+            self,
+            failure,
+            internal_workflow="AGENT_FAILURE",
+        )
+        yield _sse_event(
+            "final",
+            {"type": "final", "response": persisted},
+        )
 
     def failure_result(self, code: str) -> dict[str, object]:
         """Create a non-executable conversational failure for this exact turn."""
@@ -147,7 +147,7 @@ class AssistantChatStreamBridge(models.AbstractModel):
                 normalized_message,
                 parsed_conversation_id,
             )
-        except (ValueError, TurnContextError):
+        except (TypeError, ValueError, TurnContextError):
             raise ChatStreamPreparationError("invalid_context") from None
         except AssistantServiceError as error:
             raise ChatStreamPreparationError(_client_error_code(error.code)) from None
@@ -178,7 +178,7 @@ class AssistantChatStreamBridge(models.AbstractModel):
         parsed_conversation_id = _safe_conversation_id(conversation_id)
         result = {
             "ok": True,
-            "turn_id": _new_turn_id(),
+            "turn_id": str(uuid4()),
             "workflow": "AGENT",
             "answer": _failure_answer(normalized_code),
             "confidence": "low",
@@ -224,7 +224,9 @@ def _persist_captured_chat_result(
         )
         stored_id = stored.get("conversation_id") if isinstance(stored, dict) else None
         result["conversation_id"] = (
-            stored_id if isinstance(stored_id, str) and _is_uuid(stored_id) else None
+            stored_id
+            if isinstance(stored_id, str) and _is_uuid(stored_id)
+            else prepared.conversation_id
         )
     except AssistantServiceError:
         result["conversation_id"] = prepared.conversation_id
@@ -256,9 +258,3 @@ def _safe_conversation_id(value) -> str | None:
         return _optional_uuid(value)
     except ValueError:
         return None
-
-
-def _new_turn_id() -> str:
-    from uuid import uuid4
-
-    return str(uuid4())
