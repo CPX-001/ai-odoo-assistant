@@ -11,7 +11,6 @@ from fastapi import APIRouter, Depends, FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from odoo_ai.adapters.context_runtime import load_instance_summary
 from odoo_ai.application.agent_execution import AgentExecutionError, AgentPlanExecutionService
 from odoo_ai.application.agent_plans import AgentPlanError, AgentPlanService
 from odoo_ai.application.agent_turn import AgentTurnError, AgentTurnService
@@ -189,7 +188,7 @@ def _factory(request: Request) -> AgentServiceFactory:
     configured = getattr(request.app.state, "agent_service_factory", None)
     if configured is not None:
         return cast(AgentServiceFactory, configured)
-    configured = RuntimeAgentFactory.from_env(instance_loader=load_instance_summary)
+    configured = RuntimeAgentFactory.from_env()
     request.app.state.agent_service_factory = configured
     return configured
 
