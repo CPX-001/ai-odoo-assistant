@@ -1,7 +1,11 @@
 """Odoo-authenticated browser routes for the product-facing chat facade."""
 
+import logging
+
 from odoo import http
 from odoo.http import request
+
+_logger = logging.getLogger(__name__)
 
 
 class BrowserChatController(http.Controller):
@@ -13,6 +17,10 @@ class BrowserChatController(http.Controller):
     )
     def chat(self, message=None, screen=None, conversation_id=None, **unexpected):
         if unexpected:
+            _logger.info(
+                "Browser chat rejected unexpected payload keys: %s",
+                sorted(unexpected),
+            )
             return {"error": {"code": "invalid_context"}, "ok": False}
         return request.env["odoo.ai.assistant.bridge"].submit_chat(
             message,

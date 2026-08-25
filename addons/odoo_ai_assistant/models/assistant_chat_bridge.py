@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Mapping
 from uuid import UUID
@@ -29,6 +30,7 @@ from .assistant_bridge import (
 from .chat_preferences import recent_chat_limit
 
 RECOVERABLE_BATCH_ERROR = "batch_execution_outcome_unknown"
+_logger = logging.getLogger(__name__)
 
 
 class AssistantChatBridge(models.AbstractModel):
@@ -81,9 +83,11 @@ class AssistantChatBridge(models.AbstractModel):
                 conversation_id=conversation_id,
                 internal_workflow="AGENT",
             )
-        except ValueError:
+        except ValueError as error:
+            _logger.info("Browser chat rejected invalid value: %s", error)
             return _error("invalid_context")
-        except TurnContextError:
+        except TurnContextError as error:
+            _logger.info("Browser chat rejected invalid turn context: %s", error)
             return _error("invalid_context")
         except AssistantServiceError as error:
             return _error(_client_error_code(error.code))
