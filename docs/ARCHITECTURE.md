@@ -62,6 +62,27 @@ La lista inicial de modelos es una pista. `odoo.search_models` consulta el regis
 
 Codex sólo solicita tools de lectura/preview y propone argumentos. `AgentTurnService`, `ToolExecutor`, el Policy Engine y Odoo validan registry, schemas, ACL, record rules, budgets, riesgo, autorización, commit y verificación. La memoria de producto vive en la DB del Assistant, no en threads de Codex.
 
+### Streaming y recuperación de fallos
+
+El chat puede transportar texto provisional mediante SSE sin cambiar las fronteras de autoridad:
+
+```text
+Codex App Server delta
+    → Assistant Service SSE
+    → relay SSE autenticado de Odoo
+    → Owl
+```
+
+Los eventos provisionales contienen únicamente texto incremental extraído de `answer_markdown`; nunca incluyen plan, argumentos, fingerprints, receipts, authority ni razonamiento interno. El único estado autoritativo del turn llega en un evento terminal `final`, validado por el Assistant Service y después de nuevo por el bridge Odoo antes de exponerse al navegador. Si el stream se corta, termina sin `final` o entrega un payload no válido, el texto provisional no se acepta como resultado definitivo y se sustituye por un turn fallido conversacional.
+
+El navegador continúa autenticándose sólo contra Odoo. El shared secret Assistant↔Odoo nunca se entrega a JavaScript y el POST SSE de Odoo conserva la protección CSRF. La preparación ORM —usuario, compañías, policy, capability y modelo— se completa antes de devolver el iterador WSGI; el relay no reutiliza recordsets ni `request.env` una vez que la transacción del controlador ha terminado.
+
+Los fallos esperables del agente se presentan como respuestas del Assistant, no como códigos internos. Cuando Codex sigue disponible, un recovery separado y read-only puede recibir estado de Diagnostics y extractos de logs acotados, redactados y correlacionados con el `turn_id`. Ese recovery no dispone de tools, no repite la operación fallida y no puede escribir. Su salida debe explicar el problema en lenguaje normal y sólo puede ofrecer un reintento/corrección si el host ha marcado explícitamente esa siguiente acción como válida. Si el recovery no puede ejecutarse o su salida filtra identificadores internos, se usa un fallback host-owned corto.
+
+Una pérdida de comunicación o timeout no demuestra que una escritura no llegara a ejecutarse. En esos casos la UI no afirma “no hubo cambios”: marca el resultado como no confirmado y pide comprobar el estado actual antes de repetir una operación. Los códigos técnicos permanecen en logs/Diagnostics.
+
+El perfil actual mantiene un App Server acotado por turn y threads efímeros, con cierre bounded al terminar. No se usa un daemon Codex compartido como memoria de conversación; la continuidad vive en la DB del Assistant. Esto conserva aislamiento entre turns y evita que el estado interno de un proceso defectuoso se convierta en autoridad o memoria de producto.
+
 ## Retrieval y evidencia
 
 Primero retrieval estructural y lexical: símbolos/relaciones para source, PostgreSQL FTS para documentos y búsqueda temporal acotada para logs. Los providers de source y logs son obligatorios para `FULLY_READY`. La evidencia recuperada se trata como datos no confiables, se redacta y se entrega en resultados estructurados.
