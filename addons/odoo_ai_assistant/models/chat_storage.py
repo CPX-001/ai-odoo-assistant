@@ -13,7 +13,12 @@ class AssistantConversation(models.Model):
     _description = "Odoo AI Assistant Conversation"
     _order = "last_message_at desc, id desc"
 
-    conversation_uuid = fields.Char(required=True, readonly=True, index=True, default=lambda self: str(uuid4()))
+    conversation_uuid = fields.Char(
+        required=True,
+        readonly=True,
+        index=True,
+        default=lambda self: str(uuid4()),
+    )
     user_id = fields.Many2one(
         "res.users",
         required=True,
@@ -31,23 +36,50 @@ class AssistantConversation(models.Model):
         ondelete="cascade",
     )
     title = fields.Char(required=True, size=160)
-    last_message_at = fields.Datetime(required=True, default=fields.Datetime.now, index=True)
-    message_ids = fields.One2many("odoo.ai.message", "conversation_id", string="Messages")
-    turn_ids = fields.One2many("odoo.ai.turn", "conversation_id", string="Turns")
+    last_message_at = fields.Datetime(
+        required=True,
+        default=fields.Datetime.now,
+        index=True,
+    )
+    message_ids = fields.One2many(
+        "odoo.ai.message",
+        "conversation_id",
+        string="Messages",
+    )
+    turn_ids = fields.One2many(
+        "odoo.ai.turn",
+        "conversation_id",
+        string="Turns",
+    )
 
     _sql_constraints = [
-        ("conversation_uuid_unique", "unique(conversation_uuid)", "Conversation id must be unique."),
+        (
+            "conversation_uuid_unique",
+            "unique(conversation_uuid)",
+            "Conversation id must be unique.",
+        ),
     ]
 
     @api.model
-    def append_exchange(self, *, conversation_uuid, user_message, assistant_message, internal_workflow="AGENT"):
+    def append_exchange(
+        self,
+        *,
+        conversation_uuid,
+        user_message,
+        assistant_message,
+        internal_workflow="AGENT",
+    ):
         _validate_message(user_message)
         _validate_message(assistant_message, maximum=16_384)
-        conversation = self._owned_conversation(conversation_uuid) if conversation_uuid else self.create(
-            {
-                "title": _title(user_message),
-                "last_message_at": fields.Datetime.now(),
-            }
+        conversation = (
+            self._owned_conversation(conversation_uuid)
+            if conversation_uuid
+            else self.create(
+                {
+                    "title": _title(user_message),
+                    "last_message_at": fields.Datetime.now(),
+                }
+            )
         )
         message_model = self.env["odoo.ai.message"]
         message_model.create(
@@ -70,24 +102,39 @@ class AssistantConversation(models.Model):
         return conversation.conversation_uuid
 
     @api.model
-    def history_payload(self, *, conversation_uuid=None, max_conversations=20, max_messages=40):
+    def history_payload(
+        self,
+        *,
+        conversation_uuid=None,
+        max_conversations=20,
+        max_messages=40,
+    ):
         if not 1 <= int(max_conversations) <= 50 or not 1 <= int(max_messages) <= 80:
             raise ValidationError("Invalid history limit")
         domain = [("user_id", "=", self.env.uid)]
-        conversations = self.search(domain, limit=int(max_conversations), order="last_message_at desc, id desc")
+        conversations = self.search(
+            domain,
+            limit=int(max_conversations),
+            order="last_message_at desc, id desc",
+        )
         selected = self.browse()
         if conversation_uuid:
             selected = self._owned_conversation(conversation_uuid)
         messages = self.env["odoo.ai.message"].browse()
         if selected:
             newest = self.env["odoo.ai.message"].search(
-                [("conversation_id", "=", selected.id), ("user_id", "=", self.env.uid)],
+                [
+                    ("conversation_id", "=", selected.id),
+                    ("user_id", "=", self.env.uid),
+                ],
                 limit=int(max_messages),
                 order="create_date desc, id desc",
             )
             messages = newest.sorted(key=lambda item: (item.create_date, item.id))
         return {
-            "active_conversation_id": selected.conversation_uuid if selected else None,
+            "active_conversation_id": (
+                selected.conversation_uuid if selected else None
+            ),
             "conversations": [item._history_view() for item in conversations],
             "messages": [item._history_view() for item in messages],
         }
@@ -98,7 +145,10 @@ class AssistantConversation(models.Model):
             return ""
         conversation = self._owned_conversation(conversation_uuid)
         newest = self.env["odoo.ai.message"].search(
-            [("conversation_id", "=", conversation.id), ("user_id", "=", self.env.uid)],
+            [
+                ("conversation_id", "=", conversation.id),
+                ("user_id", "=", self.env.uid),
+            ],
             limit=max_messages,
             order="create_date desc, id desc",
         )
@@ -123,7 +173,12 @@ class AssistantConversation(models.Model):
         parsed = [_canonical_uuid(value) for value in conversation_uuids]
         if not 1 <= len(parsed) <= 50 or len(parsed) != len(set(parsed)):
             raise ValidationError("Invalid conversation selection")
-        records = self.search([("conversation_uuid", "in", parsed), ("user_id", "=", self.env.uid)])
+        records = self.search(
+            [
+                ("conversation_uuid", "in", parsed),
+                ("user_id", "=", self.env.uid),
+            ]
+        )
         if len(records) != len(parsed):
             raise AccessError("Conversation not found")
         count = len(records)
@@ -133,7 +188,10 @@ class AssistantConversation(models.Model):
     def _owned_conversation(self, conversation_uuid):
         canonical = _canonical_uuid(conversation_uuid)
         record = self.search(
-            [("conversation_uuid", "=", canonical), ("user_id", "=", self.env.uid)],
+            [
+                ("conversation_uuid", "=", canonical),
+                ("user_id", "=", self.env.uid),
+            ],
             limit=1,
         )
         if not record:
@@ -146,7 +204,9 @@ class AssistantConversation(models.Model):
             "conversation_id": self.conversation_uuid,
             "title": self.title,
             "created_at": _iso_utc(self.create_date),
-            "updated_at": _iso_utc(self.last_message_at or self.write_date or self.create_date),
+            "updated_at": _iso_utc(
+                self.last_message_at or self.write_date or self.create_date
+            ),
         }
 
 
@@ -155,8 +215,18 @@ class AssistantMessage(models.Model):
     _description = "Odoo AI Assistant Message"
     _order = "create_date asc, id asc"
 
-    message_uuid = fields.Char(required=True, readonly=True, index=True, default=lambda self: str(uuid4()))
-    conversation_id = fields.Many2one("odoo.ai.conversation", required=True, index=True, ondelete="cascade")
+    message_uuid = fields.Char(
+        required=True,
+        readonly=True,
+        index=True,
+        default=lambda self: str(uuid4()),
+    )
+    conversation_id = fields.Many2one(
+        "odoo.ai.conversation",
+        required=True,
+        index=True,
+        ondelete="cascade",
+    )
     user_id = fields.Many2one(
         "res.users",
         related="conversation_id.user_id",
@@ -171,12 +241,20 @@ class AssistantMessage(models.Model):
         readonly=True,
         index=True,
     )
-    role = fields.Selection([("user", "User"), ("assistant", "Assistant")], required=True, readonly=True)
+    role = fields.Selection(
+        [("user", "User"), ("assistant", "Assistant")],
+        required=True,
+        readonly=True,
+    )
     content = fields.Text(required=True, readonly=True)
     internal_workflow = fields.Char(readonly=True)
 
     _sql_constraints = [
-        ("message_uuid_unique", "unique(message_uuid)", "Message id must be unique."),
+        (
+            "message_uuid_unique",
+            "unique(message_uuid)",
+            "Message id must be unique.",
+        ),
     ]
 
     def _history_view(self):
@@ -192,10 +270,19 @@ class AssistantMessage(models.Model):
 class AssistantTurn(models.Model):
     _name = "odoo.ai.turn"
     _description = "Odoo AI Assistant Turn"
-    _order = "started_at desc, id desc"
+    _order = "queued_at desc, id desc"
 
-    turn_uuid = fields.Char(required=True, readonly=True, index=True, default=lambda self: str(uuid4()))
-    conversation_id = fields.Many2one("odoo.ai.conversation", index=True, ondelete="set null")
+    turn_uuid = fields.Char(
+        required=True,
+        readonly=True,
+        index=True,
+        default=lambda self: str(uuid4()),
+    )
+    conversation_id = fields.Many2one(
+        "odoo.ai.conversation",
+        index=True,
+        ondelete="set null",
+    )
     user_id = fields.Many2one(
         "res.users",
         required=True,
@@ -216,21 +303,85 @@ class AssistantTurn(models.Model):
         [
             ("queued", "Queued"),
             ("running", "Running"),
+            ("cancel_requested", "Cancellation requested"),
             ("awaiting_confirmation", "Awaiting confirmation"),
             ("completed", "Completed"),
             ("failed", "Failed"),
             ("cancelled", "Cancelled"),
+            ("recovery_required", "Recovery required"),
         ],
         required=True,
         default="queued",
         index=True,
     )
-    started_at = fields.Datetime(required=True, default=fields.Datetime.now, index=True)
-    completed_at = fields.Datetime()
-    error_code = fields.Char(readonly=True)
+    input_message = fields.Text(readonly=True)
+    screen_payload = fields.Json(readonly=True)
+    allowed_company_ids = fields.Json(readonly=True)
+    lang = fields.Char(readonly=True, size=35)
+    tz = fields.Char(readonly=True, size=64)
+    reasoning_model = fields.Char(readonly=True, size=128)
+    policy_payload = fields.Json(readonly=True)
+    request_fingerprint = fields.Char(readonly=True, index=True, size=71)
+    client_request_id = fields.Char(readonly=True, index=True, size=128)
+    user_message_id = fields.Many2one(
+        "odoo.ai.message",
+        readonly=True,
+        ondelete="set null",
+    )
+    assistant_message_id = fields.Many2one(
+        "odoo.ai.message",
+        readonly=True,
+        ondelete="set null",
+    )
+    result_payload = fields.Json(readonly=True)
+    queued_at = fields.Datetime(
+        required=True,
+        default=fields.Datetime.now,
+        index=True,
+    )
+    started_at = fields.Datetime(index=True)
+    heartbeat_at = fields.Datetime(index=True)
+    lease_expires_at = fields.Datetime(index=True)
+    lease_token = fields.Char(readonly=True, index=True, size=64)
+    attempt_count = fields.Integer(required=True, readonly=True, default=0)
+    max_attempts = fields.Integer(required=True, readonly=True, default=2)
+    write_barrier = fields.Boolean(required=True, readonly=True, default=False)
+    cancel_requested_at = fields.Datetime(readonly=True)
+    completed_at = fields.Datetime(readonly=True)
+    error_code = fields.Char(readonly=True, size=128)
+    last_event_sequence = fields.Integer(
+        required=True,
+        readonly=True,
+        default=0,
+    )
+    event_ids = fields.One2many(
+        "odoo.ai.turn.event",
+        "turn_id",
+        string="Events",
+        readonly=True,
+    )
 
     _sql_constraints = [
-        ("turn_uuid_unique", "unique(turn_uuid)", "Turn id must be unique."),
+        (
+            "turn_uuid_unique",
+            "unique(turn_uuid)",
+            "Turn id must be unique.",
+        ),
+        (
+            "turn_user_client_request_unique",
+            "unique(user_id, client_request_id)",
+            "Assistant request id must be unique per user.",
+        ),
+        (
+            "turn_attempts_nonnegative",
+            "CHECK(attempt_count >= 0 AND max_attempts >= 1 AND attempt_count <= max_attempts)",
+            "Assistant turn attempt counters are invalid.",
+        ),
+        (
+            "turn_event_sequence_nonnegative",
+            "CHECK(last_event_sequence >= 0)",
+            "Assistant event cursor is invalid.",
+        ),
     ]
 
 
@@ -240,7 +391,11 @@ def _title(message):
 
 
 def _validate_message(value, *, maximum=4_000):
-    if not isinstance(value, str) or not 1 <= len(value.strip()) <= maximum or "\x00" in value:
+    if (
+        not isinstance(value, str)
+        or not 1 <= len(value.strip()) <= maximum
+        or "\x00" in value
+    ):
         raise ValidationError("Invalid chat message")
 
 
