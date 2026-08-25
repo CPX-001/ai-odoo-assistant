@@ -10,6 +10,7 @@ from odoo_ai.api import create_app
 from odoo_ai.application.agent_events import current_agent_delta_sink
 from odoo_ai.application.agent_turn import AgentTurnError
 from odoo_ai.contracts import AgentTurnRequest, AgentTurnResponse, AnswerConfidence, PlanState
+from odoo_ai.runtime.agent_failure_diagnosis import AgentFailureDiagnosis
 from odoo_ai.security import SHARED_SECRET_HEADER
 
 SECRET = "agent-stream-secret-" + "s" * 48
@@ -34,14 +35,18 @@ class StreamingStubTurnService:
 
 
 class FailingStubTurnService:
+    def __init__(self, code: str = "agent_engine_timeout") -> None:
+        self.code = code
+
     async def run(self, request: AgentTurnRequest) -> AgentTurnResponse:
         del request
-        raise AgentTurnError("agent_engine_timeout", 504)
+        raise AgentTurnError(self.code, 504)
 
 
 class StubFactory:
-    def __init__(self, service) -> None:
+    def __init__(self, service, diagnosis: AgentFailureDiagnosis | None = None) -> None:
         self.service = service
+        self.diagnosis = diagnosis
 
     def turn_service(self, request):
         del request
@@ -52,6 +57,10 @@ class StubFactory:
 
     def execution_service(self):
         return object()
+
+    async def diagnose_failure(self, request, code):
+        del request, code
+        return self.diagnosis
 
 
 @pytest.fixture(autouse=True)
@@ -137,7 +146,7 @@ def test_stream_emits_only_visible_deltas_then_final_response() -> None:
     assert "opaque-ag1-token" not in stream
 
 
-def test_stream_failure_finishes_with_conversational_diagnostic() -> None:
+def test_stream_failure_finishes_with_plain_fallback() -> None:
     app = create_app(
         agent_service_factory=StubFactory(FailingStubTurnService())  # type: ignore[arg-type]
     )
@@ -146,8 +155,32 @@ def test_stream_failure_finishes_with_conversational_diagnostic() -> None:
 
     assert "event: delta" not in stream
     assert stream.count("event: final") == 1
-    assert "Diagnóstico." in stream
-    assert "Motivo." in stream
-    assert "Solución." in stream
+    assert "se ha quedado sin tiempo" in stream
+    assert "Diagnóstico." not in stream
+    assert "App Server" not in stream
     assert "agent_engine_timeout" not in stream
+    assert "event: error" not in stream
+
+
+def test_stream_failure_uses_model_diagnosis_in_final_event() -> None:
+    diagnosis = AgentFailureDiagnosis(
+        answer_markdown=(
+            "He podido comprobar que el intento se interrumpió antes de terminar. "
+            "No se aplicó ningún cambio."
+        ),
+        confidence=AnswerConfidence.MEDIUM,
+    )
+    app = create_app(
+        agent_service_factory=StubFactory(
+            FailingStubTurnService("tool_call_budget_exceeded"),
+            diagnosis=diagnosis,
+        )  # type: ignore[arg-type]
+    )
+
+    stream = asyncio.run(_post_stream(app))
+
+    assert stream.count("event: final") == 1
+    assert diagnosis.answer_markdown in stream
+    assert '"confidence":"medium"' in stream
+    assert "tool_call_budget_exceeded" not in stream
     assert "event: error" not in stream
