@@ -56,6 +56,9 @@ class AssistantChatServiceClient(AssistantServiceClient):
     def chat_history(self, payload: dict[str, object]) -> dict[str, object]:
         return self._chat_post("/v1/chat/history", payload)
 
+    def chat_delete(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._chat_post("/v1/chat/delete", payload)
+
     def chat_append(self, payload: dict[str, object]) -> dict[str, object]:
         return self._chat_post("/v1/chat/append", payload)
 
