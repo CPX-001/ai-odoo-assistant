@@ -17,4 +17,5 @@ from . import res_config_settings as res_config_settings
 from . import runtime_settings as runtime_settings
 from . import turn_event as turn_event
 from . import turn_queue as turn_queue
+from . import embedded_runtime as embedded_runtime
 from . import user_preferences as user_preferences
