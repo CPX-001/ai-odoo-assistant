@@ -11,8 +11,13 @@ It does not redefine the Source of Truth and does not reopen batch/recovery.
 - The unified agent advertises the existing knowledge and structural-source tools alongside Odoo
   tools. They are lazy: registering them performs no knowledge query, source inventory request, or
   filesystem scan.
-- Source retrieval resolves inventory/roots only on the first `source.*` call in a turn and then
-  queries the persistent source index. Normal turns never invoke the source scanner.
+- `odoo.get_instance_facts` exposes sanitized checked Odoo version/installed-module facts only when
+  the reasoning turn needs them; database identity and physical addons roots are not returned.
+- `source.inspect_module` gives Codex a bounded structural entry point into one exact installed
+  custom/OCA/third-party addon when the relevant method/model/field is not known yet. Actual source
+  claims still require `source.read_excerpt` and fingerprint revalidation.
+- Source retrieval resolves inventory/roots only on the first instance/source call that needs them
+  and then queries the persistent source index. Normal turns never invoke the source scanner.
 - Knowledge uses the existing PostgreSQL FTS store and preserves `KnowledgeRef` fingerprint
   revalidation before an excerpt becomes checked Evidence.
 - Source keeps structural lookup (`find_symbol`, model extensions) before a bounded
@@ -26,15 +31,23 @@ The agent chooses the narrowest source lazily:
 
 | Request shape | Expected retrieval |
 | --- | --- |
+| General version-independent concept | concise model answer; no decorative retrieval |
 | Live counts/records | Odoo query/aggregate only |
 | Record mutation | Odoo effective schema + preview only |
+| Version/module-dependent capability | `odoo.get_instance_facts` first |
 | Internal implementation/behavior | source structural lookup -> checked excerpt |
-| Configuration/how-to | configured knowledge -> checked excerpt; Odoo schema/navigation only when useful |
+| Named custom/OCA/third-party addon | instance facts -> `source.inspect_module` if needed -> checked excerpt |
+| Configuration/how-to | version/modules when relevant -> checked knowledge/source; Odoo schema/navigation only when useful |
 
-Search candidates remain untrusted pointers. The pass deliberately keeps `search` and
-`read_excerpt` separate. Current lexical search does not expose a sufficiently strong deterministic
-promotion signal to auto-select top-1 without risking irrelevant evidence. Fingerprint revalidation
-is never skipped.
+Search candidates and module-inspection results remain untrusted pointers. The pass deliberately
+keeps discovery and `read_excerpt` separate. Current lexical search does not expose a sufficiently
+strong deterministic promotion signal to auto-select top-1 without risking irrelevant evidence.
+Fingerprint revalidation is never skipped.
+
+Configuration answers must not invent an exact Settings location. `res.config.settings` is a
+transient wizard and remains outside generic business-record discovery; when implementation evidence
+is required, the agent can inspect the relevant module/model extensions statically instead of
+querying wizard records as business data.
 
 ## PostgreSQL FTS
 
@@ -48,7 +61,12 @@ representative Spanish/English Odoo retrieval set against the deployed Assistant
 Sanitized timing logs now expose only phase/tool names and durations; no prompts, payloads, record
 values, filesystem paths, or credentials are logged.
 
-Service phases:
+Odoo-side phases:
+
+- `odoo_prepare` for server-side screen/message context + policy/payload preparation;
+- `odoo_assistant_http` for the local Odoo -> Assistant round-trip.
+
+Assistant Service phases:
 
 - `history_load`
 - `instance_context`
@@ -62,8 +80,6 @@ Service phases:
 - `codex_total`
 - `assistant_turn_total`
 
-Odoo's Assistant HTTP client logs `odoo_assistant_http` for the local Odoo -> Assistant round-trip.
-
 The connector environment used for this implementation has no deployed Odoo/PostgreSQL/Codex
 runtime, so it would be misleading to commit synthetic millisecond figures. The structural baseline
 is still deterministic:
@@ -73,14 +89,16 @@ is still deterministic:
 | New Assistant SQLAlchemy Engine for history | 1 per turn with history | 0 |
 | New Assistant SQLAlchemy Engine for instance summary | 1 per turn | 0 |
 | New Assistant SQLAlchemy Engine for unified knowledge/source | unavailable in unified agent | 0; shared pool |
-| Source inventory/root preparation | not available in unified agent | only after first `source.*` call |
+| Version/module inventory | not available to unified reasoning | lazy checked metadata tool |
+| Source inventory/root preparation | not available in unified agent | only when retrieval needs source runtime |
 | Source filesystem scan in normal turn | 0 | 0 |
 | Codex App Server process/initialize | 1 per turn | 1 per turn, now measured |
 | Conversation char budget | older retained slice could evict newer context | newest retained slice |
 
 For a deployed before/after table, run a few representative turns only: pure Odoo aggregate,
-knowledge how-to, structural source explanation, a follow-up with history, and an unavailable
-retrieval/provider case. Use the timing log lines rather than hundreds of prompts.
+instance-aware configuration/how-to, structural custom-source explanation, a follow-up with history,
+and an unavailable retrieval/provider case. Use the timing log lines rather than hundreds of
+prompts.
 
 ## App Server persistence decision
 
