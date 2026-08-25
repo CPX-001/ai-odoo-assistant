@@ -4,13 +4,29 @@ from odoo import Command
 from odoo.tests.common import TransactionCase
 
 from ..runtime.capabilities import (
+    CapabilityApproval,
+    CapabilityConfigResolver,
     CapabilityContext,
+    CapabilityDefinition,
+    CapabilityDependency,
+    CapabilityEffect,
     CapabilityError,
     CapabilityExecutor,
+    CapabilityExposure,
     CapabilityRegistry,
+    CapabilityRisk,
+    ExecutionAuthority,
     clear_discovery_cache,
     discover_capabilities,
 )
+from ..runtime.capabilities.adapters import codex_plan_catalog, codex_reasoning_tools
+
+_EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
+
+
+def _ok_handler(context, arguments):
+    del context, arguments
+    return {"ok": True}
 
 
 class TestCapabilityFramework(TransactionCase):
@@ -33,7 +49,7 @@ class TestCapabilityFramework(TransactionCase):
         super().setUp()
         clear_discovery_cache()
 
-    def _context(self, events=None):
+    def _context(self, events=None, *, metadata=None):
         env = self.env(user=self.capability_user, su=False)
         sink = None
         if events is not None:
@@ -44,16 +60,20 @@ class TestCapabilityFramework(TransactionCase):
             env=env,
             turn_id="capability-test-turn",
             event_sink=sink,
+            metadata=metadata or {},
         )
 
     def test_provider_is_discovered_without_central_registration(self):
         registry = discover_capabilities()
         definition = registry.resolve("odoo.runtime_identity")
         self.assertEqual(definition.executor_id, "odoo.runtime_identity.v1")
+        self.assertEqual(definition.namespace, "odoo")
         self.assertEqual(definition.source_qualname, "runtime_identity")
         descriptor = definition.wire_descriptor()
         self.assertEqual(descriptor["name"], "odoo.runtime_identity")
         self.assertEqual(descriptor["inputSchema"]["type"], "object")
+        self.assertEqual(descriptor["meta"]["exposure"], "reasoning")
+        self.assertEqual(descriptor["meta"]["approval"], "none")
 
     def test_uniform_executor_runs_under_effective_odoo_user(self):
         events = []
@@ -84,3 +104,87 @@ class TestCapabilityFramework(TransactionCase):
         with self.assertRaises(CapabilityError) as captured:
             CapabilityRegistry((definition, definition))
         self.assertEqual(captured.exception.code, "capability_name_duplicate")
+
+    def test_plan_capability_is_known_but_not_directly_callable(self):
+        definition = CapabilityDefinition(
+            name="customer.machine.restart",
+            title="Restart machine",
+            description="Restart one explicitly configured customer machine.",
+            input_schema=_EMPTY_SCHEMA,
+            output_schema={"type": "object"},
+            risk=CapabilityRisk.ACTION,
+            effect=CapabilityEffect.EXTERNAL,
+            exposure=CapabilityExposure.PLAN,
+            approval=CapabilityApproval.ALWAYS,
+            handler=_ok_handler,
+        )
+        registry = CapabilityRegistry((definition,))
+        context = self._context()
+        self.assertEqual(codex_reasoning_tools(registry, context), ())
+        self.assertEqual(codex_plan_catalog(registry, context)[0]["name"], definition.name)
+        executor = CapabilityExecutor(
+            registry,
+            context,
+            config=CapabilityConfigResolver(),
+        )
+        with self.assertRaises(CapabilityError) as captured:
+            asyncio.run(executor.execute(definition.name, {}))
+        self.assertEqual(captured.exception.code, "capability_authority_mismatch")
+        with self.assertRaises(CapabilityError) as captured:
+            asyncio.run(
+                executor.execute(
+                    definition.name,
+                    {},
+                    authority=ExecutionAuthority.PLAN,
+                )
+            )
+        self.assertEqual(captured.exception.code, "capability_approval_required")
+        result = asyncio.run(
+            executor.execute(
+                definition.name,
+                {},
+                authority=ExecutionAuthority.PLAN,
+                approved=True,
+            )
+        )
+        self.assertTrue(result.data["ok"])
+
+    def test_host_capability_is_never_exposed_to_codex(self):
+        definition = CapabilityDefinition(
+            name="assistant.maintenance.cleanup",
+            description="Internal bounded cleanup.",
+            input_schema=_EMPTY_SCHEMA,
+            output_schema={"type": "object"},
+            risk=CapabilityRisk.HOST,
+            effect=CapabilityEffect.HOST,
+            exposure=CapabilityExposure.HOST,
+            handler=_ok_handler,
+        )
+        registry = CapabilityRegistry((definition,))
+        context = self._context()
+        self.assertEqual(codex_reasoning_tools(registry, context), ())
+        self.assertEqual(codex_plan_catalog(registry, context), ())
+        self.assertEqual(registry.for_host(context), (definition,))
+
+    def test_missing_dependency_is_rejected(self):
+        definition = CapabilityDefinition(
+            name="customer.invoice_analysis",
+            description="Analyze a customer invoice.",
+            input_schema=_EMPTY_SCHEMA,
+            output_schema={"type": "object"},
+            risk=CapabilityRisk.READ,
+            effect=CapabilityEffect.READ_ONLY,
+            dependencies=(CapabilityDependency("knowledge.customer_manuals"),),
+            handler=_ok_handler,
+        )
+        with self.assertRaises(CapabilityError) as captured:
+            CapabilityRegistry((definition,))
+        self.assertEqual(captured.exception.code, "capability_dependency_missing")
+
+    def test_disabled_capability_is_not_advertised(self):
+        registry = discover_capabilities()
+        context = self._context(
+            metadata={"capability_enabled": {"odoo.runtime_identity": False}}
+        )
+        names = {item.name for item in registry.for_reasoning(context)}
+        self.assertNotIn("odoo.runtime_identity", names)
