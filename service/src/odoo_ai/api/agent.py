@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from odoo_ai.application.agent_execution import AgentExecutionError, AgentPlanExecutionService
+from odoo_ai.application.agent_failure import agent_failure_response
 from odoo_ai.application.agent_plans import AgentPlanError, AgentPlanService
 from odoo_ai.application.agent_turn import AgentTurnError, AgentTurnService
 from odoo_ai.contracts import (
@@ -91,14 +92,15 @@ router = APIRouter()
 async def agent_turn(
     payload: AgentTurnRequest,
     request: Request,
-) -> AgentTurnResponse | JSONResponse:
+) -> AgentTurnResponse:
     try:
         return await _factory(request).turn_service(payload).run(payload)
     except AgentTurnError as error:
-        LOGGER.warning("Unified agent turn rejected: %s", error.code)
-        return _error(error.code, error.status_code)
+        LOGGER.warning("Unified agent turn failed: %s", error.code)
+        return agent_failure_response(payload, error.code)
     except Exception:
-        return _error("agent_unavailable", 503)
+        LOGGER.exception("Unified agent turn failed unexpectedly")
+        return agent_failure_response(payload, "agent_unavailable")
 
 
 @router.post(
