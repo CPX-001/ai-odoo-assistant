@@ -44,6 +44,8 @@ def tool(
     help_text: str = "",
     audit_metadata: dict[str, JsonValue] | None = None,
     developer_metadata: dict[str, JsonValue] | None = None,
+    preview: CapabilityHandler | None = None,
+    verify: CapabilityHandler | None = None,
     guard: CapabilityGuard | None = None,
 ):
     """Attach one complete definition; provider authors do not edit central catalogs."""
@@ -75,6 +77,8 @@ def tool(
             help_text=help_text,
             audit_metadata=deepcopy(audit_metadata or {}),
             developer_metadata=deepcopy(developer_metadata or {}),
+            preview_handler=preview,
+            verify_handler=verify,
             guard=guard,
             source_module=handler.__module__,
             source_qualname=handler.__qualname__,
