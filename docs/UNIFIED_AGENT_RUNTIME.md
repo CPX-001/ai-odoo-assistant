@@ -25,7 +25,9 @@ El agente dispone además de `odoo.get_instance_facts`, que obtiene mediante el
 endpoint machine-authenticated de inventario la versión real del servidor y los
 nombres técnicos de módulos instalados. No expone la base de datos ni las rutas
 físicas de addons. Esta consulta es lazy: no se ejecuta en todos los turnos, pero
-sí debe usarse cuando una respuesta pueda cambiar según versión o módulos.
+sí debe usarse cuando una respuesta pueda cambiar según versión o módulos. La
+lista retornada está acotada a 64 nombres por llamada; el resultado conserva el
+recuento real y marca truncado cuando corresponde.
 
 ## Capacidad genérica y capacidad tipada
 
@@ -34,7 +36,7 @@ sí debe usarse cuando una respuesta pueda cambiar según versión o módulos.
 | Detectar versión/módulos instalados | Inventario runtime machine-authenticated |
 | Buscar modelos instalados | Registry runtime + ACL de lectura |
 | Consultar registros/agregados | Schema efectivo, domains y campos acotados |
-| Explorar addon conocido | Índice estructural acotado + refs fingerprinted |
+| Explorar addon conocido | Índice Python/XML acotado + refs fingerprinted |
 | Crear un registro | Schema create efectivo + `default_get` real |
 | Cambiar campos escalares/many2one | Schema write efectivo, máximo 16 campos |
 | Archivar | Acción reversible tipada sobre un registro elegible |
@@ -120,9 +122,16 @@ opciones adicionales como analítica?", el comportamiento esperado es:
 3. usar schema/navigation runtime cuando aporte una ubicación o capacidad real;
 4. si interviene un addon custom/OCA/tercero, verificar que está instalado y,
    cuando no se conoce el símbolo exacto, usar `source.inspect_module` para
-   obtener la estructura indexada; después abrir sólo los excerpts relevantes
-   mediante refs con fingerprint;
+   obtener estructura Python y registros XML indexados; después abrir sólo los
+   excerpts relevantes mediante refs con fingerprint;
 5. responder primero con la conclusión y después sólo con los detalles útiles.
+
+`res.config.settings` es transient y no se trata como una tabla de negocio para
+consultas genéricas. Para comprobar que una opción existe o cómo funciona, el
+agente puede inspeccionar las extensiones Python de `res.config.settings`. Eso no
+prueba por sí solo su posición visual. Si el usuario pide la ubicación exacta en
+Settings/menús/vistas, debe localizar además un `kind=xml_id` relevante y leer el
+excerpt XML antes de afirmar dónde aparece.
 
 El agente no debe inventar un menú, sección de Settings, checkbox, dependencia o
 campo exacto. Si puede validar la funcionalidad pero no la ubicación visual,
@@ -131,11 +140,14 @@ Ajustes". Si el retrieval necesario está temporalmente indisponible, puede dar
 orientación general claramente marcada como tal y bajar la confianza, pero no
 presentarla como un hecho observado en el servidor.
 
-`source.inspect_module` no concede acceso libre al filesystem: sólo enumera una
-cantidad acotada de símbolos del índice persistente de un módulo técnico exacto.
-El contenido de código sigue requiriendo `source.read_excerpt`, que vuelve a
-validar el fingerprint contra el fichero actual. No se ejecuta shell, grep libre
-ni rescan durante el turno.
+`source.inspect_module` no concede acceso libre al filesystem: enumera como
+máximo 24 entradas de la estructura persistida de un módulo técnico exacto,
+intercalando símbolos Python y registros XML para que ninguno de los dos tipos
+quede oculto por truncado. Los XML sólo se exponen cuando disponen de un rango de
+líneas verificable. El contenido sigue requiriendo `source.read_excerpt`, que
+vuelve a validar el fingerprint contra el fichero actual y acepta tanto refs de
+`SourceSymbol` como de `XmlRecord`. No se ejecuta shell, grep libre ni rescan
+durante el turno.
 
 ## Decisión y commit
 
