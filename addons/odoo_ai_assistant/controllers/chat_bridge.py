@@ -1,11 +1,13 @@
 """Odoo-authenticated browser routes for the product-facing chat facade."""
 
+import json
 import logging
 
 from odoo import http
 from odoo.http import request
 
 _logger = logging.getLogger(__name__)
+_MAX_STREAM_SCREEN_CHARS = 16 * 1024
 
 
 class BrowserChatController(http.Controller):
@@ -27,6 +29,60 @@ class BrowserChatController(http.Controller):
             screen,
             conversation_id,
         )
+
+    @http.route(
+        "/odoo_ai/v1/chat/stream",
+        type="http",
+        auth="user",
+        methods=["POST"],
+    )
+    def chat_stream(self, message=None, screen=None, conversation_id=None, **unexpected):
+        """Relay Assistant SSE while keeping browser auth/authority entirely in Odoo."""
+
+        bridge = request.env["odoo.ai.assistant.bridge"]
+        if unexpected:
+            _logger.info(
+                "Browser streaming chat rejected unexpected payload keys: %s",
+                sorted(unexpected),
+            )
+            return _single_failure_stream(
+                bridge,
+                "invalid_context",
+                message,
+                conversation_id,
+            )
+        try:
+            if not isinstance(screen, str) or not 1 <= len(screen) <= _MAX_STREAM_SCREEN_CHARS:
+                raise ValueError
+            screen_payload = json.loads(screen)
+            if not isinstance(screen_payload, dict):
+                raise ValueError
+        except (TypeError, ValueError):
+            return _single_failure_stream(
+                bridge,
+                "invalid_context",
+                message,
+                conversation_id,
+            )
+
+        try:
+            prepared = bridge.prepare_chat_stream(
+                message,
+                screen_payload,
+                conversation_id,
+            )
+        except Exception as error:  # noqa: BLE001 - browser response stays sanitized
+            code = getattr(error, "code", "service_unavailable")
+            if not isinstance(code, str) or not code:
+                code = "service_unavailable"
+            _logger.info("Browser streaming chat preparation failed: %s", code)
+            return _single_failure_stream(
+                bridge,
+                code,
+                message,
+                conversation_id,
+            )
+        return _stream_response(prepared.iter_sse())
 
     @http.route(
         "/odoo_ai/v1/chat-history",
@@ -152,3 +208,61 @@ class BrowserChatController(http.Controller):
             confirmation_mode,
             max_auto_risk,
         )
+
+
+def _single_failure_stream(bridge, code, message, conversation_id):
+    try:
+        result = bridge.chat_stream_preparation_failure(
+            code,
+            message,
+            conversation_id,
+        )
+    except Exception:  # noqa: BLE001 - never expose a controller exception to chat
+        result = {
+            "ok": True,
+            "turn_id": "00000000-0000-4000-8000-000000000001",
+            "workflow": "AGENT",
+            "answer": (
+                "No he podido completar la petición de forma fiable. No tengo suficiente "
+                "información para afirmar la causa y no voy a inventarla."
+            ),
+            "confidence": "low",
+            "limitations": [],
+            "citations": [],
+            "plan": None,
+            "conversation_id": None,
+        }
+    return _stream_response(
+        iter(
+            (
+                _sse_event(
+                    "final",
+                    {"type": "final", "response": result},
+                ),
+            )
+        )
+    )
+
+
+def _stream_response(iterator):
+    return http.Response(
+        iterator,
+        status=200,
+        content_type="text/event-stream; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+        direct_passthrough=True,
+    )
+
+
+def _sse_event(event, payload):
+    encoded = json.dumps(
+        payload,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return f"event: {event}\ndata: {encoded}\n\n".encode("utf-8")
