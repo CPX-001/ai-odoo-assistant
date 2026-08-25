@@ -148,7 +148,14 @@
                     </button>
                 </section>
 
-                <div t-if="state.actionReceipt and !recoveryPending"
+                <div t-if="state.actionReceipt and !recoveryPending and state.actionReceipt.state === 'failed'"
+                    class="o_ai_assistant_message o_ai_assistant_message_assistant mt-3"
+                    role="status">
+                    <div class="small text-muted mb-1">Assistant</div>
+                    <div class="o_ai_assistant_message_content text-break" t-esc="actionDecisionMessage"/>
+                </div>
+
+                <div t-if="state.actionReceipt and !recoveryPending and state.actionReceipt.state !== 'failed'"
                     t-att-class="'alert mt-3 ' + actionDecisionClass"
                     role="status" t-esc="actionDecisionMessage"/>
             </div>
