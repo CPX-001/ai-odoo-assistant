@@ -193,6 +193,13 @@ class RuntimeAgentFactory:
             ConfiguredCodexRuntimeSettings.from_env(),
             tool_executor_factory=tool_factory,
         )
+
+        def turn_instance() -> InstanceProfileSummary:
+            summary = self._timed_instance()
+            return summary.model_copy(
+                update={"model_capabilities": list(allowed_models)}
+            )
+
         return _TimedAgentTurnService(
             reasoning_engine=reasoning,
             tools=tools,
@@ -207,7 +214,7 @@ class RuntimeAgentFactory:
             ),
             report_loader=report_loader,
             history_loader=self._history,
-            instance_loader=self._timed_instance,
+            instance_loader=turn_instance,
         )
 
     def plan_service(self) -> AgentPlanService:
