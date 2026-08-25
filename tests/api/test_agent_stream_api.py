@@ -5,11 +5,16 @@ from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from odoo_ai.api import create_app
+from odoo_ai.api.agent import AgentRequestLimitMiddleware
 from odoo_ai.application.agent_events import current_agent_delta_sink
 from odoo_ai.application.agent_turn import AgentTurnError
-from odoo_ai.contracts import AgentTurnRequest, AgentTurnResponse, AnswerConfidence, PlanState
+from odoo_ai.contracts import (
+    AgentTurnRequest,
+    AgentTurnResponse,
+    AnswerConfidence,
+    PlanState,
+)
 from odoo_ai.runtime.agent_failure_diagnosis import AgentFailureDiagnosis
 from odoo_ai.security import SHARED_SECRET_HEADER
 
@@ -184,3 +189,40 @@ def test_stream_failure_uses_model_diagnosis_in_final_event() -> None:
     assert '"confidence":"medium"' in stream
     assert "tool_call_budget_exceeded" not in stream
     assert "event: error" not in stream
+
+
+def test_request_limit_replays_body_once_then_forwards_disconnect() -> None:
+    received = []
+
+    async def downstream(scope, receive, send) -> None:
+        del scope, send
+        received.append(await receive())
+        received.append(await receive())
+
+    upstream = iter(
+        (
+            {"type": "http.request", "body": b'{"test":true}', "more_body": False},
+            {"type": "http.disconnect"},
+        )
+    )
+
+    async def receive():
+        return next(upstream)
+
+    async def send(message) -> None:
+        del message
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/v1/agent/turn/stream",
+        "headers": [],
+    }
+    middleware = AgentRequestLimitMiddleware(downstream, max_bytes=1024)
+
+    asyncio.run(middleware(scope, receive, send))
+
+    assert received == [
+        {"type": "http.request", "body": b'{"test":true}', "more_body": False},
+        {"type": "http.disconnect"},
+    ]

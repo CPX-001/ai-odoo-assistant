@@ -79,7 +79,7 @@ class AgentRequestLimitMiddleware:
         async def replay_receive() -> Message:
             nonlocal replayed
             if replayed:
-                return {"type": "http.request", "body": b"", "more_body": False}
+                return await receive()
             replayed = True
             return {"type": "http.request", "body": bytes(body), "more_body": False}
 
@@ -296,7 +296,7 @@ def _sse_event(event: str, payload: dict[str, object]) -> bytes:
         separators=(",", ":"),
         sort_keys=True,
     )
-    return f"event: {event}\ndata: {encoded}\n\n".encode("utf-8")
+    return f"event: {event}\ndata: {encoded}\n\n".encode()
 
 
 def install_agent_routes(
