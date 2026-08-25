@@ -115,25 +115,25 @@ def _failure_answer(code):
     if normalized in {"access_denied", "query_rejected", "action_rejected"}:
         return (
             "No he podido continuar porque Odoo no me ha permitido acceder o realizar una parte "
-            "necesaria de la petición. No he hecho ningún cambio. Si debería estar permitido, habrá "
-            "que revisar los permisos de tu usuario."
+            "necesaria de la petición. No doy ningún cambio por realizado. Si debería estar "
+            "permitido, habrá que revisar los permisos de tu usuario."
         )
     if "timeout" in normalized:
         return (
-            "La petición se ha quedado sin tiempo antes de terminar. No he dado nada por hecho ni "
-            "por aplicado. Puedes reintentarlo; si se repite, habrá que revisar qué parte está "
-            "tardando demasiado."
+            "La petición se ha quedado sin tiempo antes de terminar. No doy ningún resultado ni "
+            "cambio por confirmado. Si era una consulta puedes reintentarlo; si pedías modificar "
+            "datos, comprueba primero su estado actual para no repetir un cambio a ciegas."
         )
     if any(marker in normalized for marker in ("budget", "limit", "repeated")):
         return (
             "He tenido que parar antes de terminar porque el proceso entró en demasiadas "
-            "comprobaciones o intentos. No he dado la petición por completada. Puedes reintentarlo "
-            "una vez; si vuelve a pasar, habrá que revisar por qué se atasca."
+            "comprobaciones o intentos. No doy la petición por completada ni ningún cambio por "
+            "confirmado. Si vuelve a pasar, habrá que revisar por qué se atasca."
         )
     if normalized == "evidence_unavailable":
         return (
             "No he encontrado información suficiente para responder con fiabilidad y prefiero no "
-            "inventarla. No he dado nada por completado."
+            "inventarla. No doy la petición por completada."
         )
     if normalized in {"invalid_context", "record_context_required"}:
         return (
@@ -141,15 +141,21 @@ def _failure_answer(code):
             "petición. No necesitas abrir una pantalla concreta para darme acceso; puedes "
             "reintentarlo indicando el concepto o registro con un poco más de precisión."
         )
-    if normalized in {"engine_unavailable", "authentication_failed", "service_unavailable"}:
+    if normalized in {"engine_unavailable", "authentication_failed"}:
         return (
-            "No he podido terminar esta petición porque el servicio que la procesa no respondió "
-            "correctamente. No sé todavía por qué y no voy a inventarlo. No he hecho ningún cambio. "
-            "Puedes reintentarlo; si se repite, habrá que revisar el estado interno del Assistant."
+            "No he podido terminar esta petición porque una parte necesaria del Assistant no estaba "
+            "disponible. No tengo una causa más concreta que pueda afirmar sin inventarla y no doy "
+            "ningún cambio por confirmado."
+        )
+    if normalized in {"service_unavailable", "invalid_response"}:
+        return (
+            "Se ha interrumpido la comunicación antes de que pudiera confirmar el resultado. No sé "
+            "todavía por qué y no voy a inventarlo. Si pedías cambiar datos, no puedo asegurar si "
+            "el cambio llegó a aplicarse: comprueba su estado actual antes de repetir la operación."
         )
     return (
         "No he podido completar la petición de forma fiable. No tengo suficiente información para "
-        "afirmar la causa y no voy a inventarla. No he dado nada por completado."
+        "afirmar la causa y no voy a inventarla. No doy ningún cambio por confirmado."
     )
 
 
