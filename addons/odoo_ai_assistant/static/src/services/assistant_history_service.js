@@ -84,8 +84,12 @@ patch(assistantPanelService, {
         panel.state.conversationId = initialConversationId;
         panel.state.historyView = !initialConversationId;
 
+        const recoveryPending = () => panel.state.result?.plan?.state === "authorized";
         const isBusy = () =>
-            panel.state.loading || panel.state.historyLoading || panel.state.decisionLoading;
+            panel.state.loading ||
+            panel.state.historyLoading ||
+            panel.state.decisionLoading ||
+            recoveryPending();
 
         const showHistory = async () => {
             if (isBusy()) {
@@ -100,6 +104,9 @@ patch(assistantPanelService, {
         const open = () => {
             panel.state.isOpen = true;
             panel.refreshContext();
+            if (recoveryPending()) {
+                return;
+            }
             const recentConversationId = loadRecentActiveChat(sessionStorage);
             if (!recentConversationId) {
                 panel.newConversation();
@@ -143,11 +150,12 @@ patch(assistantPanelService, {
             },
             newConversation() {
                 if (isBusy()) {
-                    return;
+                    return false;
                 }
                 clearRecentActiveChat(sessionStorage);
-                panel.newConversation();
+                const created = panel.newConversation();
                 panel.state.historyView = false;
+                return created !== false;
             },
             async selectConversation(conversationId) {
                 if (isBusy()) {
