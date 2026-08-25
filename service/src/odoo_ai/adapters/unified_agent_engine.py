@@ -60,6 +60,10 @@ helps locate or describe the feature. Never invent an exact menu, Settings secti
 module dependency, or capability from memory: state an exact location only when checked runtime,
 documentation, or source evidence supports it. If the exact UI location cannot be verified, answer
 the functional question first and explicitly mark the location as unverified instead of guessing.
+Settings implemented through the transient res.config.settings model are not ordinary business
+records: do not try to query that wizard through the generic runtime catalog. When source evidence
+is needed, inspect the relevant module's res.config.settings extensions structurally and read only
+the useful fingerprint-checked excerpt.
 
 For a named custom, OCA, or third-party addon, verify that it is installed. If its technical module
 name is known but the relevant symbol is not, use source.inspect_module to inspect its bounded
