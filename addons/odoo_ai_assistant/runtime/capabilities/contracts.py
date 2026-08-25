@@ -123,6 +123,29 @@ class CapabilityResult:
 
 
 @dataclass(frozen=True, slots=True)
+class CapabilityPreview:
+    """Host-owned preview persisted before a plan capability may execute."""
+
+    summary: Mapping[str, JsonValue]
+    precondition_fingerprint: str
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.precondition_fingerprint, str)
+            or re.fullmatch(r"sha256:[0-9a-f]{64}", self.precondition_fingerprint) is None
+        ):
+            raise CapabilityError("capability_preview_fingerprint_invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityVerification:
+    """Post-effect verification result produced by the capability provider."""
+
+    verified: bool
+    summary: Mapping[str, JsonValue] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
 class CapabilityContext:
     """Narrow per-turn host services handed to capability handlers.
 
@@ -176,6 +199,8 @@ class CapabilityDefinition:
     help_text: str = ""
     audit_metadata: Mapping[str, JsonValue] = field(default_factory=dict)
     developer_metadata: Mapping[str, JsonValue] = field(default_factory=dict)
+    preview_handler: CapabilityHandler | None = field(default=None, repr=False, compare=False)
+    verify_handler: CapabilityHandler | None = field(default=None, repr=False, compare=False)
     guard: CapabilityGuard | None = field(default=None, repr=False, compare=False)
     source_module: str = ""
     source_qualname: str = ""
@@ -209,6 +234,13 @@ class CapabilityDefinition:
             raise CapabilityError("capability_reasoning_authority_invalid")
         if self.exposure is CapabilityExposure.HOST and self.approval is CapabilityApproval.ALWAYS:
             raise CapabilityError("capability_host_approval_invalid")
+        if self.exposure is CapabilityExposure.PLAN and self.effect is not CapabilityEffect.READ_ONLY:
+            if self.preview_handler is None or self.verify_handler is None:
+                raise CapabilityError("capability_plan_lifecycle_incomplete")
+        if self.exposure is not CapabilityExposure.PLAN and (
+            self.preview_handler is not None or self.verify_handler is not None
+        ):
+            raise CapabilityError("capability_plan_lifecycle_invalid")
         if self.timeout_seconds is not None and not 1 <= self.timeout_seconds <= 600:
             raise CapabilityError("capability_timeout_invalid")
         if not 1 <= self.max_calls <= 64:
