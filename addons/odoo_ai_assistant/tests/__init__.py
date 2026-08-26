@@ -4,6 +4,7 @@ from . import test_assistant_chat_stream as test_assistant_chat_stream
 from . import test_batch_commit as test_batch_commit
 from . import test_batch_preflight as test_batch_preflight
 from . import test_batch_tools as test_batch_tools
+from . import test_capability_actions as test_capability_actions
 from . import test_chat_policy as test_chat_policy
 from . import test_chat_preferences as test_chat_preferences
 from . import test_chat_storage as test_chat_storage
