@@ -85,6 +85,7 @@ def test_phase0_baseline_combines_client_and_persisted_event_timings() -> None:
     assert summary["timings_ms"]["reasoning_completed"] == 1000
     assert summary["timings_ms"]["result_persisted"] == 1100
     assert summary["timings_ms"]["browser_final"] == 1200
+    assert summary["timing_provenance"]["turn_persisted"] == "client:onTiming"
     assert "provider_initialized" in summary["missing_checkpoints"]
     assert "browser_first_answer_delta" in summary["missing_checkpoints"]
 
