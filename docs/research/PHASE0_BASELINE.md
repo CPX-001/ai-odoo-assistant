@@ -3,7 +3,7 @@
 Research/playbook source: `FOUNDATION_STABILIZATION_PLAYBOOK.md`  
 Phase started from main: `3f175cdc9b38aa3fc5aac4f231c0aee5d86b46ef`  
 Target: Odoo 18 Community / embedded runtime / Codex primary  
-Status: **in progress — measurement scaffolding implemented, live exit gate not yet satisfied**
+Status: **in progress — client/provider measurement instrumentation implemented, live exit gate not yet satisfied**
 
 ## Purpose
 
@@ -11,7 +11,7 @@ Phase 0 exists to stop debugging latency and failures by impression. It must pro
 
 This document is an execution record, not current-state architecture authority. Current code, accepted ADRs and the documents indexed by `docs/README.md` remain authoritative.
 
-## Implemented in this slice
+## Implemented in this phase
 
 ### 1. Machine-readable scenario matrix
 
@@ -42,7 +42,7 @@ The catalog deliberately records fixture requirements instead of hiding setup as
 
 ### 2. Browser monotonic timing checkpoints
 
-`streamAssistantChat()` now has optional `onTiming` and `nowCall` diagnostic hooks. The normal product caller can ignore them.
+`streamAssistantChat()` has optional `onTiming` and `nowCall` diagnostic hooks. The normal product caller can ignore them.
 
 Current client checkpoints:
 
@@ -55,25 +55,55 @@ browser_final
 
 `nowCall` defaults to `performance.now()` with a `Date.now()` fallback. Tests inject a deterministic clock. The callback receives only checkpoint name, elapsed milliseconds and minimal turn/state metadata.
 
-Important: the current `onDelta` path is still progress labels derived from polling. Therefore this phase does **not** record `browser_first_answer_delta`, because doing so would falsely label progress text as assistant answer streaming.
+Important: the current `onDelta` path is still progress labels derived from polling. Therefore Phase 0 does **not** record `browser_first_answer_delta`, because doing so would falsely label progress text as assistant answer streaming.
 
-### 3. Baseline trace summarizer
+### 3. Codex provider monotonic checkpoints
 
-`tests/e2e/phase0_baseline.py` consumes a captured trace and merges:
+`CodexReasoningEngine` now creates one best-effort, content-free monotonic recorder per provider run. It emits sanitized `diagnostic.timing` events through the existing `CapabilityContext` event sink.
+
+Current provider checkpoints:
+
+```text
+runtime_started
+provider_process_started
+provider_initialized
+provider_thread_started
+provider_turn_started
+first_provider_event
+first_answer_delta
+```
+
+`first_answer_delta` is timing-only. The adapter notices the already-allowed `item/agentMessage/delta` notification method but does not persist or forward its text. This deliberately does **not** implement product answer streaming ahead of Phase 4.
+
+The diagnostic event payload is limited to:
+
+```json
+{"point": "provider_initialized", "elapsed_ms": 123.456}
+```
+
+The recorder is idempotent per point and best-effort: a failure to persist diagnostic timing must not fail a product turn. No raw provider notification, prompt, output, tool arguments, stdout/stderr or credential data is added.
+
+### 4. Baseline trace summarizer
+
+`tests/e2e/phase0_baseline.py` consumes a captured trace and combines:
 
 - client monotonic checkpoints;
 - persisted Odoo turn-event timestamps;
-- future `diagnostic.timing` backend events when they become available;
+- provider `diagnostic.timing` events;
 - final state/error codes;
 - optional model-turn/tool-call/token counters.
 
-Current persisted-event mappings are intentionally explicit:
+Clock domains are kept explicit. `timings_ms` is a submit-relative product timeline: server timestamps are measured from the persisted `queued` event and shifted by the observed client `turn_persisted` latency when available. `runtime_monotonic_ms` preserves provider process-local monotonic offsets separately; the summarizer does not pretend browser and cron workers share one monotonic clock.
+
+Current evidence mappings are intentionally explicit:
 
 | Phase 0 point | Current evidence |
 | --- | --- |
-| `turn_persisted` | `queued` event, overridden by client monotonic submit timing when available |
+| `turn_persisted` | client monotonic timing + `queued` event |
 | `worker_claimed` | `started` event |
-| `runtime_started` | `reasoning.started` event as a documented proxy |
+| `runtime_started` | `reasoning.started` wall-clock proxy + `diagnostic.timing` monotonic checkpoint |
+| provider lifecycle points | `diagnostic.timing` event timestamp + runtime monotonic offset |
+| `first_answer_delta` | timing-only `diagnostic.timing`; answer text is not persisted |
 | `first_capability_started` | first `tool.started` event |
 | `last_capability_completed` | last `tool.completed` / `tool.failed` event |
 | `reasoning_completed` | `reasoning.completed` event |
@@ -123,13 +153,13 @@ The playbook requires:
 submit_received                 covered client-side
 turn_persisted                  covered client-side + queued event
 worker_claimed                  covered by started event
-runtime_started                 proxy via reasoning.started
-provider_process_started        MISSING dedicated backend checkpoint
-provider_initialized            MISSING dedicated backend checkpoint
-provider_thread_started         MISSING dedicated backend checkpoint
-provider_turn_started           MISSING dedicated backend checkpoint
-first_provider_event            MISSING dedicated backend checkpoint
-first_answer_delta              MISSING; adapter currently ignores answer deltas for product transport
+runtime_started                 covered by reasoning.started + diagnostic.timing
+provider_process_started        covered by diagnostic.timing
+provider_initialized            covered by diagnostic.timing
+provider_thread_started         covered by diagnostic.timing
+provider_turn_started           covered by diagnostic.timing
+first_provider_event            covered by diagnostic.timing
+first_answer_delta              covered timing-only when Codex emits agentMessage/delta
 first_capability_started        covered by tool.started
 last_capability_completed       covered by tool.completed/tool.failed
 reasoning_completed             covered by reasoning.completed
@@ -139,7 +169,7 @@ browser_first_answer_delta      MISSING by design until real answer streaming ex
 browser_final                   covered client-side
 ```
 
-The missing provider checkpoints are the next Phase 0 coding slice. They should be added at the Codex adapter boundary using process-local monotonic time and a sanitized diagnostic projection. They must not expose raw provider notifications or model content.
+The only intentionally missing answer-stream checkpoint is browser-side first answer delta. That belongs to the later real-streaming phase; Phase 0 can still measure whether Codex produced a delta and how long it took.
 
 ## Error-pair capture
 
@@ -181,20 +211,20 @@ For latency distributions, run `hello` and one simple read repeatedly. Do not us
 Current status:
 
 - [ ] `hello`, one read, one action and one failure have live reproducible captures in a real embedded Odoo + authenticated Codex environment.
-- [ ] A turn can be decomposed into queue/provider/tool/finalization timing with the dedicated provider checkpoints above.
-- [ ] The simple-turn latency can be attributed from measured data rather than guessed.
+- [ ] A live turn has been decomposed into queue/provider/tool/finalization timing using the implemented checkpoints.
+- [ ] The simple-turn latency has been attributed from measured live data rather than guessed.
 - [ ] At least five important failure paths have original code + final UI code recorded side by side.
 
-The repository now has the scenario contract, client measurement hooks and trace summarizer needed for those captures, but the gate remains open until provider-side timing instrumentation and live measurements are added.
+The repository now has the scenario contract, client/provider measurement hooks and trace summarizer needed for those captures. The gate remains open because the required live authenticated measurements and failure-pair evidence have not been produced in this environment.
 
-## Next coding slice
+## Next work inside Phase 0
 
 Stay in Phase 0. Do **not** begin the provider-boundary refactor yet.
 
 Next:
 
-1. add sanitized monotonic checkpoints around Codex process start/initialize, thread start, turn start and first provider event;
-2. observe `item/agentMessage/delta` only enough to measure `first_answer_delta` without changing the product streaming transport;
-3. expose those checkpoints to the trace collector without raw protocol content;
-4. execute the minimum live matrix (`hello`, read, action, failure) and record the first baseline;
-5. only then evaluate the Phase 0 exit gate.
+1. execute the minimum live matrix (`hello`, one read, one action, one failure) on a real embedded Odoo 18 instance with an authenticated Codex account;
+2. inspect the first summaries and confirm queue/provider/tool/finalization attribution is internally consistent;
+3. capture at least five original-vs-UI error pairs using controlled failure fixtures;
+4. repeat simple turns enough to establish a useful baseline distribution;
+5. only then evaluate the Phase 0 exit gate and decide whether Phase 1 may start.
