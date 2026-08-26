@@ -5,15 +5,36 @@ import { rpc } from "@web/core/network/rpc";
 import { reactive } from "@odoo/owl";
 
 const CHAT_WORKFLOWS = new Set(["AGENT"]);
+const PLAN_STATES = new Set([
+    "planning",
+    "awaiting_confirmation",
+    "authorized",
+    "executing",
+    "completed",
+    "partial",
+    "failed",
+    "rejected",
+    "expired",
+]);
+const TURN_TERMINAL_STATES = new Set([
+    "completed",
+    "failed",
+    "cancelled",
+    "recovery_required",
+]);
+const MAX_NATIVE_POLL_ATTEMPTS = 360;
+const NATIVE_POLL_DELAY_MS = 500;
 const KNOWN_ERROR_CODES = new Set([
     "access_denied",
-    "agent_budget_exceeded",
-    "action_budget_exceeded",
     "action_rejected",
-    "approval_binding_mismatch",
-    "approval_expired",
-    "approval_not_found",
+    "agent_budget_exceeded",
     "authentication_failed",
+    "capability_not_available",
+    "capability_plan_approval_required",
+    "capability_plan_binding_mismatch",
+    "capability_plan_precondition_changed",
+    "capability_plan_version_mismatch",
+    "capability_verification_failed",
     "chat_store_unavailable",
     "engine_timeout",
     "engine_unavailable",
@@ -22,172 +43,55 @@ const KNOWN_ERROR_CODES = new Set([
     "invalid_response",
     "query_budget_exceeded",
     "query_rejected",
-    "proposal_already_decided",
-    "proposal_not_found",
     "record_context_required",
+    "runtime_unavailable",
     "service_unavailable",
+    "worker_lost_after_write_barrier",
 ]);
 
 function exactKeys(value, expected) {
     return (
         value !== null &&
         typeof value === "object" &&
+        !Array.isArray(value) &&
         Object.keys(value).sort().join("|") === [...expected].sort().join("|")
     );
 }
 
-function validActionValue(value) {
-    if (!exactKeys(value, ["kind", "value"])) {
+function validJsonValue(value, depth = 0) {
+    if (depth > 6) {
         return false;
     }
-    const item = value.value;
-    if (item === null) {
+    if (value === null || typeof value === "boolean") {
         return true;
     }
-    if (value.kind === "boolean") {
-        return typeof item === "boolean";
+    if (typeof value === "number") {
+        return Number.isFinite(value);
     }
-    if (value.kind === "integer") {
-        return Number.isSafeInteger(item);
+    if (typeof value === "string") {
+        return value.length <= 4000;
     }
-    if (value.kind === "many2one") {
-        return Number.isSafeInteger(item) && item > 0;
+    if (Array.isArray(value)) {
+        return value.length <= 64 && value.every((item) => validJsonValue(item, depth + 1));
     }
-    return (
-        ["date", "datetime", "decimal", "selection", "text"].includes(value.kind) &&
-        typeof item === "string" &&
-        item.length <= 4000
-    );
-}
-
-function validActionProposal(proposal) {
-    if (proposal === null || proposal === undefined) {
-        return true;
-    }
-    if (proposal?.action_kind === "business_action") {
+    if (typeof value === "object") {
+        const entries = Object.entries(value);
         return (
-            exactKeys(proposal, [
-                "action_id",
-                "action_kind",
-                "display_name",
-                "expected_states",
-                "expires_at",
-                "proposal_id",
-                "state_before",
-                "target",
-                "warnings",
-            ]) &&
-            proposal.action_id === "sale.order.confirm.v1" &&
-            typeof proposal.proposal_id === "string" &&
-            exactKeys(proposal.target, ["model", "record_id"]) &&
-            proposal.target.model === "sale.order" &&
-            Number.isSafeInteger(proposal.target.record_id) &&
-            proposal.target.record_id > 0 &&
-            typeof proposal.display_name === "string" &&
-            ["draft", "sent"].includes(proposal.state_before) &&
-            Array.isArray(proposal.expected_states) &&
-            proposal.expected_states.join("|") === "sale|done" &&
-            Array.isArray(proposal.warnings) &&
-            proposal.warnings.length <= 8 &&
-            typeof proposal.expires_at === "string"
+            entries.length <= 64 &&
+            entries.every(
+                ([key, item]) =>
+                    typeof key === "string" &&
+                    key.length > 0 &&
+                    key.length <= 128 &&
+                    validJsonValue(item, depth + 1)
+            )
         );
     }
-    if (proposal?.action_kind === "record_create") {
-        if (
-            !exactKeys(proposal, [
-                "action_kind",
-                "proposal_id",
-                "target",
-                "values",
-                "warnings",
-                "expires_at",
-            ]) ||
-            typeof proposal.proposal_id !== "string" ||
-            !exactKeys(proposal.target, ["model"]) ||
-            typeof proposal.target.model !== "string" ||
-            !Array.isArray(proposal.values) ||
-            proposal.values.length < 1 ||
-            proposal.values.length > 16 ||
-            !Array.isArray(proposal.warnings) ||
-            proposal.warnings.length > 8 ||
-            typeof proposal.expires_at !== "string"
-        ) {
-            return false;
-        }
-        const fields = new Set();
-        for (const value of proposal.values) {
-            if (
-                !exactKeys(value, ["field", "label", "value"]) ||
-                typeof value.field !== "string" ||
-                !validActionValue(value.value) ||
-                fields.has(value.field)
-            ) {
-                return false;
-            }
-            fields.add(value.field);
-        }
-        return true;
-    }
-    if (
-        !exactKeys(proposal, [
-            "proposal_id",
-            "target",
-            "changes",
-            "warnings",
-            "expires_at",
-        ]) ||
-        typeof proposal.proposal_id !== "string" ||
-        !exactKeys(proposal.target, ["model", "record_id"]) ||
-        typeof proposal.target.model !== "string" ||
-        !Number.isSafeInteger(proposal.target.record_id) ||
-        proposal.target.record_id <= 0 ||
-        !Array.isArray(proposal.changes) ||
-        proposal.changes.length < 1 ||
-        proposal.changes.length > 16 ||
-        !Array.isArray(proposal.warnings) ||
-        proposal.warnings.length > 8 ||
-        typeof proposal.expires_at !== "string"
-    ) {
-        return false;
-    }
-    const fields = new Set();
-    for (const change of proposal.changes) {
-        if (
-            !exactKeys(change, ["field", "label", "before", "after"]) ||
-            typeof change.field !== "string" ||
-            !validActionValue(change.before) ||
-            !validActionValue(change.after) ||
-            fields.has(change.field)
-        ) {
-            return false;
-        }
-        fields.add(change.field);
-    }
-    return true;
+    return false;
 }
 
-function validAgentPlan(plan) {
-    const states = new Set([
-        "planning",
-        "awaiting_confirmation",
-        "authorized",
-        "executing",
-        "completed",
-        "partial",
-        "failed",
-        "rejected",
-        "expired",
-    ]);
-    const stepStates = new Set([
-        "planned",
-        "previewed",
-        "executing",
-        "completed",
-        "partial",
-        "failed",
-        "skipped",
-    ]);
-    const validReceipt = (receipt) =>
+function validReceipt(receipt) {
+    return (
         receipt === null ||
         (exactKeys(receipt, [
             "error_code",
@@ -202,18 +106,49 @@ function validAgentPlan(plan) {
             ((receipt.record_id === null && receipt.record_model === null) ||
                 (Number.isSafeInteger(receipt.record_id) &&
                     receipt.record_id > 0 &&
-                    typeof receipt.record_model === "string")));
-    const validStep = (step) =>
-        exactKeys(step, ["effect_scope", "receipt", "risk", "state", "step_id", "title"]) &&
+                    typeof receipt.record_model === "string")))
+    );
+}
+
+function validCapabilityStep(step) {
+    return (
+        exactKeys(step, [
+            "approval",
+            "capability",
+            "effect_scope",
+            "preview",
+            "receipt",
+            "risk",
+            "state",
+            "step_id",
+            "summary",
+            "title",
+        ]) &&
         typeof step.step_id === "string" &&
+        step.step_id.length > 0 &&
+        typeof step.capability === "string" &&
+        /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(step.capability) &&
         typeof step.title === "string" &&
         step.title.length > 0 &&
-        stepStates.has(step.state) &&
+        step.title.length <= 1000 &&
+        typeof step.summary === "string" &&
+        step.summary.length > 0 &&
+        step.summary.length <= 500 &&
+        ["planned", "previewed", "executing", "completed", "partial", "failed", "skipped"].includes(
+            step.state
+        ) &&
         ["low", "moderate", "high", "protected"].includes(step.risk) &&
         ["read_only", "internal_reversible", "internal_irreversible", "external"].includes(
             step.effect_scope
         ) &&
-        validReceipt(step.receipt);
+        ["none", "policy", "always"].includes(step.approval) &&
+        exactKeys(step.preview, Object.keys(step.preview || {})) &&
+        validJsonValue(step.preview) &&
+        validReceipt(step.receipt)
+    );
+}
+
+function validAgentPlan(plan) {
     return (
         exactKeys(plan, [
             "assumptions",
@@ -228,7 +163,7 @@ function validAgentPlan(plan) {
             "steps",
         ]) &&
         typeof plan.plan_id === "string" &&
-        states.has(plan.state) &&
+        PLAN_STATES.has(plan.state) &&
         ["low", "moderate", "high", "protected"].includes(plan.risk) &&
         typeof plan.goal === "string" &&
         plan.goal.length > 0 &&
@@ -238,11 +173,12 @@ function validAgentPlan(plan) {
         plan.assumptions.every((value) => typeof value === "string") &&
         Array.isArray(plan.steps) &&
         plan.steps.length <= 12 &&
-        plan.steps.every(validStep) &&
+        plan.steps.every(validCapabilityStep) &&
         typeof plan.requires_confirmation === "boolean" &&
         (plan.expires_at === null || typeof plan.expires_at === "string") &&
         plan.metadata !== null &&
         typeof plan.metadata === "object" &&
+        !Array.isArray(plan.metadata) &&
         exactKeys(plan.policy, [
             "allow_synthetic_data",
             "confirmation_mode",
@@ -271,8 +207,16 @@ function validCitation(value) {
     );
 }
 
+function errorCode(response, fallback = "invalid_response") {
+    const code = response?.error?.code || response?.error_code;
+    return KNOWN_ERROR_CODES.has(code) ? code : fallback;
+}
+
 export function recoveryPending(state) {
-    return state?.result?.plan?.state === "authorized";
+    return (
+        state?.actionReceipt?.state === "recovery_required" ||
+        ["authorized", "executing"].includes(state?.result?.plan?.state)
+    );
 }
 
 export function normalizeChatResponse(response) {
@@ -305,30 +249,45 @@ export function normalizeChatResponse(response) {
             errorCode: null,
         };
     }
-    const code = response?.error?.code;
-    return {
-        result: null,
-        errorCode: KNOWN_ERROR_CODES.has(code) ? code : "invalid_response",
-    };
+    return { result: null, errorCode: errorCode(response) };
 }
 
 export function normalizeActionDecisionResponse(response, planId) {
-    const states = new Set(["authorized", "completed", "partial", "failed", "rejected"]);
     if (
-        exactKeys(response, ["ok", "plan", "plan_id", "state"]) &&
+        exactKeys(response, ["ok", "plan", "plan_id", "response", "state"]) &&
         response.ok === true &&
         response.plan_id === planId &&
-        states.has(response.state) &&
-        (response.plan === null || validAgentPlan(response.plan))
+        ["authorized", "rejected"].includes(response.state) &&
+        validAgentPlan(response.plan) &&
+        (response.response === null || normalizeChatResponse(response.response).result !== null)
     ) {
-        return { receipt: response, plan: response.plan, errorCode: null };
+        return { receipt: response, plan: response.plan, response: response.response, errorCode: null };
     }
-    const code = response?.error?.code;
-    return {
-        receipt: null,
-        plan: null,
-        errorCode: KNOWN_ERROR_CODES.has(code) ? code : "invalid_response",
-    };
+    return { receipt: null, plan: null, response: null, errorCode: errorCode(response) };
+}
+
+export function normalizeCapabilityPlanStatus(response, planId) {
+    if (
+        exactKeys(response, [
+            "error_code",
+            "ok",
+            "plan",
+            "plan_id",
+            "response",
+            "state",
+            "turn_state",
+        ]) &&
+        response.ok === true &&
+        response.plan_id === planId &&
+        typeof response.state === "string" &&
+        typeof response.turn_state === "string" &&
+        (response.plan === null || validAgentPlan(response.plan)) &&
+        (response.response === null || normalizeChatResponse(response.response).result !== null) &&
+        (response.error_code === null || typeof response.error_code === "string")
+    ) {
+        return { status: response, errorCode: null };
+    }
+    return { status: null, errorCode: errorCode(response) };
 }
 
 export function normalizeHistoryResponse(response) {
@@ -356,11 +315,7 @@ export function normalizeHistoryResponse(response) {
     ) {
         return { history: response, errorCode: null };
     }
-    const code = response?.error?.code;
-    return {
-        history: null,
-        errorCode: KNOWN_ERROR_CODES.has(code) ? code : "invalid_response",
-    };
+    return { history: null, errorCode: errorCode(response) };
 }
 
 function browserStorage() {
@@ -373,9 +328,7 @@ function browserStorage() {
 
 export function draftStorageKey(conversationId) {
     const host = globalThis.location?.host || "odoo";
-    const uid =
-        globalThis.odoo?.session_info?.uid ??
-        globalThis.odoo?.__session_info__?.uid;
+    const uid = globalThis.odoo?.session_info?.uid ?? globalThis.odoo?.__session_info__?.uid;
     const userScope = Number.isSafeInteger(uid) && uid > 0 ? String(uid) : "session";
     return `odoo_ai_assistant:draft:${host}:${userScope}:${conversationId || "new"}`;
 }
@@ -409,7 +362,64 @@ export function resetForNewConversation(state, storage) {
     saveDraft(storage, null, "");
 }
 
-export async function submitAssistantRequest({ state, screenContext, rpcCall, message }) {
+function requestId() {
+    const uuid = globalThis.crypto?.randomUUID?.();
+    if (typeof uuid === "string" && uuid.length >= 8) {
+        return uuid;
+    }
+    return `web-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function appendAssistantMessage(state, response, suffix) {
+    if (!response?.answer || !response?.turn_id) {
+        return;
+    }
+    const last = state.messages[state.messages.length - 1];
+    if (last?.role === "assistant" && last.content === response.answer) {
+        return;
+    }
+    state.messages = [
+        ...state.messages,
+        {
+            message_id: `local-assistant-${response.turn_id}-${suffix}`,
+            role: "assistant",
+            content: response.answer,
+            created_at: new Date().toISOString(),
+        },
+    ];
+}
+
+async function pollTurnResponse({ rpcCall, turnId, waitCall }) {
+    for (let attempt = 0; attempt < MAX_NATIVE_POLL_ATTEMPTS; attempt += 1) {
+        await waitCall(NATIVE_POLL_DELAY_MS);
+        const status = await rpcCall("/odoo_ai/v1/turn/status", {
+            turn_id: turnId,
+            after_sequence: 0,
+        });
+        if (status?.ok !== true || status.turn_id !== turnId) {
+            throw new Error(errorCode(status, "runtime_unavailable"));
+        }
+        if (["completed", "awaiting_confirmation"].includes(status.state)) {
+            const normalized = normalizeChatResponse(status.response);
+            if (!normalized.result) {
+                throw new Error(normalized.errorCode || "invalid_response");
+            }
+            return normalized.result;
+        }
+        if (TURN_TERMINAL_STATES.has(status.state)) {
+            throw new Error(status.error_code || "runtime_unavailable");
+        }
+    }
+    throw new Error("engine_timeout");
+}
+
+export async function submitAssistantRequest({
+    state,
+    screenContext,
+    rpcCall,
+    message,
+    waitCall = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+}) {
     if (state.loading || state.decisionLoading || recoveryPending(state)) {
         return false;
     }
@@ -423,63 +433,46 @@ export async function submitAssistantRequest({ state, screenContext, rpcCall, me
     state.errorCode = null;
     state.actionReceipt = null;
     try {
-        const response = await rpcCall("/odoo_ai/v1/chat", {
+        const queued = await rpcCall("/odoo_ai/v1/turn", {
             message: normalized,
             screen: state.context,
             conversation_id: state.conversationId,
+            client_request_id: requestId(),
         });
-        const parsed = normalizeChatResponse(response);
-        state.result = parsed.result;
-        state.errorCode = parsed.errorCode;
-        if (parsed.result) {
-            const previousConversationId = state.conversationId;
-            state.conversationId = parsed.result.conversation_id || state.conversationId;
-            if (
-                state.conversationId &&
-                !state.conversations.some(
-                    (item) => item.conversation_id === state.conversationId
-                )
-            ) {
-                const now = new Date().toISOString();
-                state.conversations = [
-                    {
-                        conversation_id: state.conversationId,
-                        title: normalized.slice(0, 160),
-                        created_at: now,
-                        updated_at: now,
-                    },
-                    ...state.conversations,
-                ];
-            } else if (state.conversationId && previousConversationId === state.conversationId) {
-                state.conversations = state.conversations.map((item) =>
-                    item.conversation_id === state.conversationId
-                        ? { ...item, updated_at: new Date().toISOString() }
-                        : item
-                );
-            }
-            state.messages = [
-                ...state.messages,
-                {
-                    message_id: `local-user-${parsed.result.turn_id}`,
-                    role: "user",
-                    content: normalized,
-                    created_at: new Date().toISOString(),
-                },
-                {
-                    message_id: `local-assistant-${parsed.result.turn_id}`,
-                    role: "assistant",
-                    content: parsed.result.answer,
-                    created_at: new Date().toISOString(),
-                },
-            ];
+        if (queued?.ok !== true || typeof queued.turn_id !== "string") {
+            throw new Error(errorCode(queued, "runtime_unavailable"));
         }
-    } catch {
+        const result = ["completed", "awaiting_confirmation"].includes(queued.state)
+            ? normalizeChatResponse(queued.response).result
+            : await pollTurnResponse({ rpcCall, turnId: queued.turn_id, waitCall });
+        if (!result) {
+            throw new Error("invalid_response");
+        }
+        state.result = result;
+        state.conversationId = result.conversation_id || state.conversationId;
+        state.messages = [
+            ...state.messages,
+            {
+                message_id: `local-user-${result.turn_id}`,
+                role: "user",
+                content: normalized,
+                created_at: new Date().toISOString(),
+            },
+            {
+                message_id: `local-assistant-${result.turn_id}`,
+                role: "assistant",
+                content: result.answer,
+                created_at: new Date().toISOString(),
+            },
+        ];
+        return true;
+    } catch (error) {
         state.result = null;
-        state.errorCode = "service_unavailable";
+        state.errorCode = KNOWN_ERROR_CODES.has(error?.message) ? error.message : "service_unavailable";
+        return false;
     } finally {
         state.loading = false;
     }
-    return state.result !== null;
 }
 
 export async function loadChatHistory({ state, rpcCall, conversationId = state.conversationId }) {
@@ -568,12 +561,95 @@ export async function saveAgentPolicy({ state, rpcCall, confirmationMode, maxAut
     }
 }
 
-export async function submitActionDecision({ state, rpcCall, decision }) {
+async function applyPlanStatus(state, rawStatus, planId) {
+    const normalized = normalizeCapabilityPlanStatus(rawStatus, planId);
+    if (!normalized.status) {
+        state.errorCode = normalized.errorCode;
+        return false;
+    }
+    const status = normalized.status;
+    if (status.plan && state.result) {
+        state.result = { ...state.result, plan: status.plan };
+    }
+    if (status.turn_state === "completed" && status.response) {
+        const parsed = normalizeChatResponse(status.response);
+        if (!parsed.result) {
+            state.errorCode = parsed.errorCode;
+            return false;
+        }
+        state.result = parsed.result;
+        state.actionReceipt = {
+            ok: true,
+            plan_id: planId,
+            state: parsed.result.plan.state,
+            plan: parsed.result.plan,
+            response: parsed.result,
+        };
+        appendAssistantMessage(state, parsed.result, "final");
+        state.errorCode = null;
+        return true;
+    }
+    if (status.turn_state === "recovery_required") {
+        state.actionReceipt = {
+            ok: true,
+            plan_id: planId,
+            state: "recovery_required",
+            plan: status.plan,
+            response: null,
+        };
+        state.errorCode = status.error_code || "worker_lost_after_write_barrier";
+        return true;
+    }
+    if (["failed", "cancelled"].includes(status.turn_state)) {
+        state.actionReceipt = {
+            ok: true,
+            plan_id: planId,
+            state: "failed",
+            plan: status.plan,
+            response: null,
+        };
+        state.errorCode = status.error_code || "runtime_unavailable";
+        return true;
+    }
+    return null;
+}
+
+async function pollCapabilityPlan({
+    state,
+    rpcCall,
+    planId,
+    waitCall,
+    once = false,
+}) {
+    const attempts = once ? 1 : MAX_NATIVE_POLL_ATTEMPTS;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+        if (!once || attempt > 0) {
+            await waitCall(NATIVE_POLL_DELAY_MS);
+        }
+        const status = await rpcCall("/odoo_ai/v1/turn/plan-status", { plan_id: planId });
+        const terminal = await applyPlanStatus(state, status, planId);
+        if (terminal !== null) {
+            return terminal;
+        }
+    }
+    if (!once) {
+        state.errorCode = "engine_timeout";
+    }
+    return false;
+}
+
+export async function submitActionDecision({
+    state,
+    rpcCall,
+    decision,
+    waitCall = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+}) {
     const planId = state.result?.plan?.plan_id;
     if (
         state.loading ||
         state.decisionLoading ||
         recoveryPending(state) ||
+        state.result?.plan?.state !== "awaiting_confirmation" ||
         typeof planId !== "string" ||
         !["approve", "reject"].includes(decision)
     ) {
@@ -582,31 +658,44 @@ export async function submitActionDecision({ state, rpcCall, decision }) {
     state.decisionLoading = true;
     state.errorCode = null;
     try {
-        const response = await rpcCall("/odoo_ai/v1/agent-plan-decision", {
+        const response = await rpcCall("/odoo_ai/v1/turn/plan-decision", {
             plan_id: planId,
             decision,
         });
         const normalized = normalizeActionDecisionResponse(response, planId);
+        if (!normalized.receipt) {
+            state.errorCode = normalized.errorCode;
+            return false;
+        }
         state.actionReceipt = normalized.receipt;
-        state.errorCode = normalized.errorCode;
         if (normalized.plan && state.result) {
             state.result = { ...state.result, plan: normalized.plan };
-        } else if (normalized.receipt?.state === "rejected" && state.result) {
-            state.result = {
-                ...state.result,
-                plan: { ...state.result.plan, state: "rejected" },
-            };
         }
-    } catch {
+        if (decision === "reject") {
+            const parsed = normalizeChatResponse(normalized.response);
+            if (!parsed.result) {
+                state.errorCode = parsed.errorCode;
+                return false;
+            }
+            state.result = parsed.result;
+            appendAssistantMessage(state, parsed.result, "rejected");
+            return true;
+        }
+        return await pollCapabilityPlan({ state, rpcCall, planId, waitCall });
+    } catch (error) {
         state.actionReceipt = null;
-        state.errorCode = "service_unavailable";
+        state.errorCode = KNOWN_ERROR_CODES.has(error?.message) ? error.message : "service_unavailable";
+        return false;
     } finally {
         state.decisionLoading = false;
     }
-    return true;
 }
 
-export async function submitActionRetry({ state, rpcCall }) {
+export async function submitActionRetry({
+    state,
+    rpcCall,
+    waitCall = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+}) {
     const planId = state.result?.plan?.plan_id;
     if (
         state.loading ||
@@ -617,20 +706,17 @@ export async function submitActionRetry({ state, rpcCall }) {
         return false;
     }
     state.decisionLoading = true;
-    state.errorCode = null;
     try {
-        const response = await rpcCall("/odoo_ai/v1/agent-plan-execute", {
-            plan_id: planId,
+        // Recovery never executes a capability from the browser. This is status-only;
+        // a recovery_required turn remains host-controlled until a safe recovery path exists.
+        return await pollCapabilityPlan({
+            state,
+            rpcCall,
+            planId,
+            waitCall,
+            once: true,
         });
-        const normalized = normalizeActionDecisionResponse(response, planId);
-        state.actionReceipt = normalized.receipt;
-        state.errorCode = normalized.errorCode;
-        if (normalized.plan && state.result) {
-            state.result = { ...state.result, plan: normalized.plan };
-        }
-        return normalized.receipt !== null;
     } catch {
-        state.actionReceipt = null;
         state.errorCode = "service_unavailable";
         return false;
     } finally {
