@@ -9,6 +9,7 @@ from . import chat_preferences as chat_preferences
 from . import chat_storage as chat_storage
 from . import delegation_replay as delegation_replay
 from . import res_config_settings as res_config_settings
+from . import runtime_diagnostics as runtime_diagnostics
 from . import runtime_settings as runtime_settings
 from . import turn_event as turn_event
 from . import turn_queue as turn_queue
