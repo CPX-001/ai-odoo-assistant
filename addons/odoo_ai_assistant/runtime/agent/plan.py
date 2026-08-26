@@ -96,9 +96,9 @@ class CapabilityPlanService:
         """Revalidate every binding and cross the barrier immediately before effects.
 
         The initial preview is never execution authority. Capability availability, version,
-        arguments and preconditions are checked again in the fresh worker/user Environment.
-        ``before_effect`` is invoked only after the first step has passed that revalidation and
-        immediately before the first effectful handler is called.
+        arguments, preconditions and the *current* policy are checked again in the fresh
+        worker/user Environment. ``before_effect`` is invoked only after the first step has
+        passed that revalidation and immediately before the first effectful handler is called.
         """
 
         plan = _validated_plan(payload)
@@ -126,11 +126,11 @@ class CapabilityPlanService:
             )
             if current_preview.precondition_fingerprint != step["precondition_fingerprint"]:
                 raise CapabilityPlanError("capability_plan_precondition_changed")
-            # Re-evaluate policy/enablement before the durable barrier. This call has no
-            # effect; it only asks whether execution still requires missing approval.
+            # Re-evaluate the *current* policy using only real human approval. A previous
+            # auto-authorization is not an approval token and cannot bypass a stricter policy.
             if self._executor.approval_required(
                 definition.name,
-                approved=human_approved or not bool(step["approval_required"]),
+                approved=human_approved,
             ):
                 raise CapabilityPlanError("capability_plan_approval_required")
             step["state"] = "executing"
@@ -144,7 +144,7 @@ class CapabilityPlanService:
                 definition.name,
                 step["arguments"],
                 authority=ExecutionAuthority.PLAN,
-                approved=human_approved or not bool(step["approval_required"]),
+                approved=human_approved,
             )
             verification = await self._executor.verify(
                 definition.name,
