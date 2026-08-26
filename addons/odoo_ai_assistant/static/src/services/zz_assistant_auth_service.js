@@ -16,6 +16,7 @@ const ACCOUNT_STATES = new Set([
     "not_authenticated",
 ]);
 const LOGIN_POLL_DELAY_MS = 5000;
+const AUTHENTICATED_POLL_DELAY_MS = 60000;
 
 function exactKeys(value, expected) {
     return (
@@ -163,7 +164,7 @@ patch(assistantPanelService, {
         const baseNewConversation = service.newConversation.bind(service);
         const baseSelectConversation = service.selectConversation.bind(service);
         const baseSubmit = service.submit.bind(service);
-        let loginPoll = null;
+        let accountPoll = null;
 
         state.runtimeActionLoading = false;
         state.runtimeAccount = null;
@@ -171,12 +172,14 @@ patch(assistantPanelService, {
         state.runtimeUserCode = null;
         state.chatBootstrapped = false;
 
-        const clearLoginPoll = () => {
-            if (loginPoll !== null) {
-                globalThis.clearTimeout?.(loginPoll);
-                loginPoll = null;
+        const clearAccountPoll = () => {
+            if (accountPoll !== null) {
+                globalThis.clearTimeout?.(accountPoll);
+                accountPoll = null;
             }
         };
+
+        const pageIsVisible = () => globalThis.document?.visibilityState !== "hidden";
 
         const lockChat = () => {
             state.chatBootstrapped = false;
@@ -225,7 +228,6 @@ patch(assistantPanelService, {
                 }
                 applyRuntimeAccount(state, payload);
                 if (payload.state === "authenticated") {
-                    clearLoginPoll();
                     await initializeChat();
                 } else {
                     lockChat();
@@ -244,19 +246,37 @@ patch(assistantPanelService, {
             }
         };
 
-        const scheduleLoginPoll = () => {
-            clearLoginPoll();
-            if (!state.isOpen || state.runtimeState !== "login_pending") {
+        const scheduleAccountPoll = () => {
+            clearAccountPoll();
+            if (!state.isOpen || !pageIsVisible()) {
                 return;
             }
-            loginPoll = globalThis.setTimeout?.(async () => {
-                loginPoll = null;
-                await refreshRuntimeAccount();
-                if (state.runtimeState === "login_pending") {
-                    scheduleLoginPoll();
+            const delay =
+                state.runtimeState === "login_pending"
+                    ? LOGIN_POLL_DELAY_MS
+                    : state.runtimeState === "authenticated"
+                      ? AUTHENTICATED_POLL_DELAY_MS
+                      : null;
+            if (delay === null) {
+                return;
+            }
+            accountPoll = globalThis.setTimeout?.(async () => {
+                accountPoll = null;
+                if (!state.isOpen || !pageIsVisible()) {
+                    return;
                 }
-            }, LOGIN_POLL_DELAY_MS);
+                await refreshRuntimeAccount();
+                scheduleAccountPoll();
+            }, delay);
         };
+
+        globalThis.document?.addEventListener?.("visibilitychange", () => {
+            if (pageIsVisible()) {
+                scheduleAccountPoll();
+            } else {
+                clearAccountPoll();
+            }
+        });
 
         const runtimeAction = async (action) => {
             if (state.runtimeActionLoading) {
@@ -276,14 +296,11 @@ patch(assistantPanelService, {
                 }
                 applyRuntimeAccount(state, payload);
                 if (payload.state === "authenticated") {
-                    clearLoginPoll();
                     await initializeChat();
                 } else {
                     lockChat();
-                    if (payload.state === "login_pending") {
-                        scheduleLoginPoll();
-                    }
                 }
+                scheduleAccountPoll();
                 return true;
             } catch {
                 state.runtimeState = "authentication_error";
@@ -298,16 +315,12 @@ patch(assistantPanelService, {
 
         const open = () => {
             state.isOpen = true;
-            void refreshRuntimeAccount({ bootstrap: true }).then(() => {
-                if (state.runtimeState === "login_pending") {
-                    scheduleLoginPoll();
-                }
-            });
+            void refreshRuntimeAccount({ bootstrap: true }).then(scheduleAccountPoll);
         };
 
         service.open = open;
         service.close = () => {
-            clearLoginPoll();
+            clearAccountPoll();
             baseClose();
         };
         service.toggle = () => {
@@ -349,10 +362,22 @@ patch(assistantPanelService, {
                 )
             ) {
                 await refreshRuntimeAccount();
+                scheduleAccountPoll();
             }
             return sent;
         };
-        service.refreshRuntimeAccount = () => refreshRuntimeAccount();
+        service.refreshRuntimeAccount = async () => {
+            if (state.runtimeActionLoading) {
+                return false;
+            }
+            state.runtimeActionLoading = true;
+            try {
+                return await refreshRuntimeAccount();
+            } finally {
+                state.runtimeActionLoading = false;
+                scheduleAccountPoll();
+            }
+        };
         service.connectRuntimeAccount = () => runtimeAction("connect");
         service.cancelRuntimeLogin = () => runtimeAction("cancel");
         service.logoutRuntimeAccount = () => runtimeAction("logout");

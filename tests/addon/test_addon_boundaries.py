@@ -102,11 +102,16 @@ def test_account_ui_polls_and_settings_target_exists_in_odoo_18() -> None:
     ).read_text(encoding="utf-8")
     assert 'this.actionService = useService("action");' in panel_component
     assert "Actualizar cuenta" not in static_source
-    assert "Actualizar uso" in static_source
+    assert "Actualizar uso" not in static_source
     assert 'duration === 300' in static_source
     assert 'return _t("5 horas")' in static_source
     assert 'duration === 10080' in static_source
     assert 'return _t("Semanal")' in static_source
+    assert "service.refreshRuntimeAccount = async () =>" in static_source
+    assert "const LOGIN_POLL_DELAY_MS = 5000;" in static_source
+    assert "const AUTHENTICATED_POLL_DELAY_MS = 60000;" in static_source
+    assert 'globalThis.document?.visibilityState !== "hidden"' in static_source
+    assert 'addEventListener?.("visibilitychange"' in static_source
 
 
 def test_internal_endpoint_and_secret_are_not_duplicated_in_views() -> None:

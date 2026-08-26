@@ -70,15 +70,6 @@
                                     <div class="dropdown-divider"/>
                                     <button type="button"
                                         class="btn btn-sm btn-outline-secondary w-100 mb-2"
-                                        t-att-disabled="state.runtimeActionLoading"
-                                        t-on-click="refreshRuntimeAccount">
-                                        <i t-if="state.runtimeActionLoading"
-                                            class="fa fa-spinner fa-spin me-1"
-                                            aria-hidden="true"/>
-                                        Actualizar uso
-                                    </button>
-                                    <button type="button"
-                                        class="btn btn-sm btn-outline-secondary w-100 mb-2"
                                         t-on-click="openRuntimeSettings">
                                         Configuración del Assistant
                                     </button>
