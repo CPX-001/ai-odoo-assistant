@@ -8,12 +8,14 @@ from odoo import http
 from odoo.exceptions import AccessError, ValidationError
 from odoo.http import request
 
-from ..runtime import (
-    CodexAccountError,
-    CodexAccountManager,
-    RuntimePathError,
-    RuntimePaths,
-    detect_codex,
+from ..services.runtime_account import (
+    RuntimeAccountGateError,
+    cancel_database_login,
+    connect_database,
+    logout_database,
+    require_runtime_authenticated,
+    runtime_account_payload,
+    runtime_status_payload,
 )
 
 _logger = logging.getLogger(__name__)
@@ -29,27 +31,34 @@ class AssistantTurnController(http.Controller):
     def runtime_status(self, **unexpected):
         if unexpected:
             return _error("invalid_context")
-        can_configure = request.env.user.has_group("base.group_system")
-        codex = detect_codex()
-        if not codex.ready or codex.executable is None:
-            return _runtime_status("codex_unavailable", can_configure)
+        return runtime_status_payload(request.env)
+
+    @http.route(
+        "/odoo_ai/v1/runtime-account",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def runtime_account(self, action="status", **unexpected):
+        if unexpected or not isinstance(action, str):
+            return _error("invalid_context")
         try:
-            paths = RuntimePaths.from_odoo().ensure()
-            account = CodexAccountManager(
-                executable=codex.executable,
-                paths=paths,
-            ).status(include_rate_limits=False)
-        except (CodexAccountError, RuntimePathError):
-            return _runtime_status("authentication_error", can_configure)
-        state = account.state
-        if state not in {
-            "authenticated",
-            "authentication_error",
-            "login_pending",
-            "not_authenticated",
-        }:
-            state = "authentication_error"
-        return _runtime_status(state, can_configure)
+            if action in {"status", "refresh"}:
+                return runtime_account_payload(request.env)
+            if action == "connect":
+                return connect_database(request.env)
+            if action == "cancel":
+                return cancel_database_login(request.env)
+            if action == "logout":
+                return logout_database(request.env)
+            return _error("invalid_context")
+        except AccessError:
+            return _error("access_denied")
+        except RuntimeAccountGateError as error:
+            return _error(error.code)
+        except Exception:  # noqa: BLE001
+            _logger.exception("Assistant runtime account action failed")
+            return _error("authentication_failed")
 
     @http.route("/odoo_ai/v1/turn", type="json", auth="user", methods=["POST"])
     def enqueue_turn(
@@ -63,12 +72,15 @@ class AssistantTurnController(http.Controller):
         if unexpected:
             return _error("invalid_context")
         try:
+            require_runtime_authenticated(request.env)
             return request.env["odoo.ai.turn"].enqueue_for_current_user(
                 message=message,
                 screen=screen,
                 conversation_uuid=conversation_id or None,
                 client_request_id=client_request_id or None,
             )
+        except RuntimeAccountGateError as error:
+            return _error(error.code)
         except (AccessError, ValidationError):
             return _error("invalid_context")
         except Exception:  # noqa: BLE001
@@ -154,12 +166,3 @@ class AssistantTurnController(http.Controller):
 
 def _error(code):
     return {"ok": False, "error": {"code": code}}
-
-
-def _runtime_status(state, can_configure):
-    return {
-        "ok": True,
-        "state": state,
-        "requires_setup": state != "authenticated",
-        "can_configure": bool(can_configure),
-    }

@@ -8,3 +8,6 @@ ADR activos en el repositorio:
 
 - [`ADR-014`](ADR-014-unified-host-authorized-agent.md): agente unificado con autoridad host-side.
 - [`ADR-015`](ADR-015-batch-mutations-and-file-ingestion.md): mutaciones masivas, chunking e ingesta futura de archivos.
+- [`ADR-016`](ADR-016-embedded-odoo-runtime.md): runtime operacionalmente autocontenido en el addon Odoo.
+- [`ADR-017`](ADR-017-addon-capability-framework.md): framework interno de capabilities auto-descubiertas.
+- [`ADR-018`](ADR-018-database-scoped-codex-activation.md): activación explícita de Codex por base Odoo sin duplicar el credential store.
