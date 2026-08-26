@@ -33,6 +33,34 @@ probar el aislamiento. En PostgreSQL remoto/administrado se usa
 `--postgres-mode external-existing` y un archivo `0600` pasado mediante
 `--assistant-database-url-file`; el operador provisiona previamente role y DB.
 
+## Autenticación Codex después de instalar el addon
+
+La operación normal ya **no** requiere entrar por terminal como usuario Odoo para
+ejecutar `codex login` ni copiar `auth.json` manualmente.
+
+1. Instalar un `codex` compatible y hacerlo visible en el `PATH` de Odoo o guardar
+   el override de executable en **Settings → AI Assistant**.
+2. Actualizar/instalar `odoo_ai_assistant`.
+3. En **Embedded runtime**, confirmar `Codex state: ready`.
+4. Pulsar **Connect with ChatGPT**.
+5. Abrir la URL indicada desde cualquier navegador y escribir el device code.
+6. Pulsar **Refresh account status** hasta ver `Connected`.
+7. Abrir **AI Assistant Diagnostics** y comprobar `Authenticated / ready`.
+
+El proceso de login es efímero y queda limitado por timeout. Cancelar desde Settings
+hace que el proceso propietario ejecute `account/login/cancel`; no matar procesos a
+mano salvo investigación de un fallo del runtime. Si Odoo se reinicia durante el
+login, refrescar Settings: un intento cuyo lock ya no existe se marca interrumpido y
+puede iniciarse de nuevo.
+
+`Disconnect` usa `account/logout`; no borra la configuración del addon ni el resto de
+`data_dir`.
+
+Una sesión previa válida en el `CODEX_HOME` del addon se reconoce automáticamente.
+El login manual queda sólo como recovery/debug y debe apuntar al mismo `CODEX_HOME`;
+nunca pegar tokens en Odoo, logs o parámetros de configuración. Ver
+`docs/codex/CODEX_AUTH.md`.
+
 ## Upgrade coordinado
 
 1. Conservar el release/config actuales y comprobar espacio en el destino de backup.
@@ -86,6 +114,11 @@ Desinstalar `odoo_ai_assistant`, retirar el unit o borrar un release **no elimin
 Assistant DB. No existe uninstall hook de purge. La eliminación de role, DB, backups
 y secretos es una acción administrativa separada, destructiva y explícita, fuera
 del flujo normal de uninstall/upgrade.
+
+El `CODEX_HOME` bajo `data_dir/odoo_ai_assistant/codex` contiene estado de cuenta
+administrado por Codex y también debe tratarse como secreto. No borrarlo como efecto
+lateral de un upgrade. Un purge deliberado debe ejecutarse fuera de Odoo y bajo la
+misma política operativa que el resto de secretos persistentes.
 
 ## Smokes reproducibles
 
