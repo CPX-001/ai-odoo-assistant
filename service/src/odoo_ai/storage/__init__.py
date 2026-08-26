@@ -1,6 +1,5 @@
 """PostgreSQL persistence infrastructure for residual service responsibilities."""
 
-from odoo_ai.storage.action_repository import ActionStoreError, SqlActionApprovalStore
 from odoo_ai.storage.base import Base
 from odoo_ai.storage.config import DatabaseConfigurationError, DatabaseSettings
 from odoo_ai.storage.database import create_database_engine, create_session_factory, session_scope
@@ -15,8 +14,6 @@ from odoo_ai.storage.knowledge_repository import (
     upsert_knowledge_document,
 )
 from odoo_ai.storage.models import (
-    ActionAuditRecord,
-    ActionProposalRecord,
     CapabilitySnapshot,
     InstanceProfile,
     KnowledgeChunk,
@@ -62,9 +59,6 @@ from odoo_ai.storage.source_repository import (
 )
 
 __all__ = [
-    "ActionAuditRecord",
-    "ActionProposalRecord",
-    "ActionStoreError",
     "Base",
     "CapabilitySnapshot",
     "DatabaseConfigurationError",
@@ -81,7 +75,6 @@ __all__ = [
     "SourceFileUpsert",
     "SourceSymbol",
     "SourceSymbolValues",
-    "SqlActionApprovalStore",
     "TraceEvent",
     "UnsafeTraceAttributesError",
     "XmlRecord",

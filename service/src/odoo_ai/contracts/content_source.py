@@ -11,11 +11,13 @@ from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from odoo_ai.contracts.action import Fingerprint
-
 ContentProvider = Annotated[
     str,
     Field(pattern=r"^[a-z][a-z0-9_.-]{0,63}$"),
+]
+Fingerprint = Annotated[
+    str,
+    Field(pattern=r"^[a-z][a-z0-9_-]{0,31}:v[0-9]+:sha256:[0-9a-f]{64}$"),
 ]
 
 

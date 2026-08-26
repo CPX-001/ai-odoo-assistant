@@ -1,67 +1,8 @@
-"""Deterministic JSON Schema export for public M0 contracts."""
-
-from typing import cast
+"""Deterministic JSON Schema export for the residual service contract surface."""
 
 from pydantic import BaseModel, JsonValue
 
-from odoo_ai.contracts.action import (
-    ActionCreatePreview,
-    ActionCreatePreviewSummary,
-    ActionCreatePreviewValue,
-    ActionCreateTarget,
-    ActionFieldChange,
-    ActionPreview,
-    ActionPreviewChange,
-    ActionPreviewSummary,
-    ActionProposalPayload,
-    ActionTarget,
-    ActionValue,
-    BusinessActionPreview,
-    BusinessActionPreviewSummary,
-    BusinessActionProposalPayload,
-    EffectiveWriteFieldSchema,
-    EffectiveWriteSchema,
-    RecordCreateProposalPayload,
-)
-from odoo_ai.contracts.action_approval import (
-    ActionActorContext,
-    ActionDecisionReceipt,
-    ActionDecisionRequest,
-    PersistActionPreviewRequest,
-    PersistActionPreviewResponse,
-)
-from odoo_ai.contracts.action_execution import (
-    ActionAuthorityClaims,
-    ActionCommitResult,
-    ActionCreateCommitResult,
-    ActionCreateVerificationResult,
-    ActionExecutionReceipt,
-    ActionVerificationResult,
-    BusinessActionCommitResult,
-    BusinessActionVerificationResult,
-    ExecuteApprovedActionRequest,
-)
 from odoo_ai.contracts.agent import AnswerEnvelope, ProposedAction, ToolSpec
-from odoo_ai.contracts.agent_turn import (
-    AgentCandidateOutput,
-    AgentModelCandidate,
-    AgentPlanDecisionRequest,
-    AgentPlanDecisionResponse,
-    AgentPlanExecutionRequest,
-    AgentPlanMetadata,
-    AgentPlanReceiptView,
-    AgentPlanStatusResponse,
-    AgentPlanStep,
-    AgentPlanStepView,
-    AgentPlanView,
-    AgentPolicyLayer,
-    AgentPolicyLayers,
-    AgentPolicyView,
-    AgentTurnRequest,
-    AgentTurnResponse,
-    EffectiveAgentPolicy,
-    HostToolPolicySpec,
-)
 from odoo_ai.contracts.context import (
     ContextPack,
     ConversationState,
@@ -70,15 +11,7 @@ from odoo_ai.contracts.context import (
     UserExecutionContext,
     UserRequest,
 )
-from odoo_ai.contracts.delegation import (
-    ActionPreviewDelegationClaims,
-    AgentDelegationClaims,
-    ContextReadTurnRequest,
-    ContextReadTurnResponse,
-    DelegationClaims,
-    OdooGatewayReference,
-    QueryDelegationClaims,
-)
+from odoo_ai.contracts.delegation import ContextReadTurnRequest, ContextReadTurnResponse
 from odoo_ai.contracts.effective_schema import (
     EffectiveFieldSchema,
     EffectiveModelSchema,
@@ -106,27 +39,6 @@ from odoo_ai.contracts.navigation import (
     NavigationNode,
     NavigationSnapshot,
 )
-from odoo_ai.contracts.query import (
-    AgentModelCatalogItem,
-    AgentModelSearchRequest,
-    AgentModelSearchResult,
-    AggregateGroup,
-    AggregateRecordsRequest,
-    AggregateRecordsResult,
-    AggregateValue,
-    QueryCondition,
-    QueryFilter,
-    QueryMetric,
-    QueryRecord,
-    QueryRecordsRequest,
-    QueryRecordsResult,
-    QuerySort,
-)
-from odoo_ai.contracts.query_turn import (
-    QueryCitation,
-    QueryTurnRequest,
-    QueryTurnResponse,
-)
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.screen_context import ScreenContext
 from odoo_ai.contracts.source import (
@@ -139,74 +51,22 @@ from odoo_ai.contracts.source import (
     XmlRecord,
 )
 
-type JsonSchema = dict[str, JsonValue]
+JsonSchema = dict[str, JsonValue]
 
-PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
-    AgentCandidateOutput,
-    AgentModelCandidate,
-    AgentPlanDecisionRequest,
-    AgentPlanDecisionResponse,
-    AgentPlanExecutionRequest,
-    AgentPlanMetadata,
-    AgentPlanReceiptView,
-    AgentPlanStep,
-    AgentPlanStepView,
-    AgentPlanStatusResponse,
-    AgentPlanView,
-    AgentPolicyLayer,
-    AgentPolicyLayers,
-    AgentPolicyView,
-    AgentTurnRequest,
-    AgentTurnResponse,
-    EffectiveAgentPolicy,
-    HostToolPolicySpec,
-    ActionActorContext,
-    ActionAuthorityClaims,
-    ActionCommitResult,
-    ActionCreateCommitResult,
-    ActionCreateVerificationResult,
-    ActionDecisionReceipt,
-    ActionDecisionRequest,
-    ActionExecutionReceipt,
-    ActionPreviewDelegationClaims,
-    AgentDelegationClaims,
-    ActionFieldChange,
-    ActionCreatePreview,
-    ActionCreatePreviewSummary,
-    ActionCreatePreviewValue,
-    ActionCreateTarget,
-    ActionPreview,
-    ActionPreviewChange,
-    ActionPreviewSummary,
-    ActionProposalPayload,
-    RecordCreateProposalPayload,
-    ActionTarget,
-    ActionValue,
-    BusinessActionPreview,
-    BusinessActionPreviewSummary,
-    BusinessActionProposalPayload,
-    BusinessActionCommitResult,
-    BusinessActionVerificationResult,
-    ActionVerificationResult,
-    ExecuteApprovedActionRequest,
-    PersistActionPreviewRequest,
-    PersistActionPreviewResponse,
-    EffectiveWriteFieldSchema,
-    EffectiveWriteSchema,
+_PUBLIC_MODELS: tuple[type[BaseModel], ...] = (
     AnswerEnvelope,
     ContextPack,
     ContextReadTurnRequest,
     ContextReadTurnResponse,
     ConversationState,
-    Evidence,
     EffectiveFieldSchema,
     EffectiveModelSchema,
     EffectiveSelectionOption,
+    Evidence,
     ExplainTurnRequest,
     ExplainTurnResponse,
     HowToTurnRequest,
     HowToTurnResponse,
-    DelegationClaims,
     InstanceInventory,
     InstanceProfileSummary,
     KnowledgeDocument,
@@ -226,30 +86,11 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     NavigationLimits,
     NavigationNode,
     NavigationSnapshot,
-    AgentModelCatalogItem,
-    AgentModelSearchRequest,
-    AgentModelSearchResult,
-    AggregateGroup,
-    AggregateRecordsRequest,
-    AggregateRecordsResult,
-    AggregateValue,
-    OdooGatewayReference,
     ProposedAction,
-    QueryDelegationClaims,
-    QueryCondition,
-    QueryCitation,
-    QueryFilter,
-    QueryMetric,
-    QueryRecord,
-    QueryRecordsRequest,
-    QueryRecordsResult,
-    QuerySort,
-    QueryTurnRequest,
-    QueryTurnResponse,
     RecordRef,
     RecordSnapshot,
-    ScreenContext,
     ScanRun,
+    ScreenContext,
     SourceFile,
     SourceRef,
     SourceSymbol,
@@ -263,9 +104,9 @@ PUBLIC_CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
 
 
 def export_public_json_schemas() -> dict[str, JsonSchema]:
-    """Return public contract schemas ordered by contract name."""
+    """Return stable schemas for contracts still exposed by the service."""
 
     return {
-        model.__name__: cast(JsonSchema, model.model_json_schema())
-        for model in sorted(PUBLIC_CONTRACT_MODELS, key=lambda contract: contract.__name__)
+        model.__name__: model.model_json_schema()
+        for model in sorted(_PUBLIC_MODELS, key=lambda item: item.__name__)
     }

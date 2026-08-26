@@ -1,8 +1,8 @@
-"""Provider-neutral reasoning engine boundary."""
+"""Provider-neutral reasoning engine boundary for residual retrieval workflows."""
 
 from typing import Protocol
 
-from odoo_ai.contracts import AgentCandidateOutput, AnswerEnvelope, ContextPack, ToolSpec
+from odoo_ai.contracts import AnswerEnvelope, ContextPack, ToolSpec
 
 
 class ReasoningEngineError(RuntimeError):
@@ -14,7 +14,7 @@ class ReasoningEngineError(RuntimeError):
 
 
 class ReasoningEngine(Protocol):
-    """Run one isolated turn using explicit context, tools, and output schema."""
+    """Run one isolated read-only turn using explicit context and tools."""
 
     async def run_turn(
         self,
@@ -22,13 +22,3 @@ class ReasoningEngine(Protocol):
         tools: list[ToolSpec],
         output_schema: dict[str, object],
     ) -> AnswerEnvelope: ...
-
-
-class AgentReasoningEngine(Protocol):
-    """Propose a unified plan; the implementation receives no authorization capability."""
-
-    async def run_agent_turn(
-        self,
-        context: ContextPack,
-        tools: list[ToolSpec],
-    ) -> AgentCandidateOutput: ...
