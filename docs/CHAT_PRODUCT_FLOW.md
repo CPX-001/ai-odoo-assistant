@@ -81,6 +81,8 @@ The browser polls Odoo-owned turn/event state. Persisted events are sanitized pu
 
 At the current audited baseline, completed and approval-waiting turn status includes the persisted authoritative result payload as the browser `response`.
 
+For Foundation Stabilization Phase 0 measurement, `streamAssistantChat()` also accepts optional diagnostic-only `onTiming` and `nowCall` hooks. The normal product caller does not need to provide them. The current client records monotonic checkpoints for `submit_received`, `turn_persisted`, `browser_first_activity` and `browser_final`. These hooks do not change the transport and do **not** imply real assistant answer streaming; `browser_first_answer_delta` remains unavailable until the later streaming phase is implemented.
+
 ## Conversation persistence
 
 Conversation, message, turn and public event persistence is Odoo-native. Codex threads/process state are not the product memory authority.
