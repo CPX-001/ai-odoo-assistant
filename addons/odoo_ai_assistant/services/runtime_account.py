@@ -33,6 +33,11 @@ class RuntimeAccountGateError(RuntimeError):
 
 def database_connection_enabled(env) -> bool:
     value = env["ir.config_parameter"]._get_param(_CONNECTION_PARAMETER)
+    # Fresh installs write an explicit false value from post_init_hook. An absent
+    # value means a pre-ADR-018 database and preserves its existing Codex session
+    # across module upgrade instead of forcing an unexpected reconnect.
+    if value is None or value is False:
+        return True
     return isinstance(value, str) and value.strip().lower() in {"1", "true", "yes", "on"}
 
 

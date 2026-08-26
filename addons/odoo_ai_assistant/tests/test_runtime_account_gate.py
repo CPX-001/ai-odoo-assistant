@@ -75,6 +75,13 @@ class TestRuntimeAccountGate(TransactionCase):
         self.assertIsNone(payload["account"])
         self.assertFalse(manager.started)
 
+    def test_legacy_database_without_activation_parameter_keeps_existing_binding(self):
+        self.parameters.set_param(
+            "odoo_ai_assistant.codex_connection_enabled",
+            False,
+        )
+        self.assertTrue(runtime_account.database_connection_enabled(self.env))
+
     def test_connect_marks_database_and_reuses_existing_provider_session(self):
         manager = _FakeManager(
             CodexAccountStatus(

@@ -5,12 +5,13 @@ import logging
 from .runtime import RuntimePathError, RuntimePaths
 
 LOGGER = logging.getLogger(__name__)
+_CONNECTION_PARAMETER = "odoo_ai_assistant.codex_connection_enabled"
 
 
 def post_init_hook(env) -> None:
-    """Create the bounded local runtime layout under the real Odoo data directory."""
+    """Initialize the local runtime and require explicit Codex activation on new DBs."""
 
-    del env
+    env["ir.config_parameter"].set_param(_CONNECTION_PARAMETER, "false")
 
     try:
         RuntimePaths.from_odoo().ensure()

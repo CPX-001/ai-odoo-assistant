@@ -32,10 +32,15 @@ abrir Assistant
     -> permitir turns
 ```
 
-Una base recién instalada o que nunca haya sido activada se considera
-`not_authenticated` aunque el `CODEX_HOME` compartido ya contenga una sesión válida.
-Un administrador debe pulsar `Connect with ChatGPT`. Si Codex ya reconoce una sesión,
-la activación termina inmediatamente; si no, se usa el device-code flow existente.
+Una base recién instalada se inicializa explícitamente con la activación deshabilitada
+y se considera `not_authenticated` aunque el `CODEX_HOME` compartido ya contenga una
+sesión válida. Un administrador debe pulsar `Connect with ChatGPT`. Si Codex ya reconoce
+una sesión, la activación termina inmediatamente; si no, se usa el device-code flow
+existente.
+
+Para no romper bases actualizadas desde versiones anteriores a ADR-018, la ausencia del
+parámetro se interpreta como activación legacy. `post_init_hook` escribe `false` sólo en
+instalaciones nuevas; a partir de ese momento el valor queda explícito por base.
 
 El servidor valida el mismo gate antes de persistir un turn. La UI no es autoridad.
 
@@ -49,8 +54,9 @@ de esa base para usar la identidad Codex existente.
 - una base nueva no carga historial ni composer del Assistant antes de conectarse;
 - Settings y el panel muestran el mismo estado de activación;
 - el executable override configurado por base se respeta también en el status del panel;
+- upgrades de bases ya conectadas no fuerzan un logout/relogin sólo por introducir el gate;
 - una instalación puede conservar una sesión Codex en disco sin activarla
-  automáticamente en todas sus bases;
+  automáticamente en nuevas bases;
 - `logout` sigue siendo una operación del account lifecycle de Codex y puede invalidar
   la sesión compartida; otras bases activadas fallarán cerradas hasta reconectar;
 - no se modifica el layout de ADR-016 ni se crea un credential store por base.
@@ -67,7 +73,7 @@ para resolver el onboarding.
 
 Rechazada. Un RPC directo podría persistir turns antes de autenticarse.
 
-### Reutilizar automáticamente cualquier sesión encontrada
+### Reutilizar automáticamente cualquier sesión encontrada en una base nueva
 
 Rechazada. Evita un click pero contradice el requisito de conexión explícita para una
 base nueva.
