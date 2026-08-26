@@ -34,6 +34,14 @@ The PDFs under `docs/source-of-truth/` are dated research snapshots. They are us
 
 Work directly on `main` unless the user explicitly asks for a branch or pull request. Keep the working history coherent and do not present partial work as finished.
 
+## Roadmap execution and validation
+
+The active stabilization roadmap under `docs/research/` may be executed over multiple independent AI/Codex runs. When doing so, follow `docs/research/CONTINUOUS_EXECUTION_PROTOCOL.md` and reconstruct the next action from `docs/research/EXECUTION_STATE.md` rather than relying on chat memory.
+
+Tests and exit gates only count when they were actually executed in an environment capable of running them. If a slice requires real Odoo 18 + Codex behavior, use `docs/research/REAL_ENV_VALIDATION_PROTOCOL.md` and leave the slice at `REAL_ENV_VALIDATION_REQUIRED` until that evidence exists.
+
+**Do not use GitHub Actions for this roadmap. There are currently no GitHub runners/workers available for project execution or validation.** Do not add `.github/workflows` to advance phases, schedule continuation or satisfy gates. This restriction does not remove the requirement to test; it means tests must be run in the real/local execution environment that actually provides Odoo/Codex and any required browser/runtime dependencies.
+
 ## Change workflow
 
 For meaningful changes:
