@@ -8,14 +8,86 @@
             <xpath expr="//app[@name='odoo_ai_assistant']/block[1]" position="before">
                 <block title="Embedded runtime">
                     <setting
-                        string="Codex executable"
-                        help="Leave empty to auto-detect codex from the Odoo service PATH. No binary is downloaded by the addon."
+                        string="Codex runtime"
+                        help="Leave the override empty to auto-detect codex from the Odoo service PATH. The addon does not download a binary."
                     >
                         <field name="assistant_codex_executable" placeholder="/usr/local/bin/codex"/>
-                        <div class="text-muted">
-                            Detected: <field name="assistant_codex_executable_effective" class="oe_inline"/>
-                            (<field name="assistant_codex_state" class="oe_inline"/>)
+                        <div class="text-muted mt8">
+                            Executable: <field name="assistant_codex_executable_effective" class="oe_inline"/>
                         </div>
+                        <div class="text-muted">
+                            State: <field name="assistant_codex_state" class="oe_inline"/>
+                        </div>
+                    </setting>
+                    <setting
+                        string="ChatGPT account"
+                        help="One installation uses one Codex/ChatGPT identity. Codex owns token storage and refresh; Odoo stores no ChatGPT tokens in PostgreSQL."
+                    >
+                        <field name="assistant_codex_account_connected" invisible="1"/>
+                        <field name="assistant_codex_login_pending" invisible="1"/>
+                        <div>
+                            State: <field name="assistant_codex_account_state" class="oe_inline"/>
+                        </div>
+                        <div invisible="not assistant_codex_auth_mode" class="text-muted">
+                            Auth mode: <field name="assistant_codex_auth_mode" class="oe_inline"/>
+                        </div>
+                        <div invisible="not assistant_codex_account_email" class="text-muted">
+                            Account: <field name="assistant_codex_account_email" class="oe_inline"/>
+                        </div>
+                        <div invisible="not assistant_codex_plan_type" class="text-muted">
+                            Plan: <field name="assistant_codex_plan_type" class="oe_inline"/>
+                        </div>
+                        <div invisible="not assistant_codex_login_pending" class="mt8">
+                            <strong>Open:</strong>
+                            <field name="assistant_codex_login_url" class="oe_inline"/>
+                        </div>
+                        <div invisible="not assistant_codex_login_pending">
+                            <strong>Code:</strong>
+                            <field name="assistant_codex_login_code" class="oe_inline"/>
+                        </div>
+                        <div class="text-muted mt8">
+                            <field name="assistant_codex_account_message" nolabel="1"/>
+                        </div>
+                        <div class="mt8">
+                            <button
+                                name="action_assistant_codex_login_start"
+                                type="object"
+                                string="Connect with ChatGPT"
+                                class="btn-primary"
+                                invisible="assistant_codex_account_connected or assistant_codex_login_pending or assistant_codex_state != 'ready'"
+                            />
+                            <button
+                                name="action_assistant_codex_login_open"
+                                type="object"
+                                string="Open login page"
+                                class="btn-primary"
+                                invisible="not assistant_codex_login_pending or not assistant_codex_login_url"
+                            />
+                            <button
+                                name="action_assistant_codex_login_cancel"
+                                type="object"
+                                string="Cancel"
+                                invisible="not assistant_codex_login_pending"
+                            />
+                            <button
+                                name="action_assistant_codex_logout"
+                                type="object"
+                                string="Disconnect"
+                                invisible="not assistant_codex_account_connected or assistant_codex_login_pending"
+                            />
+                            <button
+                                name="action_assistant_codex_account_refresh"
+                                type="object"
+                                string="Refresh account status"
+                            />
+                        </div>
+                    </setting>
+                    <setting
+                        string="Codex usage"
+                        help="Optional App Server rate-limit windows. Labels and durations come from Codex; the addon does not assume fixed 5-hour or weekly buckets."
+                        invisible="not assistant_codex_rate_limits"
+                    >
+                        <field name="assistant_codex_rate_limits" nolabel="1" readonly="1"/>
                     </setting>
                     <setting
                         string="Runtime data"
