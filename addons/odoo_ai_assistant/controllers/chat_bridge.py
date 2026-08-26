@@ -7,6 +7,7 @@ from odoo.exceptions import AccessError, ValidationError
 from odoo.http import request
 
 from ..models.chat_preferences import recent_chat_limit
+from ..services.runtime_account import RuntimeAccountGateError, require_runtime_authenticated
 
 _logger = logging.getLogger(__name__)
 
@@ -24,11 +25,14 @@ class BrowserChatController(http.Controller):
         if not request.env.user._is_internal():
             return _error("access_denied")
         try:
+            require_runtime_authenticated(request.env)
             payload = request.env["odoo.ai.conversation"].history_payload(
                 conversation_uuid=conversation_id or None,
                 max_conversations=recent_chat_limit(request.env),
                 max_messages=40,
             )
+        except RuntimeAccountGateError as error:
+            return _error(error.code)
         except (AccessError, ValidationError, ValueError, TypeError):
             return _error("invalid_context")
         except Exception:  # noqa: BLE001 - browser boundary stays sanitized
