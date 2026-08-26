@@ -1,0 +1,51 @@
+{
+  "capture_error_code": "odoo_http_unavailable",
+  "capture_kind": "live_http",
+  "expectation_met": false,
+  "format_version": 1,
+  "model_turns": null,
+  "original_error_code": null,
+  "request_error_code": null,
+  "scenario_id": "hello",
+  "status_snapshots": [
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T23:19:53.000000Z",
+          "sequence": 1,
+          "type": "queued"
+        }
+      ],
+      "last_sequence": 1,
+      "state": "queued"
+    }
+  ],
+  "timings": [
+    {
+      "elapsed_ms": 0.0,
+      "point": "submit_received"
+    },
+    {
+      "elapsed_ms": 333.484,
+      "point": "turn_persisted",
+      "turn_id": "90e17614-a265-4a0e-9027-c7714887c898"
+    },
+    {
+      "elapsed_ms": 333.484,
+      "point": "browser_first_activity",
+      "turn_id": "90e17614-a265-4a0e-9027-c7714887c898"
+    },
+    {
+      "capture_error": "odoo_http_unavailable",
+      "elapsed_ms": 434.904,
+      "point": "browser_final",
+      "state": "queued",
+      "turn_id": "90e17614-a265-4a0e-9027-c7714887c898"
+    }
+  ],
+  "token_usage": null,
+  "tool_calls": null,
+  "ui_error_code": null
+}

@@ -2,9 +2,10 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `c19f669f00d98a873c4dae04059269b8beed2d97`  
+Latest repository checkpoint inspected: `121108e55ef0ff91adb0377920f73128875536ac`<br>
 Latest product/tooling implementation checkpoint: `1b5c0ba857e61bbbbf7c8fc17f677bdabc87d892`  
-Last real Odoo+Codex commit materially tested: `8641b013e62018d8d47cfb2a44106ff039b84aca`  
+Latest P0.1 validation checkpoint materially tested: `121108e55ef0ff91adb0377920f73128875536ac`<br>
+Last real Odoo+Codex commit materially tested: `121108e55ef0ff91adb0377920f73128875536ac`<br>
 Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 
 ## Current cursor
@@ -13,8 +14,8 @@ Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 phase: 0
 phase_name: reproducible baseline
 phase_state: REAL_ENV_VALIDATION_REQUIRED
-active_slice: P0.1-partial-capture-and-retry-attribution
-active_slice_state: LOCAL_VALIDATION_REQUIRED
+active_slice: P0.2-read-failure-diagnosis
+active_slice_state: READY
 current_gate_type: HARD
 next_phase: 1
 ```
@@ -27,11 +28,11 @@ Phase 1 provider/runtime architecture work remains locked.
 max_phase_distance_ahead: 1
 max_unvalidated_implementation_slices: 2
 max_stacked_unvalidated_contract_layers: 1
-currently_consumed_implementation_slices: 1
+currently_consumed_implementation_slices: 0
 currently_stacked_unvalidated_contract_layers: 0
 ```
 
-The consumed slice is a Phase 0 measurement-tooling correction, not a new production contract layer.
+No unvalidated look-ahead implementation slice is currently carried.
 
 ## Real evidence already processed
 
@@ -46,7 +47,7 @@ Observed state:
 - failure-pair matrix: only one current complete original/UI pair;
 - `phase0_report.py`: `ready_for_phase1=false`.
 
-## Active corrective slice — P0.1
+## Completed corrective slice — P0.1
 
 Evidence record:
 `docs/research/evidence/phase0/2026-08-27/P0.1-partial-capture-and-retry-attribution.md`
@@ -58,54 +59,25 @@ Implemented at `1b5c0ba857e61bbbbf7c8fc17f677bdabc87d892`:
 - recovered transient diagnostic failures are no longer promoted to terminal `original_error_code` on successful turns;
 - deterministic regression tests were added for both behaviors.
 
-Validation status for this run:
+Validation status:
 
 ```text
-source/diff inspection: PASS
-pytest: NOT RUN
-py_compile: NOT RUN
-real Odoo interrupted-capture validation: NOT RUN
+source/diff inspection: PASS at 121108e
+pytest: PASS — 7 tests
+py_compile: PASS
+P0.1-REAL-PARTIAL-CAPTURE: PASS
+recovered transient real observation: NOT OBSERVED (deterministic regression PASS)
 ```
 
-Reason: this scheduled/remote run has GitHub repository access but no executable checkout/Odoo runtime. Unrun validation is not treated as PASS.
+The real partial-capture gate used a loopback-only fault proxy: authentication and enqueue reached
+real Odoo, then the first status poll returned a controlled HTTP 503. The runner wrote a sanitized
+partial trace with the queued snapshot, available timings, `capture_error_code`,
+`expectation_met=false` and no terminal `original_error_code`. Odoo was not stopped and remained
+healthy after the test.
 
 ## Validation debt
 
-### VD-P0.1-LOCAL
-
-```text
-validation_ids:
-  - P0.1-UNIT
-  - P0.1-PYCOMPILE
-gate_type: HARD
-origin_slice: P0.1-partial-capture-and-retry-attribution
-commit_materially_tested: pending
-blocked_scope:
-  - marking P0.1 COMPLETE
-  - relying on the new capture behavior for subsequent live evidence
-reason: deterministic tests were added but could not be executed in the GitHub-only run
-```
-
-Required commands in an executable repository environment:
-
-```bash
-pytest -q tests/unit/test_phase0_live_capture.py
-python -m py_compile tests/e2e/phase0_live_capture.py
-```
-
-### VD-P0.1-REAL
-
-```text
-validation_id: P0.1-REAL-PARTIAL-CAPTURE
-gate_type: HARD
-origin_slice: P0.1-partial-capture-and-retry-attribution
-commit_materially_tested: pending
-blocked_scope:
-  - trusting interrupted live captures as preserved evidence
-reason: exact implementation commit has not yet been exercised against a real interrupted Odoo polling path
-```
-
-Pass condition: the output trace is written, sanitized, retains already collected snapshots/timing, has `capture_error_code`, and remains `expectation_met=false`.
+`VD-P0.1-LOCAL` and `VD-P0.1-REAL` are closed at materially tested commit `121108e`.
 
 ### VD-P0-LIVE-BASELINE
 
@@ -126,31 +98,36 @@ reason: READ and ACTION failed and the failure-pair matrix is incomplete
 ## Current blocker
 
 ```text
-P0_1_DETERMINISTIC_AND_REAL_VALIDATION_PENDING
+P0_READ_FUNCTIONAL_FAILURE_AND_PROVIDER_RUNTIME_UNAVAILABLE
 ```
 
-This blocker is narrower than the original live-run failure: P0.1 code exists, but must be tested before its measurement behavior is trusted.
+P0.1 is complete. Phase 0 remains blocked from Phase 1 by the failed functional READ, incomplete
+failure-pair matrix and unbounded provider/Odoo crash path. A non-injected `hello` during P0.1
+validation also ended after three `runtime_unavailable` attempts; this is diagnostic context for
+the existing Phase 0 work, not a P0.1 failure.
 
 ## Exact next action selection
 
-1. If executable local/Odoo evidence for commit `1b5c0ba857e61bbbbf7c8fc17f677bdabc87d892` is available, process it first.
-2. Run `P0.1-UNIT` and `P0.1-PYCOMPILE` in an executable repository environment.
-3. Run one bounded `P0.1-REAL-PARTIAL-CAPTURE` validation.
-4. If P0.1 fails, create the smallest corrective child slice and keep Phase 0 open.
-5. If P0.1 passes, mark it COMPLETE and make `P0.2-read-failure-diagnosis` the next normal Phase 0 slice.
-6. Do not retry ACTION until READ passes and the provider/Odoo crash path is bounded.
+1. Start `P0.2-read-failure-diagnosis` from current `main`.
+2. Reproduce the bounded READ failure and distinguish provider/account/runtime availability from
+   capability selection/input/execution failure.
+3. Tighten READ acceptance evidence so a completed apology cannot count as a functional PASS.
+4. Run the affected deterministic regression and the bounded real READ validation.
+5. Do not retry ACTION until READ passes and the provider/Odoo crash path is bounded.
 
 ## Planned corrective Phase 0 slices
 
-- `P0.1-partial-capture-and-retry-attribution` — implemented, validation pending;
-- `P0.2-read-failure-diagnosis` — reproduce why completed READ produced no tool-backed result and tighten acceptance evidence;
+- `P0.1-partial-capture-and-retry-attribution` — **COMPLETE**;
+- `P0.2-read-failure-diagnosis` — **READY**; reproduce why completed READ produced no tool-backed result and tighten acceptance evidence;
 - `P0.3-provider-crash-reproduction` — isolate Codex 0.149.1 child signal-5 crashes and Odoo service loss before another write attempt;
 - `P0.4-fault-injection-fixtures` — bounded EOF/timeout/invalid-output fixtures for the required failure-pair matrix;
 - repeat READ, then ACTION, then aggregate Phase 0 report.
 
 ## Authorized look-ahead
 
-`P1-PREP-CONFORMANCE` remains potentially useful and does not create a production contract layer, but it is **not the current priority** while a failed HARD Phase 0 gate has direct corrective work available.
+`P1-PREP-CONFORMANCE` remains potentially useful and does not create a production contract layer,
+but it is **not the current priority** while `P0.2` is READY and a failed HARD Phase 0 gate has
+direct corrective work available.
 
 No Phase 1 production provider/runtime refactor is authorized.
 
@@ -168,4 +145,6 @@ Phase 0 remains incomplete until the mandatory real matrix, timing/tool decompos
 
 ## Resume instructions
 
-Every new run must re-read current `main`, this file, the active evidence record, current code/tests and the continuous execution protocol before selecting work. Process new validation evidence before implementing another slice.
+Every new run must re-read current `main`, this file, the P0.1 evidence record, current code/tests
+and the continuous execution protocol before selecting work. The next run may begin P0.2, but must
+not repeat ACTION or begin Phase 1.

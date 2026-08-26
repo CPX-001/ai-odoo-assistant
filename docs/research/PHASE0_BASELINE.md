@@ -2,7 +2,7 @@
 
 Research/playbook source: `FOUNDATION_STABILIZATION_PLAYBOOK.md`  
 Phase started from main: `3f175cdc9b38aa3fc5aac4f231c0aee5d86b46ef`  
-Latest implementation slice inspected from: `17841f8c786bb3f58940c35a513b7f5e1296e188`  
+Latest implementation slice inspected from: `121108e55ef0ff91adb0377920f73128875536ac`<br>
 Target: Odoo 18 Community / embedded runtime / Codex primary  
 Status: **in progress — measurement + live-capture tooling implemented, live exit gate not yet satisfied**
 
@@ -178,6 +178,15 @@ It:
 7. records a pre-enqueue `request_error_code` when the product gate rejects the request;
 8. validates the observed result against the scenario catalog.
 
+P0.1 extended the capture contract without changing product runtime behavior:
+
+- once enqueue has persisted a turn, polling timeout, Odoo HTTP/RPC failure, invalid status or a
+  turn-id mismatch returns a sanitized partial trace instead of discarding prior evidence;
+- capture-side failures use `capture_error_code`, remain `expectation_met=false` and retain already
+  observed snapshots plus available browser timings;
+- successful `completed` or `awaiting_confirmation` turns do not promote a diagnostic code from a
+  recovered attempt to terminal `original_error_code`.
+
 The trace deliberately excludes:
 
 ```text
@@ -278,11 +287,17 @@ A normal persisted-turn capture has this shape:
     {"state": "completed", "error_code": null, "events": []}
   ],
   "request_error_code": null,
+  "capture_error_code": null,
   "original_error_code": null,
   "ui_error_code": null,
   "expectation_met": true
 }
 ```
+
+An interrupted persisted-turn capture uses the same bounded shape, preserves the snapshots and
+timings already observed, sets `capture_error_code` to the normalized capture-side failure,
+`expectation_met=false`, and leaves `original_error_code=null` because no terminal product error was
+observed.
 
 A pre-enqueue provider gate failure contains no invented turn:
 
@@ -444,3 +459,22 @@ Observed result:
 The run also found that failed-attempt timing events roll back, a recovered successful turn retains
 a stale transient `original_error_code`, and a transport exception prevents the live runner from
 writing partial evidence. Phase 0 remains open.
+
+## P0.1 corrective validation — 2026-08-27
+
+P0.1 was materially validated at `121108e55ef0ff91adb0377920f73128875536ac`.
+
+- deterministic runner regression: **PASS**, 7 tests;
+- `phase0_live_capture.py` compilation: **PASS**;
+- `P0.1-REAL-PARTIAL-CAPTURE`: **PASS** against real Odoo 18 using a loopback-only controlled
+  interruption after authentication and real turn persistence;
+- saved evidence retained one queued snapshot and submit/persist/activity/final timings, reported
+  `capture_error_code=odoo_http_unavailable`, kept `expectation_met=false`, and contained no prompt,
+  answer, password, tool/provider payload or terminal `original_error_code`;
+- a non-injected real `hello` did not recover: it ended `failed` after three
+  `runtime_unavailable` diagnostics, so real recovered-retry attribution remains not observed while
+  its deterministic regression is PASS.
+
+The P0.1 local and real validation debts are closed. This does not close Phase 0: READ, ACTION,
+timing decomposition and the required failure-pair matrix remain incomplete. The next normal slice
+is `P0.2-read-failure-diagnosis`; ACTION must not be repeated yet.
