@@ -197,6 +197,10 @@ def summarize(trace: dict[str, Any], *, catalog_ids: set[str]) -> dict[str, Any]
     client = _client_points(trace)
     server, server_provenance = _server_points(events)
     points = {**server, **client}
+    provenance = {
+        **server_provenance,
+        **{point: "client:onTiming" for point in client},
+    }
 
     snapshots = trace.get("status_snapshots", [])
     final_state = None
@@ -219,9 +223,9 @@ def summarize(trace: dict[str, Any], *, catalog_ids: set[str]) -> dict[str, Any]
         "ui_error_code": trace.get("ui_error_code"),
         "timings_ms": {point: points[point] for point in REQUIRED_POINTS if point in points},
         "timing_provenance": {
-            point: server_provenance[point]
+            point: provenance[point]
             for point in REQUIRED_POINTS
-            if point in server_provenance
+            if point in provenance
         },
         "missing_checkpoints": missing,
         "model_turns": trace.get("model_turns"),
