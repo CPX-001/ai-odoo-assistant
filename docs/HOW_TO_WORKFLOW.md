@@ -1,65 +1,49 @@
-# HOW_TO read-only workflow
+# HOW_TO behavior in the unified agent
 
-M5-07 adds a dedicated `HOW_TO` turn for installation-aware guidance. M5-08
-routes the integrated panel through Odoo (`/odoo_ai/v1/turn`) after an explicit
-`HOW_TO` selection; the dedicated `/odoo_ai/v1/how-to` route remains compatible.
-Odoo derives the effective user, companies and database, signs a short-lived
-delegation, and calls the Assistant Service (`/v1/turns/how-to`). The browser
-never receives the delegation token, shared secret, internal endpoint, physical
-knowledge path, raw action payload or raw Evidence.
+There is no current standalone HOW_TO router/workflow. This document records how installation-specific guidance should be handled inside the unified embedded agent runtime.
 
-## Authority and registry
+## What changed
 
-The HOW_TO delegation contains only:
+The former architecture classified requests into rigid routes such as GENERAL, QUERY, HOW_TO, EXPLAIN and ACTION. That target was retired by the unified agent runtime. A single turn may now need to inspect schema/data, explain behavior and propose an action without crossing artificial workflow boundaries.
 
-- `navigation`, always;
-- `fields_get`, only when the current screen identifies a valid runtime model;
-- no record ids, record reads, QUERY authority, write authority or action authority.
+## Current evidence available
 
-The Assistant preloads visible navigation and the effective runtime schema through that delegation. Codex receives exactly `knowledge.search` and `knowledge.read_excerpt` as dynamic tools. Labels, schema metadata, document text, snippets and the user message remain untrusted data; none can add a tool or change policy.
+At the audited baseline the embedded core capability package provides live Odoo discovery/schema/query/action/batch/runtime capabilities. It does **not** yet provide the former sidecar Knowledge FTS/source-inspection tools as first-class embedded capabilities.
 
-## Evidence and confidence rules
+Therefore a current answer must not pretend that general documentation/source RAG exists when it does not. For installation-specific HOW_TO questions, prefer evidence the runtime can actually obtain from the live instance; if evidence is insufficient, say so rather than filling gaps with an obsolete sidecar contract.
 
-All returned citations resolve to `CHECKED` Evidence produced in the same turn:
+## Desired reasoning order
 
-- `navigation`: logical visible menu id/path, target model and allowlisted view modes;
-- `schema`: model, schema fingerprint and the bounded visible field name/label/type set;
-- `document`: logical provider/document id, chunk ordinal, line range and current document fingerprint.
-
-Physical paths and raw Odoo action values are not part of the response contract.
-
-The host applies these postconditions:
-
-1. `workflow` must be `HOW_TO` and `proposed_action` must be null.
-2. Unknown, conflicting, unchecked or malformed evidence references fail closed.
-3. If no relevant visible menu exists, model-authored route text is replaced with a low-confidence installation limitation.
-4. A backtick-delimited installation field containing an underscore is checked against the effective schema. An absent field causes the assertion to be removed and replaced by a low-confidence limitation.
-5. A document citation without a navigation citation explicitly says that documentation alone does not confirm a route in this installation.
-6. `HIGH` requires checked navigation and documentation citations; when an effective schema was available, it also requires a schema citation. Missing support degrades confidence to `MEDIUM` or `LOW`.
-7. Answers, limitations, citations, navigation nodes, schema fields, tool calls, evidence count and request/response bytes are bounded.
-
-General model knowledge can only appear as a degraded answer with an explicit limitation; it is never represented as a checked installation fact.
-
-## Fixture
-
-For a user on `sale.order`, a verified response can cite:
+For a concrete Odoo installation, guidance should progressively prefer:
 
 ```text
-answer: Ve a Sales > Orders y usa el campo `state` para comprobar el estado.
-confidence: high
-citations:
-  navigation: menu 11, Sales > Orders, target sale.order, list/form
-  schema: sale.order, sha256:<runtime schema>, fields [name, state]
-  document: odoo-docs/sales/orders.md, chunk 0, lines 10-12,
-            sha256:<current document version>
+current screen/record context
+ -> effective runtime model/schema/configuration
+ -> bounded Odoo data when relevant
+ -> installed-source/XML/log evidence when/if a current capability provides it
+ -> internal knowledge/docs when/if a current retrieval provider provides it
+ -> model general knowledge as clearly lower-confidence fallback
 ```
 
-If `Sales > Orders` is not visible for that user, the service does not return that route as an installation fact, even when a document or prompt contains it.
+The exact capability set is always determined by the effective registry for the turn.
 
-## Scope boundary
+## Security
 
-HOW_TO remains read-only. It does not execute steps, query business records,
-fetch the web, persist conversation state, preview writes, request approvals or
-perform actions. The integrated routing, registries, browser response and
-hardening are documented in
-[`M5_ROUTING_SECURITY.md`](M5_ROUTING_SECURITY.md).
+HOW_TO content is informational and cannot grant authority. Text from records, docs, source comments or logs is untrusted data. It must not enable write capabilities, weaken policy, alter approval requirements or override system/host rules.
+
+## Future retrieval
+
+When source/docs retrieval returns to the embedded product, implement it through the current capability/retrieval architecture with:
+
+- provenance/citations;
+- effective user/ACL boundaries where applicable;
+- bounded excerpts and budgets;
+- explicit trust labels;
+- hybrid routing by evidence type rather than vector-only search;
+- deterministic validation for Odoo-specific structures where useful.
+
+Do not revive a separate HOW_TO service or route simply to regain old retrieval functionality.
+
+## Acceptance principle
+
+A good HOW_TO answer is not measured only by fluent prose. For instance-specific questions it should be traceable to the effective version/modules/configuration/evidence available in that turn and should distinguish verified facts from generic guidance.

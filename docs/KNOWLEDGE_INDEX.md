@@ -1,136 +1,72 @@
-# Knowledge index y PostgreSQL FTS
+# Knowledge and retrieval status
 
-M5-05 introduce una ingesta documental incremental dentro de la base PostgreSQL
-propia del Assistant. No accede a la base Odoo, no hace fetching web y no usa
-embeddings ni extensiones vectoriales.
+This document supersedes the former sidecar PostgreSQL FTS Knowledge Index specification.
 
-## Provider inicial
+## Current state
 
-`FilesystemKnowledgeProvider` acepta una raíz absoluta por provider. Las fuentes
-se configuran explícitamente mediante `ODOO_AI_KNOWLEDGE_SOURCES`, por ejemplo:
+At the audited embedded-runtime baseline, the core capability provider package contains `odoo_query`, `odoo_actions`, `odoo_batch` and `odoo_runtime`. It does **not** currently contain the old `knowledge.search`, `knowledge.read_excerpt` or a general document/vector RAG provider.
 
-```json
-[
-  {
-    "provider_id": "customer.manuals",
-    "root": "/srv/customer/assistant-knowledge",
-    "locale": "es-ES"
-  }
-]
+The earlier Knowledge Index implementation under the retired Assistant Service is historical evidence only. Its SQLAlchemy/Alembic tables, separate Assistant PostgreSQL database, service-side FTS APIs and sidecar ingestion lifecycle are not current deployment/runtime contracts.
+
+## What remains useful from the old design
+
+Several principles remain valid independent of storage technology:
+
+- retrieval results need stable provenance;
+- ingestion/indexing state should be observable;
+- excerpts and outputs must be bounded;
+- user-provided/retrieved text is data, never policy;
+- exact/lexical retrieval and semantic retrieval solve different problems;
+- source code/XML/runtime facts often need structured indexes rather than generic embeddings;
+- retrieval must respect the same installation/user context as the rest of the assistant.
+
+These are design constraints, not evidence that the old sidecar index should be restored.
+
+## Target retrieval architecture
+
+A future embedded retrieval layer should compose evidence providers behind host-owned contracts, for example:
+
+```text
+Retrieval planner/provider layer
+  |
+  +--> live runtime/schema/configuration
+  +--> Odoo business data
+  +--> source/XML structural index
+  +--> logs/diagnostics
+  +--> internal documents/Knowledge/attachments
+  +--> lexical/FTS search
+  +--> semantic/vector search where it improves recall
 ```
 
-No existe una raíz por defecto. La configuración rechaza paths relativos o con
-`..`, IDs duplicados y locales inválidos. El provider sólo admite UTF-8
-`text/plain` (`.txt`) y `text/markdown` (`.md`, `.markdown`). Ignora otros
-formatos, rechaza binarios y symlinks, comprueba el destino real del descriptor
-abierto y aplica límites de documentos, bytes por fichero, bytes totales,
-profundidad y tiempo. Los contratos y diagnósticos sólo incluyen
-`provider_id`/`document_id` lógicos; nunca incluyen la raíz física.
+Results should normalize provenance, trust level, freshness/fingerprint and bounded excerpts so reasoning can compare evidence without treating any retrieved instruction as authority.
 
-## Persistencia
+## Storage choice is not predetermined
 
-La revisión Alembic `0006_m5_05_knowledge_fts` añade:
+The current project does not require pgvector, Chroma, Qdrant, Neo4j, LlamaIndex or a separate retrieval service. Choose a store only after the desired corpus/query/eval demonstrates a need. Odoo/PostgreSQL-native solutions are preferred when they satisfy the requirement without a new operational component.
 
-- `knowledge_document`: identidad única por instancia, provider y documento
-  lógico; título, locale, media type, fingerprint, tamaño, timestamps y estado
-  `current`/`retired`.
-- `knowledge_chunk`: identidad determinista por versión y ordinal, fingerprint
-  de documento/chunk, texto, offsets, líneas, tamaños, configuración FTS y
-  `search_vector` PostgreSQL.
+## Source intelligence
 
-Índices principales:
+For questions about a concrete installation, source/XML/runtime evidence can be more valuable than general document embeddings. Future work should preserve installation-local module/version evidence and support deterministic Odoo validations (for example model/field/view/domain relationships) where feasible.
 
-- `ix_knowledge_document_instance_provider_status` para seleccionar únicamente
-  versiones vigentes dentro del provider/instancia;
-- `ix_knowledge_document_fingerprint` para comprobaciones de versión;
-- `ix_knowledge_chunk_document` para reconstrucción ordenada;
-- `ix_knowledge_chunk_search_vector`, GIN sobre `tsvector`, para búsqueda FTS.
+## Lifecycle direction
 
-La configuración FTS se pasa al store (`simple` por defecto) y queda persistida
-por chunk. No se infiere del idioma del cliente ni se fija a español. Un
-fingerprint sin cambios conserva las filas/chunk IDs existentes; un cambio
-reemplaza los chunks dentro de la misma transacción del caller; un documento no
-visto tras un scan completo pasa a `retired`. Un scan parcial nunca retira
-documentos que no alcanzó a observar.
+For persistent or temporary knowledge sources, a reasonable product lifecycle is:
 
-## Chunking
-
-El texto se normaliza a saltos `\n` y se divide de forma determinista con límites
-independientes de caracteres y bytes UTF-8. El algoritmo prefiere cerrar el
-chunk en un salto de línea, conserva ordinal, offsets de carácter y rango de
-líneas, y genera un fingerprint ligado a la versión del documento. Los defaults
-son 2.000 caracteres, 8.000 bytes y 4.096 chunks máximos por documento; todos
-son sustituibles dentro de los caps del contrato.
-
-## Diagnóstico sanitizado
-
-Un scan fixture de un documento Markdown produce una forma equivalente a:
-
-```json
-{
-  "metrics": {
-    "documents_seen": 1,
-    "documents_indexed": 1,
-    "documents_unchanged": 0,
-    "documents_retired": 0,
-    "errors": 0,
-    "chunks": 1,
-    "duration_ms": 1
-  },
-  "issue_codes": [],
-  "complete": true
-}
+```text
+discovered/uploaded -> processing -> indexed -> active
+                                  \-> error
 ```
 
-La duración es observada y variable. La respuesta no contiene roots, paths
-físicos ni contenido documental completo.
+Reprocessing, deletion, ACL changes and source freshness must invalidate/refresh derived evidence explicitly.
 
-## Retrieval y tools
+## Security
 
-M5-06 añade exactamente dos tools read-only:
+- Never let a retrieved document modify host policy.
+- Do not index secrets merely because they are readable on disk.
+- Apply ACL/provenance before returning business/internal content to the model.
+- Do not dump large files or binary/base64 payloads into prompts.
+- Keep record, byte, chunk and latency budgets host-owned.
 
-| Tool | Input | Resultado |
-|---|---|---|
-| `knowledge.search` | `KnowledgeSearchRequest` | candidatos FTS ligeros, sin Evidence |
-| `knowledge.read_excerpt` | `KnowledgeReadExcerptRequest` | excerpt acotado + Evidence `document/checked` |
+## Reintroducing knowledge
 
-`knowledge.search` acepta `query` de hasta 256 caracteres, `top_k` entre 1 y
-20, y filtros opcionales exactos por `provider_id` y `locale`. La consulta usa
-`plainto_tsquery` parametrizado con la configuración FTS persistida de cada
-chunk. Sólo une documentos `current` cuyo fingerprint coincide con el chunk.
-Los candidatos exponen posición, título, provider/document ID lógico, locale,
-media type, snippet de hasta 360 caracteres y un `KnowledgeRef`; no producen
-Evidence comprobada.
-
-La ref liga:
-
-```json
-{
-  "document_uuid": "11111111-1111-4111-8111-111111111111",
-  "chunk_uuid": "22222222-2222-4222-8222-222222222222",
-  "provider_id": "customer.manuals",
-  "document_id": "payments/terms.md",
-  "document_fingerprint": "sha256:<64 hex>",
-  "chunk_fingerprint": "sha256:<64 hex>",
-  "ordinal": 0
-}
-```
-
-`knowledge.read_excerpt` sólo acepta esa ref y caps de 1-80 líneas, 128-8.000
-caracteres y 256-16.000 bytes. Antes de responder vuelve a comparar instancia,
-estado vigente, UUIDs, IDs lógicos, ordinal y ambos fingerprints. La Evidence
-resultante usa un pointer lógico, marca el contenido como
-`untrusted_document` y no incluye paths físicos.
-
-Una ref cuya versión cambió, fue retirada, falta o fue inventada falla de forma
-recuperable y no entra en el `EvidenceLedger`:
-
-```json
-{
-  "ok": false,
-  "error": {"code": "knowledge_ref_stale"}
-}
-```
-
-El registry se construye explícitamente por turn y aplica los budgets agregados
-de `ToolExecutor`; el texto indexado no puede registrar tools ni cambiar policy.
+When implementing general knowledge/RAG, create current embedded capabilities/providers and tests/evals. Do not reconnect the old sidecar Knowledge API merely because historical code already exists.

@@ -1,58 +1,68 @@
-# PROMPT CODEX - MILESTONE &lt;ID&gt;
+# Task packet template
 
-## Contexto
+Use this template only when a bounded implementation task benefits from a hand-off packet. Current code/ADRs remain the source of truth.
 
-- Lee `docs/ARCHITECTURE.md` y ADRs relevantes.
-- Si la task toca instalación, source, logs, filesystem, servicios o PostgreSQL, lee también `docs/DEPLOYMENT_CONFIG.md`.
-- Inspecciona el repo real antes de modificar.
+## 1. Task
 
-## Objetivo
+- **Title:**
+- **Repository:** `CPX-001/ai-odoo-assistant`
+- **Inspected main SHA:**
+- **Owner/agent:**
+- **Status:** planned | active | blocked | done
 
-- &lt;resultado observable único&gt;
+## 2. Problem and acceptance
 
-## Contratos que NO puedes romper
+Describe the concrete problem and the observable behavior that must exist when complete. Separate required behavior from optional ideas.
 
-- &lt;files/contracts&gt;
+## 3. Current baseline
 
-## Debes reutilizar
+List relevant current paths/classes/models/tests and what they do now. Note documentation/code contradictions before implementation.
 
-- &lt;componentes existentes/donors ya incorporados&gt;
+## 4. Invariants
 
-## Debes implementar
+Select/apply relevant constraints:
 
-- &lt;scope concreto&gt;
+- Odoo is host/persistence/identity authority.
+- business operations use effective user `su=False`;
+- model output cannot grant capability/permission;
+- reuse current Capability Framework and turn queue;
+- no arbitrary SQL/Python/shell/sudo/unrestricted methods;
+- effectful work keeps preview/policy/approval/verification semantics;
+- retrieved/user-controlled text is untrusted data;
+- Codex credentials remain provider-owned under Odoo `data_dir`.
 
-## Fuera de scope
+Add task-specific failure modes/budgets.
 
-- &lt;lista explícita&gt;
+## 5. References
 
-## Restricciones
+- Current ADR/docs:
+- Relevant project research snapshot:
+- External reference(s), if useful:
+- Pattern to adopt:
+- Pattern/dependency explicitly rejected:
 
-- no `sudo()`;
-- no direct Odoo SQL;
-- no version checks in `application`;
-- preserve current-user semantics;
-- no convertir paths, nombres de servicios, usuarios, logs, addons o endpoints del entorno DEV en contratos del producto;
-- defaults de deployment sólo como hints/configuración sustituible.
+Do not require an external framework merely because it appears in a benchmark.
 
-## Tests obligatorios
+## 6. Implementation scope
 
-- &lt;commands&gt;
-- si la task toca deployment: incluir al menos un fixture/layout no-default relevante.
+- Files/components expected to change:
+- Existing infrastructure to reuse:
+- Data/schema/config changes:
+- Compatibility/migration concerns:
 
-## Acceptance criteria
+## 7. Verification
 
-- &lt;checks concretos&gt;
+- Deterministic unit/contract tests:
+- Odoo integration/install/update/restart checks:
+- ACL/record-rule/company cases:
+- write/approval/recovery cases if applicable:
+- agentic eval(s) if model behavior matters:
+- security/prompt-injection cases if retrieval/untrusted content is involved:
 
-## Antes de editar
+## 8. Documentation/cleanup
 
-1. Resume brevemente el estado real del repo.
-2. Señala cualquier conflicto con el Source of Truth.
-3. Si aplica, lista assumptions de deployment y clasifícalas como requisito real, default/hint u override configurable.
+List current docs/ADRs/readmes that require updates and any obsolete current-path code/docs to remove or mark historical.
 
-## Después
+## 9. Completion evidence
 
-1. Ejecuta tests.
-2. Informa archivos cambiados, decisiones y riesgos pendientes.
-3. Si aplica, lista cualquier assumption de deployment que permanezca y justifícala.
-4. No declares done si falta una verificación.
+Record commit(s), commands/checks run, results, known limitations and any follow-up that is genuinely outside scope. Do not present partial work as complete.

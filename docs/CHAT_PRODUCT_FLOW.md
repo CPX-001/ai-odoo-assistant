@@ -1,82 +1,94 @@
-# Product chat facade
+# Chat product flow
 
-> Documento histórico anterior a ADR-014. El producto activo usa un agente
-> unificado sin categorías de routing; consultar `UNIFIED_AGENT_RUNTIME.md`.
+This document describes the current embedded chat path. It supersedes the former browser/Odoo/Assistant-Service HTTP flow.
 
-El panel principal del producto es un **chat único**. `EXPLAIN`, `QUERY`, `HOW_TO` y `ACTION`
-continúan existiendo como boundaries internos de autoridad y validación, pero ya no son una
-decisión que deba tomar el usuario.
-
-## Flujo visible
+## Current flow
 
 ```text
-usuario escribe una petición
-        ↓
-Odoo añade identidad efectiva + contexto de pantalla
-        ↓
-routing semántico multilingüe sin tools
-        ↓
-Codex + tools mínimas necesarias
-        ↓
-respuesta en el mismo chat
+OWL Assistant panel
+    |
+    | Odoo RPC
+    v
+Odoo controllers/services
+    |
+    +--> conversation/message persistence
+    +--> screen context validation
+    +--> account/policy checks
+    |
+    v
+odoo.ai.turn (queued)
+    |
+    v
+ir.cron claims turn with lease
+    |
+    v
+AgentTurnService
+    |
+    +--> effective CapabilityRegistry views
+    +--> ReasoningEngine -> Codex App Server subprocess
+    |
+    v
+host validation / policy / approval / execution / verification
+    |
+    v
+turn result + sanitized events persisted in Odoo
+    |
+    v
+OWL polls Odoo and renders progress/result
 ```
 
-El browser no envía una identidad confiable ni selecciona un workflow. El router pide a Codex una
-decisión estructurada usando el texto original, el idioma efectivo, un historial reciente acotado,
-la pantalla actual y exclusivamente los modelos que Odoo acaba de comprobar como visibles y
-legibles para el usuario. Esta fase no recibe tools, registros, secretos ni autoridad de ejecución.
-No usa diccionarios de palabras por idioma: interpreta semánticamente la petición en el idioma en
-que llegue y devuelve `workflow + target_model` junto con una reformulación autocontenida en el
-mismo idioma. Esa reformulación sólo resuelve pronombres o referencias acreditadas por el historial
-reciente; Odoo guarda como mensaje del usuario el texto original.
+The browser never calls a separate Assistant Service. There is no current `/assistant/chat/turns` sidecar API, shared browser-side machine secret, or Assistant PostgreSQL transcript store.
 
-Odoo valida de nuevo ambas decisiones contra su allowlist antes de crear cualquier delegación.
-`ScreenContext` sigue siendo una pista: una pregunta puede referirse a otro modelo distinto al que
-está abierto, pero nunca a uno que las ACL/record rules hayan dejado fuera. La respuesta se redacta
-en el idioma de la petición o, si no está claro, en el idioma efectivo del usuario; los nombres
-técnicos de modelo/campo se traducen a operaciones Odoo mediante metadata runtime, no con clases o
-aliases específicos de una versión o lengua.
+## Opening the Assistant
 
-Las peticiones generales de código, módulos, arquitectura o documentación usan un turno de
-lectura que puede consultar el índice persistente de source y conocimiento sin exigir un registro
-abierto. Si source está degradado, ese turno puede continuar con conocimiento e historial en vez
-de convertir la falta de source en un fallo global del chat.
+The frontend first resolves the database-scoped Codex account state. Chat/history bootstrap is gated until the runtime account is usable. Account polling only runs while the Assistant is open and the page is visible.
 
-## Memoria
+Once usable, the panel loads Odoo-owned conversation state and may submit new messages with current screen context. Screen context is a navigation/context hint; the server reconstructs identity, companies and permissions independently.
 
-La memoria de producto no depende de threads de Codex:
+## Submit
 
-- conversaciones y mensajes enviados viven en la PostgreSQL propia del Assistant;
-- se aíslan por `database + uid` derivados por Odoo;
-- el turno general recibe un resumen acotado de mensajes recientes;
-- el texto todavía no enviado vive en `localStorage` por host/usuario/conversación para sobrevivir a cierres y
-  recargas del panel.
+Submitting a message should remain a short Odoo request:
 
-El historial no replica registros de negocio ni añade un sistema de roles propio.
+1. validate caller and input;
+2. persist user message/conversation state;
+3. create a durable `odoo.ai.turn` with the relevant context/policy snapshot;
+4. schedule/wake native cron processing;
+5. return the turn identifier/state to the browser.
 
-## Índices
+Long reasoning or provider execution does not need to remain inside the browser HTTP request.
 
-Source y knowledge son estado persistente del Assistant, independiente del modelo de razonamiento.
-El addon solicita un source rescan y knowledge reindex después de una instalación nueva; el mismo
-refresh se solicita durante el upgrade a `18.0.7.6.0`. El trabajo pesado permanece en el Assistant
-Service, no en el proceso de Odoo. Si el servicio está temporalmente degradado, install/upgrade no
-se revierte y Diagnostics/Maintenance pueden repetir el refresh.
+## Processing
 
-## Writes
+A cron worker claims the turn with a bounded lease. `AgentTurnService` rebuilds the effective Odoo user/company context and effective capability catalog, invokes the reasoning engine and handles capability calls through host-owned validation/execution.
 
-La fachada única no amplía autoridad. Una petición de escritura sigue entrando en el boundary
-ACTION existente:
+The model can request only capabilities visible in the effective reasoning/planning view. Naming a capability does not create access. Reads and writes continue to obey Odoo permissions and capability bounds.
+
+## Effects and approval
+
+Effectful requests do not become authorized because the user/model mentioned an action in chat. The current host path uses capability effect/risk metadata plus configured policy and approval semantics.
+
+The intended product UX is:
 
 ```text
-proposal → preview → approval → commit → verification
+prepare/preview -> policy -> approval if required -> execute -> verify -> receipt/result
 ```
 
-ACTION tampoco recorta familias de preview mediante expresiones regulares dependientes del idioma.
-Codex puede elegir entre todas las familias preview allowlisted; el host impone el modelo/registro
-actual, schemas efectivos, budgets y validaciones. Una corrección del registro abierto debe usar
-`record_patch`, nunca degradarse a `record_create`. El texto libre (incluido “sí, hazlo”) no equivale
-a aprobación: el commit sólo nace del endpoint explícito de decisión de Odoo.
+An approval must bind to the prepared action/preconditions. If the host cannot confirm whether an effect happened, the turn should surface recovery/uncertain state rather than invite a blind retry.
 
-No se añaden `sudo()`, SQL directo contra Odoo, shell libre, Python arbitrario ni métodos ORM
-genéricos para el modelo. Las ACL, record rules, compañías y restricciones de campos del usuario
-efectivo siguen siendo la autoridad real.
+## Polling and progress
+
+The browser polls Odoo-owned turn/event state. Persisted events are sanitized public progress projections, not provider chain-of-thought. They may describe categories of work or approval/verification state but must not expose raw prompts, sensitive arguments, credentials or private reasoning.
+
+At the current audited baseline, completed and approval-waiting turn status includes the persisted authoritative result payload as the browser `response`.
+
+## Conversation persistence
+
+Conversation, message, turn and public event persistence is Odoo-native. Codex threads/process state are not the product memory authority.
+
+## Error behavior
+
+Useful distinctions should survive to the product layer when known: account/provider unavailable, capability denied, ACL denial, invalid provider output, timeout, cancellation, failed verified effect, uncertain/partial effect and stale-turn recovery. A generic assistant error is only the fallback when no safer specific state exists.
+
+## Future surfaces
+
+Context launchers, automations, AI fields or MCP can reuse this host/runtime later, but should not create parallel authorization or tool registries. The chat is one invocation surface over the same Odoo authority model.

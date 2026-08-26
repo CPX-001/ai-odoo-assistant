@@ -22,22 +22,24 @@ A dated document never overrides newer code. Architecture changes that intention
 | `ARCHITECTURE.md` | current | Runtime, authority, persistence and component boundaries. |
 | `UNIFIED_AGENT_RUNTIME.md` | current | Turn lifecycle, reasoning/execution split and recovery. |
 | `CAPABILITY_FRAMEWORK.md` | current | Atomic capability contract, registry/executor and extension direction. |
+| `CHAT_PRODUCT_FLOW.md` | current | Browser-to-Odoo chat/turn/progress lifecycle. |
+| `HOW_TO_WORKFLOW.md` | current status | HOW_TO behavior inside the unified agent; no separate router. |
+| `KNOWLEDGE_INDEX.md` | current status | Current retrieval gap and constraints for future embedded knowledge/RAG. |
+| `AGENT_RUNTIME_OPTIMIZATION.md` | current | Performance/quality guidance for the embedded runtime. |
 | `DEPLOYMENT_CONFIG.md` | current | Supported embedded deployment and configuration. |
 | `QUERY_CONTRACT.md` | current | Schema-first query/discovery contract. |
 | `codex/CODEX_AUTH.md` | current | Provider-owned Codex account lifecycle and database gate. |
 | `adr/README.md` + accepted ADRs | current decisions | Architecture decision log. |
 | `HISTORICAL_DOCUMENTATION.md` | current index | Classification of archived/superseded material. |
 
-`CHAT_PRODUCT_FLOW.md`, `HOW_TO_WORKFLOW.md`, `KNOWLEDGE_INDEX.md` and `AGENT_RUNTIME_OPTIMIZATION.md` are retained as explicit migration/history notes and redirect to the current runtime where appropriate.
-
 ## Historical by default
 
 The following material records earlier milestones and must not be read as current deployment/runtime instructions unless a current document explicitly links to a still-valid detail:
 
 - root `docs/M*_*.md`, `docs/OPERATIONS_M1.md`, `docs/M5_ROUTING_SECURITY.md`, `docs/M6_ACTION_FOUNDATION.md`, `docs/M7_*`;
-- `docs/codex/M*.md` milestone reports/workflows;
-- everything under `docs/codex/tasks/` and `docs/codex/exec-plans/`;
-- third-party audit snapshots under `docs/third_party/`;
+- `docs/codex/M*.md` milestone reports/workflows and `docs/codex/MILESTONES.md`;
+- everything under `docs/codex/tasks/` and `docs/codex/exec-plans/` except their archive README files;
+- third-party audit snapshots under `docs/third_party/` except its archive README;
 - PDFs and generator scripts under `docs/source-of-truth/`;
 - root `design-qa.md`, which is visual QA evidence for one UI snapshot.
 
@@ -46,6 +48,10 @@ See `HISTORICAL_DOCUMENTATION.md` for the reason and superseding current documen
 ## Retired implementation lineage
 
 `service/`, `installer/` and root `migrations/` describe or support the former Assistant Service architecture. They are not the current product runtime. Their local `AGENTS.md` files make this explicit.
+
+## Plans/task packets
+
+Root `PLANS.md` defines current planning rules. `docs/codex/TASK_PACKET_TEMPLATE.md` is the current hand-off template. Old packets/plans are archives, not backlog.
 
 ## Updating documentation
 

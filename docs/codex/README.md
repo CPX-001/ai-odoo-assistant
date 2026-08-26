@@ -1,20 +1,29 @@
-# Trabajo con Codex
+# Codex documentation
 
-Las sesiones de implementación deben seguir las instrucciones raíz y locales de `AGENTS.md`, avanzar mediante milestones pequeños y usar task packets con un único resultado observable.
+Codex App Server is the current reasoning-provider adapter for the embedded Odoo runtime. It runs as an ephemeral local subprocess under the Odoo operating-system identity; it is not the product's operational host or a standalone Assistant Service.
 
-- [`TASK_PACKET_TEMPLATE.md`](TASK_PACKET_TEMPLATE.md): plantilla operativa.
-- [`MILESTONES.md`](MILESTONES.md): roadmap resumido.
-- [`../DEPLOYMENT_CONFIG.md`](../DEPLOYMENT_CONFIG.md): reglas de autodetección, overrides y portabilidad del layout.
-- [`tasks/M0/README.md`](tasks/M0/README.md): M0 completado y detalle de su gate.
-- [`tasks/M1/README.md`](tasks/M1/README.md): M1 completado y gate PASS.
-- [`tasks/M2/README.md`](tasks/M2/README.md): M2 completado y gate PASS.
-- [`tasks/M3/README.md`](tasks/M3/README.md): M3 completado y gate PASS.
-- [`tasks/M4/README.md`](tasks/M4/README.md): M4 completado; M4-01..M4-10 verificados y gate PASS.
-- [`tasks/M5/README.md`](tasks/M5/README.md): M5-01..M5-10 completadas; gate PASS.
-- [`tasks/M6/README.md`](tasks/M6/README.md): M6-01..M6-13 completadas; gate PASS.
-- [`tasks/M7/README.md`](tasks/M7/README.md): M7-01..M7-09 preparados; implementación aún no iniciada.
-- [`../../PLANS.md`](../../PLANS.md): cuándo y cómo mantener un ExecPlan.
+## Current documents
 
-Antes de implementar, contrastar siempre el task packet con el Source of Truth y los ADRs aplicables. Si la task toca filesystem, logs, source, servicios, installer o PostgreSQL, revisar también la política de deployment y distinguir explícitamente requisitos reales de defaults/hints del entorno DEV.
+- [`CODEX_AUTH.md`](CODEX_AUTH.md) — provider-owned account lifecycle, `CODEX_HOME`, device-code login and database activation.
+- [`../CURRENT_STATE.md`](../CURRENT_STATE.md) — audited implementation snapshot.
+- [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — product/runtime boundaries.
+- [`../UNIFIED_AGENT_RUNTIME.md`](../UNIFIED_AGENT_RUNTIME.md) — turn/reasoning/execution lifecycle.
+- [`../CAPABILITY_FRAMEWORK.md`](../CAPABILITY_FRAMEWORK.md) — current tool/capability contract.
 
-M0-M6 están cerrados con gate PASS. M7 es el milestone activo a nivel de planificación: sus packets están preparados y deben ejecutarse en orden, con las agrupaciones Goal descritas en `tasks/M7/README.md`. No iniciar M8 hasta cerrar M7 con gate PASS.
+## Historical material
+
+The `M*.md` files in this directory, `tasks/`, `exec-plans/` and `MILESTONES.md` are retained as implementation chronology/task evidence from earlier stages. They are not active milestone instructions and do not override current code/ADRs/docs.
+
+In particular, references to a standalone Assistant Service, old routing milestones, service APIs, separate Assistant DB or instructions such as “do not start the next milestone” are historical context only.
+
+See [`../HISTORICAL_DOCUMENTATION.md`](../HISTORICAL_DOCUMENTATION.md).
+
+## Current integration rules
+
+- Odoo owns identity, persistence, scheduling, policy and capability execution.
+- Codex receives only the context/capabilities exposed by the host for the turn.
+- Provider credentials remain in private `CODEX_HOME` below Odoo `data_dir` and are not copied into PostgreSQL/prompts/logs.
+- The host validates every requested capability/effect; provider output never grants authority.
+- Provider/runtime failures are sanitized before reaching the browser.
+
+When changing the Codex adapter, inspect current code and protocol behavior first; milestone documents are evidence, not specifications.

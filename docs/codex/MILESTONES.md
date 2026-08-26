@@ -1,23 +1,23 @@
-# Milestones
+# Historical Codex milestone chronology
 
-Este roadmap resume el Source of Truth. No autoriza por sí mismo la implementación de ningún milestone.
+> **Historical record.** This file used to be the active milestone board for the sidecar-to-agent evolution. It is retained as chronology only. It does not define current scope, sequencing or deployment. Current entry points: [`../CURRENT_STATE.md`](../CURRENT_STATE.md), [`../ARCHITECTURE.md`](../ARCHITECTURE.md), [`README.md`](README.md) and accepted ADRs.
 
-Estado actual: **M0-M6 completados; gates PASS. M7-01..05 implementados y verificados en runtime; M7-06..09 pendientes. M7 no es PASS.**
+The original milestone/task packets remain under this directory and `tasks/`/`exec-plans/`. Their completion/next-step language should be interpreted relative to the commit/date they were written, not as an instruction for current `main`.
 
-| Milestone | Objetivo observable |
-| --- | --- |
-| M0 — Repo / contratos | Monorepo y contratos mínimos con tests unitarios verdes y arquitectura congelada. |
-| M1 — Runtime / install | Service instalable, con runtime y DB propios, detectado como healthy desde Odoo. El instalador no puede depender de rutas/nombres concretos del entorno DEV. |
-| M2 — UI / context / delegation | Preguntar desde un pedido y releerlo como el usuario real mediante contexto y delegación firmada. |
-| M3 — Source + logs | Encontrar `action_confirm` y un traceback desde Diagnostics con evidencia acotada, usando roots/providers resueltos en vez de paths hardcodeados. |
-| M4 — Codex vertical slice | Resolver E2E por qué confirmar un pedido crea una tarea, citando registro y source exactos. |
-| M5 — QUERY + HOW_TO + RAG | Ejecutar consultas server-side y ofrecer guías adaptadas a menús, schemas y knowledge de la instalación. |
-| M6 — ACTION segura | Realizar desde chat cambios create/update seguros y al menos una business action curada, siempre aprobados, ligados al payload, releídos y auditados. |
-| M7 — Product hardening | Permitir que un técnico instale, actualice y opere el piloto sin consola diaria, con Diagnostics, Settings/overrides administrables y tests de seguridad. |
-| M8 — Odoo 19 | Superar la misma contract suite y workflows en Odoo 19 sin cambios en `application`. |
+## Historical sequence
 
-El plan y la evidencia del cierre M6 están en
-[`tasks/M6/README.md`](tasks/M6/README.md) y
-[`../M6_GATE_REPORT.md`](../M6_GATE_REPORT.md).
+The repository progressed through several milestone families before the current embedded runtime: foundational service/delegation/security work; query/HOW_TO/explain/action paths; Codex App Server integration; unified agent/runtime cleanup; then migration of authority/persistence into the Odoo addon.
 
-El plan ejecutable de M7 está en [`tasks/M7/README.md`](tasks/M7/README.md). Sus nueve packets son independientes y el README define la agrupación recomendada 3+3+3 para Goal Mode.
+Those records remain useful for reconstructing design intent and regression/security lessons. They are deliberately not rewritten to pretend they described the present architecture.
+
+## Current rule
+
+Before starting new work, ignore historical “active milestone” labels and instead:
+
+1. inspect current `main` and accepted ADRs;
+2. read `docs/README.md` and `docs/CURRENT_STATE.md`;
+3. identify current reusable capability/turn infrastructure;
+4. consult a historical packet only if it explains a relevant earlier decision/test;
+5. update current docs and tests with the new work.
+
+A future roadmap should be created from current product problems/evals, not resumed from this historical milestone sequence.
