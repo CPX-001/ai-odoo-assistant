@@ -21,6 +21,7 @@ Every playbook must record the inspected commit and research date. Revalidate it
 | Document | Purpose |
 | --- | --- |
 | `FOUNDATION_STABILIZATION_PLAYBOOK.md` | Step-by-step path from the current fragile chat/runtime experience to a stable, observable, provider-neutral foundation before adding major RAG/features. |
+| `PHASE0_BASELINE.md` | Active execution record for the reproducible-baseline phase: scenario catalog, timing/error capture contract, implemented measurement hooks and the remaining exit-gate work. |
 
 ## Rules for research documents
 
