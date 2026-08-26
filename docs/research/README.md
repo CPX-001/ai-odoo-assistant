@@ -16,12 +16,42 @@ They exist to answer a different question: **what should be done next, in what o
 
 Every playbook must record the inspected commit and research date. Revalidate it when product code advances materially.
 
-## Current playbooks
+## Current execution documents
 
 | Document | Purpose |
 | --- | --- |
 | `FOUNDATION_STABILIZATION_PLAYBOOK.md` | Step-by-step path from the current fragile chat/runtime experience to a stable, observable, provider-neutral foundation before adding major RAG/features. |
+| `EXECUTION_STATE.md` | Persistent cursor for recursive/multi-run execution: active phase/slice, blockers, validations and exact next action. |
+| `CONTINUOUS_EXECUTION_PROTOCOL.md` | Rules for repeatedly resuming the roadmap from Git without relying on chat memory, including slice sizing, stop rules and validation semantics. |
+| `REAL_ENV_VALIDATION_PROTOCOL.md` | Named tests that must be performed against real Odoo 18 + Codex before selected slices/phases may close. |
+| `SLICE_TEMPLATE.md` | Template for atomic roadmap slices with deterministic and real-environment gates. |
 | `PHASE0_BASELINE.md` | Active execution record for the reproducible-baseline phase: scenario catalog, timing/error capture contract, implemented measurement hooks and the remaining exit-gate work. |
+
+## Recursive execution rule
+
+A repeated AI/Codex run must reconstruct the next action from `EXECUTION_STATE.md` and current `main`; it must not rely on the previous chat saying `continue`.
+
+The intended loop is:
+
+```text
+inspect current main
+-> read execution cursor
+-> select one coherent slice
+-> implement
+-> run only tests genuinely available
+-> request/consume real Odoo+Codex evidence when required
+-> update state/evidence
+-> commit coherent checkpoint
+-> next run re-inspects from Git
+```
+
+If the active state is `REAL_ENV_VALIDATION_REQUIRED` and no new live evidence exists, the run must stop rather than start speculative later-phase work.
+
+## No GitHub Actions
+
+The current roadmap must **not** use GitHub Actions for scheduled continuation, CI gates or validation because no GitHub runners/workers are available for this project at present.
+
+Tests still remain mandatory. They must be executed in an environment that actually has the required repository/Odoo/Codex runtime, and unrun tests must remain explicitly pending.
 
 ## Rules for research documents
 
@@ -33,6 +63,8 @@ A research/playbook document should:
 - turn recommendations into ordered work packages with exit gates;
 - make unsafe shortcuts and tempting out-of-order work explicit;
 - define when an architectural decision needs an ADR;
-- include tests/evals/metrics that decide whether the next phase is allowed to start.
+- include tests/evals/metrics that decide whether the next phase is allowed to start;
+- distinguish deterministic validation from evidence that requires a real Odoo+Codex environment;
+- never mark a phase complete because a test could not be run.
 
 The goal is to make progress possible without repeatedly redesigning the roadmap in chat.
