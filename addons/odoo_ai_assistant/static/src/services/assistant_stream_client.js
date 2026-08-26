@@ -185,6 +185,11 @@ async function emitProgress(events, onDelta, emitted) {
         started: "Procesando petición…\n",
         "reasoning.started": "Analizando petición…\n",
         "tool.started": "Consultando datos…\n",
+        "tool.preview.started": "Preparando vista previa…\n",
+        "approval.required": "Esperando confirmación…\n",
+        "approval.approved": "Acción aprobada…\n",
+        "execution.barrier": "Ejecutando acción…\n",
+        "tool.verify.started": "Verificando resultado…\n",
         "reasoning.completed": "Preparando respuesta…\n",
     };
     for (const event of events) {
@@ -194,6 +199,16 @@ async function emitProgress(events, onDelta, emitted) {
             await onDelta(text);
         }
     }
+}
+
+function terminalResponse(status) {
+    if (["completed", "awaiting_confirmation"].includes(status?.state)) {
+        if (status.response?.ok !== true) {
+            throw new Error("invalid_response");
+        }
+        return status.response;
+    }
+    return null;
 }
 
 export async function streamAssistantChat({
@@ -226,8 +241,9 @@ export async function streamAssistantChat({
     }
     await emitProgress(queued.events, onDelta, emitted);
     let afterSequence = Number.isSafeInteger(queued.last_sequence) ? queued.last_sequence : 0;
-    if (queued.state === "completed" && queued.response) {
-        return queued.response;
+    const immediate = terminalResponse(queued);
+    if (immediate) {
+        return immediate;
     }
 
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
@@ -243,11 +259,9 @@ export async function streamAssistantChat({
         if (Number.isSafeInteger(status.last_sequence)) {
             afterSequence = status.last_sequence;
         }
-        if (status.state === "completed") {
-            if (status.response?.ok !== true) {
-                throw new Error("invalid_response");
-            }
-            return status.response;
+        const response = terminalResponse(status);
+        if (response) {
+            return response;
         }
         if (["failed", "cancelled", "recovery_required"].includes(status.state)) {
             throw new Error(status.error_code || "runtime_unavailable");
