@@ -145,6 +145,8 @@ class CodexReasoningEngine:
     ) -> AgentReasoningResult:
         if self._cancelled():
             raise CodexAgentError("agent_cancelled")
+        timing = _provider_timing_recorder(context)
+        timing("runtime_started")
         dynamic_tools, bindings = _dynamic_tools(reasoning_capabilities)
         turn_input = _turn_input(
             message=message,
@@ -153,7 +155,7 @@ class CodexReasoningEngine:
             reasoning=reasoning_capabilities,
             planning=planning_capabilities,
         )
-        client = await _CodexClient.start(self._settings)
+        client = await _CodexClient.start(self._settings, timing=timing)
         async with client:
             deadline = asyncio.get_running_loop().time() + self._settings.turn_timeout_seconds
             thread_result = await client.request(
@@ -172,6 +174,7 @@ class CodexReasoningEngine:
                 timeout=_remaining(deadline),
             )
             thread_id = _thread_id(thread_result)
+            timing("provider_thread_started")
             turn_result = await client.request(
                 "turn/start",
                 {
@@ -182,6 +185,7 @@ class CodexReasoningEngine:
                 timeout=_remaining(deadline),
             )
             turn_id = _turn_id(turn_result)
+            timing("provider_turn_started")
             completed = await self._wait_for_completion(
                 client,
                 thread_id=thread_id,
@@ -190,6 +194,7 @@ class CodexReasoningEngine:
                 executor=executor,
                 context=context,
                 deadline=deadline,
+                timing=timing,
             )
         return _reasoning_result(completed)
 
@@ -203,6 +208,7 @@ class CodexReasoningEngine:
         executor: CapabilityExecutor,
         context: CapabilityContext,
         deadline: float,
+        timing: Callable[[str], None],
     ) -> dict[str, object]:
         request_ids: set[tuple[type[object], object]] = set()
         dynamic_call_ids: set[str] = set()
@@ -217,6 +223,7 @@ class CodexReasoningEngine:
                 await _best_effort_interrupt(client, thread_id, turn_id)
                 raise CodexAgentError("agent_cancelled")
             event = await client.next_event(timeout=_remaining(deadline))
+            timing("first_provider_event")
             if "id" in event:
                 request_id = _request_id(event.get("id"))
                 key = (type(request_id), request_id)
@@ -243,6 +250,8 @@ class CodexReasoningEngine:
             if not isinstance(method, str):
                 raise CodexAgentError("codex_event_invalid")
             _validate_notification(method, params, thread_id=thread_id, turn_id=turn_id)
+            if method == "item/agentMessage/delta":
+                timing("first_answer_delta")
             if method == "item/completed":
                 item = _validate_completed_item(
                     params,
@@ -294,7 +303,12 @@ class _CodexClient:
         self._closed = False
 
     @classmethod
-    async def start(cls, settings: CodexAgentSettings) -> _CodexClient:
+    async def start(
+        cls,
+        settings: CodexAgentSettings,
+        *,
+        timing: Callable[[str], None] | None = None,
+    ) -> _CodexClient:
         try:
             executable = settings.executable.resolve(strict=True)
         except OSError:
@@ -327,6 +341,8 @@ class _CodexClient:
             temp_cwd.cleanup()
             temp_home.cleanup()
             raise CodexAgentError("codex_runtime_start_failed") from None
+        if timing is not None:
+            timing("provider_process_started")
         client = cls(settings, process, cwd, temp_cwd, temp_home)
         try:
             result = await client.request(
@@ -350,6 +366,8 @@ class _CodexClient:
             ):
                 raise CodexAgentError("codex_initialize_response_invalid")
             await client.notify("initialized", timeout=settings.startup_timeout_seconds)
+            if timing is not None:
+                timing("provider_initialized")
         except BaseException:
             await client.close()
             raise
@@ -495,6 +513,32 @@ class _CodexClient:
         await self.close()
 
 
+def _provider_timing_recorder(context: CapabilityContext) -> Callable[[str], None]:
+    """Create a best-effort, content-free monotonic checkpoint recorder for one provider run."""
+
+    started_at = asyncio.get_running_loop().time()
+    emitted: set[str] = set()
+
+    def record(point: str) -> None:
+        if point in emitted:
+            return
+        emitted.add(point)
+        elapsed_ms = round(
+            max(0.0, asyncio.get_running_loop().time() - started_at) * 1000,
+            3,
+        )
+        try:
+            context.emit(
+                "diagnostic.timing",
+                "Provider timing checkpoint",
+                {"point": point, "elapsed_ms": elapsed_ms},
+            )
+        except Exception:  # noqa: BLE001 - diagnostics must never fail the product turn
+            return
+
+    return record
+
+
 def _turn_input(*, message, conversation_summary, context, reasoning, planning):
     payload = {
         "host_contract": {
@@ -615,25 +659,41 @@ def _tool_success(value):
 
 
 def _tool_error(code):
-    safe = code if isinstance(code, str) and re.fullmatch(r"[a-z0-9_]{1,128}", code) else "tool_failed"
+    safe = (
+        code
+        if isinstance(code, str) and re.fullmatch(r"[a-z0-9_]{1,128}", code)
+        else "tool_failed"
+    )
     return {
         "success": False,
         "contentItems": [
             {
                 "type": "inputText",
-                "text": _canonical_json({"ok": False, "error": {"code": safe}}, "codex_tool_result_invalid"),
+                "text": _canonical_json(
+                    {"ok": False, "error": {"code": safe}},
+                    "codex_tool_result_invalid",
+                ),
             }
         ],
     }
 
 
 def _validate_notification(method, params, *, thread_id, turn_id):
-    if method in {"configWarning", "warning", "account/rateLimits/updated", "remoteControl/status/changed"}:
+    if method in {
+        "configWarning",
+        "warning",
+        "account/rateLimits/updated",
+        "remoteControl/status/changed",
+    }:
         if not isinstance(params, dict):
             raise CodexAgentError("codex_event_invalid")
         return
     if method in {"item/started", "item/completed"}:
-        if not isinstance(params, dict) or params.get("threadId") != thread_id or params.get("turnId") != turn_id:
+        if (
+            not isinstance(params, dict)
+            or params.get("threadId") != thread_id
+            or params.get("turnId") != turn_id
+        ):
             raise CodexAgentError("codex_item_event_mismatch")
         return
     if method == "thread/started":
@@ -646,7 +706,11 @@ def _validate_notification(method, params, *, thread_id, turn_id):
             raise CodexAgentError("codex_event_invalid")
         return
     if method == "error":
-        if not isinstance(params, dict) or params.get("threadId") != thread_id or params.get("turnId") != turn_id:
+        if (
+            not isinstance(params, dict)
+            or params.get("threadId") != thread_id
+            or params.get("turnId") != turn_id
+        ):
             raise CodexAgentError("codex_error_event_invalid")
         if params.get("willRetry") is True:
             return
@@ -661,7 +725,11 @@ def _validate_notification(method, params, *, thread_id, turn_id):
 
 
 def _validate_completed_item(params, *, thread_id, turn_id, dynamic_call_ids):
-    if not isinstance(params, dict) or params.get("threadId") != thread_id or params.get("turnId") != turn_id:
+    if (
+        not isinstance(params, dict)
+        or params.get("threadId") != thread_id
+        or params.get("turnId") != turn_id
+    ):
         raise CodexAgentError("codex_item_completion_mismatch")
     item = params.get("item")
     if not isinstance(item, dict):
@@ -679,7 +747,9 @@ def _with_completed_agent_messages(turn, completed_agent_messages):
     items = turn.get("items")
     if not isinstance(items, list):
         raise CodexAgentError("codex_turn_items_invalid")
-    if any(isinstance(item, dict) and item.get("type") == "agentMessage" for item in items):
+    if any(
+        isinstance(item, dict) and item.get("type") == "agentMessage" for item in items
+    ):
         return turn
     if not completed_agent_messages:
         return turn
@@ -707,11 +777,19 @@ def _reasoning_result(turn):
         raise CodexAgentError("codex_answer_invalid") from None
     if not isinstance(payload, dict) or set(payload) != {"answer", "confidence", "plan"}:
         raise CodexAgentError("codex_answer_invalid")
-    if not isinstance(payload["answer"], str) or payload["confidence"] not in {"high", "medium", "low"} or not isinstance(payload["plan"], list) or len(payload["plan"]) > 12:
+    if (
+        not isinstance(payload["answer"], str)
+        or payload["confidence"] not in {"high", "medium", "low"}
+        or not isinstance(payload["plan"], list)
+        or len(payload["plan"]) > 12
+    ):
         raise CodexAgentError("codex_answer_invalid")
     plan = []
     for raw in payload["plan"]:
-        if not isinstance(raw, dict) or set(raw) != {"capability", "arguments_json", "summary"}:
+        if (
+            not isinstance(raw, dict)
+            or set(raw) != {"capability", "arguments_json", "summary"}
+        ):
             raise CodexAgentError("codex_answer_invalid")
         try:
             arguments = json.loads(raw["arguments_json"])
