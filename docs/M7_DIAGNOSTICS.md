@@ -39,12 +39,12 @@ browser. Distingue como mínimo:
 - authenticated / ready;
 - authenticated / unusable.
 
-Cuando hay una cuenta, `account/read` es la fuente de verdad. Diagnostics puede
-pedir a Codex `refreshToken=true` para que **Codex**, y no Odoo, valide/refresque
-la sesión persistente. Después, un probe independiente arranca el mismo HOME
-temporal credential-only usado por los product turns y ejecuta `account/read`.
-Esto permite detectar una sesión que exista en el `CODEX_HOME` persistente pero
-que ya no sea utilizable desde el aislamiento productivo.
+Cuando hay una cuenta, `account/read` es la fuente de verdad. Después, un probe
+independiente arranca el mismo HOME temporal credential-only usado por los product
+turns y ejecuta `account/read(refreshToken=true)`. Codex valida/refresca únicamente
+la copia temporal: Odoo no toca ni persiste tokens. Esto permite detectar una sesión
+que exista en el `CODEX_HOME` persistente pero que ya no sea utilizable desde el
+aislamiento productivo.
 
 Email y `planType` sólo se muestran a administradores si el App Server los
 proporciona. `account/rateLimits/read` es opcional; si existe se renderizan los
