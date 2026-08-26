@@ -14,7 +14,7 @@ from odoo import SUPERUSER_ID, api, fields, models
 from odoo.exceptions import AccessError, ValidationError
 from odoo.modules.registry import Registry
 
-from ..services.screen_context import validate_query_screen
+from ..services.screen_context import ScreenContextValidationError, validate_query_screen
 
 _logger = logging.getLogger(__name__)
 
@@ -60,7 +60,10 @@ class AssistantTurnQueue(models.Model):
         if not self.env.user._is_internal():
             raise AccessError("Assistant is only available to internal users")
         _validate_message(message)
-        validated_screen = validate_query_screen(screen)
+        try:
+            validated_screen = validate_query_screen(screen)
+        except ScreenContextValidationError as error:
+            raise ValidationError("Invalid Assistant screen context") from error
         screen_payload = validated_screen.to_mapping()
         _validate_json_bytes(screen_payload, maximum=_MAX_SCREEN_BYTES)
 

@@ -62,6 +62,22 @@ class TestAssistantTurnQueue(TransactionCase):
         self.assertFalse(turn.assistant_message_id)
         self.assertEqual(turn.allowed_company_ids, [env.company.id])
 
+    def test_enqueue_accepts_general_odoo_screen_without_model(self):
+        env = self.env(user=self.user_a, su=False)
+        screen = self._screen()
+        screen.update({"model": None, "view_type": None})
+
+        result = env["odoo.ai.turn"].enqueue_for_current_user(
+            message="Ayúdame con Odoo",
+            screen=screen,
+            client_request_id="request.queue.general.0001",
+        )
+
+        self.assertTrue(result["ok"])
+        turn = env["odoo.ai.turn"]._owned_turn(result["turn_id"])
+        self.assertIsNone(turn.screen_payload["model"])
+        self.assertIsNone(turn.screen_payload["view_type"])
+
     def test_enqueue_is_idempotent_for_client_request_id(self):
         env = self.env(user=self.user_a, su=False)
         first = env["odoo.ai.turn"].enqueue_for_current_user(

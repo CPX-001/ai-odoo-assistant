@@ -216,6 +216,8 @@ export class AssistantPanel extends Component {
             approval_not_found: _t("No se encontró una aprobación ejecutable."),
             authentication_failed: _t("La autenticación interna del Assistant ha fallado."),
             chat_store_unavailable: _t("El historial no está disponible temporalmente."),
+            codex_not_connected: _t("Conecta una cuenta de ChatGPT para usar el Assistant."),
+            codex_unavailable: _t("Codex no está instalado o no está disponible para Odoo."),
             engine_timeout: _t("Codex agotó el tiempo disponible. Inténtalo de nuevo."),
             engine_unavailable: _t("Codex no está disponible en este momento."),
             evidence_unavailable: _t("No está disponible la evidencia necesaria."),
@@ -238,6 +240,28 @@ export class AssistantPanel extends Component {
             low: _t("Confianza baja"),
         };
         return labels[this.state.result?.confidence] || "";
+    }
+
+    get runtimeSetupMessage() {
+        const messages = {
+            authentication_error: _t(
+                "No se pudo comprobar la conexión con ChatGPT. Revisa la configuración de Codex."
+            ),
+            codex_unavailable: _t(
+                "Codex no está disponible para el proceso Odoo. Un administrador debe configurarlo."
+            ),
+            login_pending: _t(
+                "La conexión con ChatGPT está pendiente. Completa el acceso y actualiza el estado."
+            ),
+            not_authenticated: _t("Conecta una cuenta de ChatGPT antes de usar el Assistant."),
+        };
+        return messages[this.state.runtimeState] || _t("Comprobando la conexión con ChatGPT…");
+    }
+
+    openAssistantSettings() {
+        return this.actionService.doAction("base.action_res_config_settings", {
+            additionalContext: { module: "odoo_ai_assistant" },
+        });
     }
 
     get recoveryPending() {

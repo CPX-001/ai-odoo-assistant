@@ -2,7 +2,9 @@ import { expect, test } from "@odoo/hoot";
 import {
     loadChatHistory,
     loadDraft,
+    loadRuntimeStatus,
     normalizeChatResponse,
+    normalizeRuntimeStatus,
     recoveryPending,
     resetForNewConversation,
     saveDraft,
@@ -30,6 +32,9 @@ function state() {
         historyLoading: false,
         decisionLoading: false,
         policyLoading: false,
+        runtimeLoading: false,
+        runtimeState: null,
+        runtimeCanConfigure: false,
         result: null,
         actionReceipt: null,
         agentPolicy: {
@@ -122,6 +127,34 @@ test("chat accepts a unified-agent response without exposing a category selector
     expect(normalized.result.answer).toBe("Checked answer");
     expect(normalized.result.workflow).toBe("AGENT");
     expect(normalized.result.plan.state).toBe("completed");
+});
+
+test("runtime status requires ChatGPT setup until Codex is authenticated", async () => {
+    const panelState = state();
+    const status = {
+        ok: true,
+        state: "not_authenticated",
+        requires_setup: true,
+        can_configure: true,
+    };
+
+    expect(normalizeRuntimeStatus(status)).toEqual(status);
+    expect(
+        await loadRuntimeStatus({ state: panelState, rpcCall: async () => status })
+    ).toBe(true);
+    expect(panelState.runtimeState).toBe("not_authenticated");
+    expect(panelState.runtimeCanConfigure).toBe(true);
+});
+
+test("runtime status rejects inconsistent setup flags", () => {
+    expect(
+        normalizeRuntimeStatus({
+            ok: true,
+            state: "authenticated",
+            requires_setup: true,
+            can_configure: true,
+        })
+    ).toBe(null);
 });
 
 test("chat accepts generic capability preview metadata", () => {

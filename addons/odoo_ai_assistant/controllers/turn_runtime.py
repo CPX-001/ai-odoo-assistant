@@ -8,10 +8,49 @@ from odoo import http
 from odoo.exceptions import AccessError, ValidationError
 from odoo.http import request
 
+from ..runtime import (
+    CodexAccountError,
+    CodexAccountManager,
+    RuntimePathError,
+    RuntimePaths,
+    detect_codex,
+)
+
 _logger = logging.getLogger(__name__)
 
 
 class AssistantTurnController(http.Controller):
+    @http.route(
+        "/odoo_ai/v1/runtime-status",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def runtime_status(self, **unexpected):
+        if unexpected:
+            return _error("invalid_context")
+        can_configure = request.env.user.has_group("base.group_system")
+        codex = detect_codex()
+        if not codex.ready or codex.executable is None:
+            return _runtime_status("codex_unavailable", can_configure)
+        try:
+            paths = RuntimePaths.from_odoo().ensure()
+            account = CodexAccountManager(
+                executable=codex.executable,
+                paths=paths,
+            ).status(include_rate_limits=False)
+        except (CodexAccountError, RuntimePathError):
+            return _runtime_status("authentication_error", can_configure)
+        state = account.state
+        if state not in {
+            "authenticated",
+            "authentication_error",
+            "login_pending",
+            "not_authenticated",
+        }:
+            state = "authentication_error"
+        return _runtime_status(state, can_configure)
+
     @http.route("/odoo_ai/v1/turn", type="json", auth="user", methods=["POST"])
     def enqueue_turn(
         self,
@@ -115,3 +154,12 @@ class AssistantTurnController(http.Controller):
 
 def _error(code):
     return {"ok": False, "error": {"code": code}}
+
+
+def _runtime_status(state, can_configure):
+    return {
+        "ok": True,
+        "state": state,
+        "requires_setup": state != "authenticated",
+        "can_configure": bool(can_configure),
+    }

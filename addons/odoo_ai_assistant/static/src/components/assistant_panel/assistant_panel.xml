@@ -50,6 +50,16 @@
 
             <div t-if="!ui.isMinimized"
                 class="o_ai_assistant_messages flex-grow-1 overflow-auto p-3" aria-live="polite">
+                <div t-if="state.runtimeState !== 'authenticated'"
+                    class="alert alert-warning mb-3" role="status">
+                    <div class="fw-semibold">Conecta Codex con ChatGPT</div>
+                    <div class="small mt-1" t-esc="runtimeSetupMessage"/>
+                    <button t-if="state.runtimeCanConfigure" type="button"
+                        class="btn btn-warning btn-sm mt-2" t-on-click="openAssistantSettings">
+                        Abrir configuración
+                    </button>
+                </div>
+
                 <div t-if="state.historyLoading and !state.messages.length"
                     class="text-center text-muted py-5">
                     <i class="fa fa-spinner fa-spin me-1" aria-hidden="true"/> Cargando historial…
@@ -183,10 +193,10 @@
                         t-att-value="state.draft"
                         t-on-input="onDraftInput"
                         t-on-keydown="onComposerKeydown"
-                        t-att-disabled="state.loading or state.decisionLoading or recoveryPending"/>
+                        t-att-disabled="state.loading or state.decisionLoading or recoveryPending or state.runtimeState !== 'authenticated'"/>
                     <button type="submit" class="btn btn-primary o_ai_assistant_send_button"
                         aria-label="Enviar mensaje" title="Enviar mensaje"
-                        t-att-disabled="state.loading or state.decisionLoading or recoveryPending or !state.draft.trim()">
+                        t-att-disabled="state.loading or state.decisionLoading or recoveryPending or state.runtimeState !== 'authenticated' or !state.draft.trim()">
                         <i t-if="state.loading" class="fa fa-spinner fa-spin" aria-hidden="true"/>
                         <i t-else="" class="fa fa-paper-plane" aria-hidden="true"/>
                     </button>

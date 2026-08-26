@@ -36,6 +36,8 @@ const KNOWN_ERROR_CODES = new Set([
     "capability_plan_version_mismatch",
     "capability_verification_failed",
     "chat_store_unavailable",
+    "codex_not_connected",
+    "codex_unavailable",
     "engine_timeout",
     "engine_unavailable",
     "evidence_unavailable",
@@ -318,6 +320,26 @@ export function normalizeHistoryResponse(response) {
     return { history: null, errorCode: errorCode(response) };
 }
 
+export function normalizeRuntimeStatus(response) {
+    if (
+        exactKeys(response, ["can_configure", "ok", "requires_setup", "state"]) &&
+        response.ok === true &&
+        [
+            "authenticated",
+            "authentication_error",
+            "codex_unavailable",
+            "login_pending",
+            "not_authenticated",
+        ].includes(response.state) &&
+        typeof response.requires_setup === "boolean" &&
+        typeof response.can_configure === "boolean" &&
+        response.requires_setup === (response.state !== "authenticated")
+    ) {
+        return response;
+    }
+    return null;
+}
+
 function browserStorage() {
     try {
         return globalThis.localStorage || null;
@@ -529,6 +551,29 @@ export async function loadAgentPolicy({ state, rpcCall }) {
     }
 }
 
+export async function loadRuntimeStatus({ state, rpcCall }) {
+    state.runtimeLoading = true;
+    try {
+        const status = normalizeRuntimeStatus(
+            await rpcCall("/odoo_ai/v1/runtime-status", {})
+        );
+        if (!status) {
+            state.runtimeState = "authentication_error";
+            state.runtimeCanConfigure = false;
+            return false;
+        }
+        state.runtimeState = status.state;
+        state.runtimeCanConfigure = status.can_configure;
+        return true;
+    } catch {
+        state.runtimeState = "authentication_error";
+        state.runtimeCanConfigure = false;
+        return false;
+    } finally {
+        state.runtimeLoading = false;
+    }
+}
+
 export async function saveAgentPolicy({ state, rpcCall, confirmationMode, maxAutoRisk }) {
     if (
         state.policyLoading ||
@@ -734,6 +779,9 @@ export const assistantPanelService = {
             historyLoading: false,
             decisionLoading: false,
             policyLoading: false,
+            runtimeLoading: true,
+            runtimeState: null,
+            runtimeCanConfigure: false,
             context: null,
             conversations: [],
             conversationId: null,
@@ -765,6 +813,7 @@ export const assistantPanelService = {
             refreshContext();
             void loadHistory();
             void loadAgentPolicy({ state, rpcCall: rpc });
+            void loadRuntimeStatus({ state, rpcCall: rpc });
         };
         return {
             state,
@@ -809,6 +858,13 @@ export const assistantPanelService = {
                 saveDraft(storage, state.conversationId, state.draft);
             },
             async submit(message) {
+                if (state.runtimeState !== "authenticated") {
+                    state.errorCode =
+                        state.runtimeState === "codex_unavailable"
+                            ? "codex_unavailable"
+                            : "codex_not_connected";
+                    return false;
+                }
                 const draftConversationId = state.conversationId;
                 const sent = await submitAssistantRequest({
                     state,

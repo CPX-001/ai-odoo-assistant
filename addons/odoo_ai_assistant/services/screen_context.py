@@ -76,9 +76,14 @@ def validate_query_screen(
     *,
     clock: Callable[[], datetime] | None = None,
 ) -> ValidatedScreenContext:
-    """Validate model-scoped embedded-agent context; a current record is optional."""
+    """Validate embedded-agent context; both the current model and record are optional."""
 
-    return _validate_screen(payload, clock=clock, require_record=False)
+    return _validate_screen(
+        payload,
+        clock=clock,
+        require_record=False,
+        require_model=False,
+    )
 
 
 def _validate_screen(
