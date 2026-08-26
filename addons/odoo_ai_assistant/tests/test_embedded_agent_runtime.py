@@ -4,7 +4,7 @@ from odoo import Command
 from odoo.tests.common import TransactionCase
 
 from ..runtime.agent import AgentReasoningResult, AgentTurnService
-from ..runtime.agent.codex import _with_completed_agent_messages
+from ..runtime.agent.codex import _provider_timing_recorder, _with_completed_agent_messages
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -83,12 +83,13 @@ class TestEmbeddedAgentRuntime(TransactionCase):
             ]
         )
 
-    def _context(self):
+    def _context(self, *, event_sink=None):
         env = self.env(user=self.agent_user, su=False)
         return CapabilityContext(
             env=env,
             turn_id="embedded-agent-test",
             screen={"model": "res.partner", "selected_ids": []},
+            event_sink=event_sink,
             metadata={
                 "capability_policy": {
                     "confirmation_mode": "risk_based",
@@ -166,6 +167,35 @@ class TestEmbeddedAgentRuntime(TransactionCase):
         self.assertEqual(result.answer, "Visible contacts: 2")
         self.assertEqual(result.confidence, "high")
         self.assertEqual(result.plan, ())
+
+    def test_provider_timing_recorder_is_bounded_content_free_and_idempotent(self):
+        events = []
+        context = self._context(
+            event_sink=lambda event_type, title, payload: events.append(
+                (event_type, title, dict(payload))
+            )
+        )
+
+        async def record():
+            timing = _provider_timing_recorder(context)
+            timing("provider_process_started")
+            timing("provider_process_started")
+            await asyncio.sleep(0)
+            timing("provider_initialized")
+
+        asyncio.run(record())
+
+        self.assertEqual(
+            [event[0] for event in events],
+            ["diagnostic.timing", "diagnostic.timing"],
+        )
+        self.assertEqual(
+            [event[2]["point"] for event in events],
+            ["provider_process_started", "provider_initialized"],
+        )
+        self.assertTrue(all(event[1] == "Provider timing checkpoint" for event in events))
+        self.assertTrue(all(set(event[2]) == {"point", "elapsed_ms"} for event in events))
+        self.assertTrue(all(event[2]["elapsed_ms"] >= 0 for event in events))
 
     def test_codex_completion_uses_authoritative_completed_message_fallback(self):
         message = {
