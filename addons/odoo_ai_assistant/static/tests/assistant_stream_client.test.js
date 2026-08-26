@@ -132,6 +132,8 @@ test("browser stream enforces delta, frame, and total-byte limits", async () => 
 test("product chat uses Odoo-native queue and status without assistant secret", async () => {
     const calls = [];
     const progress = [];
+    const timings = [];
+    const clock = [100, 125, 130, 160];
     const final = {
         ok: true,
         turn_id: "turn-1",
@@ -150,6 +152,8 @@ test("product chat uses Odoo-native queue and status without assistant secret", 
             conversation_id: null,
         },
         onDelta: (text) => progress.push(text),
+        onTiming: (entry) => timings.push(entry),
+        nowCall: () => clock.shift(),
         waitCall: async () => {},
         fetchCall: async (path, options) => {
             calls.push({ path, options });
@@ -191,6 +195,12 @@ test("product chat uses Odoo-native queue and status without assistant secret", 
         "Procesando petición…\n",
         "Analizando petición…\n",
         "Preparando respuesta…\n",
+    ]);
+    expect(timings).toEqual([
+        { point: "submit_received", elapsed_ms: 0 },
+        { point: "turn_persisted", elapsed_ms: 25, turn_id: "turn-1" },
+        { point: "browser_first_activity", elapsed_ms: 30, turn_id: "turn-1" },
+        { point: "browser_final", elapsed_ms: 60, turn_id: "turn-1", state: "completed" },
     ]);
 });
 
