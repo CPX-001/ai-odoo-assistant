@@ -126,9 +126,14 @@ def _client_points(trace: dict[str, Any]) -> dict[str, float]:
     return points
 
 
-def _server_points(events: list[dict[str, Any]]) -> tuple[dict[str, float], dict[str, str]]:
+def _server_points(
+    events: list[dict[str, Any]],
+) -> tuple[dict[str, float], dict[str, str], dict[str, float]]:
+    """Return server points relative to persisted queue time plus runtime monotonic offsets."""
+
     timestamps: dict[str, datetime] = {}
     provenance: dict[str, str] = {}
+    runtime_monotonic: dict[str, float] = {}
     last_capability: datetime | None = None
     first_event_time: datetime | None = None
 
@@ -159,33 +164,22 @@ def _server_points(events: list[dict[str, Any]]) -> tuple[dict[str, float], dict
                 point = payload.get("point")
                 elapsed = payload.get("elapsed_ms")
                 if isinstance(point, str) and isinstance(elapsed, (int, float)):
-                    # Dedicated monotonic backend checkpoints take precedence over timestamp proxies.
+                    timestamps.setdefault(point, occurred_at)
                     provenance[point] = "event:diagnostic.timing"
+                    runtime_monotonic.setdefault(point, round(float(elapsed), 3))
 
     if last_capability is not None:
         timestamps["last_capability_completed"] = last_capability
         provenance["last_capability_completed"] = "event:last tool.completed/tool.failed"
 
     if first_event_time is None:
-        return {}, provenance
+        return {}, provenance, runtime_monotonic
     baseline = timestamps.get("turn_persisted", first_event_time)
     elapsed = {
         point: round((timestamp - baseline).total_seconds() * 1000, 3)
         for point, timestamp in timestamps.items()
     }
-
-    # Preserve explicit backend monotonic values when the trace contains them.
-    for event in events:
-        if event.get("type") != "diagnostic.timing":
-            continue
-        payload = event.get("payload")
-        if not isinstance(payload, dict):
-            continue
-        point = payload.get("point")
-        value = payload.get("elapsed_ms")
-        if isinstance(point, str) and isinstance(value, (int, float)):
-            elapsed[point] = round(float(value), 3)
-    return elapsed, provenance
+    return elapsed, provenance, runtime_monotonic
 
 
 def summarize(trace: dict[str, Any], *, catalog_ids: set[str]) -> dict[str, Any]:
@@ -195,7 +189,18 @@ def summarize(trace: dict[str, Any], *, catalog_ids: set[str]) -> dict[str, Any]
 
     events = _events(trace)
     client = _client_points(trace)
-    server, server_provenance = _server_points(events)
+    server_since_persisted, server_provenance, runtime_monotonic = _server_points(events)
+
+    # Server event timestamps are naturally relative to the persisted `queued` event while browser
+    # timings are relative to submit. Shift the server timeline by the observed client persistence
+    # latency when both clocks are available, then let direct browser measurements override the same
+    # point. This keeps one coherent submit-relative `timings_ms` timeline without pretending the
+    # browser and worker share a monotonic clock.
+    persisted_offset = client.get("turn_persisted", 0.0)
+    server = {
+        point: round(value + persisted_offset, 3)
+        for point, value in server_since_persisted.items()
+    }
     points = {**server, **client}
     provenance = {
         **server_provenance,
@@ -226,6 +231,11 @@ def summarize(trace: dict[str, Any], *, catalog_ids: set[str]) -> dict[str, Any]
             point: provenance[point]
             for point in REQUIRED_POINTS
             if point in provenance
+        },
+        "runtime_monotonic_ms": {
+            point: runtime_monotonic[point]
+            for point in REQUIRED_POINTS
+            if point in runtime_monotonic
         },
         "missing_checkpoints": missing,
         "model_turns": trace.get("model_turns"),
