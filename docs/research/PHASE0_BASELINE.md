@@ -2,7 +2,7 @@
 
 Research/playbook source: `FOUNDATION_STABILIZATION_PLAYBOOK.md`  
 Phase started from main: `3f175cdc9b38aa3fc5aac4f231c0aee5d86b46ef`  
-Latest implementation slice inspected from: `9840ef4299452c2bed253d85f3453547622a57e3`  
+Latest implementation slice inspected from: `17841f8c786bb3f58940c35a513b7f5e1296e188`  
 Target: Odoo 18 Community / embedded runtime / Codex primary  
 Status: **in progress — measurement + live-capture tooling implemented, live exit gate not yet satisfied**
 
@@ -41,7 +41,7 @@ stabilization playbook:
 - `worker_restart_before_write`;
 - `worker_loss_after_write_barrier`.
 
-The catalog is now format version 2. Each scenario records:
+The catalog is format version 2. Each scenario records:
 
 ```text
 entrypoint
@@ -158,7 +158,9 @@ Current evidence mappings are intentionally explicit:
 | `result_persisted` | first terminal/approval event after authoritative persistence |
 | browser points | client `onTiming` |
 
-The summarizer reports required-but-missing checkpoints instead of fabricating values.
+The summarizer reports required-but-missing checkpoints instead of fabricating values. It also
+preserves `capture_kind`, `expectation_met`, `request_error_code` and the derived `outcome_kind` so
+a saved summary retains enough provenance for the aggregate exit-gate evaluator.
 
 ### 5. Live Odoo HTTP capture runner
 
@@ -193,6 +195,12 @@ credentials
 Plain HTTP is refused for non-loopback hosts. This prevents the capture helper from casually
 sending Odoo credentials to a remote clear-text endpoint.
 
+The runner builds a complete generic Odoo screen hint when `ODOO_AI_PHASE0_SCREEN_JSON` is omitted.
+When a screen JSON fixture is supplied, only the current bounded screen keys are accepted and the
+runner always replaces `captured_at` with the actual submission time. This avoids an otherwise easy
+failure mode where a saved screen fixture is rejected as expired by the current five-minute Odoo
+screen-context bound.
+
 The runner currently supports `entrypoint=enqueue`. Plan-decision, cancellation and synthetic
 recovery fixtures remain explicit later extensions; they are not silently emulated.
 
@@ -203,12 +211,19 @@ export ODOO_AI_PHASE0_DB=odoo
 export ODOO_AI_PHASE0_LOGIN=admin
 export ODOO_AI_PHASE0_PASSWORD='...'
 export ODOO_AI_PHASE0_MESSAGE='Hola'
-export ODOO_AI_PHASE0_SCREEN_JSON='{"model":null,"view_type":null}'
 
 python tests/e2e/phase0_live_capture.py \
   --scenario hello \
   --out /tmp/phase0/hello-001.json
 ```
+
+For a screen-specific trial, `ODOO_AI_PHASE0_SCREEN_JSON` is optional input such as:
+
+```json
+{"model":"res.partner","view_type":"list"}
+```
+
+The runner fills missing bounded screen fields and stamps a fresh `captured_at` before submission.
 
 `ui_error_code` is intentionally not inferred from backend state. For a failure capture,
 `--ui-error-code` or `ODOO_AI_PHASE0_UI_ERROR_CODE` should be supplied only after the final
@@ -220,11 +235,17 @@ browser/product code has actually been observed.
 
 - number of valid live captures;
 - minimum matrix coverage;
-- provider and tool timing decomposition;
+- provider/tool/full-turn timing decomposition;
 - `hello` and simple-read latency distributions;
 - observed original-vs-UI failure pairs;
+- number of distinct failure paths represented by those pairs;
 - each Phase 0 exit-gate boolean;
 - final `ready_for_phase1`.
+
+The timing-decomposition gate is deliberately stricter than two independent booleans: one
+successful read/action turn must contain queue, provider, tool and finalization points together.
+Likewise, five repeated captures of the same failure cannot satisfy the five-failure-path gate;
+five distinct scenario paths are required.
 
 The command exits with status `0` only when the documented gate is satisfied. Incomplete evidence
 returns status `2`; it cannot make Phase 1 appear ready simply because deterministic unit tests
@@ -361,10 +382,13 @@ The current standalone Phase 0 tooling has deterministic tests for:
 - scenario catalog completeness and outcome semantics;
 - the two current pre-enqueue provider gate failures;
 - live-capture redaction;
+- fresh/complete generic screen capture and rejection of unexpected screen keys;
 - timing capture;
 - request-error capture;
 - refusal of remote plain HTTP credentials;
-- aggregate gate evaluation;
+- raw-capture to saved-summary provenance preservation;
+- one-turn timing-decomposition gate semantics;
+- distinct failure-path counting;
 - refusal to close the failure-pair gate without observed UI codes.
 
 These tests validate the measurement tooling. They do **not** substitute for the live exit gate.
