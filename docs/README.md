@@ -33,6 +33,17 @@ A dated document never overrides newer code. Architecture changes that intention
 | `HISTORICAL_DOCUMENTATION.md` | current index | Classification of archived/superseded material. |
 | `DOCUMENTATION_AUDIT.md` | close-out record | Repository-wide documentation reconciliation baseline and exit criteria. |
 
+## Research and execution guidance
+
+`docs/research/` contains living research and ordered implementation playbooks. These documents do **not** describe implemented product behavior and do not override the current documents/ADRs above. Their purpose is to turn repository inspection plus external research into explicit next steps, work packages and exit gates.
+
+Current entry points:
+
+- `research/README.md` — scope, authority and rules for research/playbook documents;
+- `research/FOUNDATION_STABILIZATION_PLAYBOOK.md` — ordered path for provider stability, failure contracts, live public activity, real answer streaming, chat UX, latency measurement, regression gates and capability-framework evolution before major feature/RAG expansion.
+
+When a playbook item is implemented, update the authoritative current document/ADR that describes the resulting behavior. Do not treat a checked roadmap item as architecture authority by itself.
+
 ## Historical by default
 
 The following material records earlier milestones and must not be read as current deployment/runtime instructions unless a current document explicitly links to a still-valid detail:
