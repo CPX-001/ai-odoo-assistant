@@ -1,93 +1,50 @@
-# Instrucciones del repositorio
+# Repository instructions
 
-## Flujo Git
+## Scope
 
-- Trabajar siempre directamente sobre `main`.
-- No crear ramas de trabajo, ramas de feature ni pull requests para cambios ordinarios.
-- Hacer commit y push directamente a `main` después de verificar los cambios.
-- Usar otra rama únicamente cuando el usuario lo ordene explícitamente para una tarea concreta.
+This repository is `CPX-001/ai-odoo-assistant`. The supported product is the Odoo 18 Community addon in `addons/odoo_ai_assistant` with an embedded agent runtime.
 
-## Fuente de verdad
+## Source of truth
 
-- `docs/source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.0.pdf` es la especificación principal.
-- `docs/ARCHITECTURE.md` es una referencia operativa resumida, no un sustituto.
-- `docs/DEPLOYMENT_CONFIG.md` concreta la política de autodetección y overrides de deployment sin cambiar las invariantes del Source of Truth.
-- Todo cambio de una invariante arquitectónica requiere un ADR y la actualización explícita del Source of Truth cuando corresponda.
-- No reinterpretar decisiones cerradas sin nueva evidencia. Señalar cualquier conflicto antes de continuar.
+Before changing architecture or behavior, use this order:
 
-## Filosofía
+1. current code on `main` and accepted ADRs;
+2. current documentation listed in `docs/README.md`;
+3. tests that exercise the current embedded runtime;
+4. dated reports, task packets, PDFs and external references as historical/design evidence.
 
-**Evidencia determinista primero; LLM después.**
+The PDFs under `docs/source-of-truth/` are dated research snapshots. They are useful design references but are not authoritative over newer code or ADRs.
 
-Priorizar corrección, seguridad, simplicidad, capacidades nativas de Odoo, reutilización selectiva, un MVP funcional y mantenibilidad. Evitar sobrearquitectura, abstracciones especulativas, frameworks universales prematuros y refactors grandes sin necesidad.
+## Current invariants
 
-## Plataforma inicial
+- Odoo is the operational host and persistence authority.
+- The browser talks to Odoo only; there is no product-required Assistant HTTP sidecar.
+- Long turns are persisted in Odoo and claimed by `ir.cron` workers.
+- Business capabilities run with the effective user Environment and `su=False`.
+- The model proposes; the host validates capability, schema, policy, approval, execution and verification.
+- `CapabilityDefinition` is the atomic executable contract. Extend the existing capability framework instead of creating parallel tool/action registries.
+- No arbitrary SQL, Python, shell, sudo or unrestricted Odoo method execution is exposed to the model.
+- Codex App Server is an ephemeral subprocess. Its credentials remain provider-owned under Odoo's `data_dir`, not in PostgreSQL, prompts or logs.
 
-- Odoo 18 Community.
-- Linux self-hosted.
-- PostgreSQL.
-- Monorepo propio.
-- Odoo addon + Assistant Service local.
-- Codex App Server como primer `ReasoningEngine`.
+## Legacy areas
 
-El baseline anterior define el primer perfil probado; no autoriza asumir rutas, nombres de servicios, usuarios, logs, addons o topología PostgreSQL concretos del entorno DEV.
+`service/`, `installer/`, root `migrations/` and many `docs/codex/` milestone artifacts belong to the retired sidecar lineage. Keep them only as historical/regression evidence unless an explicit task removes them. Do not extend them as the product runtime. See `docs/README.md` and `docs/HISTORICAL_DOCUMENTATION.md`.
 
-## Adaptabilidad del deployment
+## Git workflow
 
-**Los defaults son hints, no contratos.**
+Work directly on `main` unless the user explicitly asks for a branch or pull request. Keep the working history coherent and do not present partial work as finished.
 
-- No hardcodear como requisito `/etc/odoo.conf`, `odoo.service`, `/var/log/odoo/...`, `/opt/odoo/...`, usuario `odoo`, PostgreSQL local ni una lista fija de `addons_path`.
-- Paths y parámetros relevantes para el cliente deben autodetectarse cuando sea fiable y tener override configurable sin modificar código.
-- La prioridad conceptual es: override explícito → runtime confirmado → metadata de proceso/supervisor → config Odoo → hints convencionales.
-- Si un dato no puede resolverse de forma fiable, conservar `unknown`/capability degradada o pedir configuración; no adivinar.
-- Source/log providers sólo reciben roots/providers resueltos y validados; nunca escanean el host entero.
-- No hace falta soportar todos los deployment managers desde el MVP. Casos complejos pueden quedar detrás de adapters/providers ampliables, pero application code no debe depender de paths o layouts de un cliente.
-- Odoo Settings debe ser la superficie normal futura para overrides administrables; no conceder root a Odoo para aplicarlos.
+## Change workflow
 
-Ver `docs/DEPLOYMENT_CONFIG.md` antes de introducir cualquier nuevo path, nombre de servicio o assumption de host.
+For meaningful changes:
 
-## Invariantes de seguridad
+1. inspect current code, ADRs and relevant tests;
+2. identify reusable runtime/capability infrastructure;
+3. consult relevant project research/external references when they reduce uncertainty;
+4. state invariants and failure modes;
+5. implement the smallest coherent change;
+6. remove obsolete current-path code when appropriate;
+7. run deterministic tests and add agentic evals when model behavior is involved;
+8. update current documentation in the same change.
 
-Nunca introducir como arquitectura normal:
-
-- `sudo()` para tools del agente.
-- SQL directo del Assistant Service contra la DB productiva de Odoo.
-- Shell libre, SQL arbitrario o Python arbitrario para el agente.
-- `execute_method` / `execute_kw` genérico como tool del modelo.
-- Identidad de usuario confiada desde JavaScript.
-- Secretos dentro de prompts.
-- Writes sin validación adecuada.
-
-La identidad efectiva del usuario y las ACL/record rules de Odoo son autoritativas.
-
-## Arquitectura
-
-```text
-Odoo addon
-    ↓
-Assistant Service
-    ↓
-Evidence / Tools / Reasoning
-```
-
-Codex es un adapter inicial, no el centro de la arquitectura. Los schemas Odoo se descubren en runtime; no crear clases por versión como `SaleOrder18`, `SaleOrder19` o `AccountMove18`.
-
-## Desarrollo
-
-Trabajar por milestones y task packets pequeños.
-
-Antes de editar:
-
-1. Inspeccionar el repo real.
-2. Leer los `AGENTS.md` aplicables.
-3. Leer documentación y ADRs relevantes.
-4. Resumir brevemente el estado actual.
-5. Detectar conflictos con el Source of Truth.
-
-Después de editar:
-
-1. Ejecutar las verificaciones disponibles.
-2. Informar qué cambió.
-3. Indicar las decisiones tomadas.
-4. Indicar riesgos o trabajo pendiente.
-5. No declarar la tarea completada si falta una verificación relevante.
+External projects are references for patterns, not architecture requirements.

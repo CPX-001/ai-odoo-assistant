@@ -1,28 +1,29 @@
-# Reglas de tests
+# Test rules
 
-## Flujo Git
+## Git
 
-- Trabajar siempre directamente sobre `main`; no crear ramas ni pull requests salvo orden explícita del usuario.
+Work directly on `main` unless the user explicitly asks for a branch or pull request.
 
-Priorizar:
+## Current product priority
 
-- unit tests;
-- contract tests;
-- integración con Odoo 18;
-- E2E del vertical slice;
-- tests explícitos de seguridad.
+For the embedded addon/runtime, prioritize:
 
-Dar especial importancia futura a record rules, restricted fields, multi-company, expiración/replay de delegación, approvals, aislamiento de Codex y prompt injection.
+- unit and contract tests for capabilities/policy;
+- Odoo 18 integration tests;
+- queue/restart/cancellation/recovery tests;
+- effective-user ACL, record-rule, field-access and multi-company tests;
+- preview/approval/verification and idempotency/recovery tests for effects;
+- Codex isolation/account-gate tests;
+- prompt-injection and untrusted-data boundary tests;
+- OWL/UI tests for account gating, progress and approval surfaces;
+- agentic evals when acceptance depends on model tool/source/action selection.
 
-## Fixtures de deployment
+Do not treat a passing deterministic suite as proof of agent quality.
 
-Cuando una task toque installer, source, logs, filesystem, supervisor o PostgreSQL:
+## Legacy tests
 
-- no usar un único fixture que replique el host DEV;
-- mantener al menos un caso convencional y otro con rutas/nombres no-default;
-- probar overrides explícitos y ambigüedad cuando corresponda;
-- incluir Odoo con unit arbitrario o sin systemd cuando esa capa sea relevante;
-- comprobar que cambiar paths/puertos/nombre de DB no requiere modificar código;
-- distinguir restricciones deliberadas del perfil (por ejemplo bind loopback) de assumptions accidentales.
+Tests under sidecar-era `service/`, `installer/`, old deployment fixtures and milestone E2E scripts are historical/regression evidence. Run or modify them only when the task touches that preserved lineage or a port intentionally reuses one of its contracts. They are not acceptance gates for current embedded architecture by default.
 
-No crear suites fuera del scope autorizado por el task packet activo.
+## Deployment variability
+
+When testing filesystem/runtime deployment behavior, include non-default Odoo `data_dir`/executable locations where relevant. Avoid assumptions about fixed service names, ports or a separate Assistant DB because those are not current product invariants.

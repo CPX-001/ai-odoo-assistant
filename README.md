@@ -1,51 +1,94 @@
 # Odoo AI Assistant
 
-Odoo AI Assistant is an Odoo 18 Community addon with an Odoo-native chat panel,
-embedded turn queue, typed capabilities and an ephemeral Codex App Server reasoning
-adapter. Odoo remains authoritative for identity, ACLs, record rules, schemas, policy,
-approval, execution and verification.
+AI assistant embedded in Odoo 18 Community. The current product is an Odoo-native agent runtime: Odoo owns identity, permissions, persistence, scheduling, policy and execution, while Codex App Server is launched ephemerally as the reasoning provider.
 
-The supported operational shape is a normal addon:
+## Current architecture
 
 ```text
-Owl / RPC
-    -> Odoo controllers and models
-        -> odoo.ai.turn + ir.cron
-        -> embedded AgentTurnService
-        -> typed capabilities under the real user (su=False)
-        -> ephemeral Codex App Server subprocess
+OWL assistant panel / Odoo RPC
+            |
+            v
+Odoo controllers + conversation models
+            |
+            v
+odoo.ai.turn + persisted events + ir.cron
+            |
+            v
+AgentTurnService / ReasoningEngine
+            |
+            +--> CapabilityRegistry -> effective catalog
+            |         |
+            |         +--> odoo_query
+            |         +--> odoo_actions
+            |         +--> odoo_batch
+            |         +--> odoo_runtime
+            |
+            +--> Codex App Server (ephemeral subprocess)
+            |
+            v
+CapabilityExecutor / policy / approval / verification
+            |
+            v
+Effective Odoo Environment (su=False)
 ```
 
-There is no required FastAPI/Uvicorn sidecar, second daemon, Assistant database,
-machine shared secret or extra internal port. Mutable runtime data is created below the
-effective Odoo `data_dir` and uses the operating-system identity of the Odoo process.
+There is no product-required FastAPI/Uvicorn Assistant daemon, internal service port, second operational database or shared machine secret. The historical `service/` and `installer/` trees are retained only as lineage/regression evidence.
 
-## Install
+## Security and authority
 
-1. Place this repository in an Odoo custom-addons location, or add its `addons/`
-   directory to `addons_path`.
-2. Update the Apps list.
-3. Install **Odoo AI Assistant**.
-4. Configure Codex and the Assistant policy in **Settings -> AI Assistant**.
+- Business operations use the authenticated Odoo user's Environment, allowed companies, ACLs, record rules and field access.
+- `CapabilityDefinition` owns the executable contract: JSON schemas, risk/effect metadata, approval semantics, guards, budgets and handler.
+- Reasoning does not grant authority. The host revalidates calls before execution.
+- Writes follow host-controlled prepare/preview/policy-or-approval/execute/verify semantics.
+- Codex credentials are provider-owned in a private `CODEX_HOME` below Odoo's effective `data_dir`; token material is not copied into Odoo PostgreSQL.
+- A database-scoped non-secret activation gate controls whether that database may use the installation-scoped Codex account.
 
-Codex is the only planned host-level runtime dependency. The addon discovers it from
-the Odoo service `PATH` or an administrator override and does not download binaries.
+## Current product surface
 
-## Verification
+The addon provides the floating assistant panel, persistent conversations/turns, screen context, runtime account connection through Settings, policy/autonomy settings, diagnostics, query/discovery capabilities, bounded CRUD/action capabilities, batch capabilities and durable turn processing.
 
-```bash
-python -m compileall service/src tests addons/odoo_ai_assistant
-cd service
-python -m pytest
-python -m ruff check src ../tests ../installer ../addons/odoo_ai_assistant
-python -m mypy src/odoo_ai
+The current core provider package contains `odoo_actions`, `odoo_batch`, `odoo_query` and `odoo_runtime`. General document RAG, first-class configurable Skills/Bundles, an external `CapabilityProvider` extension API, automations/AI fields, MCP exposure, governed memory and multimodal attachments are product directions, not current completed features.
+
+## Install and configure
+
+1. Add this repository's `addons` directory to Odoo's `addons_path`.
+2. Update the Apps list and install **Odoo AI Assistant**.
+3. Ensure the Codex executable is available to the Odoo OS user. An explicit executable can be stored in `odoo_ai_assistant.codex_executable` when required.
+4. Open Odoo Settings and connect the Codex account using the official device-code flow.
+5. Configure maximum agent autonomy/risk policy in Settings as needed.
+
+Mutable runtime state is created under:
+
+```text
+<data_dir>/odoo_ai_assistant/
+  codex/
+  runtime/
+  cache/
+  source/
 ```
 
-The Odoo gate installs and upgrades the addon with Odoo 18 using
-`--test-enable --test-tags /odoo_ai_assistant` under the normal Odoo Unix user.
+These directories are owned by the Odoo runtime identity and tightened to mode `0700` by the addon.
 
-The current architecture is defined by
-[`docs/adr/ADR-016-embedded-odoo-runtime.md`](docs/adr/ADR-016-embedded-odoo-runtime.md)
-and [`docs/adr/ADR-017-addon-capability-framework.md`](docs/adr/ADR-017-addon-capability-framework.md).
-The Source of Truth v1.0 remains normative where later accepted ADRs and the v1.1
-amendment do not supersede it.
+## Documentation
+
+Start at [`docs/README.md`](docs/README.md). It distinguishes current documentation from historical milestone material.
+
+Primary current documents:
+
+- [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) — audited implementation snapshot.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — current architecture and boundaries.
+- [`docs/UNIFIED_AGENT_RUNTIME.md`](docs/UNIFIED_AGENT_RUNTIME.md) — agent/turn lifecycle.
+- [`docs/CAPABILITY_FRAMEWORK.md`](docs/CAPABILITY_FRAMEWORK.md) — capability contracts and extension direction.
+- [`docs/DEPLOYMENT_CONFIG.md`](docs/DEPLOYMENT_CONFIG.md) — deployment/configuration.
+- [`docs/codex/CODEX_AUTH.md`](docs/codex/CODEX_AUTH.md) — Codex authentication lifecycle.
+- [`docs/adr/`](docs/adr/) — accepted architecture decisions.
+
+The research PDFs in `docs/source-of-truth/` are dated reference material. They intentionally do not override newer code or ADRs.
+
+## Development and tests
+
+Current product changes should be validated primarily against addon/runtime tests and an Odoo 18 installation. Sidecar-era `service/`, installer and milestone E2E tests remain useful only when the change explicitly touches preserved legacy/regression code.
+
+When model behavior is part of the acceptance criteria, deterministic tests are necessary but not sufficient: add scenario/eval coverage for tool choice, grounding, permissions and write safety.
+
+See [`tests/AGENTS.md`](tests/AGENTS.md) for test guidance.

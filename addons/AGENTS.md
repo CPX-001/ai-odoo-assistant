@@ -1,24 +1,14 @@
-# Reglas del addon Odoo
+# Addon development rules
 
-## Flujo Git
+This tree contains the current product runtime.
 
-- Trabajar siempre directamente sobre `main`; no crear ramas ni pull requests salvo orden explícita del usuario.
+- Odoo 18 Community is the host and authority.
+- Browser traffic terminates at Odoo; do not add a browser-to-sidecar path.
+- Business access uses the effective user Environment with `su=False`, ACLs, record rules, field access and active companies.
+- Reuse `AgentTurnService`, the Odoo-native turn queue/events, `CapabilityRegistry` and `CapabilityExecutor` before adding new infrastructure.
+- Do not expose arbitrary SQL, Python, shell, sudo or unrestricted ORM method calls to the model.
+- Writes must remain host-validated and use the existing preview/policy/approval/verification lifecycle where applicable.
+- Codex remains an ephemeral provider subprocess; provider credentials stay below the effective Odoo `data_dir` and out of PostgreSQL/prompts/logs.
+- Settings/Diagnostics/account-management surfaces are administrator-gated.
 
-- Odoo 18 Community es el baseline.
-- Mantener una UX Odoo-native.
-- Durante el MVP, el browser habla con Odoo, no directamente con el Assistant Service.
-- Derivar siempre la identidad efectiva server-side; no confiar en datos de identidad del browser.
-- `ScreenContext` describe navegación, no concede autoridad.
-- Releer registros mediante ORM bajo el usuario real antes de responder o actuar.
-- No usar `sudo()` en caminos normales del agente.
-- Respetar ACL, record rules, restricciones de campos y multi-company.
-
-## Settings y deployment
-
-- No hardcodear URL/puerto del Assistant Service ni paths de config/logs/addons del cliente en Python/XML/JS.
-- Mostrar facts detectados/configurados/unknown de forma clara; no rellenar valores desconocidos con defaults del entorno DEV.
-- Los overrides que un administrador pueda cambiar normalmente deben terminar en Settings/configuración persistida, no requerir editar código.
-- Si un cambio requiere privilegios del host, Odoo no recibe root: usar setup boundary controlado o diagnóstico/fallback accionable.
-- Mantener los detalles de filesystem/supervisor fuera del frontend; el addon consume contratos/status del Assistant Service.
-
-Leer `docs/DEPLOYMENT_CONFIG.md` cuando una task añada Settings, Diagnostics, source o logs.
+For architecture, read `docs/CURRENT_STATE.md`, `docs/ARCHITECTURE.md`, ADR-016, ADR-017 and ADR-018. External project patterns are references only.

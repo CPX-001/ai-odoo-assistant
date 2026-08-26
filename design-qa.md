@@ -1,5 +1,7 @@
 # Design QA — Assistant composer
 
+> Historical UI QA snapshot. This file records the state of one completed composer comparison and is not a specification of the current runtime, model list or product roadmap. Current UI code/tests are authoritative.
+
 - Source visual truth: `design-qa-reference.png`
 - Browser-rendered implementation: `design-qa-implementation-active.jpg`
 - Focused implementation crop: `design-qa-composer-active.png`
@@ -18,22 +20,17 @@ The source and focused crop were opened together. The important composition matc
 
 ## Findings
 
-- No actionable P0, P1 or P2 differences.
-- P3: the reference also contains add and microphone controls. They were not part of the requested change and do not exist in the current product composer, so they were intentionally not introduced.
-- P3: the implementation follows Odoo's purple primary token while the reference uses black. This keeps the control consistent with the host application.
+- No actionable P0, P1 or P2 differences at the time of capture.
+- P3: the reference also contains add and microphone controls. They were not part of the requested change and were intentionally not introduced in that snapshot.
+- P3: the implementation follows Odoo's purple primary token while the reference uses black.
 
 ## Interaction and console checks
 
-- Autonomy dropdown opens; switching to Strict changes the trigger icon to `fa-hand-paper-o`; restoring Full access changes it to `fa-unlock-alt`.
-- Model dropdown opens and the compact trigger displays `5.6 Sol` while retaining the full model ID in its title.
-- The send control has no visible text, remains disabled for an empty draft and enables for a non-empty multiline draft.
-- No new console errors were observed. One pre-existing Odoo warning about `res_partner_many2one` appeared outside the Assistant component.
+- Autonomy dropdown opened and changed state correctly in the tested build.
+- Model dropdown opened and rendered the compact model trigger used in that build.
+- Send was disabled for an empty draft and enabled for a non-empty multiline draft.
+- No new console errors were observed; one pre-existing Odoo warning appeared outside the Assistant component.
 
-## Comparison history
-
-1. Initial capture used an empty draft while the source showed an active composer. This was a state mismatch rather than a design defect.
-2. A second capture used a two-line draft and enabled send state. The normalized comparison found no actionable P0/P1/P2 mismatch.
-
-## Final result
+## Final result at snapshot time
 
 final result: passed
