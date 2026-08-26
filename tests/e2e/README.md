@@ -70,17 +70,18 @@ For a failure capture, `--ui-error-code` (or `ODOO_AI_PHASE0_UI_ERROR_CODE`) may
 after the final product/browser error code has actually been observed. The runner does not invent
 that value from backend state.
 
-`phase0_baseline.py` summarizes one trace. `phase0_report.py` aggregates traces or summaries,
-computes simple latency distributions and evaluates the four Phase 0 exit-gate conditions. It
-returns exit status `0` only when the evidence says Phase 1 may start; incomplete evidence returns
-`2`.
+`phase0_baseline.py` summarizes one trace while preserving the live-capture provenance and outcome
+metadata needed by the aggregate gate. `phase0_report.py` accepts either raw captures or those saved
+summaries, computes simple latency distributions and evaluates the four Phase 0 exit-gate
+conditions. It returns exit status `0` only when the evidence says Phase 1 may start; incomplete
+evidence returns `2`.
 
 ## Legacy scripts
 
 Existing sidecar-era helper scripts may still be run when validating preserved legacy code or when
-a current migration deliberately reuses one of their contracts. Passing them does not prove the
+a current migration deliberately reuses one of its contracts. Passing them does not prove the
 embedded runtime works; failing them after an intentional retirement does not by itself indicate a
 current-product regression.
 
-For current test priorities see `../AGENTS.md`, `../docs/CURRENT_STATE.md` and
-`../docs/research/PHASE0_BASELINE.md`.
+For current test priorities see `../AGENTS.md`, `../../docs/CURRENT_STATE.md` and
+`../../docs/research/PHASE0_BASELINE.md`.

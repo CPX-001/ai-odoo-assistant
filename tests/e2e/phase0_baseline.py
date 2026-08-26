@@ -218,12 +218,27 @@ def summarize(trace: dict[str, Any], *, catalog_ids: set[str]) -> dict[str, Any]
                 last.get("error_code") if isinstance(last.get("error_code"), str) else None
             )
 
+    request_error = (
+        trace.get("request_error_code")
+        if isinstance(trace.get("request_error_code"), str)
+        else None
+    )
+    capture_kind = trace.get("capture_kind") if isinstance(trace.get("capture_kind"), str) else None
+    expectation_met = (
+        trace.get("expectation_met") if isinstance(trace.get("expectation_met"), bool) else None
+    )
+    outcome_kind = "request_error" if request_error else "turn" if snapshots else "unknown"
+
     missing = [point for point in REQUIRED_POINTS if point not in points]
     return {
         "format_version": 1,
+        "capture_kind": capture_kind,
+        "expectation_met": expectation_met,
         "scenario_id": scenario_id,
+        "outcome_kind": outcome_kind,
         "final_state": final_state,
-        "normalized_error_code": final_error,
+        "request_error_code": request_error,
+        "normalized_error_code": final_error or request_error,
         "original_error_code": trace.get("original_error_code"),
         "ui_error_code": trace.get("ui_error_code"),
         "timings_ms": {point: points[point] for point in REQUIRED_POINTS if point in points},

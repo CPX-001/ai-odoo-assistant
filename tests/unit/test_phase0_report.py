@@ -99,3 +99,31 @@ def test_phase0_report_keeps_gate_open_without_observed_ui_failure_pairs() -> No
 
     assert report["exit_gate"]["five_failure_pairs"] is False
     assert report["ready_for_phase1"] is False
+
+
+def test_phase0_report_accepts_raw_capture_and_saved_baseline_summary() -> None:
+    scenarios = phase0_report._catalog(CATALOG_PATH)
+    raw = {
+        "format_version": 1,
+        "capture_kind": "live_http",
+        "expectation_met": True,
+        "scenario_id": "provider_auth_missing",
+        "timings": [
+            {"point": "submit_received", "elapsed_ms": 0},
+            {"point": "browser_final", "elapsed_ms": 9.0},
+        ],
+        "status_snapshots": [],
+        "request_error_code": "codex_not_connected",
+        "original_error_code": "codex_not_connected",
+        "ui_error_code": "service_unavailable",
+    }
+
+    saved_summary = phase0_report._summary(raw, scenarios)
+    loaded_summary = phase0_report._summary(saved_summary, scenarios)
+
+    assert saved_summary["capture_kind"] == "live_http"
+    assert saved_summary["expectation_met"] is True
+    assert saved_summary["outcome_kind"] == "request_error"
+    assert saved_summary["request_error_code"] == "codex_not_connected"
+    assert loaded_summary == saved_summary
+    assert phase0_report._is_live(loaded_summary) is True

@@ -11,6 +11,8 @@ SPEC.loader.exec_module(phase0_baseline)
 
 def test_phase0_baseline_combines_client_and_persisted_event_timings() -> None:
     trace = {
+        "capture_kind": "live_http",
+        "expectation_met": True,
         "scenario_id": "hello",
         "timings": [
             {"point": "submit_received", "elapsed_ms": 0},
@@ -66,6 +68,7 @@ def test_phase0_baseline_combines_client_and_persisted_event_timings() -> None:
                 ],
             },
         ],
+        "request_error_code": None,
         "original_error_code": None,
         "ui_error_code": None,
         "model_turns": 1,
@@ -75,6 +78,10 @@ def test_phase0_baseline_combines_client_and_persisted_event_timings() -> None:
 
     summary = phase0_baseline.summarize(trace, catalog_ids={"hello"})
 
+    assert summary["capture_kind"] == "live_http"
+    assert summary["expectation_met"] is True
+    assert summary["outcome_kind"] == "turn"
+    assert summary["request_error_code"] is None
     assert summary["final_state"] == "completed"
     assert summary["timings_ms"]["submit_received"] == 0
     assert summary["timings_ms"]["turn_persisted"] == 20
@@ -119,3 +126,31 @@ def test_phase0_backend_monotonic_event_keeps_wall_and_runtime_domains_separate(
     assert summary["timings_ms"]["provider_initialized"] == 300
     assert summary["runtime_monotonic_ms"]["provider_initialized"] == 155.5
     assert summary["timing_provenance"]["provider_initialized"] == "event:diagnostic.timing"
+
+
+def test_phase0_baseline_preserves_pre_enqueue_request_error_metadata() -> None:
+    trace = {
+        "capture_kind": "live_http",
+        "expectation_met": True,
+        "scenario_id": "provider_auth_missing",
+        "timings": [
+            {"point": "submit_received", "elapsed_ms": 0},
+            {"point": "browser_final", "elapsed_ms": 11.5},
+        ],
+        "status_snapshots": [],
+        "request_error_code": "codex_not_connected",
+        "original_error_code": "codex_not_connected",
+        "ui_error_code": "service_unavailable",
+    }
+
+    summary = phase0_baseline.summarize(trace, catalog_ids={"provider_auth_missing"})
+
+    assert summary["capture_kind"] == "live_http"
+    assert summary["expectation_met"] is True
+    assert summary["outcome_kind"] == "request_error"
+    assert summary["final_state"] is None
+    assert summary["request_error_code"] == "codex_not_connected"
+    assert summary["normalized_error_code"] == "codex_not_connected"
+    assert summary["original_error_code"] == "codex_not_connected"
+    assert summary["ui_error_code"] == "service_unavailable"
+    assert summary["timings_ms"] == {"submit_received": 0.0, "browser_final": 11.5}
