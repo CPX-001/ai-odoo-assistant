@@ -17,6 +17,133 @@ Perfil soportado: Odoo 18 Community self-hosted en Linux, con el addon ejecután
 
 No se configura una API key central ni se usa `/v1/responses`. Codex gestiona los tokens y su refresh.
 
+## Guía de entorno para personas y agentes
+
+Esta sección permite preparar o recuperar una instalación sin depender de los
+detalles recordados de una máquina anterior. Los valores de un deployment se
+deben descubrir de nuevo: los ejemplos Yenthe/WSL de esta página son una
+referencia operativa, no requisitos del producto.
+
+### Qué espera el addon
+
+- una instalación Odoo 18 Community existente y una base donde instalar el
+  addon;
+- Linux o WSL con el proceso Odoo ejecutándose bajo una identidad Unix estable;
+- `odoo_ai_assistant` accesible desde uno de los `addons_path` efectivos;
+- un `data_dir` escribible por el usuario efectivo de Odoo;
+- un ejecutable Linux de Codex compatible, accesible desde el `PATH` del
+  servicio o configurado mediante un override absoluto en Settings;
+- PostgreSQL y el supervisor que ya utiliza Odoo.
+
+El addon no necesita otro Odoo, otra base de datos auxiliar, otro PostgreSQL,
+Docker, Redis, Celery ni un servicio systemd adicional para autenticación. El
+worker de device login es efímero y pertenece al lifecycle del propio addon.
+
+### Descubrimiento mínimo antes de instalar o diagnosticar
+
+Una persona o agente debe resolver sólo estos hechos y evitar inventar defaults:
+
+1. servicio/proceso Odoo real y usuario Unix efectivo;
+2. binario o virtualenv real de Odoo;
+3. fichero de configuración efectivo;
+4. base objetivo existente;
+5. `data_dir` y `addons_path` efectivos;
+6. ruta del ejecutable Codex y si el usuario Odoo puede ejecutarlo.
+
+Comandos orientativos de sólo lectura:
+
+```bash
+systemctl list-units --type=service --all | grep -i odoo
+ps -eo user,pid,args | grep '[o]doo-bin'
+systemctl show <servicio> -p User -p Group -p ExecStart -p FragmentPath
+<odoo-bin> --version
+sudo -u <usuario-odoo> -H <ruta-codex> --version
+```
+
+No se debe imprimir `admin_passwd`, passwords de PostgreSQL, tokens ni el
+contenido de `auth.json` durante el descubrimiento.
+
+### Ejemplo Yenthe/WSL validado
+
+En el entorno DEV validado el 26 de agosto de 2026 se observaron estos valores:
+
+| Hecho | Valor observado |
+| --- | --- |
+| Servicio | `odoo-server.service` |
+| Usuario/grupo | `odoo:odoo` |
+| Binario Odoo | `/odoo/odoo-server/odoo-bin` |
+| Config Odoo | `/etc/odoo-server.conf` |
+| Puerto HTTP | `8069` |
+| `data_dir` efectivo | `/odoo/.local/share/Odoo` |
+| Addons del cliente | `/odoo/custom/addons` |
+| Ejecutable Codex probado | `/home/cpx/.local/share/odoo-ai-assistant/codex-runtime/node_modules/.bin/codex` |
+
+Estos valores pueden cambiar si se reinstala Odoo/Codex, cambia el usuario o se
+mueve el checkout. Un agente debe confirmarlos antes de actuar. En particular,
+la ruta Codex anterior no debe convertirse en una constante del addon.
+
+### Instalación en una base nueva
+
+1. Crear o seleccionar la base Odoo mediante el flujo normal del deployment.
+   La master password del gestor de bases no es necesariamente la contraseña
+   del usuario administrador de la interfaz Odoo.
+2. Actualizar la lista de Apps e instalar `odoo_ai_assistant`.
+3. Abrir **Settings → AI Assistant → Embedded runtime** como usuario con
+   `base.group_system`.
+4. Revisar `Codex executable override`. Si Codex no está en el `PATH` del
+   servicio, introducir su ruta absoluta, guardar Settings y recargar.
+5. Confirmar que `Codex runtime` pasa a `ready`.
+6. Pulsar **Connect with ChatGPT**, abrir la URL, introducir el device code y
+   usar **Refresh account status** hasta ver `Connected`.
+7. Abrir Diagnostics y confirmar `Authenticated / ready` antes de probar un
+   turn normal.
+
+El override de ejecutable se guarda en `ir.config_parameter` y, por tanto,
+pertenece a cada base Odoo. Crear otra base o eliminar la anterior obliga a
+configurarlo de nuevo. La sesión ChatGPT, en cambio, vive bajo el `data_dir` de
+la instalación y puede sobrevivir a cambios de base mientras se conserve ese
+`CODEX_HOME`.
+
+### Qué botones deben aparecer
+
+| Estado | Acciones visibles esperadas |
+| --- | --- |
+| Runtime no detectado | override de ejecutable, mensaje de diagnóstico y refresh |
+| Runtime `ready`, sin cuenta | **Connect with ChatGPT** y refresh |
+| Login pendiente | URL, device code, **Open login page**, **Cancel** y refresh |
+| Cuenta conectada | **Disconnect** y refresh |
+
+**Connect with ChatGPT** se oculta mientras el runtime no esté `ready`.
+**Disconnect** se oculta mientras no exista una cuenta conectada. Por eso ver
+sólo un error no significa que falte el device flow: normalmente falta guardar
+un ejecutable que el proceso Odoo pueda usar.
+
+### Cambio de ordenador o dispositivo
+
+El navegador que autoriza el device code puede estar en otro dispositivo; no
+necesita acceso al filesystem de Odoo. Si el servidor, `data_dir` y usuario Unix
+siguen siendo los mismos, no se copia `auth.json` ni se repite el login sólo por
+cambiar el ordenador desde el que se administra Odoo.
+
+Si cambia el servidor o se pierde el `data_dir`, se instala/configura Codex en
+el nuevo host y se usa de nuevo **Connect with ChatGPT**. Nunca se debe copiar o
+pegar el contenido de `auth.json` en Odoo, PostgreSQL, scripts o tickets.
+
+### Checklist de validación breve
+
+- Codex `ready` bajo el usuario Unix real de Odoo;
+- Settings muestra el estado de cuenta esperado;
+- Diagnostics muestra `Authenticated / ready`;
+- un turn normal termina correctamente;
+- tras reiniciar el servicio Odoo, la cuenta y otro turn siguen funcionando;
+- `odoo_ai_assistant/`, `codex/` y `runtime/codex_auth/` son privados (`0700`)
+  y `auth.json`, cuando existe, es `0600` y propiedad del usuario Odoo;
+- no aparecen tokens en PostgreSQL, Settings RPC ni logs.
+
+Ante un fallo, corregir sólo el hecho que no cumple el checklist. No montar una
+infraestructura paralela para facilitar el diagnóstico y no desconectar una
+sesión válida antes de probar Diagnostics, turns y persistencia tras restart.
+
 ## Persistencia y propiedad del secreto
 
 El layout sigue siendo:
