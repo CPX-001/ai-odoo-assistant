@@ -1,8 +1,11 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from odoo import Command, SUPERUSER_ID
+from odoo import Command, SUPERUSER_ID, api, fields
 from odoo.exceptions import AccessError
+from odoo.modules.registry import Registry
 from odoo.tests.common import TransactionCase
+
+from ..models.turn_queue import _recover_stale_turns
 
 
 class TestAssistantTurnQueue(TransactionCase):
@@ -119,3 +122,59 @@ class TestAssistantTurnQueue(TransactionCase):
         status = env["odoo.ai.turn"].status_for_current_user(result["turn_id"], after_sequence=1)
         self.assertEqual(len(status["events"]), 1)
         self.assertEqual(status["events"][0]["payload"], {"count": 2, "detail": "bounded"})
+
+    def test_stale_worker_after_write_barrier_requires_recovery_without_retry(self):
+        """A persisted barrier is a one-way retry boundary even with attempts remaining."""
+
+        dbname = self.env.cr.dbname
+        turn_id = None
+        try:
+            with Registry(dbname).cursor() as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+                admin = env.ref("base.user_admin")
+                company = admin.company_id
+                turn = env["odoo.ai.turn"].create(
+                    {
+                        "turn_uuid": "00000000-0000-4000-8000-000000000901",
+                        "user_id": admin.id,
+                        "company_id": company.id,
+                        "state": "running",
+                        "queued_at": fields.Datetime.now() - timedelta(minutes=10),
+                        "started_at": fields.Datetime.now() - timedelta(minutes=9),
+                        "heartbeat_at": fields.Datetime.now() - timedelta(minutes=6),
+                        "lease_expires_at": fields.Datetime.now() - timedelta(seconds=1),
+                        "lease_token": "stale-after-write-barrier",
+                        "attempt_count": 1,
+                        "max_attempts": 3,
+                        "write_barrier": True,
+                        "allowed_company_ids": [company.id],
+                    }
+                )
+                turn_id = turn.id
+                cr.commit()
+
+            _recover_stale_turns(dbname)
+
+            with Registry(dbname).cursor() as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+                turn = env["odoo.ai.turn"].browse(turn_id).exists()
+                self.assertTrue(turn)
+                self.assertEqual(turn.state, "recovery_required")
+                self.assertEqual(turn.error_code, "worker_lost_after_write_barrier")
+                self.assertEqual(turn.attempt_count, 1)
+                self.assertEqual(turn.max_attempts, 3)
+                self.assertFalse(turn.lease_token)
+                self.assertFalse(turn.lease_expires_at)
+                event_types = env["odoo.ai.turn.event"].search(
+                    [("turn_id", "=", turn.id)], order="sequence"
+                ).mapped("event_type")
+                self.assertIn("recovery_required", event_types)
+                self.assertNotIn("requeued", event_types)
+        finally:
+            if turn_id is not None:
+                with Registry(dbname).cursor() as cr:
+                    env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+                    turn = env["odoo.ai.turn"].browse(turn_id).exists()
+                    if turn:
+                        turn.unlink()
+                    cr.commit()
