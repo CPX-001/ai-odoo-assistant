@@ -1,6 +1,6 @@
 # Continuous execution protocol
 
-Inspected main: `b6a7b77bc91b7e80b25551d0c07334d396f68083`  
+Inspected main: `4eb8502e04f54feccc5ad47a69fb5d0a51910416`  
 Date: 2026-08-26  
 Status: execution protocol, not architecture authority
 
@@ -8,9 +8,11 @@ Status: execution protocol, not architecture authority
 
 This document defines how an AI-assisted implementation loop may continue the stabilization roadmap over many separate runs without requiring a human to repeatedly say `continue`.
 
-The protocol is intentionally restartable. Every run must reconstruct state from Git rather than relying on chat memory.
+The protocol is restartable: every run reconstructs state from Git rather than relying on chat memory.
 
-It applies to the roadmap in `FOUNDATION_STABILIZATION_PLAYBOOK.md` and to later research playbooks that opt into the same execution model.
+It applies to `FOUNDATION_STABILIZATION_PLAYBOOK.md` and to later research playbooks that opt into the same execution model.
+
+The protocol intentionally allows **bounded look-ahead** when a real-environment validation is pending and the next work does not depend on the unvalidated behavior. It does **not** allow several dependent architecture layers to accumulate without validation.
 
 ## Scheduling constraint
 
@@ -20,18 +22,20 @@ Do not encode cadence inside implementation state. A human, Codex session or ano
 
 ## No GitHub Actions for this roadmap
 
-**Do not add or depend on GitHub Actions for roadmap execution, CI gates, scheduled continuation or live validation. This project currently has no GitHub-hosted/self-hosted runners available for this work.**
+**Do not add, modify, depend on or wait for GitHub Actions for roadmap execution, scheduled continuation or validation gates. This project currently has no GitHub-hosted/self-hosted runners available for this work.**
+
+An existing workflow in `.github/workflows/` may remain as historical/independent repository infrastructure, but this roadmap must not treat it as an available worker or CI authority.
 
 Consequences:
 
-- do not create `.github/workflows/*` to advance phases;
-- do not make a phase/slice exit gate depend on an Actions workflow;
+- do not create roadmap workflows under `.github/workflows/`;
+- do not make a phase/slice exit gate depend on Actions;
 - do not treat the absence of CI as permission to skip tests;
-- deterministic tests must be run in an execution environment that actually has the repository/runtime available;
-- Odoo+Codex integration gates must be run against the real supported environment and recorded explicitly;
-- if an automated run cannot execute a required test, it must mark the test as pending rather than assume success.
+- deterministic tests must run in an execution environment that actually has the required repository/runtime;
+- Odoo+Codex integration gates must run against the real supported environment and be recorded explicitly;
+- if an automated run cannot execute a required test, it records validation debt instead of assuming success.
 
-This constraint may only be removed when the repository instructions are explicitly changed because runners have become available.
+This constraint may only be removed when repository instructions are explicitly changed because usable runners exist.
 
 ## Persistent state model
 
@@ -42,13 +46,13 @@ FOUNDATION_STABILIZATION_PLAYBOOK.md
     long-range ordered roadmap
 
 EXECUTION_STATE.md
-    single current cursor and blockers
+    current cursor, validation debt, blockers and look-ahead budget
 
 PHASE*.md / slice records
-    evidence and implementation history for the active phase
+    evidence and implementation history for active work
 
 REAL_ENV_VALIDATION_PROTOCOL.md
-    rules for tests that must be performed on real Odoo + Codex
+    tests that must be performed on real Odoo + Codex
 ```
 
 Git is the memory between runs.
@@ -58,27 +62,166 @@ Git is the memory between runs.
 A phase or slice may have one of these states:
 
 - `PENDING` — not started;
-- `READY` — prerequisites satisfied and may be selected;
-- `IN_PROGRESS` — current implementation work;
-- `LOCAL_VALIDATION_REQUIRED` — code exists but deterministic/local verification has not been executed;
-- `REAL_ENV_VALIDATION_REQUIRED` — only a real Odoo+Codex run can close the remaining gate;
-- `BLOCKED` — cannot proceed until a named blocker is resolved;
-- `COMPLETE` — implementation, required validation, documentation and cleanup are complete;
-- `SUPERSEDED` — replaced after new evidence changed the plan.
+- `READY` — prerequisites satisfied;
+- `IN_PROGRESS` — implementation work is active;
+- `LOCAL_VALIDATION_REQUIRED` — deterministic/local verification is still pending;
+- `REAL_ENV_VALIDATION_REQUIRED` — implementation is ready for a real Odoo+Codex gate;
+- `BLOCKED` — cannot proceed until the named blocker is resolved;
+- `COMPLETE` — implementation, mandatory validation, docs and cleanup are complete;
+- `SUPERSEDED` — replaced because later evidence changed the design.
 
-Never translate `tests not runnable here` into `COMPLETE`.
+Do not translate `tests not runnable here` into `COMPLETE`.
+
+## Gate classes
+
+Every validation dependency that can block downstream work is classified as either `HARD` or `SOFT`.
+
+### HARD gate
+
+A hard gate must be satisfied before implementing work that relies on the unvalidated assumption.
+
+Typical hard gates:
+
+- failing deterministic tests;
+- security, ACL, authority, approval, verification or recovery semantics;
+- provider protocol/identity/cancellation contracts consumed by later layers;
+- a public event/schema contract that downstream frontend/transport code will depend on;
+- baseline measurements required to choose between architecture alternatives;
+- an ADR decision that changes a current invariant;
+- evidence whose failure would materially change the next slice design.
+
+Example:
+
+```text
+Codex provider event contract unvalidated
+    -> do not build answer streaming on top of it
+```
+
+### SOFT gate
+
+A soft gate may remain as validation debt while narrowly independent work continues.
+
+Typical soft gates:
+
+- final product polish checks that do not alter the consumed contract;
+- a larger soak/performance confirmation after mechanics are already deterministically verified;
+- documentation, fixtures, eval datasets or test harness preparation independent of the blocked runtime contract;
+- a real UX confirmation when the next slice only prepares unrelated backend/eval infrastructure.
+
+A real-environment test is not automatically soft. Its classification depends on what later work assumes from its result.
+
+## Bounded look-ahead policy
+
+The purpose of look-ahead is to avoid wasting development time while waiting for a convenient real Odoo+Codex validation session. It is not permission to defer integration testing indefinitely.
+
+Default limits for the stabilization roadmap:
+
+```text
+maximum phase distance ahead: 1
+maximum implementation slices carrying unresolved real-env debt: 2
+maximum stacked unvalidated contract layers: 1
+```
+
+Interpretation:
+
+- it is acceptable to prepare one or two independent slices and then validate them together;
+- it is usually acceptable to prepare work from the immediately following phase if it does not consume the unvalidated contract;
+- it is **not** acceptable to implement two or three complete dependent phases and test them only afterwards;
+- a downstream slice that consumes a new unvalidated contract counts as another contract layer and is blocked when the stack would exceed 1.
+
+For phases 1 through 5 of the current stabilization roadmap, assume strong dependency by default:
+
+```text
+provider boundary
+    -> failure semantics
+        -> public activity
+            -> answer streaming
+                -> chat UX
+```
+
+Therefore these phases should not be accumulated wholesale without validation.
+
+## Validation batching
+
+Real-environment validations should be batched when doing so does not hide causality.
+
+A useful rhythm is:
+
+```text
+slice A -> deterministic tests
+slice B -> deterministic tests
+    -> one Odoo+Codex validation session covering A+B
+    -> process failures
+    -> next batch
+```
+
+This is preferable to forcing a human validation after every tiny refactor.
+
+A batch ends immediately when:
+
+- a hard gate fails;
+- the next slice would consume an unvalidated contract;
+- the unresolved debt would exceed the look-ahead budget;
+- a security/write/recovery invariant is affected;
+- the next decision depends on performance/behavior not yet measured.
+
+## Validation debt
+
+`EXECUTION_STATE.md` must explicitly list every unresolved validation rather than hiding it inside prose.
+
+Each debt item should record:
+
+```text
+validation_id
+gate_type: HARD | SOFT
+origin_slice
+commit_materially_tested: <sha or pending>
+downstream_scope_blocked
+reason
+```
+
+Validation debt may accumulate only within the look-ahead budget. `COMPLETE` still means mandatory debt for that slice is cleared.
+
+If a later commit materially changes the subsystem covered by an older PASS, the relevant validation becomes debt again.
+
+## Look-ahead eligibility test
+
+Before selecting work while the current phase has unresolved validation, answer all of these:
+
+1. Does the proposed slice consume any new behavior/contract that is still unvalidated?
+2. Could failure of the pending validation require redesigning this slice?
+3. Does the slice touch security, writes, recovery, provider identity/cancellation or authority?
+4. Would it create a second stacked unvalidated contract layer?
+5. Would total unresolved implementation slices exceed the configured budget?
+6. Does the current phase explicitly mark its gate as hard for this downstream scope?
+
+If any answer is `yes`, the slice is not look-ahead eligible unless `EXECUTION_STATE.md` contains an explicit researched exception.
+
+Good look-ahead examples:
+
+- build Codex protocol fixtures/conformance harness while Phase 0 waits for live baseline evidence, without changing runtime behavior;
+- prepare failure/eval datasets and fault-injection fixtures while a provider soak is pending;
+- improve test tooling/documentation that remains valid whichever provider adapter wins.
+
+Bad look-ahead examples:
+
+- replace the provider adapter before Phase 0 measurements needed to choose the design;
+- implement public activity on a provider event contract that has not passed its hard conformance gate;
+- implement answer streaming on top of unverified live event visibility;
+- optimize process lifecycle before latency attribution exists;
+- stack UI behavior on error/event contracts that may still change after real tests.
 
 ## Slice sizing
 
 A slice must be small enough to leave `main` coherent after one run.
 
-A good slice normally changes one contract or one vertical behavior and includes its deterministic tests/documentation. Examples:
+Examples:
 
 ```text
 P1.1 provider event contract
 P1.2 Codex conformance fixtures
 P1.3 unknown-notification compatibility
-P2.1 FailureEnvelope dataclass/schema
+P2.1 FailureEnvelope schema
 P2.2 Codex error normalization
 P2.3 browser error preservation
 P3.1 public activity schema
@@ -86,11 +229,11 @@ P3.2 independent progress persistence
 P4.1 provider answer-delta channel
 ```
 
-If a selected slice cannot be completed safely within the current execution run, split it before implementation. Record child slices in `EXECUTION_STATE.md`; do not leave a half-migrated architecture merely to make progress visible.
+If a selected slice cannot be completed safely in one run, split it before implementation. Do not leave a half-migrated architecture merely to make progress visible.
 
 ## Required metadata for every slice
 
-Before implementation, every active slice must identify:
+Before implementation, every active slice identifies:
 
 ```text
 id
@@ -103,6 +246,10 @@ invariants
 known failure modes
 deterministic validation
 real-environment validation
+gate_type
+lookahead_eligible
+validation_debt_created
+depends_on_unvalidated_contracts
 exit criteria
 cleanup/docs required
 ```
@@ -111,7 +258,7 @@ Use `SLICE_TEMPLATE.md` when a separate slice record is useful.
 
 ## Recursive run algorithm
 
-Every independent AI/Codex run follows this exact sequence.
+Every independent AI/Codex run follows this sequence.
 
 ### 1. Reconstruct state
 
@@ -126,108 +273,106 @@ Read, in order:
 7. relevant section of `FOUNDATION_STABILIZATION_PLAYBOOK.md`;
 8. current code/tests/ADRs relevant to the selected slice.
 
-Never continue from an old chat summary without re-reading the Git state.
+Never continue from an old chat summary without re-reading Git state.
 
 ### 2. Reconcile concurrent changes
 
-Compare the HEAD recorded in execution state with current `main`.
+Compare the HEAD recorded in execution state with current `main`. If code changed materially, inspect the changes and revalidate assumptions before writing.
 
-If code changed materially:
+### 3. Process available validation evidence first
 
-- inspect the changes;
-- revalidate assumptions;
-- update the slice plan if necessary;
-- do not blindly reapply an old patch.
+If new Odoo+Codex or local evidence has appeared, process it before starting more look-ahead work. A failed hard gate freezes dependent slices immediately.
 
-### 3. Select exactly one next coherent slice
+### 4. Select one coherent slice
 
 Selection order:
 
-1. finish an `IN_PROGRESS` slice if it is still valid;
-2. process validation evidence for a `LOCAL_VALIDATION_REQUIRED` or `REAL_ENV_VALIDATION_REQUIRED` slice if evidence is available;
-3. otherwise select the first `READY` slice whose prerequisites are complete;
-4. never jump to a later phase while the current phase exit gate remains open.
+1. repair a failed hard gate or finish a still-valid `IN_PROGRESS` slice;
+2. close validation debt when evidence is available;
+3. select the first normal `READY` slice whose hard prerequisites are satisfied;
+4. if blocked only by unavailable real-environment evidence, evaluate an explicitly allowed look-ahead slice;
+5. if none is eligible, stop and report the exact validation required.
 
-### 4. Inspect before writing
+### 5. Inspect before writing
 
-Inspect current implementation and tests. Search for reusable contracts first. If the discovered code contradicts the playbook, update the plan rather than forcing the planned design.
+Inspect current implementation and tests. Search for reusable contracts first. If code contradicts the playbook, update the plan instead of forcing the planned design.
 
-### 5. Implement the smallest coherent change
+### 6. Implement the smallest coherent change
 
 Requirements:
 
-- preserve Odoo effective-user authority and `su=False`;
+- preserve effective-user Odoo authority and `su=False`;
 - preserve host-owned capability/schema/policy/approval/execution/verification;
 - do not add parallel tool registries;
 - do not revive sidecar-era runtime paths;
 - no arbitrary SQL/Python/shell/sudo model tools;
-- no GitHub Actions;
-- remove obsolete current-path code if the slice makes it unnecessary.
+- no GitHub Actions for roadmap work;
+- remove obsolete current-path code when the slice makes it unnecessary.
 
-### 6. Validate what the execution environment can actually validate
+### 7. Validate what is genuinely available
 
-Three validation classes exist:
+Validation classes:
 
 #### A. Static/repository validation
 
-Examples: schema consistency, code inspection, fixtures, documentation coherence.
+Schema consistency, code inspection, fixtures, documentation coherence.
 
 #### B. Deterministic executable validation
 
-Examples: Python/Odoo unit tests, JS/HOOT tests, protocol fixtures, standalone test scripts.
+Python/Odoo unit tests, JS/HOOT tests, protocol fixtures and standalone test scripts.
 
-Only mark these passed if the current execution environment actually ran them successfully.
+Only mark them passed if they actually ran successfully.
 
 #### C. Real environment validation
 
 Requires real Odoo 18 Community + configured Codex and, where relevant, browser interaction. Follow `REAL_ENV_VALIDATION_PROTOCOL.md`.
 
-An AI run without that environment must stop at `REAL_ENV_VALIDATION_REQUIRED` when this evidence is mandatory.
+If unavailable, create/update validation debt and apply the hard/soft/look-ahead rules above.
 
-### 7. Update evidence and execution cursor
+### 8. Update evidence and cursor
 
 Before ending a run, update `EXECUTION_STATE.md` with:
 
 - current HEAD/commit produced;
 - slice state;
 - what changed;
-- tests actually run and their result;
+- tests actually run and results;
 - tests not run;
-- real-environment checks still required;
+- validation debt;
+- look-ahead budget consumption;
 - blockers;
-- exact next slice/action.
+- exact next action.
 
 Update the active phase record when implementation/evidence changes its exit gate.
 
-### 8. Commit a coherent checkpoint
+### 9. Commit a coherent checkpoint
 
-A run should end with one or more coherent commits on `main` per repository policy. Do not call unfinished work complete.
+A run should end with coherent commits on `main` per repository policy. Do not call unfinished work complete.
 
-### 9. Decide whether the next automated run may continue
+### 10. Decide whether another automated run may continue
 
-The next run may continue automatically only if state is one of:
+Continue automatically only when:
 
-- active slice still has safe implementation work remaining;
-- active slice passed required validation and another slice is `READY`;
-- validation evidence has appeared in the repository and can be processed.
+- implementation work remains safe and coherent;
+- a normal next slice is `READY`; or
+- an eligible look-ahead slice fits inside the budget.
 
-The next run must not perform speculative work when state says:
+Stop when:
 
-- `REAL_ENV_VALIDATION_REQUIRED` and no new evidence exists;
-- `BLOCKED`;
-- phase exit requires a human product judgment;
-- an architectural invariant needs a new ADR decision.
-
-In these cases the automation should report the exact blocker and make no unrelated changes.
+- a hard validation blocks the proposed downstream scope;
+- validation debt is at the configured limit;
+- the next slice would create another unvalidated contract layer;
+- state is `BLOCKED`;
+- an ADR/product judgment is required.
 
 ## Human/AI handshake for real-environment gates
 
-A real-environment test is not an informal message such as `seems fixed`.
+A real test is not an informal `seems fixed` message.
 
-Each required test has an ID from `REAL_ENV_VALIDATION_PROTOCOL.md`. The human records or supplies enough sanitized evidence to decide pass/fail, for example:
+Each required test has an ID from `REAL_ENV_VALIDATION_PROTOCOL.md`. Record sanitized evidence such as:
 
 ```text
-validation_id: P0-REAL-HELLO
+validation_id: P4-REAL-FIRST-DELTA
 commit: <sha tested>
 Odoo version: 18.x
 Codex version: <version>
@@ -238,71 +383,54 @@ observed UI error code/category: ...
 notes: ...
 ```
 
-Sensitive prompts, credentials, raw provider output and unrestricted tool arguments must not be committed merely as validation evidence.
+Do not commit credentials, private reasoning, raw provider output or sensitive unrestricted tool payloads as validation evidence.
 
 ## When a real test failure occurs
 
-Do not immediately move the phase backward wholesale.
-
-1. attach the failed validation ID to the current slice;
+1. attach the failed validation ID to the originating slice;
 2. record observed vs expected behavior;
-3. create the smallest corrective child slice;
-4. implement + run deterministic regression tests;
-5. repeat the same real validation ID;
-6. only close the parent slice when the required validation passes.
+3. freeze dependent look-ahead slices;
+4. mark affected downstream work `BLOCKED`, `SUPERSEDED` or in need of revalidation as appropriate;
+5. create the smallest corrective child slice;
+6. add deterministic regression coverage;
+7. repeat the same real validation;
+8. revalidate downstream slices whose assumptions were affected.
 
-This creates a reproducible feedback loop instead of ad-hoc `try another fix` development.
+The look-ahead budget deliberately limits the amount of code that can require this rework.
 
 ## Phase transition rule
 
-A phase transition is allowed only when:
+A phase is formally complete only when:
 
 ```text
 all mandatory slices COMPLETE
 AND deterministic exit gate PASS
-AND mandatory real-env validation PASS
+AND mandatory hard real-env validation PASS
+AND mandatory soft validation debt for phase completion cleared
 AND current docs updated
 AND no unresolved recovery/security blocker
 ```
 
-A phase report may itself implement a machine-readable gate evaluator, as Phase 0 already does. That evaluator is authoritative only for evidence it can actually observe; it may not fabricate browser or real-provider results.
+Look-ahead can begin before formal completion only under the bounded policy. It does not change the phase-completion definition.
 
 ## Suggested hourly automation instruction
-
-When a ChatGPT scheduled task is used, its prompt should be conceptually equivalent to:
 
 ```text
 Inspect CPX-001/ai-odoo-assistant main and follow AGENTS.md plus
 `docs/research/CONTINUOUS_EXECUTION_PROTOCOL.md`.
-Reconstruct the current cursor from `docs/research/EXECUTION_STATE.md`.
-Work only on the next coherent pending slice in the active phase.
-Inspect current code before modifying it. Run only validations genuinely available in the
-execution environment; never claim unrun tests passed. Do not use GitHub Actions.
-If real Odoo+Codex validation is required and no new evidence is available, make no speculative
-next-phase changes: record/report the exact validation needed and stop.
-Update execution state and phase evidence before finishing.
+Reconstruct the cursor and validation debt from `docs/research/EXECUTION_STATE.md`.
+Process new validation evidence first. Work on the next coherent normal slice, or on one explicitly
+look-ahead-eligible slice if the current blocker is only unavailable real Odoo+Codex validation and
+the look-ahead budget permits it. Never stack dependent unvalidated contracts.
+Inspect current code before modifying it. Run only validations genuinely available; never claim
+unrun tests passed. Do not use GitHub Actions for this roadmap.
+Update execution state, validation debt and phase evidence before finishing.
 ```
-
-The prompt deliberately does not say `implement everything until finished`. The recursion comes from persisted state and repeated bounded runs.
-
-## Why this is safer than a long autonomous run
-
-The loop creates a checkpoint after every coherent slice:
-
-```text
-inspect -> implement -> validate -> checkpoint -> re-inspect -> next slice
-```
-
-This prevents several failures common in long agent runs:
-
-- assumptions becoming stale after earlier code changes;
-- multiple unrelated refactors accumulating before tests;
-- falsely closing integration work that was never tested against Codex;
-- proceeding to RAG/features while the provider/chat foundation is still broken;
-- relying on private chain-of-thought or chat history as project state.
 
 ## Current starting point
 
-At the inspected baseline, Phase 0 implementation tooling exists but its real Odoo+Codex exit gate is still open. `PHASE0_BASELINE.md` explicitly requires live captures before Phase 1.
+At this protocol revision, Phase 0 implementation tooling exists but the real Odoo+Codex exit evidence is still missing.
 
-Therefore the continuous loop must currently treat Phase 0 as active and stop at real-environment validation if those captures are not available.
+Phase 0 remains a **hard gate for architecture-changing Phase 1 runtime/provider refactors** because its measurements and failure observations are meant to prevent design-by-guessing.
+
+However, one immediately useful Phase 1 preparation lane is safe while waiting: protocol/conformance fixtures and harness work that does not modify product runtime behavior. `EXECUTION_STATE.md` records the exact authorized look-ahead scope.
