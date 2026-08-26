@@ -34,6 +34,14 @@ The PDFs under `docs/source-of-truth/` are dated research snapshots. They are us
 
 Work directly on `main` unless the user explicitly asks for a branch or pull request. Keep the working history coherent and do not present partial work as finished.
 
+For roadmap/Codex runs whose result must be consumed by later automated runs, a local commit is not a complete handoff. When repository credentials/network permit it:
+
+1. inspect `git status` and commit only a coherent checkpoint;
+2. push the checkpoint to `origin/main` without force-pushing or rewriting history;
+3. verify that the remote `main` contains the intended commit before reporting the handoff as published.
+
+If push is unavailable or rejected, do **not** claim the result is available in GitHub. Record the local commit SHA and `PUSH_REQUIRED` (plus the reason) in the execution report/state when possible, and tell the user exactly what remains to publish. Never commit credentials or unsanitized real-environment evidence merely to make a handoff visible.
+
 ## Roadmap execution and validation
 
 The active stabilization roadmap under `docs/research/` may be executed over multiple independent AI/Codex runs. When doing so, follow `docs/research/CONTINUOUS_EXECUTION_PROTOCOL.md` and reconstruct the next action from `docs/research/EXECUTION_STATE.md` rather than relying on chat memory.
