@@ -1,8 +1,6 @@
-from . import test_batch_commit as test_batch_commit
-from . import test_batch_preflight as test_batch_preflight
-from . import test_batch_tools as test_batch_tools
 from . import test_capability_action_revalidation as test_capability_action_revalidation
 from . import test_capability_actions as test_capability_actions
+from . import test_capability_batch as test_capability_batch
 from . import test_capability_framework as test_capability_framework
 from . import test_chat_policy as test_chat_policy
 from . import test_chat_preferences as test_chat_preferences

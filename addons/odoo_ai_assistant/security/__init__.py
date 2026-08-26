@@ -5,7 +5,6 @@ from .action_authority import (
     ActionAuthorityCodec,
     ActionAuthorityPayload,
 )
-from .batch_authority import BatchAuthorityCodec, BatchAuthorityPayload
 from .delegation import (
     ActionPreviewDelegationCodec,
     ActionPreviewDelegationPayload,
@@ -34,8 +33,6 @@ __all__ = [
     "ActionPreviewDelegationPayload",
     "AgentDelegationCodec",
     "AgentDelegationPayload",
-    "BatchAuthorityCodec",
-    "BatchAuthorityPayload",
     "DelegationCodec",
     "DelegationPayload",
     "DelegationTokenError",

@@ -2,7 +2,6 @@ id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_odoo_ai_assistant_diagnostics_system,odoo.ai.assistant.diagnostics system,model_odoo_ai_assistant_diagnostics,base.group_system,1,1,1,1
 access_odoo_ai_delegation_use_internal_create,odoo.ai.delegation.use internal create,model_odoo_ai_delegation_use,base.group_user,0,0,1,0
 access_odoo_ai_action_execution_internal,odoo.ai.action.execution internal,model_odoo_ai_action_execution,base.group_user,1,1,1,0
-access_odoo_ai_batch_execution_internal,odoo.ai.batch.execution internal,model_odoo_ai_batch_execution,base.group_user,1,1,1,0
 access_odoo_ai_user_preference_internal,odoo.ai.user.preference internal,model_odoo_ai_user_preference,base.group_user,1,1,1,1
 access_odoo_ai_chat_policy_internal,odoo.ai.chat.policy internal,model_odoo_ai_chat_policy,base.group_user,1,1,1,1
 access_odoo_ai_conversation_internal,odoo.ai.conversation internal,model_odoo_ai_conversation,base.group_user,1,1,1,1
