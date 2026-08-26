@@ -235,7 +235,7 @@ class CapabilityExecutor:
                 else:
                     raw = await asyncio.wait_for(raw, timeout=timeout_seconds)
             return raw
-        except asyncio.TimeoutError as error:
+        except TimeoutError as error:
             context.emit(
                 failure_event,
                 title,

@@ -3,6 +3,8 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
+
 from odoo_ai.contracts import (
     Evidence,
     EvidenceKind,
@@ -11,7 +13,6 @@ from odoo_ai.contracts import (
     RecordRef,
     ScreenContext,
 )
-from pydantic import ValidationError
 
 
 def test_screen_context_constructs_and_serializes_to_json() -> None:

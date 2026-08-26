@@ -237,7 +237,7 @@ class RuntimeAdminDiagnosticsService:
         self._reasoning_probe: CachedCodexReasoningStatus | None = None
 
     @classmethod
-    def from_env(cls) -> "RuntimeAdminDiagnosticsService":
+    def from_env(cls) -> RuntimeAdminDiagnosticsService:
         return cls()
 
     async def inspect(self) -> AdminDiagnosticsMatrix:

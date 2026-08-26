@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+
 from odoo_ai.contracts.configuration import (
     CONFIG_CATALOG,
     AssistantAdminOverrides,

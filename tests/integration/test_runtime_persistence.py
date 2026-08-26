@@ -5,6 +5,11 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from pydantic import JsonValue
+from sqlalchemy import Engine, inspect
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 from odoo_ai.contracts import LogCapabilityState, SourceCapabilityState
 from odoo_ai.storage import (
     DatabaseSettings,
@@ -20,10 +25,6 @@ from odoo_ai.storage import (
     record_source_capability,
 )
 from odoo_ai.storage.config import DATABASE_NAME_ENV, DATABASE_URL_ENV
-from pydantic import JsonValue
-from sqlalchemy import Engine, inspect
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_DATABASE_URL_ENV = "ODOO_AI_TEST_DATABASE_URL"

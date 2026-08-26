@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient, Response
+
 from odoo_ai.api import create_app
 from odoo_ai.contracts.admin_configuration import (
     AdminConfigurationActor,

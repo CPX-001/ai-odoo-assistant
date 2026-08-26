@@ -3,6 +3,7 @@ import subprocess
 from datetime import UTC, datetime
 
 import pytest
+
 from odoo_ai.contracts import LogCorrelation, LogSearchRequest
 from odoo_ai.logs import (
     JournalCommandResult,

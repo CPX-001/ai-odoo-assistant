@@ -1,4 +1,5 @@
 import pytest
+
 from odoo_ai.storage.config import (
     DATABASE_NAME_ENV,
     DATABASE_URL_ENV,

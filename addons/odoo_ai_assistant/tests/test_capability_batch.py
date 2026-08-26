@@ -20,6 +20,8 @@ class TestCapabilityBatchMutations(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         system_group = cls.env.ref("base.group_system")
+        internal_group = cls.env.ref("base.group_user")
+        partner_manager_group = cls.env.ref("base.group_partner_manager")
         company = cls.env.company
         cls.batch_user = cls.env["res.users"].create(
             {
@@ -27,7 +29,11 @@ class TestCapabilityBatchMutations(TransactionCase):
                 "login": "ai-batch-user",
                 "company_id": company.id,
                 "company_ids": [Command.set([company.id])],
-                "groups_id": [Command.set([system_group.id])],
+                "groups_id": [
+                    Command.set(
+                        [internal_group.id, partner_manager_group.id, system_group.id]
+                    )
+                ],
             }
         )
 
@@ -215,7 +221,7 @@ class TestCapabilityBatchMutations(TransactionCase):
             {
                 "name": "AI batch test deny target",
                 "model_id": self.env["ir.model"]._get_id("res.partner"),
-                "domain_force": "[('id', '!=', %d)]" % self.targets[0].id,
+                "domain_force": f"[('id', '!=', {self.targets[0].id})]",
                 "perm_read": True,
                 "perm_write": True,
                 "perm_create": False,

@@ -15,7 +15,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from ..capabilities import CapabilityContext, CapabilityDefinition, CapabilityError, CapabilityExecutor
+from ..capabilities import (
+    CapabilityContext,
+    CapabilityDefinition,
+    CapabilityError,
+    CapabilityExecutor,
+)
 from ..capabilities.policy import ExecutionAuthority
 from .service import AgentReasoningResult, AgentTurnError, PlannedCapability
 

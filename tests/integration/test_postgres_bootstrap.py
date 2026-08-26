@@ -6,7 +6,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from installer.bootstrap.postgres import PostgresBootstrapper, PostgresSettings
 
 

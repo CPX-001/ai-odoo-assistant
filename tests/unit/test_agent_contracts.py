@@ -3,6 +3,8 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
+
 from odoo_ai.contracts import (
     AnswerConfidence,
     AnswerEnvelope,
@@ -22,7 +24,6 @@ from odoo_ai.contracts import (
     UserRequest,
     Workflow,
 )
-from pydantic import ValidationError
 
 
 def _evidence() -> Evidence:

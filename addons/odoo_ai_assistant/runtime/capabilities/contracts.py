@@ -5,15 +5,15 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, TypeAlias
+from enum import StrEnum
+from typing import Any
 
-JsonValue: TypeAlias = (
+type JsonValue = (
     None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 )
-CapabilityEventSink: TypeAlias = Callable[[str, str, Mapping[str, JsonValue]], None]
-CapabilityHandler: TypeAlias = Callable[["CapabilityContext", Mapping[str, JsonValue]], Any]
-CapabilityGuard: TypeAlias = Callable[["CapabilityContext"], bool]
+type CapabilityEventSink = Callable[[str, str, Mapping[str, JsonValue]], None]
+type CapabilityHandler = Callable[["CapabilityContext", Mapping[str, JsonValue]], Any]
+type CapabilityGuard = Callable[["CapabilityContext"], bool]
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _VERSION_RE = re.compile(r"^[1-9][0-9]*$")
@@ -28,7 +28,7 @@ class CapabilityError(RuntimeError):
         self.code = code
 
 
-class CapabilityRisk(str, Enum):
+class CapabilityRisk(StrEnum):
     """Host-declared risk; never inferred from model arguments."""
 
     METADATA = "metadata"
@@ -40,7 +40,7 @@ class CapabilityRisk(str, Enum):
     HOST = "host"
 
 
-class CapabilityEffect(str, Enum):
+class CapabilityEffect(StrEnum):
     """Effect class used by policy, approval, and audit layers."""
 
     READ_ONLY = "read-only"
@@ -50,7 +50,7 @@ class CapabilityEffect(str, Enum):
     HOST = "host"
 
 
-class CapabilityExposure(str, Enum):
+class CapabilityExposure(StrEnum):
     """Discovery is not authority: exposure only describes who may learn the capability."""
 
     REASONING = "reasoning"
@@ -58,7 +58,7 @@ class CapabilityExposure(str, Enum):
     HOST = "host"
 
 
-class CapabilityApproval(str, Enum):
+class CapabilityApproval(StrEnum):
     """Human-approval contract independent from model visibility."""
 
     NONE = "none"
@@ -66,7 +66,7 @@ class CapabilityApproval(str, Enum):
     ALWAYS = "always"
 
 
-class CapabilitySettingType(str, Enum):
+class CapabilitySettingType(StrEnum):
     BOOLEAN = "boolean"
     INTEGER = "integer"
     STRING = "string"

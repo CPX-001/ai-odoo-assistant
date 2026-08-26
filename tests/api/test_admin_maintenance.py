@@ -5,8 +5,15 @@ from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient, Response
+
 from odoo_ai.api import create_app
-from odoo_ai.contracts.maintenance import MaintenanceActor, MaintenanceEvent, MaintenanceJob, MaintenanceResult, MaintenanceStatus
+from odoo_ai.contracts.maintenance import (
+    MaintenanceActor,
+    MaintenanceEvent,
+    MaintenanceJob,
+    MaintenanceResult,
+    MaintenanceStatus,
+)
 from odoo_ai.runtime.maintenance import RuntimeMaintenanceError, RuntimeMaintenanceService
 
 ADMIN_SECRET = "m7-maintenance-secret-" + "s" * 48

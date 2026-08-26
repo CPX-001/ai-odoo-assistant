@@ -5,6 +5,10 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from pydantic import ValidationError
+from sqlalchemy import Engine, inspect
+from sqlalchemy.orm import Session
+
 from odoo_ai.contracts import (
     EvidenceStatus,
     FindModelExtensionsRequest,
@@ -37,9 +41,6 @@ from odoo_ai.storage import (
     upsert_source_file,
 )
 from odoo_ai.storage.config import DATABASE_NAME_ENV, DATABASE_URL_ENV
-from pydantic import ValidationError
-from sqlalchemy import Engine, inspect
-from sqlalchemy.orm import Session
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_DATABASE_URL_ENV = "ODOO_AI_TEST_DATABASE_URL"

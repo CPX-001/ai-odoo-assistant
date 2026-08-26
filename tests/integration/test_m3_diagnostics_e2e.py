@@ -8,6 +8,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
+
 from odoo_ai.adapters import RuntimeDiagnosticsService
 from odoo_ai.api import create_app
 from odoo_ai.contracts import InstanceInventory

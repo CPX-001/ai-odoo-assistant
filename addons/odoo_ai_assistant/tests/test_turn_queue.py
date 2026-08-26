@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from odoo import Command, SUPERUSER_ID, api, fields
+from odoo import SUPERUSER_ID, Command, api, fields
 from odoo.exceptions import AccessError
 from odoo.modules.registry import Registry
 from odoo.tests.common import TransactionCase

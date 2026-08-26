@@ -72,9 +72,10 @@ class TestCapabilityFramework(TransactionCase):
         env = self.env(user=self.capability_user, su=False)
         sink = None
         if events is not None:
-            sink = lambda event_type, title, payload: events.append(
-                (event_type, title, dict(payload))
-            )
+
+            def sink(event_type, title, payload):
+                events.append((event_type, title, dict(payload)))
+
         return CapabilityContext(
             env=env,
             turn_id="capability-test-turn",

@@ -1,6 +1,7 @@
 import asyncio
 
 from httpx import ASGITransport, AsyncClient, Response
+
 from odoo_ai.api import create_app
 
 

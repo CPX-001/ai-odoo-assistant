@@ -1,6 +1,7 @@
 import asyncio
+from datetime import UTC, datetime
 
-from odoo import Command, SUPERUSER_ID
+from odoo import SUPERUSER_ID, Command
 from odoo.tests.common import TransactionCase
 
 from ..models.chat_policy import resolve_capability_policy
@@ -60,6 +61,8 @@ class TestCapabilityActions(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         system_group = cls.env.ref("base.group_system")
+        internal_group = cls.env.ref("base.group_user")
+        partner_manager_group = cls.env.ref("base.group_partner_manager")
         company = cls.env.company
         cls.action_user = cls.env["res.users"].create(
             {
@@ -67,7 +70,11 @@ class TestCapabilityActions(TransactionCase):
                 "login": "ai-action-user",
                 "company_id": company.id,
                 "company_ids": [Command.set([company.id])],
-                "groups_id": [Command.set([system_group.id])],
+                "groups_id": [
+                    Command.set(
+                        [internal_group.id, partner_manager_group.id, system_group.id]
+                    )
+                ],
             }
         )
 
@@ -80,9 +87,10 @@ class TestCapabilityActions(TransactionCase):
         env = self.env(user=self.action_user, su=False)
         sink = None
         if events is not None:
-            sink = lambda event_type, title, payload: events.append(
-                (event_type, title, dict(payload))
-            )
+
+            def sink(event_type, title, payload):
+                events.append((event_type, title, dict(payload)))
+
         return CapabilityContext(
             env=env,
             turn_id="action-lifecycle-test",
@@ -235,7 +243,7 @@ class TestCapabilityActions(TransactionCase):
             screen={
                 "action_id": None,
                 "allowed_context_subset": {},
-                "captured_at": "2026-08-26T00:00:00Z",
+                "captured_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 "menu_id": None,
                 "model": "res.partner",
                 "res_id": self.target.id,
@@ -291,7 +299,7 @@ class TestCapabilityActions(TransactionCase):
             screen={
                 "action_id": None,
                 "allowed_context_subset": {},
-                "captured_at": "2026-08-26T00:00:00Z",
+                "captured_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 "menu_id": None,
                 "model": "res.partner",
                 "res_id": self.target.id,

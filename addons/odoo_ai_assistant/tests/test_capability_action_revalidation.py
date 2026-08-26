@@ -32,6 +32,8 @@ class TestCapabilityActionPolicyRevalidation(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         system_group = cls.env.ref("base.group_system")
+        internal_group = cls.env.ref("base.group_user")
+        partner_manager_group = cls.env.ref("base.group_partner_manager")
         company = cls.env.company
         cls.action_user = cls.env["res.users"].create(
             {
@@ -39,7 +41,11 @@ class TestCapabilityActionPolicyRevalidation(TransactionCase):
                 "login": "ai-policy-revalidation-user",
                 "company_id": company.id,
                 "company_ids": [Command.set([company.id])],
-                "groups_id": [Command.set([system_group.id])],
+                "groups_id": [
+                    Command.set(
+                        [internal_group.id, partner_manager_group.id, system_group.id]
+                    )
+                ],
             }
         )
 

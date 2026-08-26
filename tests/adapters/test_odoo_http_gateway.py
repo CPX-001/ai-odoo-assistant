@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 import pytest
+
 from odoo_ai.adapters import (
     HttpOdooInstanceGateway,
     OdooGatewayError,

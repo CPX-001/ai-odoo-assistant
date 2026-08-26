@@ -65,11 +65,11 @@ jobs:
 
       - name: Browser source syntax
         run: |
-          node --check addons/odoo_ai_assistant/static/src/services/assistant_stream_client.js
-          node --check addons/odoo_ai_assistant/static/src/services/assistant_panel_service.js
-          node --check addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_panel.js
-          node --check addons/odoo_ai_assistant/static/tests/assistant_stream_client.test.js
-          node --check addons/odoo_ai_assistant/static/tests/assistant_panel_service.test.js
+          node --experimental-default-type=module --check addons/odoo_ai_assistant/static/src/services/assistant_stream_client.js
+          node --experimental-default-type=module --check addons/odoo_ai_assistant/static/src/services/assistant_panel_service.js
+          node --experimental-default-type=module --check addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_panel.js
+          node --experimental-default-type=module --check addons/odoo_ai_assistant/static/tests/assistant_stream_client.test.js
+          node --experimental-default-type=module --check addons/odoo_ai_assistant/static/tests/assistant_panel_service.test.js
           python - <<'PY'
           import xml.etree.ElementTree as ET
           ET.parse('addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_panel.xml')

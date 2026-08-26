@@ -7,7 +7,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from installer.bootstrap.bootstrap import (
     AccountState,
     BootstrapPaths,

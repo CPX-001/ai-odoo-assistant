@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Keep the former XML ID as an inactive primary view so upgrades cannot
+        retain the removed maintenance extension and its deleted RPC methods.
+    -->
+    <record id="view_odoo_ai_assistant_diagnostics_maintenance_form" model="ir.ui.view">
+        <field name="name">odoo.ai.assistant.diagnostics.retired.maintenance</field>
+        <field name="model">odoo.ai.assistant.diagnostics</field>
+        <field name="inherit_id" eval="False"/>
+        <field name="mode">primary</field>
+        <field name="active" eval="False"/>
+        <field name="arch" type="xml">
+            <form string="Retired AI Assistant Maintenance"/>
+        </field>
+    </record>
+
+    <!-- Neutralize the old child XPath before its parent settings view changes. -->
+    <record id="res_config_settings_view_form_odoo_ai_assistant_chat" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.odoo.ai.assistant.chat.upgrade</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" eval="False"/>
+        <field name="mode">primary</field>
+        <field name="active" eval="False"/>
+        <field name="arch" type="xml">
+            <form string="AI Assistant Chat Settings Upgrade Placeholder"/>
+        </field>
+    </record>
+</odoo>

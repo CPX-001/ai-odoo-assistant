@@ -3,10 +3,19 @@
 from datetime import UTC, datetime
 
 import pytest
+
 from odoo_ai.contracts.admin_diagnostics import DiagnosticRemediationKind, DiagnosticState
 from odoo_ai.contracts.diagnostics import SourceStatusDiagnostics
 from odoo_ai.runtime.admin_diagnostics import build_admin_diagnostics_matrix
-from odoo_ai.runtime.status import AdminStatus, ComponentState, ComponentStatus, InstanceStatus, MigrationStatus, ReasoningComponentStatus, RuntimeComponents
+from odoo_ai.runtime.status import (
+    AdminStatus,
+    ComponentState,
+    ComponentStatus,
+    InstanceStatus,
+    MigrationStatus,
+    ReasoningComponentStatus,
+    RuntimeComponents,
+)
 
 
 def _status(*, configuration: ComponentStatus | None = None, source: ComponentStatus | None = None, logs: ComponentStatus | None = None, reasoning: ReasoningComponentStatus | None = None) -> AdminStatus:

@@ -5,10 +5,7 @@ from . import test_capability_framework as test_capability_framework
 from . import test_chat_policy as test_chat_policy
 from . import test_chat_preferences as test_chat_preferences
 from . import test_chat_storage as test_chat_storage
-from . import test_diagnostics as test_diagnostics
 from . import test_embedded_agent_runtime as test_embedded_agent_runtime
-from . import test_maintenance as test_maintenance
 from . import test_runtime_account as test_runtime_account
-from . import test_settings as test_settings
 from . import test_turn_queue as test_turn_queue
 from . import test_user_preferences as test_user_preferences

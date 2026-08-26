@@ -14,7 +14,7 @@ from odoo import SUPERUSER_ID, api, fields, models
 from odoo.exceptions import AccessError, ValidationError
 from odoo.modules.registry import Registry
 
-from ..services.screen_context import ScreenContextValidationError, validate_query_screen
+from ..services.screen_context import validate_query_screen
 
 _logger = logging.getLogger(__name__)
 

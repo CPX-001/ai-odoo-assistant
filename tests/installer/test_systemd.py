@@ -4,7 +4,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-
 from installer.bootstrap.bootstrap import BootstrapError
 from installer.bootstrap.systemd import SystemdInstaller, SystemdSettings
 

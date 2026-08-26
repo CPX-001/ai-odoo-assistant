@@ -2,7 +2,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from installer.bootstrap.discovery import (
     DiscoveryError,
     discover_linux_host,

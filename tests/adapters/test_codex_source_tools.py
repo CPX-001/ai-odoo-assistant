@@ -1,6 +1,22 @@
 import pytest
-from odoo_ai.adapters import SOURCE_FIND_MODEL_EXTENSIONS, SOURCE_FIND_SYMBOL, SOURCE_READ_EXCERPT, SourceToolBackend, build_source_tool_registry, source_tool_specs
-from odoo_ai.contracts import FindModelExtensionsRequest, FindModelExtensionsResult, FindSymbolRequest, FindSymbolResult, ReadExcerptRequest, SourceExcerpt, ToolSpec
+
+from odoo_ai.adapters import (
+    SOURCE_FIND_MODEL_EXTENSIONS,
+    SOURCE_FIND_SYMBOL,
+    SOURCE_READ_EXCERPT,
+    SourceToolBackend,
+    build_source_tool_registry,
+    source_tool_specs,
+)
+from odoo_ai.contracts import (
+    FindModelExtensionsRequest,
+    FindModelExtensionsResult,
+    FindSymbolRequest,
+    FindSymbolResult,
+    ReadExcerptRequest,
+    SourceExcerpt,
+    ToolSpec,
+)
 from odoo_ai.tools import ToolExecutorError
 
 

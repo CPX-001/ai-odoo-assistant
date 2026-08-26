@@ -7,7 +7,6 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-
 from installer.bootstrap.runtime import RuntimeInstaller, RuntimeInstallSettings
 
 

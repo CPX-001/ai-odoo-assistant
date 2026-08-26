@@ -12,91 +12,18 @@
                     name="odoo_ai_assistant"
                     groups="base.group_system"
                 >
-                    <block title="Local Assistant connection">
-                        <setting
-                            string="Service URL"
-                            help="Only HTTP loopback endpoints are accepted."
-                        >
-                            <div class="content-group">
-                            <field name="assistant_service_url"/>
-                                <div class="text-muted">
-                                    Effective:
-                                    <field name="assistant_service_url_effective" class="oe_inline"/>
-                                    (<field name="assistant_service_url_origin" class="oe_inline"/>)
-                                </div>
-                            </div>
+                    <block name="assistant_general" title="Assistant policy">
+                        <setting string="Maximum autonomy">
+                            <field name="assistant_agent_confirmation_mode"/>
+                        </setting>
+                        <setting string="Maximum automatic risk">
+                            <field name="assistant_agent_max_auto_risk"/>
                         </setting>
                         <setting
-                            string="Machine authentication"
-                            help="The credential and its filesystem reference remain host-owned."
+                            string="Test data"
+                            help="Synthetic data is allowed only when the user explicitly requests or authorizes test/demo data."
                         >
-                            <field name="assistant_machine_credential_configured"/>
-                        </setting>
-                    </block>
-
-                    <block title="Source scanner">
-                        <setting
-                            string="Source roots"
-                            help="Requested roots must remain inside the setup-authorized envelope."
-                        >
-                            <field name="assistant_source_roots" placeholder="/srv/odoo/custom-addons"/>
-                        </setting>
-                        <setting string="Authorized envelope" help="Read-only host boundary.">
-                            <field name="assistant_source_authorized_roots"/>
-                        </setting>
-                    </block>
-
-                    <block title="Logs">
-                        <setting
-                            string="Log provider"
-                            help="Selection is limited to providers already authorized by setup."
-                        >
-                            <field name="assistant_log_provider"/>
-                            <div class="text-muted">
-                                Available:
-                                <field name="assistant_log_provider_options" class="oe_inline"/>
-                            </div>
-                        </setting>
-                    </block>
-
-                    <block name="assistant_knowledge" title="Knowledge">
-                        <setting
-                            string="Knowledge provider"
-                            help="M5 uses the provisioned Assistant PostgreSQL index; no arbitrary knowledge path is exposed here."
-                        >
-                            <field name="assistant_knowledge_provider"/>
-                        </setting>
-                    </block>
-
-                    <block title="Reasoning runtime">
-                        <setting string="Model">
-                            <field name="assistant_reasoning_model"/>
-                        </setting>
-                        <setting string="Startup timeout">
-                            <field name="assistant_reasoning_startup_timeout_seconds"/>
-                        </setting>
-                        <setting string="Turn timeout">
-                            <field name="assistant_reasoning_turn_timeout_seconds"/>
-                        </setting>
-                    </block>
-
-                    <block title="Effective configuration">
-                        <setting string="Revision">
-                            <field name="assistant_config_revision"/>
-                            <field name="assistant_config_fingerprint"/>
-                        </setting>
-                        <setting string="Validation and apply state">
-                            <field name="assistant_config_validation_state"/>
-                            <field name="assistant_config_post_action"/>
-                        </setting>
-                        <setting string="Effective values and provenance">
-                            <field name="assistant_config_effective_summary"/>
-                        </setting>
-                        <setting
-                            string="Host-owned boundaries"
-                            help="Read-only status; Settings cannot change these values."
-                        >
-                            <field name="assistant_host_only_summary"/>
+                            <field name="assistant_agent_allow_synthetic_data"/>
                         </setting>
                     </block>
                 </app>

@@ -1,8 +1,5 @@
 from . import action_execution as action_execution
-from . import assistant_bridge as assistant_bridge
 from . import assistant_diagnostics as assistant_diagnostics
-from . import assistant_diagnostics_matrix as assistant_diagnostics_matrix
-from . import assistant_maintenance as assistant_maintenance
 from . import chat_policy as chat_policy
 from . import chat_preferences as chat_preferences
 from . import chat_storage as chat_storage

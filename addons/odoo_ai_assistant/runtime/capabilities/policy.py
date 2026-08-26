@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from .contracts import (
     CapabilityApproval,
@@ -14,7 +14,7 @@ from .contracts import (
 )
 
 
-class ExecutionAuthority(str, Enum):
+class ExecutionAuthority(StrEnum):
     REASONING = "reasoning"
     PLAN = "plan"
     HOST = "host"

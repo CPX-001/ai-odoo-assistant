@@ -98,7 +98,7 @@ class RuntimeMaintenanceService:
         self._reasoning_factory = reasoning_factory
 
     @classmethod
-    def from_env(cls) -> "RuntimeMaintenanceService":
+    def from_env(cls) -> RuntimeMaintenanceService:
         return cls(database_settings=DatabaseSettings.from_env())
 
     async def readiness_test(self, actor: MaintenanceActor) -> MaintenanceResult:

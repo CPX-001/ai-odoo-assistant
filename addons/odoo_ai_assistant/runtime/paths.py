@@ -22,7 +22,7 @@ class RuntimePaths:
     source: Path
 
     @classmethod
-    def from_odoo(cls) -> "RuntimePaths":
+    def from_odoo(cls) -> RuntimePaths:
         data_dir = _odoo_data_dir()
         root = data_dir / "odoo_ai_assistant"
         return cls(
@@ -33,7 +33,7 @@ class RuntimePaths:
             source=root / "source",
         )
 
-    def ensure(self) -> "RuntimePaths":
+    def ensure(self) -> RuntimePaths:
         """Create the bounded mutable layout using the current Odoo OS identity."""
 
         for path in (self.root, self.codex_home, self.runtime, self.cache, self.source):

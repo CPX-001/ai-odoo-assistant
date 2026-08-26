@@ -13,6 +13,11 @@ from datetime import UTC, date, datetime
 
 from odoo.exceptions import AccessError, MissingError, UserError, ValidationError
 
+from ....services.turn_context import (
+    TurnContextError,
+    agent_model_is_eligible,
+    visible_action_preview_fields,
+)
 from ..contracts import (
     CapabilityApproval,
     CapabilityContext,
@@ -20,16 +25,10 @@ from ..contracts import (
     CapabilityError,
     CapabilityExposure,
     CapabilityPreview,
-    CapabilityResult,
     CapabilityRisk,
     CapabilityVerification,
 )
 from ..decorators import tool
-from ....services.turn_context import (
-    TurnContextError,
-    agent_model_is_eligible,
-    visible_action_preview_fields,
-)
 
 _MAX_FIELDS = 16
 _MAX_TEXT = 4_000
