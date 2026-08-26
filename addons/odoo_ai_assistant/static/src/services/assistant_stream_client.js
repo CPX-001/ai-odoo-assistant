@@ -176,9 +176,23 @@ function requestId() {
     return `web-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
+function defaultNow() {
+    const value = globalThis.performance?.now?.();
+    return Number.isFinite(value) ? value : Date.now();
+}
+
+async function emitTiming(onTiming, nowCall, startedAt, point, detail = {}) {
+    const elapsed = Math.max(0, Number(nowCall()) - startedAt);
+    await onTiming({
+        point,
+        elapsed_ms: Math.round(elapsed * 1000) / 1000,
+        ...detail,
+    });
+}
+
 async function emitProgress(events, onDelta, emitted) {
     if (!Array.isArray(events)) {
-        return;
+        return false;
     }
     const labels = {
         queued: "Petición en cola…\n",
@@ -192,13 +206,16 @@ async function emitProgress(events, onDelta, emitted) {
         "tool.verify.started": "Verificando resultado…\n",
         "reasoning.completed": "Preparando respuesta…\n",
     };
+    let emittedAny = false;
     for (const event of events) {
         const text = labels[event?.type];
         if (text && !emitted.has(text)) {
             emitted.add(text);
+            emittedAny = true;
             await onDelta(text);
         }
     }
+    return emittedAny;
 }
 
 function terminalResponse(status) {
@@ -214,11 +231,16 @@ function terminalResponse(status) {
 export async function streamAssistantChat({
     payload,
     onDelta = () => {},
+    onTiming = () => {},
     fetchCall = globalThis.fetch,
     waitCall = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    nowCall = defaultNow,
 }) {
     if (typeof fetchCall !== "function") {
         throw new Error("stream_unavailable");
+    }
+    if (typeof onTiming !== "function" || typeof nowCall !== "function") {
+        throw new Error("invalid_context");
     }
     if (
         typeof payload?.message !== "string" ||
@@ -229,7 +251,14 @@ export async function streamAssistantChat({
     ) {
         throw new Error("invalid_context");
     }
+    const startedAt = Number(nowCall());
+    if (!Number.isFinite(startedAt)) {
+        throw new Error("invalid_context");
+    }
+    await onTiming({ point: "submit_received", elapsed_ms: 0 });
+
     const emitted = new Set();
+    let firstActivityRecorded = false;
     const queued = await jsonRoute(fetchCall, "/odoo_ai/v1/turn", {
         message: payload.message,
         screen: payload.screen,
@@ -239,10 +268,22 @@ export async function streamAssistantChat({
     if (queued?.ok !== true || typeof queued.turn_id !== "string") {
         throw new Error(queued?.error?.code || "runtime_unavailable");
     }
-    await emitProgress(queued.events, onDelta, emitted);
+    await emitTiming(onTiming, nowCall, startedAt, "turn_persisted", {
+        turn_id: queued.turn_id,
+    });
+    if (await emitProgress(queued.events, onDelta, emitted)) {
+        firstActivityRecorded = true;
+        await emitTiming(onTiming, nowCall, startedAt, "browser_first_activity", {
+            turn_id: queued.turn_id,
+        });
+    }
     let afterSequence = Number.isSafeInteger(queued.last_sequence) ? queued.last_sequence : 0;
     const immediate = terminalResponse(queued);
     if (immediate) {
+        await emitTiming(onTiming, nowCall, startedAt, "browser_final", {
+            turn_id: queued.turn_id,
+            state: queued.state,
+        });
         return immediate;
     }
 
@@ -255,12 +296,22 @@ export async function streamAssistantChat({
         if (status?.ok !== true || status.turn_id !== queued.turn_id) {
             throw new Error(status?.error?.code || "runtime_unavailable");
         }
-        await emitProgress(status.events, onDelta, emitted);
+        const emittedActivity = await emitProgress(status.events, onDelta, emitted);
+        if (emittedActivity && !firstActivityRecorded) {
+            firstActivityRecorded = true;
+            await emitTiming(onTiming, nowCall, startedAt, "browser_first_activity", {
+                turn_id: queued.turn_id,
+            });
+        }
         if (Number.isSafeInteger(status.last_sequence)) {
             afterSequence = status.last_sequence;
         }
         const response = terminalResponse(status);
         if (response) {
+            await emitTiming(onTiming, nowCall, startedAt, "browser_final", {
+                turn_id: queued.turn_id,
+                state: status.state,
+            });
             return response;
         }
         if (["failed", "cancelled", "recovery_required"].includes(status.state)) {
