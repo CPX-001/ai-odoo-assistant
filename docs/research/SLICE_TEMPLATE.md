@@ -1,97 +1,159 @@
-# Slice template
+# Execution slice template
 
-Use this template for a roadmap slice that needs its own execution record. Remove guidance comments when instantiating it.
+Use this template when a roadmap item is large or important enough to need its own durable execution record.
+
+A slice is a coherent change that can be implemented, validated as far as the current environment permits, documented and checkpointed without leaving `main` half-migrated.
+
+---
+
+# <slice id> — <title>
 
 ```text
-slice_id:
 phase:
-status: PENDING | READY | IN_PROGRESS | LOCAL_VALIDATION_REQUIRED | REAL_ENV_VALIDATION_REQUIRED | BLOCKED | COMPLETE | SUPERSEDED
+state: PENDING | READY | IN_PROGRESS | LOCAL_VALIDATION_REQUIRED | REAL_ENV_VALIDATION_REQUIRED | BLOCKED | COMPLETE | SUPERSEDED
 inspected_head:
-started_at:
-completed_at:
+gate_type: HARD | SOFT
+lookahead_eligible: yes | no
 ```
 
 ## Objective
 
-State one observable product/engineering outcome. Avoid implementation-first wording when possible.
+What concrete product/engineering behavior changes when this slice is complete?
 
 ## Why this slice exists
 
-Link the parent playbook/phase problem and any concrete regression/evidence that makes this work necessary.
-
-## Inspected baseline
-
-List the current files/classes/contracts/tests actually inspected before writing.
+Describe the current observed problem and why it belongs in this slice rather than another layer.
 
 ## Prerequisites
 
-- [ ] parent slices complete;
-- [ ] required ADR/decision exists;
-- [ ] required fixtures/environment available.
+List required completed slices, accepted ADRs, runtime facts and validation evidence.
+
+Explicitly identify any unresolved validation debt.
+
+## Dependency on unvalidated contracts
+
+```text
+depends_on_unvalidated_contracts:
+  - none | <contract/slice>
+creates_new_production_contract: yes | no
+stacked_unvalidated_contract_layers_after_slice: <integer>
+```
+
+If the slice consumes an unvalidated new production contract, it is normally **not** eligible for look-ahead.
+
+## Gate classification
+
+### HARD
+
+Use when failure of the pending validation could change the downstream design, security/authority semantics, provider protocol, recovery behavior or contract consumed by later slices.
+
+A hard gate blocks dependent work.
+
+### SOFT
+
+Use when remaining validation may be batched and downstream work remains valid regardless of its outcome.
+
+Explain why the gate is soft. Do not classify a gate soft merely because the real environment is inconvenient to access.
+
+## Look-ahead justification
+
+Complete only when `lookahead_eligible: yes`.
+
+Answer:
+
+1. Why will this work remain useful if the pending real validation fails?
+2. Does it change production runtime behavior?
+3. Does it consume a new unvalidated contract?
+4. What validation debt does it create?
+5. How much of the configured look-ahead budget does it consume?
+
+If these answers are not clear, set `lookahead_eligible: no`.
+
+## Likely affected areas
+
+List files/modules/contracts to inspect, not a mandatory implementation patch.
 
 ## Invariants
 
-Explicitly list relevant invariants, normally including Odoo effective-user authority, host-owned capability validation, approval/verification for writes, durable turn semantics and no unsafe generic execution surface.
+At minimum consider as relevant:
 
-## Scope
+- Odoo effective user and `su=False`;
+- host-owned capability/schema/policy/approval/execution/verification;
+- durable turn/recovery semantics;
+- no arbitrary SQL/Python/shell/sudo/unrestricted ORM methods;
+- no secret/raw reasoning leakage;
+- embedded runtime constraints;
+- no GitHub Actions dependency for this roadmap.
 
-What this slice is allowed to change.
+## Failure modes
 
-## Out of scope
+List concrete ways the slice could regress behavior, including compatibility/restart/cancellation/write ambiguity where applicable.
 
-Name tempting adjacent changes that should not be pulled into the slice.
+## Implementation scope
 
-## Proposed change
+What may be changed in this slice.
 
-Describe contract/behavior changes, not private reasoning.
+## Explicitly out of scope
 
-## Failure modes to cover
-
-List concrete failure modes introduced/affected by the slice.
+What must not be pulled into this slice merely because it is nearby.
 
 ## Deterministic validation
 
-Tests that must actually run before the slice can complete.
+List exact tests/checks that must run when the execution environment supports them.
+
+Record results later as:
 
 ```text
-command/test:
-expected:
-result: NOT_RUN | PASS | FAIL
-execution_environment:
+command/check:
+result: PASS | FAIL | NOT_RUN
+commit:
+notes:
 ```
 
-Do not mark `PASS` from code inspection alone.
+`NOT_RUN` is not PASS.
 
-## Real Odoo + Codex validation
+## Real-environment validation
 
-Reference validation IDs from `REAL_ENV_VALIDATION_PROTOCOL.md` or define new IDs here.
+Reference IDs from `REAL_ENV_VALIDATION_PROTOCOL.md` or define new IDs there first.
+
+```text
+required_validation_ids:
+  - ...
+```
+
+Record the exact commit materially tested.
+
+## Validation debt created
+
+For every pending validation:
 
 ```text
 validation_id:
-required_before: slice_complete | phase_exit | optional
-result: NOT_RUN | PASS | FAIL | BLOCKED
-commit_tested:
+gate_type: HARD | SOFT
+origin_slice:
+commit_materially_tested: pending | <sha>
+downstream_scope_blocked:
+reason:
 ```
 
-If no live validation is required, explain why deterministic evidence is sufficient.
-
-## Documentation/cleanup
-
-Current docs/ADRs to update when behavior becomes real; obsolete code to remove.
+A slice may carry unresolved debt only within the limits in `CONTINUOUS_EXECUTION_PROTOCOL.md`.
 
 ## Exit criteria
 
-- [ ] implementation coherent;
-- [ ] deterministic tests actually passed;
-- [ ] mandatory real validations passed;
-- [ ] docs updated;
-- [ ] no unresolved safety/recovery blocker;
-- [ ] `EXECUTION_STATE.md` advanced.
+A slice is `COMPLETE` only when its mandatory implementation, tests, required real validation for completion, documentation and cleanup are done.
 
-## Execution log
+If code is ready but live validation is pending, use `REAL_ENV_VALIDATION_REQUIRED`, not `COMPLETE`.
 
-Record concise discoveries/decisions/results by commit. Do not use this as chain-of-thought.
+## Documentation/cleanup
 
-## Next slice
+Name current docs/ADRs to update and obsolete current-path code to remove if applicable.
 
-State exactly what becomes `READY` after this slice closes.
+## Result / discoveries
+
+Fill during/after implementation. Record contradictions with the original plan and decisions made from new evidence.
+
+## Next action
+
+State exactly what the next independent run should do.
+
+If the slice is waiting for validation, say whether an explicitly named look-ahead slice is allowed and why. Never leave a vague `continue` instruction.
