@@ -43,42 +43,72 @@ function state() {
     };
 }
 
-function agentPlan(state = "completed", requiresConfirmation = false) {
+function capabilityStep(state = "previewed") {
+    return {
+        step_id: "32345678-1234-5678-9234-567812345678:0",
+        capability: "odoo.record.patch",
+        title: "Cambiar nombre del contacto",
+        summary: "patch · AI Test Partner · 1 cambio(s)",
+        state,
+        risk: "moderate",
+        effect_scope: "internal_reversible",
+        approval: "policy",
+        preview: {
+            operation: "patch",
+            model: "res.partner",
+            record_id: 42,
+            display_name: "AI Test Partner",
+            changes: [{ field: "name", before: "AI Test Partner", after: "AI Updated Partner" }],
+        },
+        receipt:
+            state === "completed"
+                ? {
+                      error_code: null,
+                      evidence_id: null,
+                      outcome: "verified",
+                      record_id: 42,
+                      record_model: "res.partner",
+                  }
+                : null,
+    };
+}
+
+function agentPlan(state = "completed", requiresConfirmation = false, steps = []) {
     return {
         plan_id: "32345678-1234-5678-9234-567812345678",
         state,
-        risk: "low",
+        risk: steps.length ? "moderate" : "low",
         metadata: {
-            needs_read: true,
-            needs_schema: true,
-            needs_write: false,
+            needs_read: !steps.length,
+            needs_schema: !steps.length,
+            needs_write: Boolean(steps.length),
             needs_business_action: false,
             has_external_effect: false,
             has_irreversible_effect: false,
             is_atomic: true,
-            estimated_blast_radius: 0,
+            estimated_blast_radius: steps.length,
         },
         policy: {
             confirmation_mode: "risk_based",
             max_auto_risk: "low",
             allow_synthetic_data: false,
-            constrained_by: ["system_ceiling"],
+            constrained_by: [],
         },
-        goal: "Responder con datos efectivos de Odoo",
+        goal: steps.length ? "Cambiar el nombre" : "Responder con datos efectivos de Odoo",
         assumptions: [],
-        steps: [],
+        steps,
         requires_confirmation: requiresConfirmation,
-        expires_at: "2026-08-24T08:35:00Z",
+        expires_at: null,
     };
 }
 
-function chatResponse(plan = agentPlan()) {
+function chatResponse(plan = agentPlan(), answer = "Checked answer") {
     return {
         ok: true,
         workflow: "AGENT",
         turn_id: "12345678-1234-5678-1234-567812345678",
         conversation_id: "22345678-1234-5678-9234-567812345678",
-        answer: "Checked answer",
+        answer,
         confidence: "high",
         limitations: [],
         citations: [],
@@ -94,48 +124,46 @@ test("chat accepts a unified-agent response without exposing a category selector
     expect(normalized.result.plan.state).toBe("completed");
 });
 
-test("chat accepts a partial batch step returned by the service", () => {
-    const plan = agentPlan("partial", false);
-    plan.steps = [
-        {
-            step_id: "bulk_update",
-            title: "Actualizar lote",
-            state: "partial",
-            risk: "moderate",
-            effect_scope: "internal_reversible",
-            receipt: null,
-        },
-    ];
-    plan.metadata.needs_write = true;
-    plan.metadata.is_atomic = false;
-    plan.metadata.estimated_blast_radius = 10;
-
+test("chat accepts generic capability preview metadata", () => {
+    const plan = agentPlan("awaiting_confirmation", true, [capabilityStep()]);
     const normalized = normalizeChatResponse(chatResponse(plan));
 
     expect(normalized.errorCode).toBe(null);
-    expect(normalized.result.plan.steps[0].state).toBe("partial");
+    expect(normalized.result.plan.steps[0].capability).toBe("odoo.record.patch");
+    expect(normalized.result.plan.steps[0].preview.changes[0].after).toBe(
+        "AI Updated Partner"
+    );
 });
 
-test("chat sends no workflow and works without an active model", async () => {
+test("chat sends through the Odoo-native turn queue", async () => {
     const panelState = state();
-    let observedPath;
-    let observedPayload;
+    const paths = [];
 
     const executed = await submitAssistantRequest({
         state: panelState,
         screenContext: { capture: () => SCREEN },
-        rpcCall: async (path, payload) => {
-            observedPath = path;
-            observedPayload = payload;
-            return chatResponse();
+        waitCall: async () => {},
+        rpcCall: async (path) => {
+            paths.push(path);
+            if (path === "/odoo_ai/v1/turn") {
+                return {
+                    ok: true,
+                    turn_id: "12345678-1234-5678-1234-567812345678",
+                    state: "queued",
+                };
+            }
+            return {
+                ok: true,
+                turn_id: "12345678-1234-5678-1234-567812345678",
+                state: "completed",
+                response: chatResponse(),
+            };
         },
         message: "Explícame el backend",
     });
 
     expect(executed).toBe(true);
-    expect(observedPath).toBe("/odoo_ai/v1/chat");
-    expect(observedPayload.workflow).toBe(undefined);
-    expect(observedPayload.screen.model).toBe(null);
+    expect(paths).toEqual(["/odoo_ai/v1/turn", "/odoo_ai/v1/turn/status"]);
     expect(panelState.conversationId).toBe("22345678-1234-5678-9234-567812345678");
 });
 
@@ -222,6 +250,7 @@ test("loading guard prevents simultaneous chat turns", async () => {
         state: panelState,
         screenContext: { capture: () => SCREEN },
         rpcCall,
+        waitCall: async () => {},
         message: "Pregunta",
     };
 
@@ -229,73 +258,124 @@ test("loading guard prevents simultaneous chat turns", async () => {
     const second = await submitAssistantRequest(options);
     expect(second).toBe(false);
     expect(calls).toBe(1);
-    resolveRpc(chatResponse());
+    resolveRpc({
+        ok: true,
+        turn_id: "12345678-1234-5678-1234-567812345678",
+        state: "completed",
+        response: chatResponse(),
+    });
     await first;
     expect(panelState.loading).toBe(false);
 });
 
-test("action decision remains explicit and one-shot from the UI", async () => {
+test("approve uses native plan decision then status until verified completion", async () => {
     const panelState = state();
-    panelState.result = chatResponse(agentPlan("awaiting_confirmation", true));
-    let resolveRpc;
-    let calls = 0;
-    const rpcCall = () => {
-        calls += 1;
-        return new Promise((resolve) => {
-            resolveRpc = resolve;
-        });
-    };
+    const awaiting = agentPlan("awaiting_confirmation", true, [capabilityStep()]);
+    panelState.result = chatResponse(awaiting, "He preparado el cambio.");
+    const paths = [];
 
-    const first = submitActionDecision({ state: panelState, rpcCall, decision: "approve" });
-    const second = await submitActionDecision({ state: panelState, rpcCall, decision: "approve" });
-    expect(second).toBe(false);
-    expect(calls).toBe(1);
-    resolveRpc({
-        ok: true,
-        plan_id: panelState.result.plan.plan_id,
-        state: "completed",
-        plan: agentPlan("completed", false),
-    });
-    await first;
-    expect(panelState.actionReceipt.state).toBe("completed");
-    expect(panelState.result.plan.state).toBe("completed");
-});
-
-test("pending recovery blocks new chat and retries the same plan id", async () => {
-    const panelState = state();
-    panelState.result = chatResponse(agentPlan("authorized", false));
-    let observedPath;
-    let observedPayload;
-
-    expect(recoveryPending(panelState)).toBe(true);
-    expect(
-        await submitAssistantRequest({
-            state: panelState,
-            screenContext: { capture: () => SCREEN },
-            rpcCall: async () => {
-                throw new Error("must not submit a new chat");
-            },
-            message: "Otra operación",
-        })
-    ).toBe(false);
-
-    const retried = await submitActionRetry({
+    const approved = await submitActionDecision({
         state: panelState,
-        rpcCall: async (path, payload) => {
-            observedPath = path;
-            observedPayload = payload;
+        decision: "approve",
+        waitCall: async () => {},
+        rpcCall: async (path) => {
+            paths.push(path);
+            if (path === "/odoo_ai/v1/turn/plan-decision") {
+                return {
+                    ok: true,
+                    plan_id: awaiting.plan_id,
+                    state: "authorized",
+                    plan: agentPlan("authorized", true, [capabilityStep()]),
+                    response: null,
+                };
+            }
+            const completed = agentPlan("completed", true, [capabilityStep("completed")]);
             return {
                 ok: true,
-                plan_id: panelState.result.plan.plan_id,
+                plan_id: awaiting.plan_id,
                 state: "completed",
-                plan: agentPlan("completed", false),
+                turn_state: "completed",
+                plan: completed,
+                response: chatResponse(completed, "He completado y verificado la acción."),
+                error_code: null,
             };
         },
     });
 
-    expect(retried).toBe(true);
-    expect(observedPath).toBe("/odoo_ai/v1/agent-plan-execute");
-    expect(observedPayload.plan_id).toBe("32345678-1234-5678-9234-567812345678");
-    expect(recoveryPending(panelState)).toBe(false);
+    expect(approved).toBe(true);
+    expect(paths).toEqual([
+        "/odoo_ai/v1/turn/plan-decision",
+        "/odoo_ai/v1/turn/plan-status",
+    ]);
+    expect(panelState.result.plan.state).toBe("completed");
     expect(panelState.actionReceipt.state).toBe("completed");
+    expect(recoveryPending(panelState)).toBe(false);
+});
+
+test("reject is terminal and never polls or executes", async () => {
+    const panelState = state();
+    const awaiting = agentPlan("awaiting_confirmation", true, [capabilityStep()]);
+    panelState.result = chatResponse(awaiting, "He preparado el cambio.");
+    const paths = [];
+    const rejected = agentPlan("rejected", true, [capabilityStep()]);
+
+    const result = await submitActionDecision({
+        state: panelState,
+        decision: "reject",
+        rpcCall: async (path) => {
+            paths.push(path);
+            return {
+                ok: true,
+                plan_id: awaiting.plan_id,
+                state: "rejected",
+                plan: rejected,
+                response: chatResponse(
+                    rejected,
+                    "Acción cancelada. No se ha realizado ningún cambio."
+                ),
+            };
+        },
+    });
+
+    expect(result).toBe(true);
+    expect(paths).toEqual(["/odoo_ai/v1/turn/plan-decision"]);
+    expect(panelState.result.plan.state).toBe("rejected");
+    expect(panelState.result.answer).toBe("Acción cancelada. No se ha realizado ningún cambio.");
+});
+
+test("recovery control is status-only and never re-executes the action", async () => {
+    const panelState = state();
+    const authorized = agentPlan("authorized", true, [capabilityStep()]);
+    panelState.result = chatResponse(authorized);
+    panelState.actionReceipt = {
+        ok: true,
+        plan_id: authorized.plan_id,
+        state: "recovery_required",
+        plan: authorized,
+        response: null,
+    };
+    const paths = [];
+
+    expect(recoveryPending(panelState)).toBe(true);
+    const checked = await submitActionRetry({
+        state: panelState,
+        waitCall: async () => {},
+        rpcCall: async (path) => {
+            paths.push(path);
+            return {
+                ok: true,
+                plan_id: authorized.plan_id,
+                state: "authorized",
+                turn_state: "recovery_required",
+                plan: authorized,
+                response: null,
+                error_code: "worker_lost_after_write_barrier",
+            };
+        },
+    });
+
+    expect(checked).toBe(true);
+    expect(paths).toEqual(["/odoo_ai/v1/turn/plan-status"]);
+    expect(panelState.actionReceipt.state).toBe("recovery_required");
+    expect(panelState.errorCode).toBe("worker_lost_after_write_barrier");
 });
