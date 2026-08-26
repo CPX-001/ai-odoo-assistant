@@ -39,8 +39,15 @@ A dated document never overrides newer code. Architecture changes that intention
 
 Current entry points:
 
-- `research/README.md` — scope, authority and rules for research/playbook documents;
-- `research/FOUNDATION_STABILIZATION_PLAYBOOK.md` — ordered path for provider stability, failure contracts, live public activity, real answer streaming, chat UX, latency measurement, regression gates and capability-framework evolution before major feature/RAG expansion.
+- `research/README.md` — index, scope and authority for the research/execution layer;
+- `research/FOUNDATION_STABILIZATION_PLAYBOOK.md` — ordered path for provider stability, failure contracts, live public activity, real answer streaming, chat UX, latency, regression gates and capability-framework evolution before major feature/RAG expansion;
+- `research/EXECUTION_STATE.md` — persistent current cursor used to resume the roadmap across independent runs;
+- `research/CONTINUOUS_EXECUTION_PROTOCOL.md` — recursive/restartable execution algorithm, stop rules and validation semantics;
+- `research/REAL_ENV_VALIDATION_PROTOCOL.md` — named checks that require the real Odoo 18 + Codex product path;
+- `research/SLICE_TEMPLATE.md` — contract for atomic implementation slices;
+- `research/PHASE0_BASELINE.md` — current Phase 0 evidence/measurement record.
+
+The stabilization roadmap explicitly does not use GitHub Actions for execution or validation while the project has no runners/workers available. Required tests must be run in an environment that actually provides the needed Odoo/Codex/browser/runtime dependencies; unrun tests remain pending.
 
 When a playbook item is implemented, update the authoritative current document/ADR that describes the resulting behavior. Do not treat a checked roadmap item as architecture authority by itself.
 
