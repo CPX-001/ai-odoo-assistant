@@ -27,6 +27,13 @@
                     <group string="Healthy checks" col="1" invisible="not diagnostic_ok">
                         <field name="diagnostic_ok" nolabel="1"/>
                     </group>
+                    <group string="Embedded Codex account">
+                        <field name="codex_account_state"/>
+                        <field name="codex_account_identity" invisible="not codex_account_identity"/>
+                        <field name="codex_account_plan" invisible="not codex_account_plan"/>
+                        <field name="codex_account_detail"/>
+                        <field name="codex_account_usage" nolabel="1" invisible="not codex_account_usage"/>
+                    </group>
                     <separator string="Legacy Detail / Evidence"/>
                     <group string="Local Assistant Service">
                         <field name="service_state" widget="badge"/>
