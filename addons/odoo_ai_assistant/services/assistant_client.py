@@ -1,4 +1,4 @@
-"""Narrow server-side HTTP client for temporary source/retrieval services."""
+"""Narrow server-side HTTP client for residual Source/Diagnostics services."""
 
 from __future__ import annotations
 
@@ -24,6 +24,8 @@ class AssistantServiceError(RuntimeError):
 
 
 class AssistantServiceClient:
+    """Call only residual local service administration/source endpoints."""
+
     def __init__(
         self,
         *,
@@ -50,10 +52,10 @@ class AssistantServiceClient:
             port = parsed.port or 80
         except ValueError as error:
             raise AssistantServiceError("configuration_invalid") from error
-        if not loopback or not 1 <= port <= 65535:
-            raise AssistantServiceError("configuration_invalid")
         if (
-            isinstance(timeout, bool)
+            not loopback
+            or not 1 <= port <= 65535
+            or isinstance(timeout, bool)
             or not isinstance(timeout, (int, float))
             or not 0 < timeout <= 300
         ):
@@ -70,10 +72,7 @@ class AssistantServiceClient:
         return payload
 
     def admin_status(self) -> dict[str, Any]:
-        secret = self._read_shared_secret()
-        return self._get_json(
-            "/v1/admin/status", headers={SHARED_SECRET_HEADER: secret}
-        )
+        return self._admin_get("/v1/admin/status")
 
     def diagnostics_matrix(self) -> dict[str, Any]:
         return self._admin_get("/v1/admin/diagnostics")
@@ -93,14 +92,17 @@ class AssistantServiceClient:
     def maintenance_logs_test(self, payload: dict[str, object]) -> dict[str, Any]:
         return self._admin_post("/v1/admin/maintenance/logs/test", payload)
 
-    def maintenance_knowledge_reindex(self, payload: dict[str, object]) -> dict[str, Any]:
+    def maintenance_knowledge_reindex(
+        self, payload: dict[str, object]
+    ) -> dict[str, Any]:
         return self._admin_post("/v1/admin/maintenance/knowledge/reindex", payload)
 
     def maintenance_reasoning_test(self, payload: dict[str, object]) -> dict[str, Any]:
         return self._admin_post("/v1/admin/maintenance/reasoning/test", payload)
 
-    def maintenance_action_self_test(self, payload: dict[str, object]) -> dict[str, Any]:
-        """Temporary diagnostic endpoint retained until the M7 settings UI is simplified."""
+    def maintenance_action_self_test(
+        self, payload: dict[str, object]
+    ) -> dict[str, Any]:
         return self._admin_post("/v1/admin/maintenance/action/self-test", payload)
 
     def maintenance_configuration_revalidate(
@@ -138,46 +140,6 @@ class AssistantServiceClient:
             {"fingerprint": fingerprint, "max_bytes": max_bytes},
         )
 
-    def context_read(self, payload: dict[str, object]) -> dict[str, Any]:
-        return self._turn_post("/v1/turns/context-read", payload)
-
-    def explain(self, payload: dict[str, object]) -> dict[str, Any]:
-        return self._turn_post("/v1/turns/explain", payload)
-
-    def how_to(self, payload: dict[str, object]) -> dict[str, Any]:
-        return self._turn_post("/v1/turns/how-to", payload)
-
-    def _turn_post(self, path: str, payload: dict[str, object]) -> dict[str, Any]:
-        if path not in {
-            "/v1/turns/context-read",
-            "/v1/turns/explain",
-            "/v1/turns/how-to",
-        }:
-            raise AssistantServiceError("invalid_request")
-        secret = self._read_shared_secret()
-        try:
-            body = json.dumps(
-                payload,
-                allow_nan=False,
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("utf-8")
-        except (TypeError, ValueError) as error:
-            raise AssistantServiceError("invalid_request") from error
-        if not body or len(body) > MAX_REQUEST_BYTES:
-            raise AssistantServiceError("invalid_request")
-        return self._request_json(
-            "POST",
-            path,
-            body=body,
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                SHARED_SECRET_HEADER: secret,
-            },
-        )
-
     def _read_shared_secret(self) -> str:
         if not self._shared_secret_file:
             raise AssistantServiceError("authentication_unconfigured")
@@ -198,7 +160,10 @@ class AssistantServiceClient:
         return secret
 
     def _get_json(
-        self, path: str, *, headers: dict[str, str] | None = None
+        self,
+        path: str,
+        *,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         return self._request_json("GET", path, headers=headers)
 
@@ -207,7 +172,9 @@ class AssistantServiceClient:
         return self._get_json(path, headers={SHARED_SECRET_HEADER: secret})
 
     def _admin_post(
-        self, path: str, payload: dict[str, object]
+        self,
+        path: str,
+        payload: dict[str, object],
     ) -> dict[str, Any]:
         secret = self._read_shared_secret()
         try:
@@ -241,7 +208,11 @@ class AssistantServiceClient:
         body: bytes | None = None,
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        connection = http.client.HTTPConnection(self._host, self._port, timeout=self._timeout)
+        connection = http.client.HTTPConnection(
+            self._host,
+            self._port,
+            timeout=self._timeout,
+        )
         try:
             connection.request(method, path, body=body, headers=headers or {})
             response = connection.getresponse()
@@ -250,29 +221,26 @@ class AssistantServiceClient:
             raise AssistantServiceError("service_unavailable") from error
         finally:
             connection.close()
+
         if response.status == 401:
             raise AssistantServiceError("authentication_rejected")
         if response.status == 403:
             raise AssistantServiceError("access_denied")
         if response.status in {404, 409, 410, 422}:
             error_code = _response_error_code(response_body)
-            configuration_codes = {
+            passthrough = {
                 "configuration_invalid",
                 "configuration_revision_conflict",
-            }
-            maintenance_codes = {
                 "maintenance_invalid",
                 "maintenance_job_active",
                 "maintenance_job_not_found",
                 "maintenance_unavailable",
             }
-            if error_code in configuration_codes | maintenance_codes:
+            if error_code in passthrough:
                 raise AssistantServiceError(error_code)
             if response.status == 404:
                 raise AssistantServiceError("diagnostic_not_found")
-            if response.status == 409:
-                raise AssistantServiceError("diagnostic_unavailable")
-            if response.status == 410:
+            if response.status in {409, 410}:
                 raise AssistantServiceError("diagnostic_unavailable")
             raise AssistantServiceError("invalid_context")
         if response.status == 413:
@@ -289,6 +257,7 @@ class AssistantServiceClient:
             raise AssistantServiceError("service_unavailable")
         if response.status >= 500:
             raise AssistantServiceError("service_unavailable")
+
         content_type = response.getheader("Content-Type", "").partition(";")[0].strip()
         if (
             response.status != 200

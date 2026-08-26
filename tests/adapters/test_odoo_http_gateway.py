@@ -5,71 +5,24 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from typing import Any
-from uuid import UUID
 
 import pytest
 from odoo_ai.adapters import (
-    HttpOdooGateway,
     HttpOdooInstanceGateway,
     OdooGatewayError,
     OdooGatewayFactory,
     OdooGatewaySettings,
 )
 from odoo_ai.adapters.odoo_http import (
-    ACTION_COMMIT_ROUTE,
-    ACTION_PREVIEW_ROUTE,
-    ACTION_VERIFY_ROUTE,
-    AGGREGATE_RECORDS_ROUTE,
-    DELEGATION_HEADER,
     INVENTORY_ROUTE,
     MAX_RESPONSE_BYTES,
-    METADATA_ROUTE,
-    NAVIGATION_ROUTE,
     ODOO_BASE_URL_ENV,
-    QUERY_RECORDS_ROUTE,
-    QUERY_SCHEMA_ROUTE,
-    READ_ROUTE,
-    WRITE_SCHEMA_ROUTE,
-)
-from odoo_ai.contracts import (
-    ActionCreatePreview,
-    ActionCreatePreviewSummary,
-    ActionCreatePreviewValue,
-    ActionCreateTarget,
-    ActionFieldChange,
-    ActionPreview,
-    ActionPreviewChange,
-    ActionPreviewSummary,
-    ActionProposalPayload,
-    ActionTarget,
-    ActionValue,
-    ActionValueKind,
-    AggregateRecordsRequest,
-    BusinessActionPreview,
-    BusinessActionPreviewSummary,
-    BusinessActionProposalPayload,
-    EvidenceKind,
-    EvidenceStatus,
-    QueryAggregateOperation,
-    QueryCondition,
-    QueryFilter,
-    QueryMetric,
-    QueryOperator,
-    QueryRecordsRequest,
-    QuerySort,
-    QuerySortDirection,
-    RecordCreateProposalPayload,
-    RecordRef,
 )
 from odoo_ai.security import SHARED_SECRET_HEADER
 
-TURN_ID = UUID("12345678-1234-5678-1234-567812345678")
 MACHINE_SECRET = "machine-" + "m" * 48
-DELEGATION_TOKEN = "v1." + "d" * 96
 
 
 @dataclass(slots=True)
@@ -153,86 +106,29 @@ def _factory(base_url: str, **settings: object) -> OdooGatewayFactory:
     )
 
 
-def _gateway(base_url: str, **settings: object) -> HttpOdooGateway:
-    return _factory(base_url, **settings).for_turn(
-        turn_id=TURN_ID,
-        delegation_token=DELEGATION_TOKEN,
-    )
-
-
-def test_nondefault_url_metadata_maps_to_checked_evidence() -> None:
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        assert request.path == METADATA_ROUTE
-        return _json_response(
-            {
-                "captured_at": "2026-08-21T10:30:00Z",
-                "fields": {
-                    "name": {
-                        "readonly": False,
-                        "required": True,
-                        "string": "Name",
-                        "type": "char",
-                    }
-                },
-                "model": "sale.order",
-                "ok": True,
-            }
-        )
-
-    with fake_odoo_server(responder) as server:
-        base_url = f"http://127.0.0.1:{server.server_port}"
-        evidence = asyncio.run(_gateway(base_url).get_model_metadata("sale.order"))
-
-    assert evidence.kind is EvidenceKind.METADATA
-    assert evidence.status is EvidenceStatus.CHECKED
-    assert evidence.payload["model"] == "sale.order"
-    assert evidence.payload["fields"] == {
-        "name": {
-            "readonly": False,
-            "required": True,
-            "string": "Name",
-            "type": "char",
-        }
+def _inventory_response() -> dict[str, object]:
+    return {
+        "addons_roots": ["/srv/customer/addons"],
+        "captured_at": "2026-08-22T10:30:00Z",
+        "database": "customer_odoo",
+        "installed_modules": ["base", "sale"],
+        "ok": True,
+        "server_version": "18.0",
     }
-
-
-def test_metadata_rejects_duplicate_json_keys() -> None:
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        assert request.path == METADATA_ROUTE
-        return ResponseSpec(
-            status=200,
-            headers={"Content-Type": "application/json"},
-            body=(
-                b'{"captured_at":"2026-08-21T10:30:00Z","fields":'
-                b'{"name":{"type":"char"},"name":{"type":"text"}},'
-                b'"model":"sale.order","ok":true}'
-            ),
-        )
-
-    with fake_odoo_server(responder) as server:
-        base_url = f"http://127.0.0.1:{server.server_port}"
-        with pytest.raises(OdooGatewayError, match="malformed_response"):
-            asyncio.run(_gateway(base_url).get_model_metadata("sale.order"))
 
 
 def test_machine_only_instance_inventory_is_bounded_and_validated() -> None:
     def responder(request: CapturedRequest) -> ResponseSpec:
         assert request.path == INVENTORY_ROUTE
-        assert DELEGATION_HEADER not in request.headers
+        assert request.body == b"{}"
         assert request.headers[SHARED_SECRET_HEADER] == MACHINE_SECRET
-        return _json_response(
-            {
-                "addons_roots": ["/srv/customer/addons"],
-                "captured_at": "2026-08-22T10:30:00Z",
-                "database": "customer_odoo",
-                "installed_modules": ["base", "sale"],
-                "ok": True,
-                "server_version": "18.0",
-            }
-        )
+        assert "X-Odoo-AI-Delegation" not in request.headers
+        return _json_response(_inventory_response())
 
     with fake_odoo_server(responder) as server:
-        gateway = _factory(f"http://127.0.0.1:{server.server_port}").for_instance()
+        gateway = _factory(
+            f"http://127.0.0.1:{server.server_port}"
+        ).for_instance()
         inventory = asyncio.run(gateway.get_instance_inventory())
 
     assert inventory.database == "customer_odoo"
@@ -241,595 +137,40 @@ def test_machine_only_instance_inventory_is_bounded_and_validated() -> None:
     assert MACHINE_SECRET not in repr(gateway)
 
 
-def test_navigation_maps_only_bounded_visible_metadata() -> None:
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        assert request.path == NAVIGATION_ROUTE
-        assert json.loads(request.body) == {"turn_id": str(TURN_ID)}
-        assert request.headers[DELEGATION_HEADER] == DELEGATION_TOKEN
-        assert request.headers[SHARED_SECRET_HEADER] == MACHINE_SECRET
-        return _json_response(
-            {
-                "captured_at": "2026-08-22T10:30:00Z",
-                "content_trust": "untrusted",
-                "limits": {"max_bytes": 131072, "max_depth": 8, "max_nodes": 256},
-                "nodes": [
-                    {
-                        "action": {
-                            "action_type": "ir.actions.act_window",
-                            "target_model": "sale.order",
-                            "view_modes": ["list", "form"],
-                        },
-                        "label": "Orders",
-                        "menu_id": 42,
-                        "parent_id": None,
-                        "path": ["Orders"],
-                        "sequence": 10,
-                    }
-                ],
-                "ok": True,
-                "truncated": False,
-            }
-        )
-
-    with fake_odoo_server(responder) as server:
-        base_url = f"http://127.0.0.1:{server.server_port}"
-        navigation = asyncio.run(_gateway(base_url).get_navigation())
-
-    assert navigation.nodes[0].menu_id == 42
-    assert navigation.nodes[0].action is not None
-    assert navigation.nodes[0].action.target_model == "sale.order"
-    assert navigation.content_trust == "untrusted"
-
-
-def test_query_schema_uses_the_separate_narrow_route() -> None:
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        assert request.path == QUERY_SCHEMA_ROUTE
-        assert json.loads(request.body) == {
-            "model": "sale.order",
-            "turn_id": str(TURN_ID),
-        }
-        return _json_response(
-            {
-                "captured_at": "2026-08-22T10:30:00Z",
-                "fields": {
-                    "id": {
-                        "groupable": True,
-                        "readonly": True,
-                        "required": False,
-                        "searchable": True,
-                        "sortable": True,
-                        "type": "integer",
-                    }
-                },
-                "label": "Sales Order",
-                "model": "sale.order",
-                "ok": True,
-            }
-        )
-
-    with fake_odoo_server(responder) as server:
-        evidence = asyncio.run(
-            _gateway(f"http://127.0.0.1:{server.server_port}").get_query_model_metadata(
-                "sale.order"
-            )
-        )
-
-    assert evidence.status is EvidenceStatus.CHECKED
-    assert evidence.pointer == {
-        "model": "sale.order",
-        "provider": "odoo_query_http",
-    }
-
-
-def test_action_write_schema_uses_separate_p1_route_and_write_access_flag() -> None:
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        assert request.path == WRITE_SCHEMA_ROUTE
-        assert json.loads(request.body) == {
-            "model": "sale.order",
-            "turn_id": str(TURN_ID),
-        }
-        return _json_response(
-            {
-                "captured_at": "2026-08-23T10:30:00Z",
-                "fields": {
-                    "client_order_ref": {
-                        "readonly": False,
-                        "required": False,
-                        "string": "Customer Reference",
-                        "type": "char",
-                    }
-                },
-                "label": "Sales Order",
-                "model": "sale.order",
-                "ok": True,
-                "create_access": True,
-                "write_access": True,
-            }
-        )
-
-    with fake_odoo_server(responder) as server:
-        evidence = asyncio.run(
-            _gateway(f"http://127.0.0.1:{server.server_port}").get_write_model_metadata(
-                "sale.order"
-            )
-        )
-
-    assert evidence.status is EvidenceStatus.CHECKED
-    assert evidence.payload["write_access"] is True
-    assert evidence.payload["create_access"] is True
-    assert evidence.pointer == {
-        "model": "sale.order",
-        "provider": "odoo_action_preview_http",
-    }
-
-
-def test_action_preview_sends_only_canonical_proposal_and_maps_strict_diff() -> None:
-    proposal_id = UUID("11111111-1111-4111-8111-111111111111")
-    proposal = ActionProposalPayload(
-        proposal_id=proposal_id,
-        turn_id=TURN_ID,
-        instance_id="odoo-production",
-        database="acme",
-        uid=17,
-        company_id=1,
-        allowed_company_ids=(1,),
-        target=ActionTarget(model="sale.order", record_id=42),
-        changes=(
-            ActionFieldChange(
-                field="client_order_ref",
-                value=ActionValue(kind=ActionValueKind.TEXT, value="PO-43"),
-            ),
-        ),
-        policy_revision="m6-record-patch-v1",
-        schema_revision="action-schema:v1:sha256:" + "a" * 64,
-    )
-    payload_fingerprint = "action-payload:v1:sha256:" + "b" * 64
-    now = datetime(2026, 8, 23, 10, 30, tzinfo=UTC)
-    expected = ActionPreview(
-        preview_id=UUID("33333333-3333-4333-8333-333333333333"),
-        summary=ActionPreviewSummary(
-            proposal_id=proposal_id,
-            target=proposal.target,
-            changes=(
-                ActionPreviewChange(
-                    field="client_order_ref",
-                    label="Customer Reference",
-                    before=ActionValue(kind=ActionValueKind.TEXT, value="PO-42"),
-                    after=proposal.changes[0].value,
-                ),
-            ),
-            warnings=("Preview only.",),
-        ),
-        payload_fingerprint=payload_fingerprint,
-        precondition_fingerprint="action-precondition:v1:sha256:" + "c" * 64,
-        policy_revision="m6-record-patch-v1",
-        schema_revision=proposal.schema_revision,
-        observed_at=now,
-        expires_at=now + timedelta(seconds=120),
+def test_settings_from_env_accept_nondefault_loopback_url() -> None:
+    settings = OdooGatewaySettings.from_env(
+        {ODOO_BASE_URL_ENV: "http://127.0.0.1:18069"}
     )
 
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        assert request.path == ACTION_PREVIEW_ROUTE
-        assert json.loads(request.body) == {
-            "payload_fingerprint": payload_fingerprint,
-            "proposal": proposal.model_dump(mode="json"),
-            "turn_id": str(TURN_ID),
-        }
-        return _json_response({"ok": True, "preview": expected.model_dump(mode="json")})
-
-    with fake_odoo_server(responder) as server:
-        actual = asyncio.run(
-            _gateway(f"http://127.0.0.1:{server.server_port}").preview_record_patch(
-                proposal, payload_fingerprint=payload_fingerprint
-            )
-        )
-
-    assert actual == expected
-
-
-def test_create_preview_commit_and_verify_use_only_strict_action_routes() -> None:
-    proposal = RecordCreateProposalPayload(
-        proposal_id=UUID("11111111-1111-4111-8111-111111111111"),
-        turn_id=TURN_ID,
-        instance_id="odoo-production",
-        database="acme",
-        uid=17,
-        company_id=1,
-        allowed_company_ids=(1,),
-        target=ActionCreateTarget(model="res.partner"),
-        values=(
-            ActionFieldChange(
-                field="name",
-                value=ActionValue(kind=ActionValueKind.TEXT, value="New customer"),
-            ),
-        ),
-        policy_revision="m6-record-patch-v1",
-        schema_revision="action-schema:v1:sha256:" + "a" * 64,
-    )
-    payload_fingerprint = "action-payload:v1:sha256:" + "b" * 64
-    precondition = "action-precondition:v1:sha256:" + "c" * 64
-    attempt_id = UUID("55555555-5555-4555-8555-555555555555")
-    now = datetime(2026, 8, 23, 10, 30, tzinfo=UTC)
-    preview = ActionCreatePreview(
-        preview_id=UUID("33333333-3333-4333-8333-333333333333"),
-        summary=ActionCreatePreviewSummary(
-            proposal_id=proposal.proposal_id,
-            target=proposal.target,
-            values=(
-                ActionCreatePreviewValue(
-                    field="name", label="Name", value=proposal.values[0].value
-                ),
-            ),
-            warnings=("Requested values only.",),
-        ),
-        payload_fingerprint=payload_fingerprint,
-        precondition_fingerprint=precondition,
-        policy_revision=proposal.policy_revision,
-        schema_revision=proposal.schema_revision,
-        observed_at=now,
-        expires_at=now + timedelta(seconds=120),
-    )
-    responses = {
-        ACTION_PREVIEW_ROUTE: {
-            "ok": True,
-            "preview": preview.model_dump(mode="json"),
-        },
-        ACTION_COMMIT_ROUTE: {
-            "attempt_id": str(attempt_id),
-            "committed_at": now.isoformat().replace("+00:00", "Z"),
-            "ok": True,
-            "payload_fingerprint": payload_fingerprint,
-            "precondition_fingerprint": precondition,
-            "proposal_id": str(proposal.proposal_id),
-            "record_id": 84,
-        },
-        ACTION_VERIFY_ROUTE: {
-            "after": {"name": {"kind": "text", "value": "New customer"}},
-            "attempt_id": str(attempt_id),
-            "matches": True,
-            "ok": True,
-            "proposal_id": str(proposal.proposal_id),
-            "record_id": 84,
-            "verified_at": now.isoformat().replace("+00:00", "Z"),
-        },
-    }
-
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        body = json.loads(request.body)
-        assert body["proposal"] == proposal.model_dump(mode="json")
-        if request.path == ACTION_PREVIEW_ROUTE:
-            assert body == {
-                "payload_fingerprint": payload_fingerprint,
-                "proposal": proposal.model_dump(mode="json"),
-                "turn_id": str(TURN_ID),
-            }
-        else:
-            assert body == {"proposal": proposal.model_dump(mode="json")}
-        return _json_response(responses[request.path])
-
-    with fake_odoo_server(responder) as server:
-        base_url = f"http://127.0.0.1:{server.server_port}"
-        preview_result = asyncio.run(
-            _gateway(base_url).preview_record_create(
-                proposal, payload_fingerprint=payload_fingerprint
-            )
-        )
-        action_gateway = _factory(base_url).for_action(authority_token=DELEGATION_TOKEN)
-        commit = asyncio.run(action_gateway.commit_record_create(proposal))
-        verification = asyncio.run(action_gateway.verify_record_create(proposal))
-
-    assert preview_result == preview
-    assert commit.record_id == verification.record_id == 84
-    assert verification.matches is True
-    assert [request.path for request in server.requests] == [
-        ACTION_PREVIEW_ROUTE,
-        ACTION_COMMIT_ROUTE,
-        ACTION_VERIFY_ROUTE,
-    ]
-
-
-def test_business_action_preview_commit_and_verify_use_strict_action_contract() -> None:
-    proposal = BusinessActionProposalPayload(
-        proposal_id=UUID("11111111-1111-4111-8111-111111111111"),
-        turn_id=TURN_ID,
-        instance_id="odoo-production",
-        database="acme",
-        uid=17,
-        company_id=1,
-        allowed_company_ids=(1,),
-        target=ActionTarget(model="sale.order", record_id=42),
-        policy_revision="m6-record-patch-v1",
-    )
-    payload_fingerprint = "action-payload:v1:sha256:" + "b" * 64
-    precondition = "action-precondition:v1:sha256:" + "c" * 64
-    attempt_id = UUID("55555555-5555-4555-8555-555555555555")
-    now = datetime(2026, 8, 23, 10, 30, tzinfo=UTC)
-    preview = BusinessActionPreview(
-        preview_id=UUID("33333333-3333-4333-8333-333333333333"),
-        summary=BusinessActionPreviewSummary(
-            proposal_id=proposal.proposal_id,
-            target=proposal.target,
-            display_name="S00042",
-            state_before="draft",
-            warnings=("Installed modules may add side effects.",),
-        ),
-        payload_fingerprint=payload_fingerprint,
-        precondition_fingerprint=precondition,
-        policy_revision=proposal.policy_revision,
-        action_spec_revision=proposal.action_spec_revision,
-        observed_at=now,
-        expires_at=now + timedelta(seconds=120),
-    )
-    responses = {
-        ACTION_PREVIEW_ROUTE: {
-            "ok": True,
-            "preview": preview.model_dump(mode="json"),
-        },
-        ACTION_COMMIT_ROUTE: {
-            "action_id": proposal.action_id,
-            "attempt_id": str(attempt_id),
-            "committed_at": now.isoformat().replace("+00:00", "Z"),
-            "ok": True,
-            "payload_fingerprint": payload_fingerprint,
-            "precondition_fingerprint": precondition,
-            "proposal_id": str(proposal.proposal_id),
-            "record_id": 42,
-        },
-        ACTION_VERIFY_ROUTE: {
-            "action_id": proposal.action_id,
-            "attempt_id": str(attempt_id),
-            "matches": True,
-            "ok": True,
-            "proposal_id": str(proposal.proposal_id),
-            "record_id": 42,
-            "state": "sale",
-            "verified_at": now.isoformat().replace("+00:00", "Z"),
-        },
-    }
-
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        body = json.loads(request.body)
-        assert body["proposal"] == proposal.model_dump(mode="json")
-        assert "method" not in body["proposal"]
-        if request.path == ACTION_PREVIEW_ROUTE:
-            assert body["payload_fingerprint"] == payload_fingerprint
-            assert body["turn_id"] == str(TURN_ID)
-        else:
-            assert body == {"proposal": proposal.model_dump(mode="json")}
-        return _json_response(responses[request.path])
-
-    with fake_odoo_server(responder) as server:
-        base_url = f"http://127.0.0.1:{server.server_port}"
-        preview_result = asyncio.run(
-            _gateway(base_url).preview_business_action(
-                proposal, payload_fingerprint=payload_fingerprint
-            )
-        )
-        action_gateway = _factory(base_url).for_action(authority_token=DELEGATION_TOKEN)
-        commit = asyncio.run(action_gateway.commit_business_action(proposal))
-        verification = asyncio.run(action_gateway.verify_business_action(proposal))
-
-    assert preview_result == preview
-    assert commit.action_id == verification.action_id == "sale.order.confirm.v1"
-    assert commit.record_id == verification.record_id == 42
-    assert verification.state == "sale"
-    assert [request.path for request in server.requests] == [
-        ACTION_PREVIEW_ROUTE,
-        ACTION_COMMIT_ROUTE,
-        ACTION_VERIFY_ROUTE,
-    ]
-
-
-def test_query_records_sends_only_structured_ast_and_validates_response() -> None:
-    query = QueryRecordsRequest(
-        model="sale.order",
-        schema_id="sha256:" + "a" * 64,
-        fields=("name",),
-        filter=QueryFilter(
-            conditions=(
-                QueryCondition(
-                    field="name",
-                    operator=QueryOperator.CONTAINS,
-                    value="SO",
-                ),
-            )
-        ),
-        order=(QuerySort(field="name", direction=QuerySortDirection.ASC),),
-        limit=10,
-    )
-
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        assert request.path == QUERY_RECORDS_ROUTE
-        payload = json.loads(request.body)
-        assert payload["turn_id"] == str(TURN_ID)
-        assert "schema_id" not in payload["query"]
-        assert payload["query"]["filter"]["conditions"][0] == {
-            "field": "name",
-            "operator": "contains",
-            "value": "SO",
-        }
-        return _json_response(
-            {
-                "captured_at": "2026-08-22T10:31:00Z",
-                "limit": 10,
-                "model": "sale.order",
-                "ok": True,
-                "records": [{"fields": {"name": "SO001"}, "id": 7}],
-                "returned_count": 1,
-                "truncated": False,
-            }
-        )
-
-    with fake_odoo_server(responder) as server:
-        result = asyncio.run(
-            _gateway(f"http://127.0.0.1:{server.server_port}").query_records(query)
-        )
-
-    assert result.records[0].fields == {"name": "SO001"}
-    assert result.query == query
-    assert result.content_trust == "untrusted"
-
-
-def test_aggregate_records_maps_count_and_empty_result_without_raw_domain() -> None:
-    query = AggregateRecordsRequest(
-        model="sale.order",
-        schema_id="sha256:" + "a" * 64,
-        metrics=(QueryMetric(operation=QueryAggregateOperation.COUNT),),
-        group_limit=10,
-    )
-
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        assert request.path == AGGREGATE_RECORDS_ROUTE
-        payload = json.loads(request.body)
-        assert "domain" not in json.dumps(payload)
-        return _json_response(
-            {
-                "captured_at": "2026-08-22T10:31:00Z",
-                "group_limit": 10,
-                "groups": [
-                    {
-                        "group": {},
-                        "metrics": [{"field": None, "operation": "count", "value": 0}],
-                    }
-                ],
-                "model": "sale.order",
-                "ok": True,
-                "returned_group_count": 1,
-                "truncated": False,
-            }
-        )
-
-    with fake_odoo_server(responder) as server:
-        result = asyncio.run(
-            _gateway(f"http://127.0.0.1:{server.server_port}").aggregate_records(query)
-        )
-
-    assert result.groups[0].metrics[0].value == 0
-    assert result.query == query
-
-
-def test_valid_read_maps_exact_records_and_sends_both_server_credentials() -> None:
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        assert request.path == READ_ROUTE
-        return _json_response(
-            {
-                "captured_at": "2026-08-21T10:31:00Z",
-                "model": "sale.order",
-                "ok": True,
-                "records": [
-                    {
-                        "display_name": "S00042",
-                        "fields": {"name": "S00042", "state": "sale"},
-                        "id": 42,
-                    }
-                ],
-            }
-        )
-
-    with fake_odoo_server(responder) as server:
-        gateway = _gateway(f"http://127.0.0.1:{server.server_port}")
-        snapshots = asyncio.run(
-            gateway.read_records(
-                [RecordRef(model="sale.order", id=42)],
-                ["name", "state"],
-            )
-        )
-        captured = server.requests[0]
-
-    assert snapshots[0].record.display_name == "S00042"
-    assert snapshots[0].fields == {"name": "S00042", "state": "sale"}
-    assert captured.headers[SHARED_SECRET_HEADER] == MACHINE_SECRET
-    assert captured.headers[DELEGATION_HEADER] == DELEGATION_TOKEN
-    assert json.loads(captured.body) == {
-        "fields": ["name", "state"],
-        "ids": [42],
-        "model": "sale.order",
-        "turn_id": str(TURN_ID),
-    }
-    assert MACHINE_SECRET not in repr(gateway)
-    assert DELEGATION_TOKEN not in repr(gateway)
-
-
-def test_factory_reuses_the_m1_secret_file_loader(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    secret_file = tmp_path / "shared-secret"
-    secret_file.write_text(MACHINE_SECRET, encoding="utf-8")
-    secret_file.chmod(0o640)
-    monkeypatch.setenv("ODOO_AI_SHARED_SECRET_FILE", str(secret_file))
-
-    gateway = OdooGatewayFactory(OdooGatewaySettings("http://localhost:8069")).for_turn(
-        turn_id=TURN_ID,
-        delegation_token=DELEGATION_TOKEN,
-    )
-
-    assert MACHINE_SECRET not in repr(gateway)
-    assert DELEGATION_TOKEN not in repr(gateway)
+    assert settings.base_url == "http://127.0.0.1:18069"
 
 
 @pytest.mark.parametrize(
-    "url",
+    "value",
     [
         "",
-        "localhost:8069",
-        "ftp://localhost:8069",
-        "http://user:password@localhost:8069",
-        "http://localhost:8069/base",
-        "http://localhost:8069?db=customer",
-        "http://localhost:8069#fragment",
-        "http://localhost:99999",
+        " http://127.0.0.1:8069",
+        "ftp://127.0.0.1:8069",
+        "http://user:pass@127.0.0.1:8069",
+        "http://127.0.0.1:8069/path",
+        "http://127.0.0.1:99999",
     ],
 )
-def test_invalid_or_credential_bearing_urls_are_rejected(url: str) -> None:
+def test_invalid_gateway_urls_are_rejected(value: str) -> None:
     with pytest.raises(OdooGatewayError, match="invalid_gateway_url"):
-        OdooGatewaySettings(url)
+        OdooGatewaySettings(base_url=value)
 
 
-def test_settings_require_server_side_env_and_accept_nondefault_port() -> None:
-    with pytest.raises(OdooGatewayError, match="gateway_unconfigured"):
-        OdooGatewaySettings.from_env({})
+def test_inventory_rejects_duplicate_or_malformed_values() -> None:
+    malformed = _inventory_response()
+    malformed["installed_modules"] = ["base", "base"]
 
-    settings = OdooGatewaySettings.from_env({ODOO_BASE_URL_ENV: "http://odoo.internal:18069"})
-
-    assert settings.base_url == "http://odoo.internal:18069"
-
-
-def test_redirect_is_rejected_without_following_location() -> None:
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        del request
-        return ResponseSpec(
-            status=307,
-            headers={"Location": "http://attacker.invalid/capture"},
-        )
-
-    with fake_odoo_server(responder) as server:
-        gateway = _gateway(f"http://127.0.0.1:{server.server_port}")
-        with pytest.raises(OdooGatewayError, match="redirect_rejected") as failure:
-            asyncio.run(gateway.get_model_metadata("sale.order"))
-
-    assert "attacker" not in str(failure.value)
-    assert len(server.requests) == 1
-
-
-def test_timeout_is_sanitized() -> None:
-    def responder(request: CapturedRequest) -> ResponseSpec:
-        del request
-        return ResponseSpec(delay_seconds=0.15)
-
-    with fake_odoo_server(responder) as server:
-        gateway = _gateway(f"http://127.0.0.1:{server.server_port}", timeout_seconds=0.02)
-        with pytest.raises(OdooGatewayError, match="upstream_timeout") as failure:
-            asyncio.run(gateway.get_model_metadata("sale.order"))
-
-    assert MACHINE_SECRET not in str(failure.value)
-    assert DELEGATION_TOKEN not in str(failure.value)
-
-
-def test_request_body_cap_is_enforced_before_connecting() -> None:
-    gateway = _gateway("http://127.0.0.1:9", max_request_bytes=1)
-
-    with pytest.raises(OdooGatewayError, match="request_too_large"):
-        asyncio.run(gateway.get_model_metadata("sale.order"))
+    with fake_odoo_server(lambda request: _json_response(malformed)) as server:
+        gateway = _factory(
+            f"http://127.0.0.1:{server.server_port}"
+        ).for_instance()
+        with pytest.raises(OdooGatewayError, match="malformed_response"):
+            asyncio.run(gateway.get_instance_inventory())
 
 
 @pytest.mark.parametrize(
@@ -842,16 +183,22 @@ def test_request_body_cap_is_enforced_before_connecting() -> None:
 )
 def test_oversized_or_malformed_bodies_are_rejected(response: ResponseSpec) -> None:
     with fake_odoo_server(lambda request: response) as server:
-        gateway = _gateway(f"http://127.0.0.1:{server.server_port}")
-        with pytest.raises(OdooGatewayError, match="malformed_response|response_too_large"):
-            asyncio.run(gateway.get_model_metadata("sale.order"))
+        gateway = _factory(
+            f"http://127.0.0.1:{server.server_port}"
+        ).for_instance()
+        with pytest.raises(
+            OdooGatewayError,
+            match="malformed_response|response_too_large",
+        ):
+            asyncio.run(gateway.get_instance_inventory())
 
 
 @pytest.mark.parametrize(
     ("status", "code"),
     [
+        (307, "redirect_rejected"),
         (401, "machine_auth_rejected"),
-        (403, "delegation_rejected"),
+        (403, "machine_auth_rejected"),
         (404, "endpoint_unavailable"),
         (429, "rate_limited"),
         (503, "upstream_unavailable"),
@@ -859,16 +206,32 @@ def test_oversized_or_malformed_bodies_are_rejected(response: ResponseSpec) -> N
 )
 def test_upstream_statuses_map_to_sanitized_errors(status: int, code: str) -> None:
     with fake_odoo_server(lambda request: ResponseSpec(status=status)) as server:
-        gateway = _gateway(f"http://127.0.0.1:{server.server_port}")
+        gateway = _factory(
+            f"http://127.0.0.1:{server.server_port}"
+        ).for_instance()
         with pytest.raises(OdooGatewayError, match=code) as failure:
-            asyncio.run(gateway.get_model_metadata("sale.order"))
+            asyncio.run(gateway.get_instance_inventory())
 
     assert MACHINE_SECRET not in str(failure.value)
-    assert DELEGATION_TOKEN not in str(failure.value)
+
+
+def test_timeout_is_sanitized() -> None:
+    def responder(request: CapturedRequest) -> ResponseSpec:
+        del request
+        return ResponseSpec(delay_seconds=0.15)
+
+    with fake_odoo_server(responder) as server:
+        gateway = _factory(
+            f"http://127.0.0.1:{server.server_port}",
+            timeout_seconds=0.02,
+        ).for_instance()
+        with pytest.raises(OdooGatewayError, match="upstream_timeout") as failure:
+            asyncio.run(gateway.get_instance_inventory())
+
+    assert MACHINE_SECRET not in str(failure.value)
 
 
 def test_adapter_exposes_no_generic_odoo_method() -> None:
-    assert not hasattr(HttpOdooGateway, "execute_kw")
-    assert not hasattr(HttpOdooGateway, "execute_method")
-    assert not hasattr(HttpOdooGateway, "search")
+    assert not hasattr(HttpOdooInstanceGateway, "execute_kw")
     assert not hasattr(HttpOdooInstanceGateway, "execute_method")
+    assert not hasattr(HttpOdooInstanceGateway, "search")

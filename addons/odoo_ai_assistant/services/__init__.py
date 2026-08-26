@@ -1,60 +1,11 @@
+"""Odoo-side services shared by current runtime and residual service boundaries."""
+
 from .assistant_client import AssistantServiceClient, AssistantServiceError
-from .instance_inventory import (
-    InstanceInventoryError,
-    collect_instance_inventory,
-)
-from .screen_context import (
-    ScreenContextValidationError,
-    ValidatedScreenContext,
-    validate_context_read_screen,
-    validate_how_to_screen,
-)
-from .turn_context import (
-    ActionPreviewTurnContextPreparer,
-    AgentTurnContextPreparer,
-    EffectiveUserContext,
-    HowToTurnContextPreparer,
-    PreparedActionPreviewTurn,
-    PreparedAgentTurn,
-    PreparedContextTurn,
-    PreparedQueryTurn,
-    QueryTurnContextPreparer,
-    TurnContextError,
-    TurnContextPreparer,
-    derive_action_decision_actor,
-    derive_user_execution_context,
-    prepare_action_preview_turn,
-    prepare_agent_turn,
-    prepare_context_turn,
-    prepare_how_to_turn,
-    prepare_query_turn,
-)
+from .instance_inventory import InstanceInventoryError, collect_instance_inventory
 
 __all__ = [
-    "ActionPreviewTurnContextPreparer",
-    "AgentTurnContextPreparer",
     "AssistantServiceClient",
     "AssistantServiceError",
-    "EffectiveUserContext",
-    "HowToTurnContextPreparer",
     "InstanceInventoryError",
-    "PreparedActionPreviewTurn",
-    "PreparedAgentTurn",
-    "PreparedContextTurn",
-    "PreparedQueryTurn",
-    "QueryTurnContextPreparer",
-    "ScreenContextValidationError",
-    "TurnContextError",
-    "TurnContextPreparer",
-    "ValidatedScreenContext",
     "collect_instance_inventory",
-    "derive_action_decision_actor",
-    "derive_user_execution_context",
-    "prepare_action_preview_turn",
-    "prepare_agent_turn",
-    "prepare_context_turn",
-    "prepare_how_to_turn",
-    "prepare_query_turn",
-    "validate_context_read_screen",
-    "validate_how_to_screen",
 ]

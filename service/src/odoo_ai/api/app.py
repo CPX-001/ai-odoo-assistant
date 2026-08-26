@@ -1,9 +1,7 @@
-"""Temporary HTTP surface for source/retrieval responsibilities not yet embedded."""
+"""Temporary HTTP surface for Source/Scanner/Diagnostics responsibilities."""
 
 import asyncio
-from collections.abc import Callable
 from typing import Final, Literal
-from uuid import UUID
 
 from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -11,41 +9,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from odoo_ai.adapters import (
-    CachedCodexReasoningStatus,
-    CodexAppServerEngine,
-    CodexRuntimeSettings,
-    KnowledgeToolExecutorFactory,
-    OdooGatewayError,
-    OdooGatewayFactory,
-    OdooGatewaySettings,
-    RuntimeDiagnosticsService,
-    SourceToolExecutorFactory,
-    knowledge_tool_specs,
-    load_instance_summary,
-    persist_trace_events,
-    source_tool_specs,
-)
-from odoo_ai.application import (
-    ContextReadError,
-    ContextReadService,
-    DiagnosticsError,
-    DiagnosticsService,
-    ExplainService,
-    ExplainTurnError,
-    HowToService,
-    HowToTurnError,
-    TraceEventData,
-)
+from odoo_ai.adapters import CachedCodexReasoningStatus, RuntimeDiagnosticsService
+from odoo_ai.application import DiagnosticsError, DiagnosticsService
 from odoo_ai.contracts import (
-    ContextReadTurnRequest,
-    ContextReadTurnResponse,
     EmptyDiagnosticsRequest,
-    ExplainTurnRequest,
-    ExplainTurnResponse,
-    HowToTurnRequest,
-    HowToTurnResponse,
-    InstanceProfileSummary,
     LogEvidence,
     LogSearchRequest,
     LogTestDiagnostics,
@@ -62,12 +29,9 @@ from odoo_ai.runtime.status import (
 )
 from odoo_ai.security import require_shared_secret
 
-MAX_CONTEXT_REQUEST_BYTES: Final = 16 * 1024
+MAX_REQUEST_BYTES: Final = 16 * 1024
 _BOUNDED_POST_PATHS: Final = frozenset(
     {
-        "/v1/turns/context-read",
-        "/v1/turns/explain",
-        "/v1/turns/how-to",
         "/v1/admin/source/rescan",
         "/v1/admin/source/test",
         "/v1/admin/logs/test",
@@ -85,7 +49,7 @@ class HealthResponse(BaseModel):
 
 
 class BoundedRequestLimitMiddleware:
-    """Reject oversized legacy source/retrieval requests before JSON parsing."""
+    """Reject oversized residual admin requests before JSON parsing."""
 
     def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
         self._app = app
@@ -93,7 +57,8 @@ class BoundedRequestLimitMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or not (
-            scope.get("method") == "POST" and scope.get("path") in _BOUNDED_POST_PATHS
+            scope.get("method") == "POST"
+            and scope.get("path") in _BOUNDED_POST_PATHS
         ):
             await self._app(scope, receive, send)
             return
@@ -127,49 +92,25 @@ class BoundedRequestLimitMiddleware:
             if replayed:
                 return {"type": "http.request", "body": b"", "more_body": False}
             replayed = True
-            return {"type": "http.request", "body": bytes(body), "more_body": False}
+            return {
+                "type": "http.request",
+                "body": bytes(body),
+                "more_body": False,
+            }
 
         await self._app(scope, replay_receive, send)
 
 
-def create_app(
-    *,
-    gateway_factory: OdooGatewayFactory | None = None,
-    instance_loader: Callable[[], InstanceProfileSummary] = load_instance_summary,
-    trace_writer: Callable[[UUID, tuple[TraceEventData, ...]], None] | None = None,
-    diagnostics_service: DiagnosticsService | None = None,
-    explain_service: ExplainService | None = None,
-    how_to_service: HowToService | None = None,
-) -> FastAPI:
-    """Build the remaining temporary source/retrieval service surface."""
+def create_app(*, diagnostics_service: DiagnosticsService | None = None) -> FastAPI:
+    """Build the residual source/scanner/diagnostics service surface."""
 
-    application = FastAPI(title="Odoo AI Assistant Temporary Service")
+    application = FastAPI(title="Odoo AI Assistant Residual Service")
     application.add_middleware(
         BoundedRequestLimitMiddleware,
-        max_bytes=MAX_CONTEXT_REQUEST_BYTES,
+        max_bytes=MAX_REQUEST_BYTES,
     )
     diagnostics = diagnostics_service
     reasoning_status_probe: CachedCodexReasoningStatus | None = None
-
-    def get_explain_service() -> ExplainService:
-        if explain_service is not None:
-            return explain_service
-        effective_factory = gateway_factory or OdooGatewayFactory(
-            OdooGatewaySettings.from_env()
-        )
-        source_factory = SourceToolExecutorFactory.from_env()
-        engine = CodexAppServerEngine(
-            CodexRuntimeSettings.from_env(),
-            tool_executor_factory=source_factory,
-        )
-        return ExplainService(
-            gateway_factory=effective_factory,
-            reasoning_engine=engine,
-            source_tools=source_tool_specs(),
-            report_loader=source_factory.take_report,
-            instance_loader=instance_loader,
-            trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
-        )
 
     def get_diagnostics() -> DiagnosticsService:
         nonlocal diagnostics
@@ -179,26 +120,6 @@ def create_app(
             except (OSError, ValueError):
                 raise DiagnosticsError("diagnostics_unconfigured", 503) from None
         return diagnostics
-
-    def get_how_to_service() -> HowToService:
-        if how_to_service is not None:
-            return how_to_service
-        effective_factory = gateway_factory or OdooGatewayFactory(
-            OdooGatewaySettings.from_env()
-        )
-        knowledge_factory = KnowledgeToolExecutorFactory.from_env()
-        engine = CodexAppServerEngine(
-            CodexRuntimeSettings.from_env(),
-            tool_executor_factory=knowledge_factory,
-        )
-        return HowToService(
-            gateway_factory=effective_factory,
-            reasoning_engine=engine,
-            knowledge_tools=knowledge_tool_specs(),
-            report_loader=knowledge_factory.take_report,
-            instance_loader=instance_loader,
-            trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
-        )
 
     @application.exception_handler(RequestValidationError)
     async def invalid_request(_request, _error) -> JSONResponse:
@@ -270,9 +191,7 @@ def create_app(
         response_model=LogTestDiagnostics,
         dependencies=[Depends(require_shared_secret)],
     )
-    async def logs_test(
-        payload: LogSearchRequest,
-    ) -> LogTestDiagnostics | JSONResponse:
+    async def logs_test(payload: LogSearchRequest) -> LogTestDiagnostics | JSONResponse:
         try:
             return await get_diagnostics().test_logs(payload)
         except DiagnosticsError as error:
@@ -283,79 +202,13 @@ def create_app(
         response_model=LogEvidence,
         dependencies=[Depends(require_shared_secret)],
     )
-    async def logs_traceback(
-        payload: TracebackRequest,
-    ) -> LogEvidence | JSONResponse:
+    async def logs_traceback(payload: TracebackRequest) -> LogEvidence | JSONResponse:
         try:
             return await get_diagnostics().read_traceback(payload)
         except DiagnosticsError as error:
             return _error_response(error.code, error.status_code)
 
-    @application.post(
-        "/v1/turns/context-read",
-        response_model=ContextReadTurnResponse,
-        dependencies=[Depends(require_shared_secret)],
-    )
-    async def context_read_turn(
-        payload: ContextReadTurnRequest,
-    ) -> ContextReadTurnResponse | JSONResponse:
-        try:
-            effective_factory = gateway_factory or OdooGatewayFactory(
-                OdooGatewaySettings.from_env()
-            )
-            service = ContextReadService(
-                gateway_factory=effective_factory,
-                instance_loader=instance_loader,
-                trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
-            )
-            return await service.run(payload)
-        except ContextReadError as error:
-            return _error_response(error.code, error.status_code)
-        except OdooGatewayError as error:
-            code, status_code = _gateway_error(error.code)
-            return _error_response(code, status_code)
-
-    @application.post(
-        "/v1/turns/explain",
-        response_model=ExplainTurnResponse,
-        dependencies=[Depends(require_shared_secret)],
-    )
-    async def explain_turn(
-        payload: ExplainTurnRequest,
-    ) -> ExplainTurnResponse | JSONResponse:
-        try:
-            return await get_explain_service().run(payload)
-        except ExplainTurnError as error:
-            return _error_response(error.code, error.status_code)
-        except Exception:  # noqa: BLE001 - sanitize infrastructure/provider details
-            return _error_response("engine_unavailable", 503)
-
-    @application.post(
-        "/v1/turns/how-to",
-        response_model=HowToTurnResponse,
-        dependencies=[Depends(require_shared_secret)],
-    )
-    async def how_to_turn(
-        payload: HowToTurnRequest,
-    ) -> HowToTurnResponse | JSONResponse:
-        try:
-            return await get_how_to_service().run(payload)
-        except HowToTurnError as error:
-            return _error_response(error.code, error.status_code)
-        except Exception:  # noqa: BLE001 - sanitize infrastructure details
-            return _error_response("engine_unavailable", 503)
-
     return application
-
-
-def _gateway_error(code: str) -> tuple[str, int]:
-    if code in {"access_denied", "delegation_rejected"}:
-        return "access_denied", 403
-    if code in {"invalid_request", "request_too_large"}:
-        return code, 413 if code == "request_too_large" else 422
-    if code in {"malformed_response", "response_too_large"}:
-        return "invalid_gateway_response", 502
-    return "service_unavailable", 503
 
 
 def _error_response(code: str, status_code: int) -> JSONResponse:

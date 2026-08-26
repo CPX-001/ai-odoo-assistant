@@ -11,15 +11,7 @@ from odoo_ai.contracts.context import (
     UserExecutionContext,
     UserRequest,
 )
-from odoo_ai.contracts.delegation import ContextReadTurnRequest, ContextReadTurnResponse
-from odoo_ai.contracts.effective_schema import (
-    EffectiveFieldSchema,
-    EffectiveModelSchema,
-    EffectiveSelectionOption,
-)
 from odoo_ai.contracts.evidence import Evidence
-from odoo_ai.contracts.explain import ExplainTurnRequest, ExplainTurnResponse
-from odoo_ai.contracts.how_to import HowToTurnRequest, HowToTurnResponse
 from odoo_ai.contracts.knowledge import (
     KnowledgeDocument,
     KnowledgeExcerpt,
@@ -33,18 +25,18 @@ from odoo_ai.contracts.knowledge import (
     KnowledgeSearchResult,
 )
 from odoo_ai.contracts.logs import LogEvidence, LogSearchRequest, TimestampRange
-from odoo_ai.contracts.navigation import (
-    NavigationActionSummary,
-    NavigationLimits,
-    NavigationNode,
-    NavigationSnapshot,
-)
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.screen_context import ScreenContext
 from odoo_ai.contracts.source import (
+    FindModelExtensionsRequest,
+    FindModelExtensionsResult,
+    FindSymbolRequest,
+    FindSymbolResult,
     InstanceInventory,
     ManifestMetadata,
+    ReadExcerptRequest,
     ScanRun,
+    SourceExcerpt,
     SourceFile,
     SourceRef,
     SourceSymbol,
@@ -56,17 +48,12 @@ JsonSchema = dict[str, JsonValue]
 _PUBLIC_MODELS: tuple[type[BaseModel], ...] = (
     AnswerEnvelope,
     ContextPack,
-    ContextReadTurnRequest,
-    ContextReadTurnResponse,
     ConversationState,
-    EffectiveFieldSchema,
-    EffectiveModelSchema,
-    EffectiveSelectionOption,
     Evidence,
-    ExplainTurnRequest,
-    ExplainTurnResponse,
-    HowToTurnRequest,
-    HowToTurnResponse,
+    FindModelExtensionsRequest,
+    FindModelExtensionsResult,
+    FindSymbolRequest,
+    FindSymbolResult,
     InstanceInventory,
     InstanceProfileSummary,
     KnowledgeDocument,
@@ -82,15 +69,13 @@ _PUBLIC_MODELS: tuple[type[BaseModel], ...] = (
     LogEvidence,
     LogSearchRequest,
     ManifestMetadata,
-    NavigationActionSummary,
-    NavigationLimits,
-    NavigationNode,
-    NavigationSnapshot,
     ProposedAction,
+    ReadExcerptRequest,
     RecordRef,
     RecordSnapshot,
     ScanRun,
     ScreenContext,
+    SourceExcerpt,
     SourceFile,
     SourceRef,
     SourceSymbol,

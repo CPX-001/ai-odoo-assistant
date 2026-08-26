@@ -6,7 +6,6 @@ from . import assistant_maintenance as assistant_maintenance
 from . import chat_policy as chat_policy
 from . import chat_preferences as chat_preferences
 from . import chat_storage as chat_storage
-from . import delegation_replay as delegation_replay
 from . import embedded_runtime as embedded_runtime
 from . import res_config_settings as res_config_settings
 from . import runtime_diagnostics as runtime_diagnostics

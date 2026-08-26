@@ -1,4 +1,4 @@
-"""Public contracts for the responsibilities still hosted by the temporary service."""
+"""Public contracts for residual Source/Retrieval/Evidence/Diagnostics responsibilities."""
 
 from odoo_ai.contracts.agent import (
     AnswerConfidence,
@@ -17,23 +17,13 @@ from odoo_ai.contracts.context import (
     UserRequest,
     Workflow,
 )
-from odoo_ai.contracts.delegation import (
-    ContextReadTurnRequest,
-    ContextReadTurnResponse,
-    DelegationClaims,
-    DelegationScope,
-    OdooGatewayReference,
-)
 from odoo_ai.contracts.diagnostics import (
-    DiagnosticCapability,
-    DiagnosticCapabilityStatus,
-    DiagnosticSnapshot,
-    DiagnosticsResponse,
-)
-from odoo_ai.contracts.effective_schema import (
-    EffectiveFieldSchema,
-    EffectiveModelSchema,
-    EffectiveSelectionOption,
+    EmptyDiagnosticsRequest,
+    LogTestDiagnostics,
+    SourceScanDiagnostics,
+    SourceStatusDiagnostics,
+    SourceTestDiagnostics,
+    TracebackRequest,
 )
 from odoo_ai.contracts.evidence import (
     Evidence,
@@ -41,12 +31,15 @@ from odoo_ai.contracts.evidence import (
     EvidenceSensitivity,
     EvidenceStatus,
 )
-from odoo_ai.contracts.explain import ExplainTurnRequest, ExplainTurnResponse
-from odoo_ai.contracts.how_to import HowToTurnRequest, HowToTurnResponse
 from odoo_ai.contracts.knowledge import (
+    KnowledgeChunk,
     KnowledgeDocument,
+    KnowledgeDocumentStatus,
     KnowledgeExcerpt,
+    KnowledgeExcerptLine,
+    KnowledgeMediaType,
     KnowledgeProviderIssue,
+    KnowledgeProviderResult,
     KnowledgeReadExcerptRequest,
     KnowledgeRef,
     KnowledgeScanMetrics,
@@ -54,6 +47,7 @@ from odoo_ai.contracts.knowledge import (
     KnowledgeSearchCandidate,
     KnowledgeSearchRequest,
     KnowledgeSearchResult,
+    KnowledgeStoredChunk,
 )
 from odoo_ai.contracts.logs import (
     LogCorrelation,
@@ -61,56 +55,56 @@ from odoo_ai.contracts.logs import (
     LogSearchRequest,
     TimestampRange,
 )
-from odoo_ai.contracts.navigation import (
-    NavigationActionSummary,
-    NavigationLimits,
-    NavigationNode,
-    NavigationSnapshot,
-)
 from odoo_ai.contracts.records import RecordRef, RecordSnapshot
 from odoo_ai.contracts.schema import JsonSchema, export_public_json_schemas
 from odoo_ai.contracts.screen_context import ScreenContext
 from odoo_ai.contracts.source import (
+    FindModelExtensionsRequest,
+    FindModelExtensionsResult,
+    FindSymbolRequest,
+    FindSymbolResult,
     InstanceInventory,
     ManifestMetadata,
+    ModelExtensionGroup,
+    ReadExcerptRequest,
     ScanRun,
+    SourceCandidate,
+    SourceExcerpt,
+    SourceExcerptLine,
     SourceFile,
     SourceRef,
     SourceSymbol,
     XmlRecord,
 )
-from odoo_ai.contracts.tool_execution import ToolExecutionResult
+from odoo_ai.contracts.tool_execution import ToolExecutionEvent, ToolExecutionReport
 
 __all__ = [
     "AnswerConfidence",
     "AnswerEnvelope",
     "ContentSourceDescriptor",
     "ContextPack",
-    "ContextReadTurnRequest",
-    "ContextReadTurnResponse",
     "ConversationState",
-    "DelegationClaims",
-    "DelegationScope",
-    "DiagnosticCapability",
-    "DiagnosticCapabilityStatus",
-    "DiagnosticSnapshot",
-    "DiagnosticsResponse",
-    "EffectiveFieldSchema",
-    "EffectiveModelSchema",
-    "EffectiveSelectionOption",
+    "EmptyDiagnosticsRequest",
     "Evidence",
     "EvidenceKind",
     "EvidenceSensitivity",
     "EvidenceStatus",
-    "ExplainTurnRequest",
-    "ExplainTurnResponse",
+    "FindModelExtensionsRequest",
+    "FindModelExtensionsResult",
+    "FindSymbolRequest",
+    "FindSymbolResult",
     "Fingerprint",
     "InstanceInventory",
     "InstanceProfileSummary",
     "JsonSchema",
+    "KnowledgeChunk",
     "KnowledgeDocument",
+    "KnowledgeDocumentStatus",
     "KnowledgeExcerpt",
+    "KnowledgeExcerptLine",
+    "KnowledgeMediaType",
     "KnowledgeProviderIssue",
+    "KnowledgeProviderResult",
     "KnowledgeReadExcerptRequest",
     "KnowledgeRef",
     "KnowledgeScanMetrics",
@@ -118,27 +112,34 @@ __all__ = [
     "KnowledgeSearchCandidate",
     "KnowledgeSearchRequest",
     "KnowledgeSearchResult",
+    "KnowledgeStoredChunk",
     "LogCorrelation",
     "LogEvidence",
     "LogSearchRequest",
+    "LogTestDiagnostics",
     "ManifestMetadata",
-    "NavigationActionSummary",
-    "NavigationLimits",
-    "NavigationNode",
-    "NavigationSnapshot",
-    "OdooGatewayReference",
+    "ModelExtensionGroup",
     "ProposedAction",
+    "ReadExcerptRequest",
     "RecordRef",
     "RecordSnapshot",
     "ScanRun",
     "ScreenContext",
+    "SourceCandidate",
+    "SourceExcerpt",
+    "SourceExcerptLine",
     "SourceFile",
     "SourceRef",
+    "SourceScanDiagnostics",
+    "SourceStatusDiagnostics",
     "SourceSymbol",
+    "SourceTestDiagnostics",
     "TimestampRange",
-    "ToolExecutionResult",
+    "ToolExecutionEvent",
+    "ToolExecutionReport",
     "ToolRisk",
     "ToolSpec",
+    "TracebackRequest",
     "TurnLimits",
     "UserExecutionContext",
     "UserRequest",
