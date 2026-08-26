@@ -1,19 +1,7 @@
 """PostgreSQL persistence infrastructure for the Assistant Service."""
 
 from odoo_ai.storage.action_repository import ActionStoreError, SqlActionApprovalStore
-from odoo_ai.storage.agent_models import (
-    AgentPlanAuditRecord,
-    AgentPlanRecord,
-    AgentPlanStepRecord,
-)
-from odoo_ai.storage.agent_plan_repository import AgentPlanStoreError, SqlAgentPlanStore
 from odoo_ai.storage.base import Base
-from odoo_ai.storage.batch_models import (
-    BatchMutationAuditRecord,
-    BatchMutationItemRecord,
-    BatchMutationJobRecord,
-)
-from odoo_ai.storage.batch_repository import BatchJobStoreError, SqlBatchMutationJobStore
 from odoo_ai.storage.chat_models import ChatConversation, ChatMessage
 from odoo_ai.storage.config import DatabaseConfigurationError, DatabaseSettings
 from odoo_ai.storage.database import create_database_engine, create_session_factory, session_scope
@@ -78,15 +66,7 @@ __all__ = [
     "Base",
     "ActionProposalRecord",
     "ActionAuditRecord",
-    "AgentPlanAuditRecord",
-    "AgentPlanRecord",
-    "AgentPlanStoreError",
-    "AgentPlanStepRecord",
     "ActionStoreError",
-    "BatchJobStoreError",
-    "BatchMutationAuditRecord",
-    "BatchMutationItemRecord",
-    "BatchMutationJobRecord",
     "CapabilitySnapshot",
     "ChatConversation",
     "ChatMessage",
@@ -105,8 +85,6 @@ __all__ = [
     "SourceSymbol",
     "SourceSymbolValues",
     "SqlActionApprovalStore",
-    "SqlAgentPlanStore",
-    "SqlBatchMutationJobStore",
     "TraceEvent",
     "UnsafeTraceAttributesError",
     "XmlRecord",

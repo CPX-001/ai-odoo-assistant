@@ -7,14 +7,6 @@ from odoo_ai.ports.actions import (
     StoredActionProposal,
     StoredDecisionResult,
 )
-from odoo_ai.ports.agent_plans import (
-    AgentPlanStore,
-    AgentPlanTransitionOutcome,
-    AgentPlanTransitionResult,
-    StoredAgentPlan,
-    StoredAgentPlanStepResult,
-)
-from odoo_ai.ports.batch import BatchMutationGateway
 from odoo_ai.ports.knowledge import KnowledgeProvider
 from odoo_ai.ports.logs import LogProvider
 from odoo_ai.ports.odoo import (
@@ -29,12 +21,8 @@ __all__ = [
     "KnowledgeProvider",
     "ActionApprovalStore",
     "ActionAuthorityIssuer",
-    "AgentPlanStore",
-    "AgentPlanTransitionOutcome",
-    "AgentPlanTransitionResult",
     "AgentReasoningEngine",
     "ActionDecisionOutcome",
-    "BatchMutationGateway",
     "LogProvider",
     "ModelMetadataGateway",
     "OdooGateway",
@@ -42,7 +30,5 @@ __all__ = [
     "OdooInstanceGateway",
     "ReasoningEngine",
     "StoredActionProposal",
-    "StoredAgentPlan",
-    "StoredAgentPlanStepResult",
     "StoredDecisionResult",
 ]

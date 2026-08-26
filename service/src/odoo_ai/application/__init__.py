@@ -26,11 +26,6 @@ from odoo_ai.application.action_preview import (
     BusinessActionPreviewService,
 )
 from odoo_ai.application.action_workflow import ActionService, ActionTurnError
-from odoo_ai.application.agent_plans import AgentPlanError, AgentPlanService
-from odoo_ai.application.batch_execution import (
-    BatchExecutionError,
-    BatchMutationExecutionService,
-)
 from odoo_ai.application.context_read import (
     ContextReadError,
     ContextReadService,
@@ -81,10 +76,6 @@ __all__ = [
     "BusinessActionPreviewService",
     "ActionService",
     "ActionTurnError",
-    "AgentPlanError",
-    "AgentPlanService",
-    "BatchExecutionError",
-    "BatchMutationExecutionService",
     "ContextReadError",
     "ContextReadService",
     "DiagnosticsError",
