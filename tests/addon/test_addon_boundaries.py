@@ -97,6 +97,16 @@ def test_account_ui_polls_and_settings_target_exists_in_odoo_18() -> None:
     static_source = _static_text()
     assert "base.action_res_config_settings" not in static_source
     assert "base_setup.action_general_configuration" in static_source
+    panel_component = (
+        ADDON_ROOT / "static/src/components/assistant_panel/assistant_panel.js"
+    ).read_text(encoding="utf-8")
+    assert 'this.actionService = useService("action");' in panel_component
+    assert "Actualizar cuenta" not in static_source
+    assert "Actualizar uso" in static_source
+    assert 'duration === 300' in static_source
+    assert 'return _t("5 horas")' in static_source
+    assert 'duration === 10080' in static_source
+    assert 'return _t("Semanal")' in static_source
 
 
 def test_internal_endpoint_and_secret_are_not_duplicated_in_views() -> None:

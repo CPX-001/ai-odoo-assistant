@@ -129,6 +129,7 @@ export class AssistantPanel extends Component {
 
     setup() {
         this.panel = useService("odoo_ai_assistant_panel");
+        this.actionService = useService("action");
         this.state = useState(this.panel.state);
         this.panelRef = useRef("panel");
         this.ui = useState({ isMinimized: false });

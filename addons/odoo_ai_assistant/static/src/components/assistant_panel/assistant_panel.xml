@@ -75,7 +75,7 @@
                                         <i t-if="state.runtimeActionLoading"
                                             class="fa fa-spinner fa-spin me-1"
                                             aria-hidden="true"/>
-                                        Actualizar cuenta
+                                        Actualizar uso
                                     </button>
                                     <button type="button"
                                         class="btn btn-sm btn-outline-secondary w-100 mb-2"

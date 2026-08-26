@@ -23,6 +23,23 @@ function safeLoginUrl(value) {
     }
 }
 
+export function runtimeUsageWindowLabel(row) {
+    const duration = row?.window_duration_mins;
+    if (duration === 300) {
+        return _t("5 horas");
+    }
+    if (duration === 10080) {
+        return _t("Semanal");
+    }
+    if (row?.window === "primary") {
+        return _t("Ventana principal");
+    }
+    if (row?.window === "secondary") {
+        return _t("Ventana secundaria");
+    }
+    return null;
+}
+
 patch(AssistantPanel.prototype, {
     stopRuntimeMenuPointerDown(ev) {
         ev?.stopPropagation?.();
@@ -83,10 +100,11 @@ patch(AssistantPanel.prototype, {
             return "";
         }
         const name = row.limit_name || row.limit_id || _t("Límite Codex");
+        const window = runtimeUsageWindowLabel(row);
         const used =
             typeof row.used_percent === "number" && Number.isFinite(row.used_percent)
-                ? `${Math.round(row.used_percent)}%`
+                ? _t("%s usado", `${Math.round(row.used_percent)}%`)
                 : null;
-        return [name, used].filter(Boolean).join(" · ");
+        return [name, window, used].filter(Boolean).join(" · ");
     },
 });
