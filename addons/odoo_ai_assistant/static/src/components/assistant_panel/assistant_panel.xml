@@ -113,6 +113,21 @@
                             </div>
                         </div>
                     </div>
+                    <div class="d-flex flex-column gap-2 mt-3">
+                        <div t-foreach="state.result.plan.steps" t-as="step" t-key="step.step_id"
+                            class="border rounded p-2 bg-light-subtle">
+                            <div class="d-flex align-items-start justify-content-between gap-2">
+                                <div class="fw-semibold small text-break" t-esc="step.title"/>
+                                <span class="badge text-bg-secondary" t-esc="step.risk"/>
+                            </div>
+                            <div class="small mt-1 text-break" t-esc="step.summary"/>
+                            <div class="small text-muted mt-1 text-break">
+                                <span t-esc="step.capability"/>
+                                <span class="mx-1">·</span>
+                                <span t-esc="step.approval"/>
+                            </div>
+                        </div>
+                    </div>
                     <div class="d-flex gap-2 mt-3">
                         <button type="button" class="btn btn-primary flex-grow-1"
                             t-att-disabled="state.decisionLoading" t-on-click="approveAction">
@@ -129,22 +144,21 @@
                 <section t-if="recoveryPending" class="alert alert-warning mt-3 mb-0" role="status">
                     <div class="fw-semibold mb-1">
                         <t t-if="recoveryExecuting">Ejecución en curso</t>
-                        <t t-else="">Recuperación pendiente</t>
+                        <t t-else="">Revisión de ejecución pendiente</t>
                     </div>
                     <div class="small mb-2">
                         <t t-if="recoveryExecuting">
-                            El plan sigue ejecutándose. No se volverá a lanzar: sólo se consultará su estado hasta que Odoo confirme el resultado o habilite una recuperación segura.
+                            El plan sigue ejecutándose. El navegador sólo consulta su estado; no puede volver a lanzar la acción.
                         </t>
                         <t t-else="">
-                            El resultado del lote quedó ambiguo. Se conservarán la misma autorización y el mismo intento para recuperar el resultado sin duplicar cambios.
+                            El worker cruzó la barrera de escritura y el resultado no es concluyente. No se repetirá la acción automáticamente.
                         </t>
                     </div>
                     <button type="button" class="btn btn-warning btn-sm"
                         t-att-disabled="state.decisionLoading" t-on-click="retryAction">
                         <i t-if="state.decisionLoading" class="fa fa-spinner fa-spin me-1"
                             aria-hidden="true"/>
-                        <t t-if="recoveryExecuting">Comprobar estado</t>
-                        <t t-else="">Reintentar recuperación</t>
+                        Comprobar estado
                     </button>
                 </section>
 
