@@ -1,4 +1,4 @@
-"""Stable ports implemented by infrastructure adapters in later milestones."""
+"""Stable ports for responsibilities still hosted by the temporary service."""
 
 from odoo_ai.ports.actions import (
     ActionApprovalStore,
@@ -19,13 +19,9 @@ from odoo_ai.ports.knowledge import KnowledgeProvider
 from odoo_ai.ports.logs import LogProvider
 from odoo_ai.ports.odoo import (
     ModelMetadataGateway,
-    OdooActionGateway,
-    OdooActionGatewayFactory,
-    OdooActionPreviewGateway,
     OdooGateway,
     OdooGatewayError,
     OdooInstanceGateway,
-    OdooQueryGateway,
 )
 from odoo_ai.ports.reasoning import AgentReasoningEngine, ReasoningEngine
 
@@ -42,12 +38,8 @@ __all__ = [
     "LogProvider",
     "ModelMetadataGateway",
     "OdooGateway",
-    "OdooActionGateway",
-    "OdooActionGatewayFactory",
     "OdooGatewayError",
-    "OdooActionPreviewGateway",
     "OdooInstanceGateway",
-    "OdooQueryGateway",
     "ReasoningEngine",
     "StoredActionProposal",
     "StoredAgentPlan",
