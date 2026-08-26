@@ -61,10 +61,11 @@ class AssistantDiagnosticsCodexAccount(models.TransientModel):
             return values
         try:
             paths = RuntimePaths.from_odoo().ensure()
-            status = CodexAccountManager(
+            manager = CodexAccountManager(
                 executable=detected.executable,
                 paths=paths,
-            ).status(include_rate_limits=True)
+            )
+            status = manager.status(include_rate_limits=False)
         except RuntimePathError:
             values.update(
                 codex_account_state=_("Runtime unusable"),
@@ -83,6 +84,23 @@ class AssistantDiagnosticsCodexAccount(models.TransientModel):
                 codex_account_detail=_account_error_detail(error.code),
             )
             return values
+
+        # Refresh only against the persistent Codex-owned store. Refreshing a copied
+        # product-turn HOME could rotate a refresh token inside a disposable directory
+        # and leave the persistent credential store stale.
+        if status.connected:
+            try:
+                asyncio.run(manager._request("account/read", {"refreshToken": True}))
+                status = manager.status(include_rate_limits=True)
+            except CodexAccountError as error:
+                values.update(
+                    codex_account_state=_account_error_state(error.code),
+                    codex_account_identity=False,
+                    codex_account_plan=False,
+                    codex_account_usage=False,
+                    codex_account_detail=_account_error_detail(error.code),
+                )
+                return values
 
         detail = {
             "not_authenticated": _("Codex is available but no account is connected."),
