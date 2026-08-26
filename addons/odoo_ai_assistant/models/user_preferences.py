@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
-from ..services import AssistantServiceError
+from ..runtime import RuntimePaths, detect_codex
+from ..runtime.agent.codex import CodexAgentSettings
+from ..runtime.agent.model_catalog import CodexModelCatalogError, load_codex_model_catalog
 
 _MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
-_MAX_MODEL_OPTIONS = 50
 _AUTONOMY_PROFILES = {
     "strict": ("always_confirm", "low"),
     "balanced": ("risk_based", "moderate"),
@@ -160,32 +162,16 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
         return self.env["odoo.ai.user.preference"].current_reasoning_model()
 
     @api.model
-    def _client(self):
-        return super()._client().bind_reasoning_model(self._preferred_reasoning_model())
-
-    @api.model
-    def _chat_client(self):
-        return super()._chat_client().bind_reasoning_model(
-            self._preferred_reasoning_model()
-        )
-
-    @api.model
     def chat_model_preferences(self):
         if not self.env.user._is_internal():
             return _error("access_denied")
         selected = self._preferred_reasoning_model()
         can_manage = self.env.user.has_group("base.group_system")
         try:
-            catalog = _validated_model_catalog(self._chat_client().codex_models())
-        except (AssistantServiceError, ValueError):
+            catalog = _embedded_model_catalog(self.env)
+        except (CodexModelCatalogError, OSError, RuntimeError, ValueError):
             fallback_models = (
-                [
-                    {
-                        "model": selected,
-                        "display_name": selected,
-                        "is_default": False,
-                    }
-                ]
+                [{"model": selected, "display_name": selected, "is_default": False}]
                 if selected
                 else []
             )
@@ -226,9 +212,9 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
                 ].set_current_reasoning_model(None),
             }
         try:
-            catalog = _validated_model_catalog(self._chat_client().codex_models())
-        except (AssistantServiceError, ValueError):
-            return _error("service_unavailable")
+            catalog = _embedded_model_catalog(self.env)
+        except (CodexModelCatalogError, OSError, RuntimeError, ValueError):
+            return _error("engine_unavailable")
         available = {item["model"] for item in catalog["models"]}
         if normalized not in available:
             return _error("invalid_context")
@@ -238,10 +224,7 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
             )
         except ValidationError:
             return _error("invalid_context")
-        return {
-            "ok": True,
-            "selected_model": selected,
-        }
+        return {"ok": True, "selected_model": selected}
 
     @api.model
     def agent_autonomy_preferences(self):
@@ -297,6 +280,22 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
         }
 
 
+def _embedded_model_catalog(env):
+    configured = env["ir.config_parameter"]._get_param(
+        "odoo_ai_assistant.codex_executable"
+    ) or None
+    status = detect_codex(configured)
+    if not status.ready or status.executable is None:
+        raise CodexModelCatalogError("codex_runtime_not_found")
+    paths = RuntimePaths.from_odoo().ensure()
+    settings = CodexAgentSettings(
+        executable=status.executable,
+        codex_home=paths.codex_home,
+        model=None,
+    )
+    return asyncio.run(load_codex_model_catalog(settings))
+
+
 def _profile_from_legacy(mode, risk):
     if mode == "always_confirm":
         return "strict"
@@ -305,37 +304,6 @@ def _profile_from_legacy(mode, risk):
     if mode == "protected_only":
         return "autonomous"
     return "balanced"
-
-
-def _validated_model_catalog(payload):
-    if not isinstance(payload, dict) or set(payload) != {"models", "default_model"}:
-        raise ValueError
-    models = payload.get("models")
-    default_model = payload.get("default_model")
-    if (
-        not isinstance(models, list)
-        or len(models) > _MAX_MODEL_OPTIONS
-        or default_model is not None
-        and (not isinstance(default_model, str) or not _MODEL_PATTERN.fullmatch(default_model))
-    ):
-        raise ValueError
-    clean = []
-    seen = set()
-    for item in models:
-        if (
-            not isinstance(item, dict)
-            or set(item) != {"model", "display_name", "is_default"}
-            or not isinstance(item.get("model"), str)
-            or not _MODEL_PATTERN.fullmatch(item["model"])
-            or item["model"] in seen
-            or not isinstance(item.get("display_name"), str)
-            or not 1 <= len(item["display_name"]) <= 160
-            or not isinstance(item.get("is_default"), bool)
-        ):
-            raise ValueError
-        seen.add(item["model"])
-        clean.append(dict(item))
-    return {"models": clean, "default_model": default_model}
 
 
 def _error(code):
