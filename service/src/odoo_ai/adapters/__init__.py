@@ -1,4 +1,4 @@
-"""Replaceable infrastructure adapters for stable service ports."""
+"""Replaceable infrastructure adapters for the remaining temporary service ports."""
 
 from odoo_ai.adapters.action_tools import (
     ODOO_GET_EFFECTIVE_WRITE_SCHEMA,
@@ -18,12 +18,6 @@ from odoo_ai.adapters.action_tools import (
     PreviewRecordPatchRequest,
     action_tool_specs,
     build_action_tool_registry,
-)
-from odoo_ai.adapters.agent_tools import (
-    ODOO_SEARCH_MODELS,
-    UnifiedAgentToolExecutorFactory,
-    agent_tool_policy_specs,
-    agent_tool_specs,
 )
 from odoo_ai.adapters.codex_engine import (
     CodexEngineError,
@@ -108,7 +102,6 @@ __all__ = [
     "ActionPreviewToolData",
     "ActionToolBackend",
     "ActionToolExecutorFactory",
-    "UnifiedAgentToolExecutorFactory",
     "CodexAppServerClient",
     "CodexAppServerEngine",
     "CodexEngineError",
@@ -148,7 +141,6 @@ __all__ = [
     "ODOO_PREVIEW_RECORD_CREATE",
     "ODOO_PREVIEW_RECORD_DELETE",
     "ODOO_PREVIEW_SALE_ORDER_BUILD_FLOW",
-    "ODOO_SEARCH_MODELS",
     "ODOO_QUERY_RECORDS",
     "AggregateRecordsToolData",
     "EffectiveSchemaToolData",
@@ -181,8 +173,6 @@ __all__ = [
     "probe_codex_runtime",
     "query_tool_specs",
     "action_tool_specs",
-    "agent_tool_policy_specs",
-    "agent_tool_specs",
     "serialize_codex_context",
     "source_tool_specs",
 ]
