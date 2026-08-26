@@ -15,9 +15,7 @@ MAX_FUTURE_SKEW_SECONDS: Final = 30
 ALLOWED_VIEW_TYPES: Final = frozenset(
     {"activity", "calendar", "form", "graph", "kanban", "list", "pivot"}
 )
-ALLOWED_CONTEXT_KEYS: Final = frozenset(
-    {"active_id", "active_ids", "active_model"}
-)
+ALLOWED_CONTEXT_KEYS: Final = frozenset({"active_id", "active_ids", "active_model"})
 SCREEN_KEYS: Final = frozenset(
     {
         "action_id",
@@ -31,14 +29,7 @@ SCREEN_KEYS: Final = frozenset(
     }
 )
 IDENTITY_KEYS: Final = frozenset(
-    {
-        "allowed_company_ids",
-        "company_id",
-        "companies",
-        "lang",
-        "uid",
-        "user_id",
-    }
+    {"allowed_company_ids", "company_id", "companies", "lang", "uid", "user_id"}
 )
 
 ContextHint = str | int | list[int]
@@ -80,36 +71,14 @@ class ValidatedScreenContext:
         }
 
 
-def validate_context_read_screen(
-    payload: Mapping[str, object],
-    *,
-    clock: Callable[[], datetime] | None = None,
-) -> ValidatedScreenContext:
-    """Validate the single-current-record ScreenContext supported in M2."""
-
-    return _validate_screen(payload, clock=clock, require_record=True)
-
-
 def validate_query_screen(
     payload: Mapping[str, object],
     *,
     clock: Callable[[], datetime] | None = None,
 ) -> ValidatedScreenContext:
-    """Validate model-scoped QUERY context; a current record is optional."""
+    """Validate model-scoped embedded-agent context; a current record is optional."""
 
     return _validate_screen(payload, clock=clock, require_record=False)
-
-
-def validate_how_to_screen(
-    payload: Mapping[str, object],
-    *,
-    clock: Callable[[], datetime] | None = None,
-) -> ValidatedScreenContext:
-    """Validate HOW_TO navigation hints; model and record are optional."""
-
-    return _validate_screen(
-        payload, clock=clock, require_record=False, require_model=False
-    )
 
 
 def _validate_screen(
@@ -136,9 +105,7 @@ def _validate_screen(
         if require_record
         else _optional_positive_id(payload.get("res_id"))
     )
-    selected_ids = _positive_id_list(
-        payload.get("selected_ids", []), maximum=MAX_SELECTED_IDS
-    )
+    selected_ids = _positive_id_list(payload.get("selected_ids", []), maximum=MAX_SELECTED_IDS)
     captured_at = _captured_at(payload.get("captured_at"))
     now = (clock or _utc_now)()
     if now.tzinfo is None:
@@ -221,9 +188,7 @@ def _captured_at(value: object) -> datetime:
 def _context_subset(
     value: object, *, model: str | None, res_id: int | None
 ) -> dict[str, ContextHint]:
-    if not isinstance(value, Mapping) or not all(
-        isinstance(key, str) for key in value
-    ):
+    if not isinstance(value, Mapping) or not all(isinstance(key, str) for key in value):
         raise ScreenContextValidationError("invalid_context_subset")
     keys = set(value)
     if keys - ALLOWED_CONTEXT_KEYS:
@@ -232,9 +197,7 @@ def _context_subset(
     result: dict[str, ContextHint] = {}
     if "active_model" in value:
         active_model = value["active_model"]
-        if active_model != model:
-            raise ScreenContextValidationError("inconsistent_context_hint")
-        if model is None:
+        if active_model != model or model is None:
             raise ScreenContextValidationError("inconsistent_context_hint")
         result["active_model"] = model
     if "active_id" in value:
@@ -243,8 +206,6 @@ def _context_subset(
             raise ScreenContextValidationError("inconsistent_context_hint")
         result["active_id"] = active_id
     if "active_ids" in value:
-        active_ids = _positive_id_list(
-            value["active_ids"], maximum=MAX_SELECTED_IDS
-        )
+        active_ids = _positive_id_list(value["active_ids"], maximum=MAX_SELECTED_IDS)
         result["active_ids"] = list(active_ids)
     return result

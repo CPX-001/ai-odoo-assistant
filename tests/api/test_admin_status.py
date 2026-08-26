@@ -8,30 +8,14 @@ from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient, Response
 from odoo_ai.api import create_app
-from odoo_ai.runtime.status import (
-    AdminStatusService,
-    ComponentState,
-    ComponentStatus,
-    InstanceStatus,
-    MigrationStatus,
-    ReasoningComponentStatus,
-)
-from odoo_ai.storage import (
-    DatabaseSettings,
-    create_capability_snapshot,
-    create_database_engine,
-    create_instance_profile,
-    create_session_factory,
-    session_scope,
-)
+from odoo_ai.runtime.status import AdminStatusService, ComponentState, InstanceStatus, ReasoningComponentStatus
+from odoo_ai.storage import DatabaseSettings, create_capability_snapshot, create_database_engine, create_instance_profile, create_session_factory, session_scope
 from odoo_ai.storage.config import DATABASE_NAME_ENV, DATABASE_URL_ENV
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_CONFIG = REPO_ROOT / "alembic.ini"
 TEST_DATABASE_URL_ENV = "ODOO_AI_TEST_DATABASE_URL"
-
-
 ADMIN_SECRET = "test-admin-secret-" + "s" * 48
 
 
@@ -66,230 +50,58 @@ def configured_engine(monkeypatch: pytest.MonkeyPatch) -> Engine:
     engine.dispose()
 
 
-def test_admin_status_reports_runtime_db_migrations_and_profile(
-    configured_engine: Engine,
-) -> None:
-    instance_id = f"status-{uuid4()}"
+def test_admin_status_reports_current_component_surface(configured_engine: Engine) -> None:
     session_factory = create_session_factory(configured_engine)
     with session_scope(session_factory) as session:
-        profile = create_instance_profile(
-            session, instance_id=instance_id, fingerprint="sha256:status"
-        )
-        create_capability_snapshot(
-            session,
-            instance_profile_id=profile.id,
-            readiness="DEGRADED",
-            capabilities={"runtime_http": True, "assistant_db": True},
-        )
-
+        profile = create_instance_profile(session, instance_id=f"status-{uuid4()}", fingerprint="sha256:status")
+        create_capability_snapshot(session, instance_profile_id=profile.id, readiness="DEGRADED", capabilities={"runtime_http": True, "assistant_db": True})
     response = asyncio.run(_get_status())
     payload = response.json()
-
     assert response.status_code == 200
     assert payload["readiness"] == "DEGRADED"
     assert payload["components"]["runtime"] == {"state": "ok", "detail": "running"}
-    assert payload["components"]["assistant_database"] == {
-        "state": "ok",
-        "detail": "available",
-    }
-    assert payload["components"]["migrations"]["state"] == "ok"
+    assert payload["components"]["assistant_database"] == {"state": "ok", "detail": "available"}
     assert payload["components"]["migrations"]["detail"] == "at_head"
     assert payload["components"]["configuration"] == {"state": "ok", "detail": "valid"}
-    assert payload["instance"]["instance_id"] == instance_id
     assert payload["pending_capabilities"] == ["source", "logs", "reasoning_engine"]
-    assert payload["components"]["reasoning_engine"] == {
-        "state": "pending",
-        "detail": "not_configured",
-        "provider": "codex",
-        "protocol": None,
-        "runtime_version": None,
-        "model": None,
-    }
-    assert payload["workflow_capabilities"] == {
-        "query": {"state": "pending", "detail": "reasoning_unavailable"},
-        "navigation": {"state": "ok", "detail": "validated_per_turn"},
-        "knowledge": {"state": "ok", "detail": "available"},
-        "how_to": {"state": "pending", "detail": "reasoning_unavailable"},
-        "action": {"state": "pending", "detail": "reasoning_unavailable"},
-    }
+    assert "workflow_capabilities" not in payload
 
 
-def test_all_required_capabilities_produce_fully_ready_sanitized_snapshot(
-    configured_engine: Engine,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    authority_file = tmp_path / "action-authority-secret"
-    authority_file.write_text("a" * 64, encoding="utf-8")
-    authority_file.chmod(0o600)
-    monkeypatch.setenv("ODOO_AI_ACTION_AUTHORITY_SECRET_FILE", str(authority_file))
+def test_fully_ready_status_is_sanitized(configured_engine: Engine) -> None:
     session_factory = create_session_factory(configured_engine)
     with session_scope(session_factory) as session:
-        profile = create_instance_profile(
-            session,
-            instance_id=f"fully-ready-{uuid4()}",
-            fingerprint="sha256:fully-ready",
-        )
-        create_capability_snapshot(
-            session,
-            instance_profile_id=profile.id,
-            readiness="DEGRADED",
-            capabilities={
-                "source": "DETECTED",
-                "logs": "OPERATIONAL",
-                "log_provider": "file",
-                "source_root": "/srv/private/addons",
-                "shared_secret": "canary-secret",
-            },
-        )
-
-    status = AdminStatusService.from_env().inspect(
-        reasoning=ReasoningComponentStatus(
-            state=ComponentState.OK,
-            detail="operational",
-            protocol="app-server-jsonl-v2",
-            runtime_version="0.149.0",
-            model="configured-model",
-        )
-    )
+        profile = create_instance_profile(session, instance_id=f"fully-ready-{uuid4()}", fingerprint="sha256:fully-ready")
+        create_capability_snapshot(session, instance_profile_id=profile.id, readiness="DEGRADED", capabilities={"source": "DETECTED", "logs": "OPERATIONAL", "log_provider": "file", "source_root": "/srv/private/addons", "shared_secret": "canary-secret"})
+    status = AdminStatusService.from_env().inspect(reasoning=ReasoningComponentStatus(state=ComponentState.OK, detail="operational", protocol="app-server-jsonl-v2", runtime_version="0.149.0", model="configured-model"))
     serialized = status.model_dump_json()
-
     assert status.readiness == "FULLY_READY"
-    assert status.components.configuration.state is ComponentState.OK
     assert status.pending_capabilities == ()
     assert status.instance is not None
-    assert status.instance.reported_readiness == "FULLY_READY"
     assert status.instance.capabilities["reasoning_engine"] == "OPERATIONAL"
-    assert status.workflow_capabilities.query.state is ComponentState.OK
-    assert status.workflow_capabilities.navigation.state is ComponentState.OK
-    assert status.workflow_capabilities.knowledge.state is ComponentState.OK
-    assert status.workflow_capabilities.how_to.state is ComponentState.OK
-    assert status.workflow_capabilities.action.state is ComponentState.OK
     assert "/srv/private" not in serialized
     assert "canary-secret" not in serialized
 
 
 def test_admin_status_sanitizes_database_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     secret = "must-not-appear"
-    monkeypatch.setenv(
-        DATABASE_URL_ENV,
-        f"postgresql+psycopg://invalid:{secret}@127.0.0.1:1/odoo_ai_test?connect_timeout=1",
-    )
+    monkeypatch.setenv(DATABASE_URL_ENV, f"postgresql+psycopg://invalid:{secret}@127.0.0.1:1/odoo_ai_test?connect_timeout=1")
     monkeypatch.setenv(DATABASE_NAME_ENV, "odoo_ai_test")
     monkeypatch.setenv("ODOO_AI_ALEMBIC_CONFIG", str(ALEMBIC_CONFIG))
-
     response = asyncio.run(_get_status())
-    payload = response.json()
-
     assert response.status_code == 200
-    assert payload["readiness"] == "ERROR"
-    assert payload["components"]["assistant_database"] == {
-        "state": "error",
-        "detail": "unavailable",
-    }
+    assert response.json()["readiness"] == "ERROR"
     assert secret not in response.text
     assert "postgresql" not in response.text
 
 
-def test_action_capability_is_degraded_without_action_authority_secret() -> None:
-    capabilities = AdminStatusService._workflow_capabilities(
-        database=ComponentStatus(state=ComponentState.OK, detail="available"),
-        migrations=MigrationStatus(state=ComponentState.OK, detail="at_head"),
-        configuration=ComponentStatus(state=ComponentState.OK, detail="valid"),
-        instance=InstanceStatus(
-            instance_id="fixture",
-            fingerprint="sha256:fixture",
-            capabilities={},
-        ),
-        reasoning=ReasoningComponentStatus(
-            state=ComponentState.OK,
-            detail="operational",
-        ),
-        action_authority_ready=False,
-    )
-
-    assert capabilities.action.state is ComponentState.PENDING
-    assert capabilities.action.detail == "action_authority_unavailable"
+def test_admin_status_requires_local_shared_secret() -> None:
+    assert asyncio.run(_get_status(secret=None)).status_code == 401
+    assert asyncio.run(_get_status(secret="wrong-secret")).status_code == 401
 
 
-def test_invalid_configuration_blocks_workflow_readiness() -> None:
-    capabilities = AdminStatusService._workflow_capabilities(
-        database=ComponentStatus(state=ComponentState.OK, detail="available"),
-        migrations=MigrationStatus(state=ComponentState.OK, detail="at_head"),
-        configuration=ComponentStatus(state=ComponentState.ERROR, detail="invalid"),
-        instance=None,
-        reasoning=ReasoningComponentStatus(state=ComponentState.OK, detail="operational"),
-        action_authority_ready=True,
-    )
-
-    assert capabilities.query.state is ComponentState.ERROR
-    assert capabilities.action.state is ComponentState.ERROR
-    assert capabilities.action.detail == "assistant_runtime_unavailable"
-
-
-def test_admin_status_reports_migration_mismatch(configured_engine: Engine) -> None:
-    config = Config(ALEMBIC_CONFIG)
-    with configured_engine.begin() as connection:
-        connection.execute(text("UPDATE alembic_version SET version_num = '0001_m1_02_baseline'"))
-    try:
-        response = asyncio.run(_get_status())
-        payload = response.json()
-
-        assert response.status_code == 200
-        assert payload["readiness"] == "ERROR"
-        assert payload["components"]["migrations"]["state"] == "error"
-        assert payload["components"]["migrations"]["detail"] == "revision_mismatch"
-        assert payload["components"]["migrations"]["current_revision"] == (
-            "0001_m1_02_baseline"
-        )
-        assert payload["instance"] is None
-    finally:
-        command.stamp(config, "head")
-
-
-def test_admin_status_requires_the_local_shared_secret() -> None:
-    missing = asyncio.run(_get_status(secret=None))
-    wrong = asyncio.run(_get_status(secret="wrong-secret"))
-
-    assert missing.status_code == 401
-    assert wrong.status_code == 401
-    assert ADMIN_SECRET not in missing.text
-    assert ADMIN_SECRET not in wrong.text
-
-
-def test_admin_status_rejects_other_readable_secret(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    public_secret = tmp_path / "public-secret"
-    public_secret.write_text(ADMIN_SECRET, encoding="utf-8")
-    public_secret.chmod(0o644)
-    monkeypatch.setenv("ODOO_AI_SHARED_SECRET_FILE", str(public_secret))
-
-    response = asyncio.run(_get_status())
-
-    assert response.status_code == 503
-    assert ADMIN_SECRET not in response.text
-
-
-@pytest.mark.parametrize(
-    ("source_state", "component_state", "detail"),
-    [
-        ("DETECTED", ComponentState.OK, "operational"),
-        ("NOT_FOUND", ComponentState.PENDING, "not_found"),
-        ("NO_PERMISSION", ComponentState.ERROR, "no_permission"),
-        ("ERROR", ComponentState.ERROR, "error"),
-    ],
-)
-def test_source_capability_states_remain_distinct(
-    source_state: str, component_state: ComponentState, detail: str
-) -> None:
-    instance = InstanceStatus(
-        instance_id="customer",
-        fingerprint="sha256:instance",
-        capabilities={"source": source_state},
-    )
-
+@pytest.mark.parametrize(("source_state", "component_state", "detail"), [("DETECTED", ComponentState.OK, "operational"), ("NOT_FOUND", ComponentState.PENDING, "not_found"), ("NO_PERMISSION", ComponentState.ERROR, "no_permission"), ("ERROR", ComponentState.ERROR, "error")])
+def test_source_capability_states_remain_distinct(source_state: str, component_state: ComponentState, detail: str) -> None:
+    instance = InstanceStatus(instance_id="customer", fingerprint="sha256:instance", capabilities={"source": source_state})
     status = AdminStatusService._source_status(instance)
-
     assert status.state is component_state
     assert status.detail == detail

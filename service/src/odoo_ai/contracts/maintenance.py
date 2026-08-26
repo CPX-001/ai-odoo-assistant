@@ -15,7 +15,6 @@ MaintenanceOperation = Literal[
     "logs_test",
     "knowledge_reindex",
     "reasoning_test",
-    "action_self_test",
     "configuration_revalidate",
 ]
 MaintenanceJobOperation = Literal["source_rescan", "knowledge_reindex"]
@@ -43,9 +42,6 @@ MaintenanceResultCode = Literal[
     "reasoning_auth_unavailable",
     "reasoning_protocol_incompatible",
     "reasoning_error",
-    "action_self_test_succeeded",
-    "action_authority_unavailable",
-    "action_store_unavailable",
     "configuration_valid",
     "configuration_invalid",
     "configuration_unavailable",
@@ -133,5 +129,5 @@ class MaintenanceStatus(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    latest: tuple[MaintenanceEvent, ...] = Field(default=(), max_length=8)
+    latest: tuple[MaintenanceEvent, ...] = Field(default=(), max_length=7)
     active_jobs: tuple[MaintenanceJob, ...] = Field(default=(), max_length=2)

@@ -16,7 +16,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from odoo_ai.runtime.configuration import runtime_configuration_is_valid
-from odoo_ai.security import ActionAuthorityCodec, ActionAuthorityError
 from odoo_ai.storage import (
     DatabaseConfigurationError,
     DatabaseSettings,
@@ -72,18 +71,6 @@ class RuntimeComponents(BaseModel):
     reasoning_engine: ReasoningComponentStatus
 
 
-class WorkflowCapabilities(BaseModel):
-    """Workflow diagnostics that do not redefine global readiness."""
-
-    model_config = ConfigDict(frozen=True)
-
-    query: ComponentStatus
-    navigation: ComponentStatus
-    knowledge: ComponentStatus
-    how_to: ComponentStatus
-    action: ComponentStatus
-
-
 class AdminStatus(BaseModel):
     """Stable, sanitized readiness payload for Odoo Diagnostics."""
 
@@ -92,7 +79,6 @@ class AdminStatus(BaseModel):
     readiness: Literal["FULLY_READY", "DEGRADED", "ERROR"]
     checked_at: datetime
     components: RuntimeComponents
-    workflow_capabilities: WorkflowCapabilities
     pending_capabilities: tuple[str, ...]
     instance: InstanceStatus | None = None
 
@@ -168,14 +154,6 @@ class AdminStatusService:
             and logs.state is ComponentState.OK
             and reasoning_status.state is ComponentState.OK
         )
-        workflow_capabilities = self._workflow_capabilities(
-            database=database,
-            migrations=migrations,
-            configuration=configuration,
-            instance=instance,
-            reasoning=reasoning_status,
-            action_authority_ready=_action_authority_ready(),
-        )
         return AdminStatus(
             readiness="ERROR" if has_error else "FULLY_READY" if fully_ready else "DEGRADED",
             checked_at=datetime.now(UTC),
@@ -188,7 +166,6 @@ class AdminStatusService:
                 logs=logs,
                 reasoning_engine=reasoning_status,
             ),
-            workflow_capabilities=workflow_capabilities,
             pending_capabilities=pending_capabilities,
             instance=instance,
         )
@@ -266,107 +243,10 @@ class AdminStatusService:
             return ComponentStatus(state=ComponentState.ERROR, detail="error")
         return ComponentStatus(state=ComponentState.PENDING, detail="unknown")
 
-    @staticmethod
-    def _workflow_capabilities(
-        *,
-        database: ComponentStatus,
-        migrations: MigrationStatus,
-        configuration: ComponentStatus,
-        instance: InstanceStatus | None,
-        reasoning: ReasoningComponentStatus,
-        action_authority_ready: bool,
-    ) -> WorkflowCapabilities:
-        if (
-            database.state is not ComponentState.OK
-            or migrations.state is not ComponentState.OK
-            or configuration.state is not ComponentState.OK
-        ):
-            unavailable = ComponentStatus(
-                state=ComponentState.ERROR,
-                detail="assistant_runtime_unavailable",
-            )
-            return WorkflowCapabilities(
-                query=unavailable,
-                navigation=unavailable,
-                knowledge=unavailable,
-                how_to=unavailable,
-                action=unavailable,
-            )
-
-        navigation = ComponentStatus(
-            state=ComponentState.OK,
-            detail="validated_per_turn",
-        )
-        knowledge = ComponentStatus(
-            state=(ComponentState.OK if instance is not None else ComponentState.PENDING),
-            detail="available" if instance is not None else "instance_unknown",
-        )
-        query = ComponentStatus(
-            state=(
-                ComponentState.OK
-                if reasoning.state is ComponentState.OK
-                else ComponentState.PENDING
-            ),
-            detail=(
-                "validated_per_turn"
-                if reasoning.state is ComponentState.OK
-                else "reasoning_unavailable"
-            ),
-        )
-        reasoning_with_instance_ready = (
-            reasoning.state is ComponentState.OK
-            and knowledge.state is ComponentState.OK
-        )
-        return WorkflowCapabilities(
-            query=query,
-            navigation=navigation,
-            knowledge=knowledge,
-            how_to=ComponentStatus(
-                state=(
-                    ComponentState.OK
-                    if reasoning_with_instance_ready
-                    else ComponentState.PENDING
-                ),
-                detail=(
-                    "validated_per_turn"
-                    if reasoning_with_instance_ready
-                    else (
-                        "reasoning_unavailable"
-                        if reasoning.state is not ComponentState.OK
-                        else "knowledge_unavailable"
-                    )
-                ),
-            ),
-            action=ComponentStatus(
-                state=(
-                    ComponentState.OK
-                    if reasoning_with_instance_ready and action_authority_ready
-                    else ComponentState.PENDING
-                ),
-                detail=(
-                    "validated_per_turn"
-                    if reasoning_with_instance_ready and action_authority_ready
-                    else (
-                        "reasoning_unavailable"
-                        if reasoning.state is not ComponentState.OK
-                        else (
-                            "instance_unknown"
-                            if knowledge.state is not ComponentState.OK
-                            else "action_authority_unavailable"
-                        )
-                    )
-                ),
-            ),
-        )
-
 
 def unavailable_admin_status() -> AdminStatus:
     """Return a sanitized status when external configuration cannot be loaded."""
 
-    unavailable = ComponentStatus(
-        state=ComponentState.ERROR,
-        detail="assistant_runtime_unavailable",
-    )
     return AdminStatus(
         readiness="ERROR",
         checked_at=datetime.now(UTC),
@@ -384,13 +264,6 @@ def unavailable_admin_status() -> AdminStatus:
                 detail="unknown",
             ),
         ),
-        workflow_capabilities=WorkflowCapabilities(
-            query=unavailable,
-            navigation=unavailable,
-            knowledge=unavailable,
-            how_to=unavailable,
-            action=unavailable,
-        ),
         pending_capabilities=AdminStatusService._PENDING_CAPABILITIES,
     )
 
@@ -404,14 +277,6 @@ def inspect_admin_status(
         return AdminStatusService.from_env().inspect(reasoning=reasoning)
     except DatabaseConfigurationError:
         return unavailable_admin_status()
-
-
-def _action_authority_ready() -> bool:
-    try:
-        ActionAuthorityCodec.from_env()
-    except ActionAuthorityError:
-        return False
-    return True
 
 
 def _reasoning_snapshot_state(reasoning: ReasoningComponentStatus) -> Literal[
@@ -454,9 +319,7 @@ _PUBLIC_CAPABILITY_KEYS = frozenset(
 )
 
 
-def _public_capabilities(
-    capabilities: dict[str, JsonValue],
-) -> dict[str, JsonValue]:
+def _public_capabilities(capabilities: dict[str, JsonValue]) -> dict[str, JsonValue]:
     return {
         key: value
         for key, value in capabilities.items()

@@ -28,7 +28,6 @@ _MAINTENANCE_POST_PATHS: Final = frozenset(
         "/v1/admin/maintenance/logs/test",
         "/v1/admin/maintenance/knowledge/reindex",
         "/v1/admin/maintenance/reasoning/test",
-        "/v1/admin/maintenance/action/self-test",
         "/v1/admin/maintenance/configuration/revalidate",
     }
 )
@@ -212,21 +211,6 @@ async def reasoning_test(request: Request) -> MaintenanceResult | JSONResponse:
 
 
 @router.post(
-    "/v1/admin/maintenance/action/self-test",
-    response_model=MaintenanceResult,
-    dependencies=[Depends(require_shared_secret)],
-)
-async def action_self_test(request: Request) -> MaintenanceResult | JSONResponse:
-    try:
-        payload = await _payload(request)
-        return await _service(request).action_self_test(payload.actor)
-    except ValidationError:
-        return _error_response("maintenance_invalid", 422)
-    except RuntimeMaintenanceError as error:
-        return _error_response(error.code, error.status_code)
-
-
-@router.post(
     "/v1/admin/maintenance/configuration/revalidate",
     response_model=MaintenanceResult,
     dependencies=[Depends(require_shared_secret)],
@@ -246,7 +230,7 @@ def install_maintenance_routes(
     *,
     service: RuntimeMaintenanceService | None = None,
 ) -> FastAPI:
-    """Install only the fixed M7 maintenance handlers; no generic dispatcher exists."""
+    """Install only the fixed maintenance handlers; no generic dispatcher exists."""
 
     if getattr(application.state, "m7_maintenance_routes_installed", False):
         if service is not None:

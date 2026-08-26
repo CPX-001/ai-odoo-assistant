@@ -65,13 +65,6 @@
                         <field name="reasoning_model"/>
                         <field name="reasoning_setup_message"/>
                     </group>
-                    <group string="Workflow detail">
-                        <field name="query_capability_state"/>
-                        <field name="navigation_capability_state"/>
-                        <field name="knowledge_capability_state"/>
-                        <field name="how_to_capability_state"/>
-                        <field name="action_capability_state"/>
-                    </group>
                     <group string="Bounded Diagnostic Evidence" col="1">
                         <field name="source_result" nolabel="1"/>
                         <field name="log_result" nolabel="1"/>

@@ -71,7 +71,6 @@ _ALL_OPERATIONS = frozenset(
         "logs_test",
         "knowledge_reindex",
         "reasoning_test",
-        "action_self_test",
         "configuration_revalidate",
     }
 )
@@ -276,7 +275,7 @@ def record_maintenance_event(
 def list_latest_maintenance_events(
     session: Session,
 ) -> tuple[MaintenanceEventRecord, ...]:
-    """Return only the latest event for each of the eight explicit operations."""
+    """Return only the latest event for each currently supported operation."""
 
     rows = session.execute(
         select(_maintenance_audit_event)
@@ -287,7 +286,7 @@ def list_latest_maintenance_events(
     seen: set[str] = set()
     for row in rows:
         operation = cast(str, row["operation"])
-        if operation in seen:
+        if operation not in _ALL_OPERATIONS or operation in seen:
             continue
         seen.add(operation)
         latest.append(_event_record(row))
@@ -334,11 +333,7 @@ def _metrics(
 ) -> dict[str, JsonValue]:
     if value is None:
         return {}
-    model = (
-        value
-        if isinstance(value, MaintenanceMetrics)
-        else MaintenanceMetrics.model_validate(value)
-    )
+    model = value if isinstance(value, MaintenanceMetrics) else MaintenanceMetrics.model_validate(value)
     return cast(dict[str, JsonValue], model.model_dump(mode="json", exclude_none=True))
 
 

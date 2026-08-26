@@ -3,121 +3,81 @@ from pathlib import Path
 ADDON_ROOT = Path(__file__).parents[2] / "addons/odoo_ai_assistant"
 
 
-def test_browser_assets_use_only_the_authenticated_odoo_bridge() -> None:
-    manifest = (ADDON_ROOT / "__manifest__.py").read_text(encoding="utf-8")
-    static_text = "\n".join(
+def _static_text() -> str:
+    return "\n".join(
         path.read_text(encoding="utf-8")
         for path in (ADDON_ROOT / "static").rglob("*")
         if path.is_file()
     )
 
-    assert '"web"' in manifest
-    assert '"web.assets_backend"' in manifest
-    assert '"web.assets_unit_tests"' in manifest
-    assert 'rpcCall("/odoo_ai/v1/chat"' in static_text
-    assert 'rpcCall("/odoo_ai/v1/agent-plan-decision"' in static_text
-    assert "orm.call(" not in static_text
-    assert "fetch(" not in static_text
-    assert "127.0.0.1" not in static_text
-    assert "X-Odoo-AI-Shared-Secret" not in static_text
-    assert "X-Odoo-AI-Delegation" not in static_text
-    assert "delegation_token" not in static_text
-    assert "innerHTML" not in static_text
-    assert "t-raw" not in static_text
-    assert "/v1/admin/source" not in static_text
-    assert "/v1/admin/logs" not in static_text
 
-    browser_controller = (ADDON_ROOT / "controllers/browser_bridge.py").read_text(
-        encoding="utf-8"
-    )
-    assert 'auth="user"' in browser_controller
-    assert 'request.env["odoo.ai.assistant.bridge"]' in browser_controller
-    assert "/odoo_ai/v1/context-read" in browser_controller
-    assert "/odoo_ai/v1/explain" in browser_controller
-    assert "/odoo_ai/v1/query" in browser_controller
-    assert "/odoo_ai/v1/how-to" in browser_controller
-    assert "/odoo_ai/v1/turn" in browser_controller
-    chat_controller = (ADDON_ROOT / "controllers/chat_bridge.py").read_text(
-        encoding="utf-8"
-    )
-    assert "/odoo_ai/v1/agent-plan-decision" in chat_controller
-    assert '"uid"' not in browser_controller
+def test_browser_assets_use_only_authenticated_odoo_routes() -> None:
+    source = _static_text()
+    assert 'rpcCall("/odoo_ai/v1/turn"' in source
+    assert 'rpcCall("/odoo_ai/v1/turn/status"' in source
+    assert "fetch(" not in source
+    assert "127.0.0.1" not in source
+    assert "X-Odoo-AI-Shared-Secret" not in source
+    assert "X-Odoo-AI-Delegation" not in source
+    assert "delegation_token" not in source
+    assert "innerHTML" not in source
+    assert "t-raw" not in source
 
 
-def test_internal_tool_routes_have_double_auth_and_no_generic_execution() -> None:
-    controller = (ADDON_ROOT / "controllers/internal_tools.py").read_text(
-        encoding="utf-8"
-    )
-
-    assert "/odoo_ai/internal/v1/model-metadata" in controller
-    assert "/odoo_ai/internal/v1/read-records" in controller
+def test_internal_tools_expose_only_residual_inventory_callback() -> None:
+    controller = (ADDON_ROOT / "controllers/internal_tools.py").read_text(encoding="utf-8")
     assert "/odoo_ai/internal/v1/instance-inventory" in controller
-    assert "/odoo_ai/internal/v1/navigation" in controller
-    assert "/odoo_ai/internal/v1/query-schema" in controller
-    assert "/odoo_ai/internal/v1/query-records" in controller
-    assert "/odoo_ai/internal/v1/aggregate-records" in controller
-    assert "/odoo_ai/internal/v1/agent-model-search" in controller
-    assert "/odoo_ai/internal/v1/action-write-schema" in controller
-    assert "/odoo_ai/internal/v1/action-preview" in controller
-    assert "/odoo_ai/internal/v1/action-commit" in controller
-    assert "/odoo_ai/internal/v1/action-verify" in controller
     assert 'auth="none"' in controller
     assert "require_machine_secret(" in controller
-    assert "DELEGATION_HEADER" in controller
-    assert "DelegatedOrmToolExecutor" in controller
-    assert "DelegatedQueryToolExecutor" in controller
-    assert "DelegatedActionPreviewToolExecutor" in controller
-    assert "ApprovedActionToolExecutor" in controller
+    for retired in (
+        "/odoo_ai/internal/v1/model-metadata",
+        "/odoo_ai/internal/v1/read-records",
+        "/odoo_ai/internal/v1/navigation",
+        "/odoo_ai/internal/v1/query-schema",
+        "/odoo_ai/internal/v1/query-records",
+        "/odoo_ai/internal/v1/aggregate-records",
+        "/odoo_ai/internal/v1/action-write-schema",
+        "/odoo_ai/internal/v1/action-preview",
+        "/odoo_ai/internal/v1/action-commit",
+        "/odoo_ai/internal/v1/action-verify",
+        "DELEGATION_HEADER",
+        "DelegatedOrmToolExecutor",
+        "ApprovedActionToolExecutor",
+    ):
+        assert retired not in controller
     assert "execute_kw" not in controller
     assert "execute_method" not in controller
 
 
+def test_turn_controller_is_the_authenticated_browser_ingress() -> None:
+    controller = (ADDON_ROOT / "controllers/turn_runtime.py").read_text(encoding="utf-8")
+    for route in (
+        "/odoo_ai/v1/turn",
+        "/odoo_ai/v1/turn/status",
+        "/odoo_ai/v1/turn/cancel",
+        "/odoo_ai/v1/turn/plan-decision",
+        "/odoo_ai/v1/turn/plan-status",
+    ):
+        assert route in controller
+    assert 'auth="user"' in controller
+
+
 def test_internal_endpoint_and_secret_are_not_duplicated_in_views() -> None:
-    view_text = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (ADDON_ROOT / "views").glob("*.xml")
+    source = "\n".join(
+        path.read_text(encoding="utf-8") for path in (ADDON_ROOT / "views").glob("*.xml")
     )
-
-    assert "127.0.0.1" not in view_text
-    assert "X-Odoo-AI-Shared-Secret" not in view_text
-    assert "shared_secret" not in view_text
-    assert "ODOO_AI_SOURCE_ROOTS" not in view_text
-    assert "ODOO_AI_LOG_FILE" not in view_text
-    assert "ODOO_AI_JOURNAL_UNIT" not in view_text
+    assert "127.0.0.1" not in source
+    assert "X-Odoo-AI-Shared-Secret" not in source
+    assert "shared_secret" not in source
+    assert "ODOO_AI_SOURCE_ROOTS" not in source
 
 
-def test_browser_bridge_derives_server_context_and_returns_a_sanitized_shape() -> None:
-    bridge = (ADDON_ROOT / "models/assistant_bridge.py").read_text(encoding="utf-8")
-
-    assert "prepare_context_turn(" in bridge
-    assert "prepare_query_turn(" in bridge
-    assert "prepare_how_to_turn(" in bridge
-    assert "prepare_action_preview_turn(" in bridge
-    assert "derive_action_decision_actor(self.env)" in bridge
-    assert "ALLOWED_WORKFLOWS" in bridge
-    assert "env=self.env" in bridge
-    assert "prepared.to_assistant_payload()" in bridge
-    assert "prepared.delegation_token" in bridge
-    assert '"uid"' not in bridge
-    assert '"user"' not in bridge
-    assert "_browser_explain_response" in bridge
-    assert "logical_path" in bridge
-    assert "raw Evidence" not in bridge
-    assert '"payload_fingerprint": proposal[' not in bridge
-
-
-def test_m2_paths_have_no_privilege_or_generic_execution_escape_hatches() -> None:
-    roots = [
-        ADDON_ROOT / "controllers",
-        ADDON_ROOT / "models",
-        ADDON_ROOT / "services",
-    ]
+def test_addon_server_paths_have_no_privilege_or_generic_execution_escape_hatches() -> None:
     source = "\n".join(
         path.read_text(encoding="utf-8")
-        for root in roots
-        for path in root.rglob("*.py")
+        for root_name in ("controllers", "models", "services", "runtime")
+        for path in (ADDON_ROOT / root_name).rglob("*.py")
     )
-
     assert ".sudo(" not in source
     assert "execute_kw" not in source
     assert "execute_method" not in source

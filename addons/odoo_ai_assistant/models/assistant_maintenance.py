@@ -13,7 +13,6 @@ _OPERATION_LABELS = {
     "logs_test": "Logs test",
     "knowledge_reindex": "Knowledge reindex",
     "reasoning_test": "Codex test",
-    "action_self_test": "ACTION self-test",
     "configuration_revalidate": "Configuration revalidation",
 }
 
@@ -27,9 +26,7 @@ _RESULT_MESSAGES = {
     "source_rescan": {
         "source_rescan_succeeded": "The bounded source rescan completed.",
         "source_rescan_failed": "The bounded source rescan failed.",
-        "maintenance_job_abandoned": (
-            "The previous source rescan did not complete and can be retried."
-        ),
+        "maintenance_job_abandoned": "The previous source rescan did not complete and can be retried.",
     },
     "source_test": {
         "source_test_succeeded": "The bounded source evidence test succeeded.",
@@ -41,49 +38,24 @@ _RESULT_MESSAGES = {
     },
     "knowledge_reindex": {
         "knowledge_reindex_succeeded": "Knowledge was rebuilt from the configured sources.",
-        "knowledge_reindex_incomplete": (
-            "Knowledge rebuild was incomplete and was not committed."
-        ),
-        "knowledge_sources_unconfigured": (
-            "No knowledge sources are configured for maintenance."
-        ),
-        "knowledge_source_limit": (
-            "The configured knowledge source count exceeds the maintenance bound."
-        ),
-        "knowledge_instance_unavailable": (
-            "No current Odoo instance profile is available for knowledge."
-        ),
+        "knowledge_reindex_incomplete": "Knowledge rebuild was incomplete and was not committed.",
+        "knowledge_sources_unconfigured": "No knowledge sources are configured for maintenance.",
+        "knowledge_source_limit": "The configured knowledge source count exceeds the maintenance bound.",
+        "knowledge_instance_unavailable": "No current Odoo instance profile is available for knowledge.",
         "knowledge_reindex_failed": "Knowledge could not be rebuilt safely.",
-        "maintenance_job_abandoned": (
-            "The previous knowledge rebuild did not complete and can be retried."
-        ),
+        "maintenance_job_abandoned": "The previous knowledge rebuild did not complete and can be retried.",
     },
     "reasoning_test": {
         "reasoning_operational": "Codex App Server is operational.",
         "reasoning_not_configured": "Codex runtime is not configured.",
         "reasoning_runtime_missing": "The configured Codex runtime is unavailable.",
-        "reasoning_auth_unavailable": (
-            "Codex authentication is unavailable for the service user."
-        ),
-        "reasoning_protocol_incompatible": (
-            "The Codex protocol is incompatible with this Assistant version."
-        ),
+        "reasoning_auth_unavailable": "Codex authentication is unavailable for the service user.",
+        "reasoning_protocol_incompatible": "The Codex protocol is incompatible with this Assistant version.",
         "reasoning_error": "Codex could not be validated safely.",
-    },
-    "action_self_test": {
-        "action_self_test_succeeded": (
-            "ACTION authority and Assistant-side storage are ready."
-        ),
-        "action_authority_unavailable": (
-            "ACTION authority is not provisioned for the service."
-        ),
-        "action_store_unavailable": "ACTION Assistant-side storage is unavailable.",
     },
     "configuration_revalidate": {
         "configuration_valid": "The current effective configuration remains valid.",
-        "configuration_invalid": (
-            "The current configuration no longer satisfies host boundaries."
-        ),
+        "configuration_invalid": "The current configuration no longer satisfies host boundaries.",
         "configuration_unavailable": "Configuration could not be revalidated safely.",
     },
 }
@@ -119,63 +91,42 @@ class AssistantMaintenance(models.TransientModel):
         self._require_admin()
         self.ensure_one()
         return self._execute_maintenance(
-            lambda: self._client().maintenance_readiness_test(
-                self._maintenance_actor_payload()
-            )
+            lambda: self._client().maintenance_readiness_test(self._maintenance_actor_payload())
         )
 
     def action_maintenance_source_rescan(self):
         self._require_admin()
         self.ensure_one()
         return self._execute_maintenance(
-            lambda: self._client().maintenance_source_rescan(
-                self._maintenance_actor_payload()
-            )
+            lambda: self._client().maintenance_source_rescan(self._maintenance_actor_payload())
         )
 
     def action_maintenance_source_test(self):
         self._require_admin()
         self.ensure_one()
         return self._execute_maintenance(
-            lambda: self._client().maintenance_source_test(
-                self._maintenance_actor_payload()
-            )
+            lambda: self._client().maintenance_source_test(self._maintenance_actor_payload())
         )
 
     def action_maintenance_logs_test(self):
         self._require_admin()
         self.ensure_one()
         return self._execute_maintenance(
-            lambda: self._client().maintenance_logs_test(
-                self._maintenance_actor_payload()
-            )
+            lambda: self._client().maintenance_logs_test(self._maintenance_actor_payload())
         )
 
     def action_maintenance_knowledge_reindex(self):
         self._require_admin()
         self.ensure_one()
         return self._execute_maintenance(
-            lambda: self._client().maintenance_knowledge_reindex(
-                self._maintenance_actor_payload()
-            )
+            lambda: self._client().maintenance_knowledge_reindex(self._maintenance_actor_payload())
         )
 
     def action_maintenance_reasoning_test(self):
         self._require_admin()
         self.ensure_one()
         return self._execute_maintenance(
-            lambda: self._client().maintenance_reasoning_test(
-                self._maintenance_actor_payload()
-            )
-        )
-
-    def action_maintenance_action_self_test(self):
-        self._require_admin()
-        self.ensure_one()
-        return self._execute_maintenance(
-            lambda: self._client().maintenance_action_self_test(
-                self._maintenance_actor_payload()
-            )
+            lambda: self._client().maintenance_reasoning_test(self._maintenance_actor_payload())
         )
 
     def action_maintenance_configuration_revalidate(self):
@@ -231,7 +182,7 @@ class AssistantMaintenance(models.TransientModel):
         active = payload.get("active_jobs")
         if (
             not isinstance(latest, list)
-            or len(latest) > 8
+            or len(latest) > 7
             or not isinstance(active, list)
             or len(active) > 2
         ):
@@ -257,10 +208,7 @@ class AssistantMaintenance(models.TransientModel):
                 active_lines.append(rendered)
         if rejected:
             latest_lines.append(
-                _(
-                    "One or more maintenance results were omitted because their "
-                    "contract was unknown."
-                )
+                _("One or more maintenance results were omitted because their contract was unknown.")
             )
         return {
             "maintenance_latest": "\n".join(latest_lines) or False,

@@ -15,7 +15,6 @@ DIAGNOSTIC_SCHEMA_VERSION = 1
 
 class DiagnosticScope(StrEnum):
     COMPONENT = "component"
-    WORKFLOW = "workflow"
 
 
 class DiagnosticState(StrEnum):
@@ -75,13 +74,6 @@ DiagnosticReasonCode = Literal[
     "reasoning_auth_unavailable",
     "reasoning_protocol_incompatible",
     "reasoning_error",
-    "action_authority_available",
-    "action_authority_unavailable",
-    "workflow_ready",
-    "workflow_reasoning_unavailable",
-    "workflow_knowledge_unavailable",
-    "workflow_source_unavailable",
-    "workflow_action_authority_unavailable",
     "assistant_runtime_unavailable",
     "status_unrecognized",
 ]
@@ -107,7 +99,7 @@ class AdminDiagnosticEntry(BaseModel):
 
 
 class AdminDiagnosticsMatrix(BaseModel):
-    """Complete M7 operational view consumed only by authenticated administrators."""
+    """Complete operational view consumed only by authenticated administrators."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 

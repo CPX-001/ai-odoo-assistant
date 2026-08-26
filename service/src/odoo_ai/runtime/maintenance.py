@@ -9,7 +9,6 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from odoo_ai.adapters import CachedCodexReasoningStatus, RuntimeDiagnosticsService
@@ -36,7 +35,6 @@ from odoo_ai.knowledge import (
 )
 from odoo_ai.runtime.admin_diagnostics import RuntimeAdminDiagnosticsService
 from odoo_ai.runtime.configuration import RuntimeConfigurationError, RuntimeConfigurationService
-from odoo_ai.security import ActionAuthorityCodec, ActionAuthorityError
 from odoo_ai.storage import (
     DatabaseConfigurationError,
     DatabaseSettings,
@@ -82,7 +80,7 @@ class _KnowledgeFailure(RuntimeError):
 
 
 class RuntimeMaintenanceService:
-    """Execute only the fixed M7 maintenance operations and audit every attempt."""
+    """Execute only the fixed maintenance operations and audit every attempt."""
 
     def __init__(
         self,
@@ -100,11 +98,10 @@ class RuntimeMaintenanceService:
         self._reasoning_factory = reasoning_factory
 
     @classmethod
-    def from_env(cls) -> RuntimeMaintenanceService:
+    def from_env(cls) -> "RuntimeMaintenanceService":
         return cls(database_settings=DatabaseSettings.from_env())
 
     async def readiness_test(self, actor: MaintenanceActor) -> MaintenanceResult:
-        code: MaintenanceResultCode
         try:
             matrix = await self._admin_diagnostics_factory().inspect()
             code = cast(
@@ -193,15 +190,6 @@ class RuntimeMaintenanceService:
             actor=actor,
             operation="reasoning_test",
             succeeded=succeeded,
-            result_code=code,
-        )
-
-    async def action_self_test(self, actor: MaintenanceActor) -> MaintenanceResult:
-        code = await asyncio.to_thread(self._action_self_test_sync)
-        return await self._direct_result(
-            actor=actor,
-            operation="action_self_test",
-            succeeded=True,
             result_code=code,
         )
 
@@ -306,30 +294,6 @@ class RuntimeMaintenanceService:
             checked_at=datetime.now(UTC),
             metrics=effective_metrics,
         )
-
-    def _action_self_test_sync(self) -> MaintenanceResultCode:
-        try:
-            ActionAuthorityCodec.from_env(self._environ)
-        except ActionAuthorityError:
-            return "action_authority_unavailable"
-        engine = None
-        try:
-            engine = create_database_engine(self._database_settings)
-            with engine.connect() as connection:
-                tables = connection.execute(
-                    text(
-                        "SELECT to_regclass('public.action_proposal'), "
-                        "to_regclass('public.action_audit_event')"
-                    )
-                ).one()
-                if tables[0] is None or tables[1] is None:
-                    return "action_store_unavailable"
-            return "action_self_test_succeeded"
-        except (DatabaseConfigurationError, SQLAlchemyError, OSError, ValueError):
-            return "action_store_unavailable"
-        finally:
-            if engine is not None:
-                engine.dispose()
 
     def _create_job_sync(
         self,
@@ -450,9 +414,7 @@ class RuntimeMaintenanceService:
                     )
                     totals["knowledge_documents_seen"] += result.metrics.documents_seen
                     totals["knowledge_documents_indexed"] += result.metrics.documents_indexed
-                    totals["knowledge_documents_unchanged"] += (
-                        result.metrics.documents_unchanged
-                    )
+                    totals["knowledge_documents_unchanged"] += result.metrics.documents_unchanged
                     totals["knowledge_documents_retired"] += result.metrics.documents_retired
                     totals["knowledge_errors"] += result.metrics.errors
                     totals["knowledge_chunks"] += result.metrics.chunks
@@ -526,12 +488,8 @@ class RuntimeMaintenanceService:
             engine = create_database_engine(self._database_settings)
             factory = create_session_factory(engine)
             with session_scope(factory) as session:
-                latest = tuple(
-                    _event_model(row) for row in list_latest_maintenance_events(session)
-                )
-                active = tuple(
-                    _job_model(row) for row in list_active_maintenance_jobs(session)
-                )
+                latest = tuple(_event_model(row) for row in list_latest_maintenance_events(session))
+                active = tuple(_job_model(row) for row in list_active_maintenance_jobs(session))
                 return MaintenanceStatus(latest=latest, active_jobs=active)
         except (
             MaintenanceStoreError,

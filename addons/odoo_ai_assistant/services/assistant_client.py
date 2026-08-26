@@ -26,13 +26,7 @@ class AssistantServiceError(RuntimeError):
 class AssistantServiceClient:
     """Call only residual local service administration/source endpoints."""
 
-    def __init__(
-        self,
-        *,
-        base_url: str,
-        shared_secret_file: str | None,
-        timeout: float = 3.0,
-    ) -> None:
+    def __init__(self, *, base_url: str, shared_secret_file: str | None, timeout: float = 3.0) -> None:
         parsed = urlsplit(base_url.strip())
         if (
             parsed.scheme != "http"
@@ -45,10 +39,7 @@ class AssistantServiceClient:
         ):
             raise AssistantServiceError("configuration_invalid")
         try:
-            loopback = (
-                parsed.hostname == "localhost"
-                or ipaddress.ip_address(parsed.hostname).is_loopback
-            )
+            loopback = parsed.hostname == "localhost" or ipaddress.ip_address(parsed.hostname).is_loopback
             port = parsed.port or 80
         except ValueError as error:
             raise AssistantServiceError("configuration_invalid") from error
@@ -92,26 +83,14 @@ class AssistantServiceClient:
     def maintenance_logs_test(self, payload: dict[str, object]) -> dict[str, Any]:
         return self._admin_post("/v1/admin/maintenance/logs/test", payload)
 
-    def maintenance_knowledge_reindex(
-        self, payload: dict[str, object]
-    ) -> dict[str, Any]:
+    def maintenance_knowledge_reindex(self, payload: dict[str, object]) -> dict[str, Any]:
         return self._admin_post("/v1/admin/maintenance/knowledge/reindex", payload)
 
     def maintenance_reasoning_test(self, payload: dict[str, object]) -> dict[str, Any]:
         return self._admin_post("/v1/admin/maintenance/reasoning/test", payload)
 
-    def maintenance_action_self_test(
-        self, payload: dict[str, object]
-    ) -> dict[str, Any]:
-        return self._admin_post("/v1/admin/maintenance/action/self-test", payload)
-
-    def maintenance_configuration_revalidate(
-        self, payload: dict[str, object]
-    ) -> dict[str, Any]:
-        return self._admin_post(
-            "/v1/admin/maintenance/configuration/revalidate",
-            payload,
-        )
+    def maintenance_configuration_revalidate(self, payload: dict[str, object]) -> dict[str, Any]:
+        return self._admin_post("/v1/admin/maintenance/configuration/revalidate", payload)
 
     def configuration_snapshot(self) -> dict[str, Any]:
         return self._admin_get("/v1/admin/configuration")
@@ -146,11 +125,7 @@ class AssistantServiceClient:
         path = Path(self._shared_secret_file)
         try:
             metadata = path.stat()
-            if (
-                not stat.S_ISREG(metadata.st_mode)
-                or metadata.st_size > 4096
-                or metadata.st_mode & 0o007
-            ):
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 4096 or metadata.st_mode & 0o007:
                 raise OSError
             secret = path.read_text(encoding="utf-8").strip()
         except (OSError, UnicodeError) as error:
@@ -159,23 +134,14 @@ class AssistantServiceClient:
             raise AssistantServiceError("authentication_unavailable")
         return secret
 
-    def _get_json(
-        self,
-        path: str,
-        *,
-        headers: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
+    def _get_json(self, path: str, *, headers: dict[str, str] | None = None) -> dict[str, Any]:
         return self._request_json("GET", path, headers=headers)
 
     def _admin_get(self, path: str) -> dict[str, Any]:
         secret = self._read_shared_secret()
         return self._get_json(path, headers={SHARED_SECRET_HEADER: secret})
 
-    def _admin_post(
-        self,
-        path: str,
-        payload: dict[str, object],
-    ) -> dict[str, Any]:
+    def _admin_post(self, path: str, payload: dict[str, object]) -> dict[str, Any]:
         secret = self._read_shared_secret()
         try:
             body = json.dumps(
@@ -208,11 +174,7 @@ class AssistantServiceClient:
         body: bytes | None = None,
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        connection = http.client.HTTPConnection(
-            self._host,
-            self._port,
-            timeout=self._timeout,
-        )
+        connection = http.client.HTTPConnection(self._host, self._port, timeout=self._timeout)
         try:
             connection.request(method, path, body=body, headers=headers or {})
             response = connection.getresponse()
@@ -259,11 +221,7 @@ class AssistantServiceClient:
             raise AssistantServiceError("service_unavailable")
 
         content_type = response.getheader("Content-Type", "").partition(";")[0].strip()
-        if (
-            response.status != 200
-            or content_type != "application/json"
-            or len(response_body) > MAX_RESPONSE_BYTES
-        ):
+        if response.status != 200 or content_type != "application/json" or len(response_body) > MAX_RESPONSE_BYTES:
             raise AssistantServiceError("invalid_response")
         try:
             response_payload = json.loads(response_body)

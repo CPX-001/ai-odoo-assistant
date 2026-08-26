@@ -16,45 +16,16 @@
                 <attribute name="name">action_maintenance_logs_test</attribute>
             </xpath>
             <xpath expr="//header" position="inside">
-                <button
-                    name="action_maintenance_readiness_test"
-                    type="object"
-                    string="Test Readiness"
-                />
-                <button
-                    name="action_maintenance_knowledge_reindex"
-                    type="object"
-                    string="Reindex Knowledge"
-                />
-                <button
-                    name="action_maintenance_reasoning_test"
-                    type="object"
-                    string="Test Codex"
-                />
-                <button
-                    name="action_maintenance_action_self_test"
-                    type="object"
-                    string="Test ACTION Readiness"
-                />
-                <button
-                    name="action_maintenance_configuration_revalidate"
-                    type="object"
-                    string="Revalidate Configuration"
-                />
+                <button name="action_maintenance_readiness_test" type="object" string="Test Readiness"/>
+                <button name="action_maintenance_knowledge_reindex" type="object" string="Reindex Knowledge"/>
+                <button name="action_maintenance_reasoning_test" type="object" string="Test Codex"/>
+                <button name="action_maintenance_configuration_revalidate" type="object" string="Revalidate Configuration"/>
             </xpath>
             <xpath expr="//field[@name='diagnostic_ok']/.." position="after">
                 <group string="Maintenance operations" col="1">
                     <field name="maintenance_last_result" nolabel="1"/>
-                    <field
-                        name="maintenance_active_jobs"
-                        nolabel="1"
-                        invisible="not maintenance_active_jobs"
-                    />
-                    <field
-                        name="maintenance_latest"
-                        nolabel="1"
-                        invisible="not maintenance_latest"
-                    />
+                    <field name="maintenance_active_jobs" nolabel="1" invisible="not maintenance_active_jobs"/>
+                    <field name="maintenance_latest" nolabel="1" invisible="not maintenance_latest"/>
                 </group>
             </xpath>
         </field>

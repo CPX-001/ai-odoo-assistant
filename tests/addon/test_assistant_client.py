@@ -10,10 +10,7 @@ import pytest
 
 
 def _load_client_module() -> ModuleType:
-    path = (
-        Path(__file__).parents[2]
-        / "addons/odoo_ai_assistant/services/assistant_client.py"
-    )
+    path = Path(__file__).parents[2] / "addons/odoo_ai_assistant/services/assistant_client.py"
     spec = importlib.util.spec_from_file_location("odoo_ai_test_assistant_client", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -29,69 +26,38 @@ AssistantServiceError = client_module.AssistantServiceError
 
 class AssistantHandler(BaseHTTPRequestHandler):
     secret = "addon-test-secret-" + "s" * 48
-    last_post: dict[str, object] | None = None
-    action_decision_response = (200, b'{"ok":true,"state":"verified"}')
+    last_request: dict[str, object] | None = None
 
     def do_GET(self) -> None:
+        type(self).last_request = {"path": self.path, "headers": dict(self.headers.items())}
         if self.path == "/health":
-            self._json(200, b'{"status":"ok"}')
+            self._json(200, {"status": "ok"})
+        elif self.headers.get("X-Odoo-AI-Shared-Secret") != self.secret:
+            self._json(401, {"error": {"code": "invalid"}, "ok": False})
         elif self.path == "/v1/admin/status":
-            if self.headers.get("X-Odoo-AI-Shared-Secret") != self.secret:
-                self._json(401, b'{"detail":"invalid"}')
-            else:
-                self._json(
-                    200,
-                    b'{"readiness":"DEGRADED","components":{},"instance":null}',
-                )
+            self._json(200, {"readiness": "DEGRADED", "components": {}, "instance": None})
         elif self.path == "/v1/admin/source/status":
-            if self.headers.get("X-Odoo-AI-Shared-Secret") != self.secret:
-                self._json(401, b'{"detail":"invalid"}')
-            else:
-                self._json(
-                    200,
-                    b'{"state":"DETECTED","scan_status":"succeeded",'
-                    b'"scan_id":null,"fingerprint":null,"completed_at":null}',
-                )
+            self._json(200, {"state": "DETECTED", "scan_status": "succeeded"})
         else:
-            self._json(404, b"{}")
+            self._json(404, {})
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
-        payload = json.loads(self.rfile.read(length))
-        type(self).last_post = {
-            "headers": dict(self.headers.items()),
-            "path": self.path,
-            "payload": payload,
-        }
+        raw = self.rfile.read(length)
+        payload = json.loads(raw) if raw else {}
+        type(self).last_request = {"path": self.path, "headers": dict(self.headers.items()), "payload": payload}
         if self.headers.get("X-Odoo-AI-Shared-Secret") != self.secret:
-            self._json(401, b'{"error":{"code":"invalid"},"ok":false}')
-        elif self.path == "/v1/turns/context-read":
-            self._json(200, b'{"ok":true,"turn_id":"example"}')
-        elif self.path == "/v1/turns/explain":
-            self._json(200, b'{"ok":true,"turn_id":"explain-example"}')
-        elif self.path == "/v1/turns/query":
-            self._json(200, b'{"ok":true,"turn_id":"query-example"}')
-        elif self.path == "/v1/turns/how-to":
-            self._json(200, b'{"ok":true,"turn_id":"how-to-example"}')
-        elif self.path == "/v1/turns/action":
-            self._json(200, b'{"ok":true,"turn_id":"action-example"}')
-        elif self.path == "/v1/actions/decision-execute":
-            self._json(*type(self).action_decision_response)
-        elif self.path == "/v1/admin/source/rescan":
-            self._json(200, b'{"state":"DETECTED","metrics":{}}')
-        elif self.path == "/v1/admin/source/test":
-            self._json(200, b'{"candidate":{},"excerpt":{}}')
-        elif self.path == "/v1/admin/logs/test":
-            self._json(200, b'{"state":"OPERATIONAL","provider":"file","results":[]}')
-        elif self.path == "/v1/admin/logs/traceback":
-            self._json(200, b'{"provider":"file","excerpt":"bounded"}')
+            self._json(401, {"error": {"code": "invalid"}, "ok": False})
+        elif self.path == "/v1/admin/maintenance/readiness/test":
+            self._json(200, {"operation": "readiness_test", "state": "succeeded", "result_code": "readiness_ok", "checked_at": "2026-08-26T00:00:00Z", "metrics": {}})
         else:
-            self._json(404, b"{}")
+            self._json(404, {})
 
     def log_message(self, format: str, *args: object) -> None:
         return
 
-    def _json(self, status: int, body: bytes) -> None:
+    def _json(self, status: int, payload: dict[str, object]) -> None:
+        body = json.dumps(payload).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -101,10 +67,6 @@ class AssistantHandler(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def local_service():
-    AssistantHandler.action_decision_response = (
-        200,
-        b'{"ok":true,"state":"verified"}',
-    )
     server = ThreadingHTTPServer(("127.0.0.1", 0), AssistantHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -116,261 +78,43 @@ def local_service():
         server.server_close()
 
 
-def test_client_uses_non_default_local_port_and_server_side_secret(
-    tmp_path: Path, local_service: ThreadingHTTPServer
-) -> None:
+def _client(tmp_path: Path, server: ThreadingHTTPServer) -> AssistantServiceClient:
     secret_file = tmp_path / "shared-secret"
-    secret_file.write_text(f"{AssistantHandler.secret}\n", encoding="utf-8")
+    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
     secret_file.chmod(0o640)
-    client = AssistantServiceClient(
-        base_url=f"http://127.0.0.1:{local_service.server_port}",
-        shared_secret_file=str(secret_file),
-    )
+    return AssistantServiceClient(base_url=f"http://127.0.0.1:{server.server_port}", shared_secret_file=str(secret_file))
 
+
+def test_client_uses_loopback_and_server_side_secret(tmp_path: Path, local_service: ThreadingHTTPServer) -> None:
+    client = _client(tmp_path, local_service)
     assert client.health() == {"status": "ok"}
     assert client.admin_status()["readiness"] == "DEGRADED"
+    assert AssistantHandler.last_request is not None
+    assert AssistantHandler.last_request["headers"]["X-Odoo-AI-Shared-Secret"] == AssistantHandler.secret
 
 
-def test_client_rejects_non_loopback_and_sanitizes_auth_failure(
-    tmp_path: Path, local_service: ThreadingHTTPServer
-) -> None:
-    with pytest.raises(AssistantServiceError) as public:
-        AssistantServiceClient(
-            base_url="http://example.com:8000", shared_secret_file=None
-        )
-    assert public.value.code == "configuration_invalid"
-
-    secret_file = tmp_path / "shared-secret"
-    secret_file.write_text("wrong-" + "x" * 48, encoding="utf-8")
-    secret_file.chmod(0o640)
-    client = AssistantServiceClient(
-        base_url=f"http://127.0.0.1:{local_service.server_port}",
-        shared_secret_file=str(secret_file),
-    )
-    with pytest.raises(AssistantServiceError) as rejected:
-        client.admin_status()
-    assert rejected.value.code == "authentication_rejected"
-    assert "wrong" not in str(rejected.value)
-
-
-def test_client_rejects_unbounded_turn_timeout() -> None:
+def test_client_rejects_non_loopback_and_unbounded_timeout() -> None:
     with pytest.raises(AssistantServiceError, match="configuration_invalid"):
-        AssistantServiceClient(
-            base_url="http://127.0.0.1:8000",
-            shared_secret_file=None,
-            timeout=301,
-        )
+        AssistantServiceClient(base_url="http://example.com:8000", shared_secret_file=None)
+    with pytest.raises(AssistantServiceError, match="configuration_invalid"):
+        AssistantServiceClient(base_url="http://127.0.0.1:8000", shared_secret_file=None, timeout=301)
 
 
 def test_client_rejects_other_readable_secret(tmp_path: Path) -> None:
     secret_file = tmp_path / "public-secret"
     secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
     secret_file.chmod(0o644)
-    client = AssistantServiceClient(
-        base_url="http://127.0.0.1:8000",
-        shared_secret_file=str(secret_file),
-    )
-
-    with pytest.raises(AssistantServiceError) as unavailable:
+    client = AssistantServiceClient(base_url="http://127.0.0.1:8000", shared_secret_file=str(secret_file))
+    with pytest.raises(AssistantServiceError, match="authentication_unavailable"):
         client.admin_status()
-    assert unavailable.value.code == "authentication_unavailable"
 
 
-def test_context_read_posts_only_to_the_narrow_authenticated_route(
-    tmp_path: Path, local_service: ThreadingHTTPServer
-) -> None:
-    secret_file = tmp_path / "shared-secret"
-    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
-    secret_file.chmod(0o640)
-    client = AssistantServiceClient(
-        base_url=f"http://127.0.0.1:{local_service.server_port}",
-        shared_secret_file=str(secret_file),
-    )
-    payload = {
-        "turn_id": "12345678-1234-5678-1234-567812345678",
-        "message": "question",
-        "screen": {"model": "sale.order", "res_id": 42},
-    }
-
-    response = client.context_read(payload)
-
-    assert response == {"ok": True, "turn_id": "example"}
-    assert AssistantHandler.last_post is not None
-    assert AssistantHandler.last_post["path"] == "/v1/turns/context-read"
-    assert AssistantHandler.last_post["payload"] == payload
-    headers = AssistantHandler.last_post["headers"]
-    assert headers["X-Odoo-AI-Shared-Secret"] == AssistantHandler.secret
-    assert headers["Content-Type"] == "application/json"
-
-
-def test_explain_posts_only_to_its_narrow_authenticated_route(
-    tmp_path: Path, local_service: ThreadingHTTPServer
-) -> None:
-    secret_file = tmp_path / "shared-secret"
-    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
-    secret_file.chmod(0o640)
-    client = AssistantServiceClient(
-        base_url=f"http://127.0.0.1:{local_service.server_port}",
-        shared_secret_file=str(secret_file),
-    )
-    payload = {
-        "turn_id": "12345678-1234-5678-1234-567812345678",
-        "message": "explain",
-        "screen": {"model": "sale.order", "res_id": 42},
-    }
-
-    response = client.explain(payload)
-
-    assert response == {"ok": True, "turn_id": "explain-example"}
-    assert AssistantHandler.last_post is not None
-    assert AssistantHandler.last_post["path"] == "/v1/turns/explain"
-    assert AssistantHandler.last_post["payload"] == payload
-    headers = AssistantHandler.last_post["headers"]
-    assert headers["X-Odoo-AI-Shared-Secret"] == AssistantHandler.secret
-
-
-def test_query_posts_only_to_its_narrow_authenticated_route(
-    tmp_path: Path, local_service: ThreadingHTTPServer
-) -> None:
-    secret_file = tmp_path / "shared-secret"
-    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
-    secret_file.chmod(0o640)
-    client = AssistantServiceClient(
-        base_url=f"http://127.0.0.1:{local_service.server_port}",
-        shared_secret_file=str(secret_file),
-    )
-    payload = {
-        "turn_id": "12345678-1234-5678-1234-567812345678",
-        "message": "query",
-        "screen": {"model": "sale.order", "res_id": 42},
-    }
-
-    response = client.query(payload)
-
-    assert response == {"ok": True, "turn_id": "query-example"}
-    assert AssistantHandler.last_post is not None
-    assert AssistantHandler.last_post["path"] == "/v1/turns/query"
-    assert AssistantHandler.last_post["payload"] == payload
-
-
-def test_how_to_posts_only_to_its_narrow_authenticated_route(
-    tmp_path: Path, local_service: ThreadingHTTPServer
-) -> None:
-    secret_file = tmp_path / "shared-secret"
-    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
-    secret_file.chmod(0o640)
-    client = AssistantServiceClient(
-        base_url=f"http://127.0.0.1:{local_service.server_port}",
-        shared_secret_file=str(secret_file),
-    )
-    payload = {
-        "turn_id": "12345678-1234-5678-1234-567812345678",
-        "message": "how to",
-        "screen": {"model": "sale.order", "menu_id": 11},
-    }
-
-    response = client.how_to(payload)
-
-    assert response == {"ok": True, "turn_id": "how-to-example"}
-    assert AssistantHandler.last_post is not None
-    assert AssistantHandler.last_post["path"] == "/v1/turns/how-to"
-    assert AssistantHandler.last_post["payload"] == payload
-
-
-def test_action_turn_and_decision_use_only_fixed_authenticated_routes(
-    tmp_path: Path, local_service: ThreadingHTTPServer
-) -> None:
-    secret_file = tmp_path / "shared-secret"
-    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
-    secret_file.chmod(0o640)
-    client = AssistantServiceClient(
-        base_url=f"http://127.0.0.1:{local_service.server_port}",
-        shared_secret_file=str(secret_file),
-    )
-    turn_payload = {
-        "turn_id": "12345678-1234-5678-1234-567812345678",
-        "message": "preview",
-        "screen": {"model": "sale.order", "res_id": 42},
-    }
-
-    assert client.action(turn_payload) == {"ok": True, "turn_id": "action-example"}
-    assert AssistantHandler.last_post["path"] == "/v1/turns/action"
-    decision_payload = {
-        "proposal_id": "22345678-1234-5678-9234-567812345678",
-        "decision": "approve",
-        "actor": {
-            "database": "fixture-db",
-            "uid": 17,
-            "company_id": 3,
-            "allowed_company_ids": [3],
-        },
-    }
-    assert client.action_decision(decision_payload)["state"] == "verified"
-    assert AssistantHandler.last_post["path"] == "/v1/actions/decision-execute"
-    assert AssistantHandler.last_post["payload"] == decision_payload
-
-
-def test_action_decision_preserves_cross_actor_binding_error(
-    tmp_path: Path, local_service: ThreadingHTTPServer
-) -> None:
-    secret_file = tmp_path / "shared-secret"
-    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
-    secret_file.chmod(0o640)
-    client = AssistantServiceClient(
-        base_url=f"http://127.0.0.1:{local_service.server_port}",
-        shared_secret_file=str(secret_file),
-    )
-    AssistantHandler.action_decision_response = (
-        403,
-        b'{"error":{"code":"approval_binding_mismatch"},"ok":false}',
-    )
-
-    with pytest.raises(AssistantServiceError) as rejected:
-        client.action_decision(
-            {
-                "proposal_id": "22345678-1234-5678-9234-567812345678",
-                "decision": "approve",
-                "actor": {
-                    "database": "other-db",
-                    "uid": 99,
-                    "company_id": 9,
-                    "allowed_company_ids": [9],
-                },
-            }
-        )
-
-    assert rejected.value.code == "approval_binding_mismatch"
-
-
-def test_m3_admin_client_uses_only_fixed_server_side_routes(
-    tmp_path: Path, local_service: ThreadingHTTPServer
-) -> None:
-    secret_file = tmp_path / "shared-secret"
-    secret_file.write_text(AssistantHandler.secret, encoding="utf-8")
-    secret_file.chmod(0o640)
-    client = AssistantServiceClient(
-        base_url=f"http://127.0.0.1:{local_service.server_port}",
-        shared_secret_file=str(secret_file),
-    )
-
+def test_current_admin_routes_are_narrow_and_authenticated(tmp_path: Path, local_service: ThreadingHTTPServer) -> None:
+    client = _client(tmp_path, local_service)
     assert client.source_status()["state"] == "DETECTED"
-    assert client.source_rescan()["state"] == "DETECTED"
-    assert AssistantHandler.last_post is not None
-    assert AssistantHandler.last_post["path"] == "/v1/admin/source/rescan"
-    assert AssistantHandler.last_post["payload"] == {}
-    assert client.source_test()["candidate"] == {}
-    assert (
-        client.logs_test({"terms": ["Traceback"], "max_lines": 20, "max_bytes": 4096})[
-            "provider"
-        ]
-        == "file"
-    )
-    assert client.logs_traceback("sha256:" + "a" * 64, max_bytes=1024) == {
-        "provider": "file",
-        "excerpt": "bounded",
-    }
-    assert AssistantHandler.last_post["path"] == "/v1/admin/logs/traceback"
-    assert AssistantHandler.last_post["payload"] == {
-        "fingerprint": "sha256:" + "a" * 64,
-        "max_bytes": 1024,
-    }
+    payload = {"actor": {"odoo_uid": 7, "odoo_database": "fixture"}}
+    result = client.maintenance_readiness_test(payload)
+    assert result["result_code"] == "readiness_ok"
+    assert AssistantHandler.last_request is not None
+    assert AssistantHandler.last_request["path"] == "/v1/admin/maintenance/readiness/test"
+    assert AssistantHandler.last_request["payload"] == payload

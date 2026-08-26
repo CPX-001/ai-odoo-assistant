@@ -1,4 +1,4 @@
-"""Administrator-only Odoo view of Assistant Service health."""
+"""Administrator-only Odoo view of residual Assistant Service health."""
 
 import os
 from datetime import UTC, datetime, timedelta
@@ -25,11 +25,6 @@ _DIAGNOSTIC_KEYS = {
     "logs.provider": "Log provider",
     "knowledge.index": "Knowledge index",
     "reasoning.codex": "Codex runtime",
-    "action.authority": "ACTION authority",
-    "workflow.explain": "EXPLAIN",
-    "workflow.query": "QUERY",
-    "workflow.how_to": "HOW_TO",
-    "workflow.action": "ACTION",
 }
 
 # Odoo deliberately re-derives trusted presentation from reason codes. Backend
@@ -56,11 +51,7 @@ _DIAGNOSTIC_REASON_PRESENTATION = {
         "Effective runtime configuration is invalid against current host boundaries.",
     ),
     "instance_available": ("ok", "none", "An authenticated Odoo instance profile is available."),
-    "instance_unknown": (
-        "degraded",
-        "retry",
-        "No current Odoo instance profile is available.",
-    ),
+    "instance_unknown": ("degraded", "retry", "No current Odoo instance profile is available."),
     "source_operational": ("ok", "none", "Source index capability is operational."),
     "source_not_found": (
         "degraded",
@@ -98,11 +89,7 @@ _DIAGNOSTIC_REASON_PRESENTATION = {
         "The Assistant cannot read the authorized log source.",
     ),
     "logs_error": ("error", "retry", "The selected log provider reported an error."),
-    "logs_unknown": (
-        "degraded",
-        "retry",
-        "Log capability has not been established yet.",
-    ),
+    "logs_unknown": ("degraded", "retry", "Log capability has not been established yet."),
     "knowledge_index_available": (
         "ok",
         "none",
@@ -119,11 +106,7 @@ _DIAGNOSTIC_REASON_PRESENTATION = {
         "The knowledge index could not be inspected safely.",
     ),
     "reasoning_operational": ("ok", "none", "Codex App Server is operational."),
-    "reasoning_not_configured": (
-        "degraded",
-        "setup_required",
-        "Codex runtime is not configured.",
-    ),
+    "reasoning_not_configured": ("degraded", "setup_required", "Codex runtime is not configured."),
     "reasoning_runtime_missing": (
         "error",
         "setup_required",
@@ -140,37 +123,10 @@ _DIAGNOSTIC_REASON_PRESENTATION = {
         "The configured Codex runtime is incompatible with this Assistant version.",
     ),
     "reasoning_error": ("error", "retry", "The reasoning runtime could not be validated."),
-    "action_authority_available": ("ok", "none", "M6 ACTION commit authority is configured."),
-    "action_authority_unavailable": (
-        "degraded",
-        "setup_required",
-        "M6 ACTION commit authority is unavailable.",
-    ),
-    "workflow_ready": ("ok", "none", "Workflow prerequisites are currently available."),
-    "workflow_reasoning_unavailable": (
-        "degraded",
-        "retry",
-        "Workflow is blocked by the reasoning runtime.",
-    ),
-    "workflow_knowledge_unavailable": (
-        "degraded",
-        "reindex",
-        "Workflow is waiting for instance or knowledge state.",
-    ),
-    "workflow_source_unavailable": (
-        "degraded",
-        "rescan",
-        "EXPLAIN is degraded because source evidence is unavailable.",
-    ),
-    "workflow_action_authority_unavailable": (
-        "degraded",
-        "setup_required",
-        "ACTION cannot commit because its host authority is unavailable.",
-    ),
     "assistant_runtime_unavailable": (
         "error",
         "setup_required",
-        "Workflow is blocked by Assistant storage, migrations, or configuration.",
+        "Assistant runtime is blocked by storage, migrations, or configuration.",
     ),
     "status_unrecognized": (
         "unknown",
@@ -221,11 +177,6 @@ class AssistantDiagnostics(models.TransientModel):
     reasoning_runtime_version = fields.Char(readonly=True)
     reasoning_model = fields.Char(readonly=True)
     reasoning_setup_message = fields.Char(readonly=True)
-    query_capability_state = fields.Char(readonly=True)
-    navigation_capability_state = fields.Char(readonly=True)
-    knowledge_capability_state = fields.Char(readonly=True)
-    how_to_capability_state = fields.Char(readonly=True)
-    action_capability_state = fields.Char(readonly=True)
     source_result = fields.Text(readonly=True)
     log_result = fields.Text(readonly=True)
 
@@ -362,10 +313,7 @@ class AssistantDiagnostics(models.TransientModel):
         if not service_url:
             raise AssistantServiceError("configuration_missing")
         secret_file = self._configured_value(SECRET_FILE_PARAM, SECRET_FILE_ENV)
-        return AssistantServiceClient(
-            base_url=service_url,
-            shared_secret_file=secret_file,
-        )
+        return AssistantServiceClient(base_url=service_url, shared_secret_file=secret_file)
 
     @api.model
     def _diagnostic_values(self):
@@ -403,11 +351,6 @@ class AssistantDiagnostics(models.TransientModel):
             "reasoning_setup_message": _(
                 "Configure and test the Codex runtime from the Assistant setup boundary."
             ),
-            "query_capability_state": unknown,
-            "navigation_capability_state": unknown,
-            "knowledge_capability_state": unknown,
-            "how_to_capability_state": unknown,
-            "action_capability_state": unknown,
             "source_result": False,
             "log_result": False,
         }
@@ -418,11 +361,7 @@ class AssistantDiagnostics(models.TransientModel):
             matrix = client.diagnostics_matrix()
         except AssistantServiceError as error:
             message = self._error_message(error.code)
-            values.update(
-                service_state="error",
-                message=message,
-                diagnostic_errors=message,
-            )
+            values.update(service_state="error", message=message, diagnostic_errors=message)
             return values
 
         components = status.get("components") if isinstance(status.get("components"), dict) else {}
@@ -432,11 +371,6 @@ class AssistantDiagnostics(models.TransientModel):
         source = components.get("source", {})
         logs = components.get("logs", {})
         reasoning = components.get("reasoning_engine", {})
-        workflows = (
-            status.get("workflow_capabilities")
-            if isinstance(status.get("workflow_capabilities"), dict)
-            else {}
-        )
         try:
             source_status = client.source_status()
         except AssistantServiceError:
@@ -460,11 +394,6 @@ class AssistantDiagnostics(models.TransientModel):
             reasoning_runtime_version=str(reasoning.get("runtime_version") or unknown),
             reasoning_model=str(reasoning.get("model") or unknown),
             reasoning_setup_message=self._reasoning_setup_message(reasoning.get("detail")),
-            query_capability_state=self._capability_label(workflows.get("query")),
-            navigation_capability_state=self._capability_label(workflows.get("navigation")),
-            knowledge_capability_state=self._capability_label(workflows.get("knowledge")),
-            how_to_capability_state=self._capability_label(workflows.get("how_to")),
-            action_capability_state=self._capability_label(workflows.get("action")),
         )
         values.update(self._matrix_values(matrix))
         return values
@@ -544,44 +473,18 @@ class AssistantDiagnostics(models.TransientModel):
         }
 
     @api.model
-    def _capability_label(self, value):
-        if not isinstance(value, dict):
-            return _("Unknown")
-        state = value.get("state")
-        detail = value.get("detail")
-        allowed_states = {"ok", "pending", "error"}
-        allowed_details = {
-            "assistant_runtime_unavailable",
-            "action_authority_unavailable",
-            "available",
-            "instance_unknown",
-            "knowledge_unavailable",
-            "reasoning_unavailable",
-            "validated_per_turn",
-        }
-        if state not in allowed_states or detail not in allowed_details:
-            return _("Unknown")
-        return f"{state} - {detail}"
-
-    @api.model
     def _reasoning_setup_message(self, detail):
         messages = {
             "operational": _("Codex App Server is operational."),
-            "not_configured": _(
-                "Select the Codex runtime in the Assistant host setup, then test again."
-            ),
-            "runtime_missing": _(
-                "The configured Codex runtime is unavailable to the Assistant Service."
-            ),
+            "not_configured": _("Select the Codex runtime in the Assistant host setup, then test again."),
+            "runtime_missing": _("The configured Codex runtime is unavailable to the Assistant Service."),
             "auth_unavailable": _(
                 "Authenticate Codex as the operating-system user that runs the Assistant Service."
             ),
             "protocol_incompatible": _(
                 "The configured Codex runtime is not compatible with this Assistant version."
             ),
-            "error": _(
-                "Codex could not be tested. Review the sanitized Assistant Service diagnostics."
-            ),
+            "error": _("Codex could not be tested. Review the sanitized Assistant Service diagnostics."),
         }
         return messages.get(
             detail,
@@ -591,12 +494,8 @@ class AssistantDiagnostics(models.TransientModel):
     @api.model
     def _error_message(self, code: str) -> str:
         messages = {
-            "configuration_missing": _(
-                "Assistant Service endpoint is not configured on the Odoo server."
-            ),
-            "configuration_invalid": _(
-                "Assistant Service endpoint must be a valid loopback HTTP URL."
-            ),
+            "configuration_missing": _("Assistant Service endpoint is not configured on the Odoo server."),
+            "configuration_invalid": _("Assistant Service endpoint must be a valid loopback HTTP URL."),
             "authentication_unconfigured": _(
                 "Assistant Service authentication is not configured on the Odoo server."
             ),
