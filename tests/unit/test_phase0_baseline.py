@@ -78,19 +78,19 @@ def test_phase0_baseline_combines_client_and_persisted_event_timings() -> None:
     assert summary["final_state"] == "completed"
     assert summary["timings_ms"]["submit_received"] == 0
     assert summary["timings_ms"]["turn_persisted"] == 20
-    assert summary["timings_ms"]["worker_claimed"] == 100
-    assert summary["timings_ms"]["runtime_started"] == 200
-    assert summary["timings_ms"]["first_capability_started"] == 500
-    assert summary["timings_ms"]["last_capability_completed"] == 700
-    assert summary["timings_ms"]["reasoning_completed"] == 1000
-    assert summary["timings_ms"]["result_persisted"] == 1100
+    assert summary["timings_ms"]["worker_claimed"] == 120
+    assert summary["timings_ms"]["runtime_started"] == 220
+    assert summary["timings_ms"]["first_capability_started"] == 520
+    assert summary["timings_ms"]["last_capability_completed"] == 720
+    assert summary["timings_ms"]["reasoning_completed"] == 1020
+    assert summary["timings_ms"]["result_persisted"] == 1120
     assert summary["timings_ms"]["browser_final"] == 1200
     assert summary["timing_provenance"]["turn_persisted"] == "client:onTiming"
     assert "provider_initialized" in summary["missing_checkpoints"]
     assert "browser_first_answer_delta" in summary["missing_checkpoints"]
 
 
-def test_phase0_backend_monotonic_event_overrides_timestamp_proxy() -> None:
+def test_phase0_backend_monotonic_event_keeps_wall_and_runtime_domains_separate() -> None:
     trace = {
         "scenario_id": "hello",
         "timings": [],
@@ -116,5 +116,6 @@ def test_phase0_backend_monotonic_event_overrides_timestamp_proxy() -> None:
 
     summary = phase0_baseline.summarize(trace, catalog_ids={"hello"})
 
-    assert summary["timings_ms"]["provider_initialized"] == 155.5
+    assert summary["timings_ms"]["provider_initialized"] == 300
+    assert summary["runtime_monotonic_ms"]["provider_initialized"] == 155.5
     assert summary["timing_provenance"]["provider_initialized"] == "event:diagnostic.timing"
