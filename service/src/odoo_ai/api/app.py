@@ -1,18 +1,17 @@
-"""FastAPI application factory for the Assistant Service."""
+"""Temporary HTTP surface for source/retrieval responsibilities not yet embedded."""
 
 import asyncio
 from collections.abc import Callable
 from typing import Final, Literal
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from odoo_ai.adapters import (
-    ActionToolExecutorFactory,
     CachedCodexReasoningStatus,
     CodexAppServerEngine,
     CodexRuntimeSettings,
@@ -20,24 +19,14 @@ from odoo_ai.adapters import (
     OdooGatewayError,
     OdooGatewayFactory,
     OdooGatewaySettings,
-    QueryToolExecutorFactory,
     RuntimeDiagnosticsService,
     SourceToolExecutorFactory,
-    action_tool_specs,
     knowledge_tool_specs,
     load_instance_summary,
     persist_trace_events,
-    query_tool_specs,
     source_tool_specs,
 )
 from odoo_ai.application import (
-    ActionApprovalError,
-    ActionApprovalService,
-    ActionCommandService,
-    ActionExecutionError,
-    ActionExecutionService,
-    ActionService,
-    ActionTurnError,
     ContextReadError,
     ContextReadService,
     DiagnosticsError,
@@ -46,22 +35,12 @@ from odoo_ai.application import (
     ExplainTurnError,
     HowToService,
     HowToTurnError,
-    QueryService,
-    QueryTurnError,
     TraceEventData,
 )
 from odoo_ai.contracts import (
-    ActionCommandReceipt,
-    ActionDecisionCommandRequest,
-    ActionDecisionReceipt,
-    ActionDecisionRequest,
-    ActionExecutionReceipt,
-    ActionTurnRequest,
-    ActionTurnResponse,
     ContextReadTurnRequest,
     ContextReadTurnResponse,
     EmptyDiagnosticsRequest,
-    ExecuteApprovedActionRequest,
     ExplainTurnRequest,
     ExplainTurnResponse,
     HowToTurnRequest,
@@ -70,10 +49,6 @@ from odoo_ai.contracts import (
     LogEvidence,
     LogSearchRequest,
     LogTestDiagnostics,
-    PersistActionPreviewRequest,
-    PersistActionPreviewResponse,
-    QueryTurnRequest,
-    QueryTurnResponse,
     SourceScanDiagnostics,
     SourceStatusDiagnostics,
     SourceTestDiagnostics,
@@ -85,13 +60,7 @@ from odoo_ai.runtime.status import (
     ReasoningComponentStatus,
     inspect_admin_status,
 )
-from odoo_ai.security import ActionAuthorityCodec, ActionAuthorityError, require_shared_secret
-from odoo_ai.storage import (
-    DatabaseSettings,
-    SqlActionApprovalStore,
-    create_database_engine,
-    create_session_factory,
-)
+from odoo_ai.security import require_shared_secret
 
 MAX_CONTEXT_REQUEST_BYTES: Final = 16 * 1024
 _BOUNDED_POST_PATHS: Final = frozenset(
@@ -99,16 +68,10 @@ _BOUNDED_POST_PATHS: Final = frozenset(
         "/v1/turns/context-read",
         "/v1/turns/explain",
         "/v1/turns/how-to",
-        "/v1/turns/query",
-        "/v1/turns/action",
         "/v1/admin/source/rescan",
         "/v1/admin/source/test",
         "/v1/admin/logs/test",
         "/v1/admin/logs/traceback",
-        "/v1/actions/previews",
-        "/v1/actions/decisions",
-        "/v1/actions/commits",
-        "/v1/actions/decision-execute",
     }
 )
 
@@ -122,7 +85,7 @@ class HealthResponse(BaseModel):
 
 
 class BoundedRequestLimitMiddleware:
-    """Reject oversized turn/admin requests before FastAPI parses JSON."""
+    """Reject oversized legacy source/retrieval requests before JSON parsing."""
 
     def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
         self._app = app
@@ -150,8 +113,7 @@ class BoundedRequestLimitMiddleware:
             message = await receive()
             if message["type"] == "http.disconnect":
                 return
-            chunk = message.get("body", b"")
-            body.extend(chunk)
+            body.extend(message.get("body", b""))
             if len(body) > self._max_bytes:
                 await _error_response("request_too_large", 413)(scope, receive, send)
                 return
@@ -177,62 +139,17 @@ def create_app(
     trace_writer: Callable[[UUID, tuple[TraceEventData, ...]], None] | None = None,
     diagnostics_service: DiagnosticsService | None = None,
     explain_service: ExplainService | None = None,
-    query_service: QueryService | None = None,
     how_to_service: HowToService | None = None,
-    action_approval_service: ActionApprovalService | None = None,
-    action_execution_service: ActionExecutionService | None = None,
-    action_service: ActionService | None = None,
-    action_command_service: ActionCommandService | None = None,
 ) -> FastAPI:
-    """Build an isolated application instance for runtime and API tests."""
+    """Build the remaining temporary source/retrieval service surface."""
 
-    application = FastAPI(title="Odoo AI Assistant Service")
+    application = FastAPI(title="Odoo AI Assistant Temporary Service")
     application.add_middleware(
         BoundedRequestLimitMiddleware,
         max_bytes=MAX_CONTEXT_REQUEST_BYTES,
     )
     diagnostics = diagnostics_service
-    approvals = action_approval_service
-    executions = action_execution_service
-    action_commands = action_command_service
     reasoning_status_probe: CachedCodexReasoningStatus | None = None
-
-    def get_action_approval_service() -> ActionApprovalService:
-        nonlocal approvals
-        if approvals is None:
-            try:
-                engine = create_database_engine(DatabaseSettings.from_env())
-                approvals = ActionApprovalService(
-                    SqlActionApprovalStore(create_session_factory(engine))
-                )
-            except (OSError, ValueError):
-                raise ActionApprovalError("approval_store_unavailable", 503) from None
-        return approvals
-
-    def get_action_execution_service() -> ActionExecutionService:
-        nonlocal executions
-        if executions is None:
-            try:
-                engine = create_database_engine(DatabaseSettings.from_env())
-                store = SqlActionApprovalStore(create_session_factory(engine))
-                executions = ActionExecutionService(
-                    store=store,
-                    authority_codec=ActionAuthorityCodec.from_env(),
-                    gateway_factory=gateway_factory
-                    or OdooGatewayFactory(OdooGatewaySettings.from_env()),
-                )
-            except (ActionAuthorityError, OdooGatewayError, OSError, ValueError):
-                raise ActionExecutionError("action_execution_unavailable", 503) from None
-        return executions
-
-    def get_action_command_service() -> ActionCommandService:
-        nonlocal action_commands
-        if action_commands is None:
-            action_commands = ActionCommandService(
-                approvals=get_action_approval_service(),
-                executions=get_action_execution_service(),
-            )
-        return action_commands
 
     def get_explain_service() -> ExplainService:
         if explain_service is not None:
@@ -251,9 +168,7 @@ def create_app(
             source_tools=source_tool_specs(),
             report_loader=source_factory.take_report,
             instance_loader=instance_loader,
-            trace_writer=(
-                persist_trace_events if trace_writer is None else trace_writer
-            ),
+            trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
         )
 
     def get_diagnostics() -> DiagnosticsService:
@@ -264,64 +179,6 @@ def create_app(
             except (OSError, ValueError):
                 raise DiagnosticsError("diagnostics_unconfigured", 503) from None
         return diagnostics
-
-    def get_query_service(payload: QueryTurnRequest) -> QueryService:
-        if query_service is not None:
-            return query_service
-        effective_factory = gateway_factory or OdooGatewayFactory(OdooGatewaySettings.from_env())
-        gateway = effective_factory.for_turn(
-            turn_id=payload.turn_id,
-            delegation_token=payload.delegation_token,
-        )
-        query_factory = QueryToolExecutorFactory(
-            gateway=gateway,
-            user_id=payload.user.uid,
-            model=payload.screen.model or "",
-        )
-        engine = CodexAppServerEngine(
-            CodexRuntimeSettings.from_env(),
-            tool_executor_factory=query_factory,
-        )
-        return QueryService(
-            reasoning_engine=engine,
-            query_tools=query_tool_specs(),
-            report_loader=query_factory.take_report,
-            instance_loader=instance_loader,
-            trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
-        )
-
-    def get_action_service(payload: ActionTurnRequest) -> ActionService:
-        if action_service is not None:
-            return action_service
-        effective_factory = gateway_factory or OdooGatewayFactory(OdooGatewaySettings.from_env())
-        gateway = effective_factory.for_turn(
-            turn_id=payload.turn_id,
-            delegation_token=payload.delegation_token,
-        )
-        if payload.screen.model is None or payload.screen.res_id is None:
-            raise ActionTurnError("record_context_required", 422)
-        action_factory = ActionToolExecutorFactory(
-            gateway=gateway,
-            approval_service=get_action_approval_service(),
-            turn_id=payload.turn_id,
-            database=payload.gateway.database,
-            user_id=payload.user.uid,
-            company_id=payload.user.company_id,
-            allowed_company_ids=tuple(payload.user.allowed_company_ids),
-            model=payload.screen.model,
-            record_id=payload.screen.res_id,
-        )
-        engine = CodexAppServerEngine(
-            CodexRuntimeSettings.from_env(),
-            tool_executor_factory=action_factory,
-        )
-        return ActionService(
-            reasoning_engine=engine,
-            action_tools=action_tool_specs(),
-            report_loader=action_factory.take_report,
-            instance_loader=instance_loader,
-            trace_writer=(persist_trace_events if trace_writer is None else trace_writer),
-        )
 
     def get_how_to_service() -> HowToService:
         if how_to_service is not None:
@@ -344,89 +201,12 @@ def create_app(
         )
 
     @application.exception_handler(RequestValidationError)
-    async def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:
-        del request, error
+    async def invalid_request(_request, _error) -> JSONResponse:
         return _error_response("invalid_request", 422)
 
     @application.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
         return HealthResponse()
-
-    @application.post(
-        "/v1/actions/previews",
-        response_model=PersistActionPreviewResponse,
-        dependencies=[Depends(require_shared_secret)],
-    )
-    async def persist_action_preview(
-        request: Request,
-    ) -> PersistActionPreviewResponse | JSONResponse:
-        try:
-            payload = PersistActionPreviewRequest.model_validate_json(
-                await request.body()
-            )
-            return await asyncio.to_thread(
-                get_action_approval_service().persist_preview,
-                payload,
-            )
-        except ValidationError:
-            return _error_response("invalid_request", 422)
-        except ActionApprovalError as error:
-            return _error_response(error.code, error.status_code)
-
-    @application.post(
-        "/v1/actions/decisions",
-        response_model=ActionDecisionReceipt,
-        dependencies=[Depends(require_shared_secret)],
-    )
-    async def decide_action(
-        request: Request,
-    ) -> ActionDecisionReceipt | JSONResponse:
-        try:
-            payload = ActionDecisionRequest.model_validate_json(await request.body())
-            return await asyncio.to_thread(
-                get_action_approval_service().decide,
-                payload,
-            )
-        except ValidationError:
-            return _error_response("invalid_request", 422)
-        except ActionApprovalError as error:
-            return _error_response(error.code, error.status_code)
-
-    @application.post(
-        "/v1/actions/commits",
-        response_model=ActionExecutionReceipt,
-        dependencies=[Depends(require_shared_secret)],
-    )
-    async def commit_action(request: Request) -> ActionExecutionReceipt | JSONResponse:
-        try:
-            payload = ExecuteApprovedActionRequest.model_validate_json(
-                await request.body()
-            )
-            return await get_action_execution_service().execute(payload)
-        except ValidationError:
-            return _error_response("invalid_request", 422)
-        except ActionExecutionError as error:
-            return _error_response(error.code, error.status_code)
-
-    @application.post(
-        "/v1/actions/decision-execute",
-        response_model=ActionCommandReceipt,
-        dependencies=[Depends(require_shared_secret)],
-    )
-    async def decide_and_execute_action(
-        request: Request,
-    ) -> ActionCommandReceipt | JSONResponse:
-        try:
-            payload = ActionDecisionCommandRequest.model_validate_json(await request.body())
-            return await get_action_command_service().decide_and_execute(payload)
-        except ValidationError:
-            return _error_response("invalid_request", 422)
-        except ActionApprovalError as error:
-            return _error_response(error.code, error.status_code)
-        except ActionExecutionError as error:
-            return _error_response(error.code, error.status_code)
-        except Exception:  # noqa: BLE001 - sanitize deterministic command failures
-            return _error_response("action_execution_unavailable", 503)
 
     @application.get(
         "/v1/admin/status",
@@ -547,9 +327,7 @@ def create_app(
             return await get_explain_service().run(payload)
         except ExplainTurnError as error:
             return _error_response(error.code, error.status_code)
-        # This is an authenticated infrastructure boundary; never expose
-        # configuration/provider exception details to Odoo.
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 - sanitize infrastructure/provider details
             return _error_response("engine_unavailable", 503)
 
     @application.post(
@@ -563,36 +341,6 @@ def create_app(
         try:
             return await get_how_to_service().run(payload)
         except HowToTurnError as error:
-            return _error_response(error.code, error.status_code)
-        except Exception:  # noqa: BLE001 - sanitize infrastructure details
-            return _error_response("engine_unavailable", 503)
-
-    @application.post(
-        "/v1/turns/query",
-        response_model=QueryTurnResponse,
-        dependencies=[Depends(require_shared_secret)],
-    )
-    async def query_turn(
-        payload: QueryTurnRequest,
-    ) -> QueryTurnResponse | JSONResponse:
-        try:
-            return await get_query_service(payload).run(payload)
-        except QueryTurnError as error:
-            return _error_response(error.code, error.status_code)
-        except Exception:  # noqa: BLE001 - sanitize infrastructure details
-            return _error_response("engine_unavailable", 503)
-
-    @application.post(
-        "/v1/turns/action",
-        response_model=ActionTurnResponse,
-        dependencies=[Depends(require_shared_secret)],
-    )
-    async def action_turn(
-        payload: ActionTurnRequest,
-    ) -> ActionTurnResponse | JSONResponse:
-        try:
-            return await get_action_service(payload).run(payload)
-        except ActionTurnError as error:
             return _error_response(error.code, error.status_code)
         except Exception:  # noqa: BLE001 - sanitize infrastructure details
             return _error_response("engine_unavailable", 503)
