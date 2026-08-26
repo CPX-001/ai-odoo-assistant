@@ -1,13 +1,9 @@
 from . import action_execution as action_execution
 from . import assistant_bridge as assistant_bridge
 from . import assistant_chat_bridge as assistant_chat_bridge
-from . import assistant_chat_failures as assistant_chat_failures
-from . import assistant_chat_history_actions as assistant_chat_history_actions
-from . import assistant_chat_stream as assistant_chat_stream
 from . import assistant_diagnostics as assistant_diagnostics
 from . import assistant_diagnostics_matrix as assistant_diagnostics_matrix
 from . import assistant_maintenance as assistant_maintenance
-from . import assistant_plan_recovery as assistant_plan_recovery
 from . import batch_execution as batch_execution
 from . import chat_policy as chat_policy
 from . import chat_preferences as chat_preferences
