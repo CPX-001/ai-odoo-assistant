@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import secrets
 from datetime import timedelta
 from uuid import UUID
@@ -20,10 +21,26 @@ _logger = logging.getLogger(__name__)
 _MAX_MESSAGE = 4_000
 _MAX_SCREEN_BYTES = 16 * 1024
 _MAX_EVENTS_PAGE = 100
-_MAX_ATTEMPTS = 2
+# One transient planning retry plus the normal post-approval execution claim must fit.
+_MAX_ATTEMPTS = 3
 _LEASE_SECONDS = 300
 _STALE_SCAN_LIMIT = 25
 _CLIENT_REQUEST_ID = "^[A-Za-z0-9_.:-]{8,128}$"
+_ERROR_CODE = re.compile(r"^[a-z0-9_]{1,128}$")
+_NON_RETRYABLE_TURN_ERRORS = frozenset(
+    {
+        "access_denied",
+        "capability_authority_mismatch",
+        "capability_not_available",
+        "capability_plan_approval_required",
+        "capability_plan_binding_mismatch",
+        "capability_plan_corrupt",
+        "capability_plan_not_authorized",
+        "capability_plan_precondition_changed",
+        "capability_plan_version_mismatch",
+        "capability_verification_failed",
+    }
+)
 
 
 class AssistantTurnQueue(models.Model):
@@ -206,9 +223,10 @@ class AssistantTurnQueue(models.Model):
         turn_id, lease_token = claimed
         try:
             _execute_claimed_turn(dbname, turn_id, lease_token)
-        except Exception:  # noqa: BLE001 - cron boundary must stay sanitized
-            _logger.exception("Embedded Assistant turn %s crashed", turn_id)
-            _fail_claimed_turn(dbname, turn_id, lease_token, "runtime_unavailable")
+        except Exception as error:  # noqa: BLE001 - cron boundary must stay sanitized
+            code = _runtime_error_code(error)
+            _logger.exception("Embedded Assistant turn %s crashed: %s", turn_id, code)
+            _fail_claimed_turn(dbname, turn_id, lease_token, code)
 
     @api.model
     def _owned_turn(self, turn_uuid):
@@ -262,12 +280,18 @@ def _claim_next_turn(dbname):
 
 
 def _execute_claimed_turn(dbname, turn_id, lease_token):
-    """Run the embedded composition root under the originating Odoo user."""
+    """Run the embedded composition root under the originating Odoo user.
+
+    For a completed turn, business effects, verification, final message and result/status are
+    committed by the same cursor. The separately committed write barrier remains the recovery
+    boundary if the worker is lost before that transaction finishes.
+    """
 
     if _cancellation_requested(dbname, turn_id, lease_token):
         _cancel_claimed_turn(dbname, turn_id, lease_token)
         return
 
+    completed = False
     with Registry(dbname).cursor() as cr:
         control = api.Environment(cr, SUPERUSER_ID, {}, su=True)
         turn = control["odoo.ai.turn"].browse(turn_id).exists()
@@ -286,10 +310,7 @@ def _execute_claimed_turn(dbname, turn_id, lease_token):
             for company_id in (turn.allowed_company_ids or [])
             if company_id in current_allowed
         )
-        if (
-            turn.company_id.id not in allowed_company_ids
-            or not allowed_company_ids
-        ):
+        if turn.company_id.id not in allowed_company_ids or not allowed_company_ids:
             raise AccessError("Assistant company context is no longer authorized")
         context = {
             "allowed_company_ids": list(allowed_company_ids),
@@ -305,43 +326,46 @@ def _execute_claimed_turn(dbname, turn_id, lease_token):
         )
         if not isinstance(result, dict):
             raise ValidationError("Invalid embedded Assistant result")
+
+        turn.invalidate_recordset(
+            ["state", "lease_token", "assistant_message_id", "result_payload"]
+        )
+        if turn.state == "running" and turn.lease_token == lease_token:
+            _stage_completed_turn(control, turn, result)
+            completed = True
+        elif turn.state != "awaiting_confirmation":
+            raise ValidationError("Embedded Assistant returned from an invalid turn state")
         cr.commit()
 
-    _complete_claimed_turn(dbname, turn_id, lease_token, result)
+    if completed:
+        _append_event(dbname, turn_id, "completed", "Respuesta completada")
 
 
-def _complete_claimed_turn(dbname, turn_id, lease_token, result):
+def _stage_completed_turn(env, turn, result):
     answer = result.get("answer")
     if not isinstance(answer, str) or not 1 <= len(answer.strip()) <= 16_384:
         raise ValidationError("Invalid embedded Assistant answer")
-    with Registry(dbname).cursor() as cr:
-        env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
-        turn = env["odoo.ai.turn"].browse(turn_id).exists()
-        if not turn or turn.lease_token != lease_token or turn.state != "running":
-            return
-        assistant_message = env["odoo.ai.message"].create(
-            {
-                "conversation_id": turn.conversation_id.id,
-                "role": "assistant",
-                "content": answer,
-                "internal_workflow": "AGENT",
-            }
-        )
-        turn.write(
-            {
-                "state": "completed",
-                "assistant_message_id": assistant_message.id,
-                "result_payload": result,
-                "completed_at": fields.Datetime.now(),
-                "lease_token": False,
-                "lease_expires_at": False,
-                "heartbeat_at": fields.Datetime.now(),
-            }
-        )
-        if turn.conversation_id:
-            turn.conversation_id.write({"last_message_at": fields.Datetime.now()})
-        cr.commit()
-    _append_event(dbname, turn_id, "completed", "Respuesta completada")
+    assistant_message = env["odoo.ai.message"].create(
+        {
+            "conversation_id": turn.conversation_id.id,
+            "role": "assistant",
+            "content": answer,
+            "internal_workflow": "AGENT",
+        }
+    )
+    turn.write(
+        {
+            "state": "completed",
+            "assistant_message_id": assistant_message.id,
+            "result_payload": result,
+            "completed_at": fields.Datetime.now(),
+            "lease_token": False,
+            "lease_expires_at": False,
+            "heartbeat_at": fields.Datetime.now(),
+        }
+    )
+    if turn.conversation_id:
+        turn.conversation_id.write({"last_message_at": fields.Datetime.now()})
 
 
 def _fail_claimed_turn(dbname, turn_id, lease_token, error_code):
@@ -362,7 +386,8 @@ def _fail_claimed_turn(dbname, turn_id, lease_token, error_code):
             cr.commit()
             _append_event(dbname, turn_id, "cancelled", "Petición cancelada")
             return
-        if not turn.write_barrier and turn.attempt_count < turn.max_attempts:
+        retryable = error_code not in _NON_RETRYABLE_TURN_ERRORS
+        if retryable and not turn.write_barrier and turn.attempt_count < turn.max_attempts:
             turn.write(
                 {
                     "state": "queued",
@@ -577,6 +602,15 @@ def _trigger_turn_crons(dbname):
         cr.commit()
 
 
+def _runtime_error_code(error):
+    code = getattr(error, "code", None)
+    if isinstance(code, str) and _ERROR_CODE.fullmatch(code):
+        return code
+    if isinstance(error, AccessError):
+        return "access_denied"
+    return "runtime_unavailable"
+
+
 def _validate_message(value):
     if (
         not isinstance(value, str)
@@ -629,8 +663,6 @@ def _request_fingerprint(
 
 
 def _validate_client_request_id(value):
-    import re
-
     if not isinstance(value, str) or re.fullmatch(_CLIENT_REQUEST_ID, value) is None:
         raise ValidationError("Invalid Assistant request id")
     return value
