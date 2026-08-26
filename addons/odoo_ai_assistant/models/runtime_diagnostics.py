@@ -181,11 +181,8 @@ def _format_usage(rows):
         label = row.get("limit_name") or row.get("limit_id") or _("Codex limit")
         window = row.get("window") or _("window")
         used = row.get("used_percent")
-        duration = row.get("window_duration_mins")
         resets = row.get("resets_at")
         parts = [_("%(used)s%% used") % {"used": used}]
-        if type(duration) is int:
-            parts.append(_("%(minutes)s min") % {"minutes": duration})
         if type(resets) is int:
             try:
                 reset_text = datetime.fromtimestamp(resets, tz=UTC).isoformat(timespec="minutes")

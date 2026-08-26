@@ -4,6 +4,7 @@ from odoo import Command
 from odoo.tests.common import TransactionCase
 
 from ..runtime.agent import AgentReasoningResult, AgentTurnService
+from ..runtime.agent.codex import _with_completed_agent_messages
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -165,3 +166,28 @@ class TestEmbeddedAgentRuntime(TransactionCase):
         self.assertEqual(result.answer, "Visible contacts: 2")
         self.assertEqual(result.confidence, "high")
         self.assertEqual(result.plan, ())
+
+    def test_codex_completion_uses_authoritative_completed_message_fallback(self):
+        message = {
+            "id": "message-1",
+            "type": "agentMessage",
+            "phase": "final_answer",
+            "text": '{"answer":"Hola","confidence":"high","plan":[]}',
+        }
+        turn = _with_completed_agent_messages(
+            {"id": "turn-1", "status": "completed", "items": []},
+            [message],
+        )
+        self.assertEqual(turn["items"], [message])
+
+    def test_codex_completion_keeps_full_turn_message(self):
+        turn_message = {
+            "id": "message-1",
+            "type": "agentMessage",
+            "text": '{"answer":"Hola","confidence":"high","plan":[]}',
+        }
+        turn = {"id": "turn-1", "status": "completed", "items": [turn_message]}
+        self.assertIs(
+            _with_completed_agent_messages(turn, [{**turn_message, "text": "stale"}]),
+            turn,
+        )

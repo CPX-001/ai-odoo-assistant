@@ -251,7 +251,7 @@ export class AssistantPanel extends Component {
                 "Codex no está disponible para el proceso Odoo. Un administrador debe configurarlo."
             ),
             login_pending: _t(
-                "La conexión con ChatGPT está pendiente. Completa el acceso y actualiza el estado."
+                "La conexión con ChatGPT está pendiente. Completa el acceso; el Assistant la detectará automáticamente."
             ),
             not_authenticated: _t("Conecta una cuenta de ChatGPT antes de usar el Assistant."),
         };
@@ -259,7 +259,7 @@ export class AssistantPanel extends Component {
     }
 
     openAssistantSettings() {
-        return this.actionService.doAction("base.action_res_config_settings", {
+        return this.actionService.doAction("base_setup.action_general_configuration", {
             additionalContext: { module: "odoo_ai_assistant" },
         });
     }

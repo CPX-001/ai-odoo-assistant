@@ -29,7 +29,9 @@ class AssistantDiagnostics(models.TransientModel):
     def action_open_settings(self):
         self._require_admin()
         self.ensure_one()
-        action = self.env["ir.actions.actions"]._for_xml_id("base.action_res_config_settings")
+        action = self.env["ir.actions.actions"]._for_xml_id(
+            "base_setup.action_general_configuration"
+        )
         action["context"] = {"module": "odoo_ai_assistant"}
         return action
 

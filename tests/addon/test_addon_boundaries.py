@@ -1,4 +1,5 @@
 from pathlib import Path
+from xml.etree import ElementTree
 
 ADDON_ROOT = Path(__file__).parents[2] / "addons/odoo_ai_assistant"
 
@@ -77,6 +78,25 @@ def test_history_ui_never_replaces_the_account_gate_before_authentication() -> N
         ADDON_ROOT / "static/src/services/zz_assistant_auth_service.js"
     ).read_text(encoding="utf-8")
     assert "state.historyView = false;" in auth_service
+
+
+def test_account_ui_polls_and_settings_target_exists_in_odoo_18() -> None:
+    auth_service = (
+        ADDON_ROOT / "static/src/services/zz_assistant_auth_service.js"
+    ).read_text(encoding="utf-8")
+    assert "const LOGIN_POLL_DELAY_MS = 5000;" in auth_service
+    panel_path = (
+        ADDON_ROOT / "static/src/components/assistant_panel/assistant_panel.xml"
+    )
+    panel = ElementTree.parse(panel_path)
+    refresh_labels = [
+        " ".join(button.itertext()).strip()
+        for button in panel.findall(".//button[@t-on-click='refreshRuntimeAccount']")
+    ]
+    assert "Comprobar" not in refresh_labels
+    static_source = _static_text()
+    assert "base.action_res_config_settings" not in static_source
+    assert "base_setup.action_general_configuration" in static_source
 
 
 def test_internal_endpoint_and_secret_are_not_duplicated_in_views() -> None:

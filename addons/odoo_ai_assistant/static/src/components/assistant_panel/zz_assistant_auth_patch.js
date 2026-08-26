@@ -87,10 +87,6 @@ patch(AssistantPanel.prototype, {
             typeof row.used_percent === "number" && Number.isFinite(row.used_percent)
                 ? `${Math.round(row.used_percent)}%`
                 : null;
-        const duration =
-            Number.isSafeInteger(row.window_duration_mins) && row.window_duration_mins > 0
-                ? `${row.window_duration_mins} min`
-                : row.window || null;
-        return [name, used, duration].filter(Boolean).join(" · ");
+        return [name, used].filter(Boolean).join(" · ");
     },
 });

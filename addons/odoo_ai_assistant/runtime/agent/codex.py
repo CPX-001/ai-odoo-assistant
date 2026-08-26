@@ -206,6 +206,7 @@ class CodexReasoningEngine:
     ) -> dict[str, object]:
         request_ids: set[tuple[type[object], object]] = set()
         dynamic_call_ids: set[str] = set()
+        completed_agent_messages: list[dict[str, object]] = []
         policy = context.metadata.get("capability_policy", {})
         max_calls = policy.get("max_tool_calls_per_turn", 32) if isinstance(policy, dict) else 32
         if type(max_calls) is not int or not 1 <= max_calls <= 32:
@@ -243,12 +244,14 @@ class CodexReasoningEngine:
                 raise CodexAgentError("codex_event_invalid")
             _validate_notification(method, params, thread_id=thread_id, turn_id=turn_id)
             if method == "item/completed":
-                _validate_completed_item(
+                item = _validate_completed_item(
                     params,
                     thread_id=thread_id,
                     turn_id=turn_id,
                     dynamic_call_ids=dynamic_call_ids,
                 )
+                if item.get("type") == "agentMessage":
+                    completed_agent_messages.append(item)
                 continue
             if method != "turn/completed":
                 continue
@@ -261,7 +264,10 @@ class CodexReasoningEngine:
                 raise CodexAgentError("agent_cancelled")
             if turn.get("status") != "completed" or turn.get("error") not in (None, {}):
                 raise CodexAgentError("codex_turn_failed")
-            return cast(dict[str, object], turn)
+            return _with_completed_agent_messages(
+                cast(dict[str, object], turn),
+                completed_agent_messages,
+            )
         raise CodexAgentError("codex_event_budget_exceeded")
 
 
@@ -663,9 +669,21 @@ def _validate_completed_item(params, *, thread_id, turn_id, dynamic_call_ids):
     if item.get("type") == "dynamicToolCall":
         if item.get("id") not in dynamic_call_ids:
             raise CodexAgentError("codex_dynamic_tool_item_unknown")
-        return
+        return item
     if item.get("type") not in _ALLOWED_ITEM_TYPES:
         raise CodexAgentError("codex_tool_call_not_allowed")
+    return item
+
+
+def _with_completed_agent_messages(turn, completed_agent_messages):
+    items = turn.get("items")
+    if not isinstance(items, list):
+        raise CodexAgentError("codex_turn_items_invalid")
+    if any(isinstance(item, dict) and item.get("type") == "agentMessage" for item in items):
+        return turn
+    if not completed_agent_messages:
+        return turn
+    return {**turn, "items": [*items, *completed_agent_messages]}
 
 
 def _reasoning_result(turn):

@@ -22,7 +22,7 @@ patch(AssistantPanel.prototype, {
 
     async openAssistantSettings() {
         this.panel.close();
-        await this.actionService.doAction("base.action_res_config_settings", {
+        await this.actionService.doAction("base_setup.action_general_configuration", {
             additionalContext: { module: "odoo_ai_assistant" },
         });
     },

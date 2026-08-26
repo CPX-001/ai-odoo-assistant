@@ -159,12 +159,6 @@
                                             <button type="button"
                                                 class="btn btn-outline-secondary btn-sm"
                                                 t-att-disabled="state.runtimeActionLoading"
-                                                t-on-click="refreshRuntimeAccount">
-                                                Comprobar
-                                            </button>
-                                            <button type="button"
-                                                class="btn btn-outline-secondary btn-sm"
-                                                t-att-disabled="state.runtimeActionLoading"
                                                 t-on-click="cancelRuntimeLogin">
                                                 Cancelar
                                             </button>

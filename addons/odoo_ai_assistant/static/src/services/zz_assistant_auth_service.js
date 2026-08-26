@@ -15,7 +15,7 @@ const ACCOUNT_STATES = new Set([
     "login_pending",
     "not_authenticated",
 ]);
-const LOGIN_POLL_DELAY_MS = 1500;
+const LOGIN_POLL_DELAY_MS = 5000;
 
 function exactKeys(value, expected) {
     return (
