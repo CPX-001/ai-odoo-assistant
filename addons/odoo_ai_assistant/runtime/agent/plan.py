@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from ..capabilities import (
@@ -27,6 +29,9 @@ class CapabilityPlanError(RuntimeError):
 class CapabilityPlanExecution:
     payload: dict[str, JsonValue]
     results: tuple[CapabilityResult, ...]
+
+
+BeforeEffect = Callable[[], None | Awaitable[None]]
 
 
 class CapabilityPlanService:
@@ -59,6 +64,7 @@ class CapabilityPlanService:
                     "title": requested.summary,
                     "risk": _risk(definition.risk.value, definition.effect.value),
                     "effect": _effect(definition.effect.value),
+                    "approval": definition.approval.value,
                     "approval_required": approval_required,
                     "precondition_fingerprint": preview.precondition_fingerprint,
                     "binding_fingerprint": _binding_fingerprint(
@@ -85,12 +91,22 @@ class CapabilityPlanService:
         payload: dict[str, JsonValue],
         *,
         human_approved: bool,
+        before_effect: BeforeEffect | None = None,
     ) -> CapabilityPlanExecution:
+        """Revalidate every binding and cross the barrier immediately before effects.
+
+        The initial preview is never execution authority. Capability availability, version,
+        arguments and preconditions are checked again in the fresh worker/user Environment.
+        ``before_effect`` is invoked only after the first step has passed that revalidation and
+        immediately before the first effectful handler is called.
+        """
+
         plan = _validated_plan(payload)
         if plan["state"] not in {"authorized", "executing"}:
             raise CapabilityPlanError("capability_plan_not_authorized")
         steps = list(plan["steps"])
         results: list[CapabilityResult] = []
+        barrier_crossed = False
         for index, raw_step in enumerate(steps):
             step = dict(raw_step)
             definition = self._registry.resolve(step["capability"])
@@ -110,8 +126,20 @@ class CapabilityPlanService:
             )
             if current_preview.precondition_fingerprint != step["precondition_fingerprint"]:
                 raise CapabilityPlanError("capability_plan_precondition_changed")
+            # Re-evaluate policy/enablement before the durable barrier. This call has no
+            # effect; it only asks whether execution still requires missing approval.
+            if self._executor.approval_required(
+                definition.name,
+                approved=human_approved or not bool(step["approval_required"]),
+            ):
+                raise CapabilityPlanError("capability_plan_approval_required")
             step["state"] = "executing"
             steps[index] = step
+            if not barrier_crossed and before_effect is not None:
+                pending = before_effect()
+                if inspect.isawaitable(pending):
+                    await pending
+                barrier_crossed = True
             result = await self._executor.execute(
                 definition.name,
                 step["arguments"],
@@ -153,6 +181,7 @@ def _validated_plan(payload):
             "title",
             "risk",
             "effect",
+            "approval",
             "approval_required",
             "precondition_fingerprint",
             "binding_fingerprint",
@@ -168,6 +197,7 @@ def _validated_plan(payload):
             or not isinstance(step.get("version"), str)
             or not isinstance(step.get("arguments"), dict)
             or not isinstance(step.get("title"), str)
+            or step.get("approval") not in {"none", "policy", "always"}
             or type(step.get("approval_required")) is not bool
             or not isinstance(step.get("preview"), dict)
             or step.get("state") not in {"previewed", "executing", "completed"}
