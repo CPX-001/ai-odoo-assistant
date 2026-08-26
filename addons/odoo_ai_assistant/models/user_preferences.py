@@ -45,9 +45,8 @@ class AssistantUserPreference(models.Model):
         ],
         string="Assistant autonomy",
     )
-    # Legacy fields remain stored so existing databases upgrade without a destructive
-    # migration. A missing profile is derived from these fields once, preserving the
-    # user's previous autonomy instead of silently resetting it.
+    # Legacy stored fields remain for upgrade compatibility only. Runtime policy is
+    # derived from the single visible autonomy profile.
     agent_confirmation_mode = fields.Selection(
         selection=[
             ("always_confirm", "Always confirm"),
@@ -153,19 +152,11 @@ class AssistantUserPreference(models.Model):
             "max_consecutive_failures": 3,
         }
 
-
-class AssistantBridgeUserPreferences(models.AbstractModel):
-    _inherit = "odoo.ai.assistant.bridge"
-
-    @api.model
-    def _preferred_reasoning_model(self):
-        return self.env["odoo.ai.user.preference"].current_reasoning_model()
-
     @api.model
     def chat_model_preferences(self):
         if not self.env.user._is_internal():
             return _error("access_denied")
-        selected = self._preferred_reasoning_model()
+        selected = self.current_reasoning_model()
         can_manage = self.env.user.has_group("base.group_system")
         try:
             catalog = _embedded_model_catalog(self.env)
@@ -185,7 +176,7 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
 
         available = {item["model"] for item in catalog["models"]}
         if selected is not None and selected not in available:
-            self.env["odoo.ai.user.preference"].set_current_reasoning_model(None)
+            self.set_current_reasoning_model(None)
             selected = None
         return {
             "ok": True,
@@ -205,23 +196,15 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
             return _error("invalid_context")
         normalized = model or None
         if normalized is None:
-            return {
-                "ok": True,
-                "selected_model": self.env[
-                    "odoo.ai.user.preference"
-                ].set_current_reasoning_model(None),
-            }
+            return {"ok": True, "selected_model": self.set_current_reasoning_model(None)}
         try:
             catalog = _embedded_model_catalog(self.env)
         except (CodexModelCatalogError, OSError, RuntimeError, ValueError):
             return _error("engine_unavailable")
-        available = {item["model"] for item in catalog["models"]}
-        if normalized not in available:
+        if normalized not in {item["model"] for item in catalog["models"]}:
             return _error("invalid_context")
         try:
-            selected = self.env["odoo.ai.user.preference"].set_current_reasoning_model(
-                normalized
-            )
+            selected = self.set_current_reasoning_model(normalized)
         except ValidationError:
             return _error("invalid_context")
         return {"ok": True, "selected_model": selected}
@@ -230,17 +213,14 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
     def agent_autonomy_preferences(self):
         if not self.env.user._is_internal():
             return _error("access_denied")
-        return {
-            "ok": True,
-            "profile": self.env["odoo.ai.user.preference"].current_agent_profile(),
-        }
+        return {"ok": True, "profile": self.current_agent_profile()}
 
     @api.model
     def set_agent_autonomy_preference(self, profile):
         if not self.env.user._is_internal() or profile not in _AUTONOMY_PROFILES:
             return _error("invalid_context")
         try:
-            selected = self.env["odoo.ai.user.preference"].set_current_agent_profile(profile)
+            selected = self.set_current_agent_profile(profile)
         except ValidationError:
             return _error("invalid_context")
         return {"ok": True, "profile": selected}
@@ -250,7 +230,7 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
         """Compatibility response for cached pre-profile frontend assets."""
         if not self.env.user._is_internal():
             return _error("access_denied")
-        policy = self.env["odoo.ai.user.preference"].current_agent_policy()
+        policy = self.current_agent_policy()
         legacy_risk = policy["max_auto_risk"]
         if legacy_risk == "protected":
             legacy_risk = "high"
@@ -269,7 +249,7 @@ class AssistantBridgeUserPreferences(models.AbstractModel):
             return _error("invalid_context")
         profile = _profile_from_legacy(confirmation_mode, max_auto_risk)
         try:
-            selected = self.env["odoo.ai.user.preference"].set_current_agent_profile(profile)
+            selected = self.set_current_agent_profile(profile)
         except ValidationError:
             return _error("invalid_context")
         mode, risk = _AUTONOMY_PROFILES[selected]
