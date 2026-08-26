@@ -45,7 +45,7 @@ class BrowserChatController(http.Controller):
     def models(self, **unexpected):
         if unexpected:
             return _error("invalid_context")
-        return request.env["odoo.ai.assistant.bridge"].chat_model_preferences()
+        return request.env["odoo.ai.user.preference"].chat_model_preferences()
 
     @http.route(
         "/odoo_ai/v1/chat-model",
@@ -56,7 +56,7 @@ class BrowserChatController(http.Controller):
     def set_model(self, model=None, **unexpected):
         if unexpected:
             return _error("invalid_context")
-        return request.env["odoo.ai.assistant.bridge"].set_chat_model_preference(model)
+        return request.env["odoo.ai.user.preference"].set_chat_model_preference(model)
 
     @http.route(
         "/odoo_ai/v1/agent-autonomy",
@@ -67,7 +67,7 @@ class BrowserChatController(http.Controller):
     def agent_autonomy(self, **unexpected):
         if unexpected:
             return _error("invalid_context")
-        return request.env["odoo.ai.assistant.bridge"].agent_autonomy_preferences()
+        return request.env["odoo.ai.user.preference"].agent_autonomy_preferences()
 
     @http.route(
         "/odoo_ai/v1/agent-autonomy-set",
@@ -78,7 +78,7 @@ class BrowserChatController(http.Controller):
     def set_agent_autonomy(self, profile=None, **unexpected):
         if unexpected:
             return _error("invalid_context")
-        return request.env["odoo.ai.assistant.bridge"].set_agent_autonomy_preference(profile)
+        return request.env["odoo.ai.user.preference"].set_agent_autonomy_preference(profile)
 
     # Compatibility policy endpoints for cached pre-profile frontend assets. They are
     # Odoo-native preferences and do not cross the retired Assistant agent runtime.
@@ -91,7 +91,7 @@ class BrowserChatController(http.Controller):
     def agent_policy(self, **unexpected):
         if unexpected:
             return _error("invalid_context")
-        return request.env["odoo.ai.assistant.bridge"].agent_policy_preferences()
+        return request.env["odoo.ai.user.preference"].agent_policy_preferences()
 
     @http.route(
         "/odoo_ai/v1/agent-policy-set",
@@ -107,7 +107,7 @@ class BrowserChatController(http.Controller):
     ):
         if unexpected:
             return _error("invalid_context")
-        return request.env["odoo.ai.assistant.bridge"].set_agent_policy_preferences(
+        return request.env["odoo.ai.user.preference"].set_agent_policy_preferences(
             confirmation_mode,
             max_auto_risk,
         )
