@@ -1,11 +1,10 @@
-"""HTTP API for the local Assistant Service."""
+"""HTTP API for the temporary Assistant Service responsibilities."""
 
 from typing import Any
 
 from fastapi import FastAPI
 
 from odoo_ai.api.admin_diagnostics import install_admin_diagnostics_routes
-from odoo_ai.api.agent import AgentServiceFactory, install_agent_routes
 from odoo_ai.api.app import app as app
 from odoo_ai.api.app import create_app as _base_create_app
 from odoo_ai.api.chat import install_chat_routes
@@ -28,10 +27,9 @@ def create_app(
     chat_history_service: RuntimeChatHistoryService | None = None,
     chat_delete_service: RuntimeChatDeleteService | None = None,
     general_chat_service: GeneralChatService | None = None,
-    agent_service_factory: AgentServiceFactory | None = None,
     **kwargs: Any,
 ) -> FastAPI:
-    """Build the core API plus isolated administrative and chat boundaries."""
+    """Build the temporary source/retrieval/configuration service surface."""
 
     application = install_configuration_routes(
         _base_create_app(**kwargs),
@@ -45,10 +43,6 @@ def create_app(
         application,
         service=maintenance_service,
     )
-    application = install_agent_routes(
-        application,
-        factory=agent_service_factory,
-    )
     application = install_chat_routes(
         application,
         history_service=chat_history_service,
@@ -60,7 +54,6 @@ def create_app(
 install_configuration_routes(app)
 install_admin_diagnostics_routes(app)
 install_maintenance_routes(app)
-install_agent_routes(app)
 install_chat_routes(app)
 install_chat_delete_routes(app)
 
