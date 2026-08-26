@@ -345,9 +345,19 @@ Before ending a run, update `EXECUTION_STATE.md` with:
 
 Update the active phase record when implementation/evidence changes its exit gate.
 
-### 9. Commit a coherent checkpoint
+### 9. Commit and publish a coherent checkpoint
 
 A run should end with coherent commits on `main` per repository policy. Do not call unfinished work complete.
+
+For a run whose result must be consumed by the next remote/automated run, **a local commit alone is not a complete handoff**. When credentials/network permit:
+
+1. inspect final `git status`;
+2. commit the coherent implementation/evidence/state checkpoint;
+3. push it to `origin/main` without force-pushing or rewriting history;
+4. verify the remote `main` contains the pushed commit;
+5. report the published SHA in the handoff.
+
+If the push cannot be completed, do not report the handoff as published. Record `PUSH_REQUIRED`, the local commit SHA and the concrete push blocker in the execution report/state when possible, then tell the user that remote automation cannot consume those local results yet. Never solve a push failure by force-pushing, discarding concurrent remote work or committing secrets/unsanitized evidence.
 
 ### 10. Decide whether another automated run may continue
 
@@ -425,6 +435,9 @@ the look-ahead budget permits it. Never stack dependent unvalidated contracts.
 Inspect current code before modifying it. Run only validations genuinely available; never claim
 unrun tests passed. Do not use GitHub Actions for this roadmap.
 Update execution state, validation debt and phase evidence before finishing.
+Commit and publish the coherent checkpoint to `origin/main` when credentials/network permit, then verify
+that remote `main` contains the published commit. If publishing fails, record/report `PUSH_REQUIRED`
+instead of assuming the next remote run can see local state.
 ```
 
 ## Current starting point
