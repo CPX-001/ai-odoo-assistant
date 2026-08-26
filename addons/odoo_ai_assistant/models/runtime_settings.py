@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
-from odoo import api, fields, models
+from datetime import UTC, datetime
+
+from odoo import _, api, fields, models
 from odoo.exceptions import AccessError, ValidationError
 
-from ..runtime import RuntimePathError, RuntimePaths, detect_codex
+from ..runtime import (
+    CodexAccountError,
+    CodexAccountManager,
+    CodexAccountStatus,
+    RuntimePathError,
+    RuntimePaths,
+    detect_codex,
+)
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -44,13 +53,65 @@ class ResConfigSettingsRuntime(models.TransientModel):
         readonly=True,
         groups="base.group_system",
     )
+    assistant_codex_account_state = fields.Char(
+        string="ChatGPT account state",
+        readonly=True,
+        groups="base.group_system",
+    )
+    assistant_codex_account_connected = fields.Boolean(
+        string="ChatGPT connected",
+        readonly=True,
+        groups="base.group_system",
+    )
+    assistant_codex_login_pending = fields.Boolean(
+        string="ChatGPT login pending",
+        readonly=True,
+        groups="base.group_system",
+    )
+    assistant_codex_auth_mode = fields.Char(
+        string="Authentication mode",
+        readonly=True,
+        groups="base.group_system",
+    )
+    assistant_codex_account_email = fields.Char(
+        string="Account",
+        readonly=True,
+        groups="base.group_system",
+    )
+    assistant_codex_plan_type = fields.Char(
+        string="Plan",
+        readonly=True,
+        groups="base.group_system",
+    )
+    assistant_codex_login_url = fields.Char(
+        string="Login page",
+        readonly=True,
+        groups="base.group_system",
+    )
+    assistant_codex_login_code = fields.Char(
+        string="Device code",
+        readonly=True,
+        groups="base.group_system",
+    )
+    assistant_codex_account_message = fields.Char(
+        string="Account detail",
+        readonly=True,
+        groups="base.group_system",
+    )
+    assistant_codex_rate_limits = fields.Text(
+        string="Codex usage",
+        readonly=True,
+        groups="base.group_system",
+    )
 
     @api.model
     def get_values(self):
+        self._require_capability_admin()
         values = super().get_values()
         parameters = self.env["ir.config_parameter"]
         configured = parameters._get_param("odoo_ai_assistant.codex_executable") or ""
         codex = detect_codex(configured)
+        paths = None
         try:
             paths = RuntimePaths.from_odoo().ensure()
         except RuntimePathError as error:
@@ -59,6 +120,20 @@ class ResConfigSettingsRuntime(models.TransientModel):
         else:
             runtime_directory = str(paths.root)
             runtime_state = "ready"
+
+        account = CodexAccountStatus(state="runtime_unavailable")
+        if codex.ready and codex.executable is not None and paths is not None:
+            try:
+                account = CodexAccountManager(
+                    executable=codex.executable,
+                    paths=paths,
+                ).status(include_rate_limits=True)
+            except (CodexAccountError, RuntimePathError):
+                account = CodexAccountStatus(
+                    state="authentication_error",
+                    error_code="codex_account_unavailable",
+                )
+
         values.update(
             {
                 "assistant_codex_executable": configured,
@@ -68,9 +143,70 @@ class ResConfigSettingsRuntime(models.TransientModel):
                 "assistant_codex_state": codex.state,
                 "assistant_runtime_directory": runtime_directory,
                 "assistant_runtime_state": runtime_state,
+                **self._account_values(account),
             }
         )
         return values
+
+    def action_assistant_codex_login_start(self):
+        self._require_capability_admin()
+        self.ensure_one()
+        try:
+            self._codex_account_manager().start_login()
+        except CodexAccountError as error:
+            raise ValidationError(self._account_error_message(error.code)) from error
+        return _reload_action()
+
+    def action_assistant_codex_login_open(self):
+        self._require_capability_admin()
+        self.ensure_one()
+        try:
+            status = self._codex_account_manager().status(include_rate_limits=False)
+        except CodexAccountError as error:
+            raise ValidationError(self._account_error_message(error.code)) from error
+        if not status.login_pending or not status.verification_url:
+            raise ValidationError(_("There is no active ChatGPT device login to open."))
+        return {
+            "type": "ir.actions.act_url",
+            "url": status.verification_url,
+            "target": "new",
+        }
+
+    def action_assistant_codex_login_cancel(self):
+        self._require_capability_admin()
+        self.ensure_one()
+        try:
+            self._codex_account_manager().cancel_login()
+        except CodexAccountError as error:
+            raise ValidationError(self._account_error_message(error.code)) from error
+        return _reload_action()
+
+    def action_assistant_codex_logout(self):
+        self._require_capability_admin()
+        self.ensure_one()
+        try:
+            self._codex_account_manager().logout()
+        except CodexAccountError as error:
+            raise ValidationError(self._account_error_message(error.code)) from error
+        return _reload_action()
+
+    def action_assistant_codex_account_refresh(self):
+        self._require_capability_admin()
+        self.ensure_one()
+        return _reload_action()
+
+    @api.model
+    def assistant_codex_account_status(self):
+        """Bounded admin RPC for tests/future UI polling; never returns token material."""
+
+        self._require_capability_admin()
+        try:
+            return self._codex_account_manager().status(include_rate_limits=True).browser_payload()
+        except CodexAccountError as error:
+            return CodexAccountStatus(
+                state="authentication_error",
+                error_code=error.code,
+            ).browser_payload()
 
     @api.model
     def assistant_capability_catalog(self):
@@ -148,6 +284,104 @@ class ResConfigSettingsRuntime(models.TransientModel):
     def _require_capability_admin(self):
         if not self.env.user.has_group("base.group_system"):
             raise AccessError("Assistant capability settings require Settings access")
+
+    def _codex_account_manager(self):
+        configured = (
+            self.env["ir.config_parameter"]._get_param("odoo_ai_assistant.codex_executable")
+            or ""
+        )
+        codex = detect_codex(configured)
+        if not codex.ready or codex.executable is None:
+            raise CodexAccountError("codex_runtime_not_found")
+        try:
+            paths = RuntimePaths.from_odoo().ensure()
+        except RuntimePathError as error:
+            raise CodexAccountError("codex_runtime_storage_unavailable") from error
+        return CodexAccountManager(executable=codex.executable, paths=paths)
+
+    @api.model
+    def _account_values(self, status: CodexAccountStatus):
+        return {
+            "assistant_codex_account_state": self._account_state_label(status.state),
+            "assistant_codex_account_connected": status.connected,
+            "assistant_codex_login_pending": status.login_pending,
+            "assistant_codex_auth_mode": status.auth_mode or "",
+            "assistant_codex_account_email": status.email or "",
+            "assistant_codex_plan_type": status.plan_type or "",
+            "assistant_codex_login_url": status.verification_url or "",
+            "assistant_codex_login_code": status.user_code or "",
+            "assistant_codex_account_message": self._account_detail(status),
+            "assistant_codex_rate_limits": _format_rate_limits(status.rate_limits),
+        }
+
+    @api.model
+    def _account_state_label(self, state):
+        return {
+            "runtime_unavailable": _("Runtime unavailable"),
+            "not_authenticated": _("Not connected"),
+            "authenticated": _("Connected"),
+            "authentication_error": _("Authentication error"),
+            "login_pending": _("Login pending"),
+        }.get(state, _("Unknown"))
+
+    @api.model
+    def _account_detail(self, status):
+        if status.state == "login_pending":
+            if status.verification_url and status.user_code:
+                return _("Open the login page and enter the device code, then refresh this status.")
+            return _("Codex is preparing the device login. Refresh this status shortly.")
+        if status.state == "authenticated":
+            return _("Codex manages and refreshes this account session in the private runtime storage.")
+        if status.state == "not_authenticated":
+            return _("Connect a ChatGPT account to enable Codex turns.")
+        if status.state == "runtime_unavailable":
+            return _("Install or configure the Codex executable first.")
+        return self._account_error_message(status.error_code or "codex_account_unavailable")
+
+    @api.model
+    def _account_error_message(self, code):
+        return {
+            "codex_runtime_not_found": _("The Codex executable is unavailable to the Odoo process."),
+            "codex_runtime_storage_unavailable": _("The private Assistant runtime directory is unavailable."),
+            "codex_account_api_unsupported": _("This Codex version does not support the required account API."),
+            "codex_login_pending": _("A ChatGPT login is already in progress."),
+            "codex_login_timeout": _("The ChatGPT login expired. Start a new login."),
+            "codex_login_interrupted": _("The previous ChatGPT login was interrupted. Start it again."),
+            "codex_login_failed": _("ChatGPT login did not complete successfully."),
+            "codex_login_start_timeout": _("Codex did not initialize the login in time."),
+            "codex_login_worker_failed": _("The temporary Codex login process stopped unexpectedly."),
+            "codex_login_worker_start_failed": _("The temporary Codex login process could not be started."),
+            "codex_initialize_response_invalid": _("This Codex version returned an incompatible App Server handshake."),
+        }.get(
+            code,
+            _("Codex authentication could not be validated. Refresh or retry the connection."),
+        )
+
+
+def _format_rate_limits(rows):
+    rendered = []
+    for row in rows:
+        limit = row.get("limit_name") or row.get("limit_id") or _("Codex limit")
+        window = row.get("window") or _("window")
+        used = row.get("used_percent")
+        duration = row.get("window_duration_mins")
+        resets = row.get("resets_at")
+        parts = [_("%(used)s%% used") % {"used": used}]
+        if type(duration) is int:
+            parts.append(_("%(minutes)s min window") % {"minutes": duration})
+        if type(resets) is int:
+            try:
+                reset_text = datetime.fromtimestamp(resets, tz=UTC).isoformat(timespec="minutes")
+            except (OverflowError, OSError, ValueError):
+                reset_text = None
+            if reset_text:
+                parts.append(_("resets %(time)s") % {"time": reset_text})
+        rendered.append(f"{limit} / {window}: " + ", ".join(parts))
+    return "\n".join(rendered)
+
+
+def _reload_action():
+    return {"type": "ir.actions.client", "tag": "reload"}
 
 
 def _setting_storage_value(value):
