@@ -62,6 +62,23 @@ def test_turn_controller_is_the_authenticated_browser_ingress() -> None:
     assert 'auth="user"' in controller
 
 
+def test_history_ui_never_replaces_the_account_gate_before_authentication() -> None:
+    history = (
+        ADDON_ROOT
+        / "static/src/components/assistant_history/assistant_history.xml"
+    ).read_text(encoding="utf-8")
+    assert (
+        "state.runtimeState === 'authenticated' and state.historyView" in history
+    )
+    assert (
+        "state.runtimeState === 'authenticated' and !state.historyView" in history
+    )
+    auth_service = (
+        ADDON_ROOT / "static/src/services/zz_assistant_auth_service.js"
+    ).read_text(encoding="utf-8")
+    assert "state.historyView = false;" in auth_service
+
+
 def test_internal_endpoint_and_secret_are_not_duplicated_in_views() -> None:
     source = "\n".join(
         path.read_text(encoding="utf-8") for path in (ADDON_ROOT / "views").glob("*.xml")

@@ -133,12 +133,12 @@
     <t t-name="odoo_ai_assistant.AssistantPanelHistoryUX"
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
         <xpath expr="//button[@title='Nuevo chat']" position="attributes">
-            <attribute name="t-if">!state.historyView</attribute>
+            <attribute name="t-if">state.runtimeState === 'authenticated' and !state.historyView</attribute>
             <attribute name="t-att-disabled">state.loading or state.historyLoading or state.decisionLoading or recoveryPending</attribute>
         </xpath>
 
         <xpath expr="//div[select[@aria-label='Historial de chats']]" position="replace">
-            <div t-if="!ui.isMinimized and !state.historyView"
+            <div t-if="!ui.isMinimized and state.runtimeState === 'authenticated' and !state.historyView"
                 class="o_ai_assistant_context_nav d-flex align-items-center">
                 <button type="button"
                     class="btn btn-sm btn-link text-body o_ai_assistant_history_button px-1"
@@ -151,13 +151,13 @@
         </xpath>
 
         <xpath expr="//div[contains(@class, 'o_ai_assistant_messages')]" position="before">
-            <AssistantHistory t-if="!ui.isMinimized and state.historyView"/>
+            <AssistantHistory t-if="!ui.isMinimized and state.runtimeState === 'authenticated' and state.historyView"/>
         </xpath>
         <xpath expr="//div[contains(@class, 'o_ai_assistant_messages')]" position="attributes">
             <attribute name="t-if">!ui.isMinimized and !state.historyView</attribute>
         </xpath>
         <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]" position="attributes">
-            <attribute name="t-if">!ui.isMinimized and !state.historyView</attribute>
+            <attribute name="t-if">!ui.isMinimized and state.runtimeState === 'authenticated' and !state.historyView</attribute>
         </xpath>
     </t>
 </templates>
