@@ -2,7 +2,7 @@
 {
     "name": "Odoo AI Assistant",
     "summary": "Context-aware local AI assistant for Odoo",
-    "version": "18.0.10.4.5",
+    "version": "18.0.10.4.6",
     "category": "Administration",
     "license": "LGPL-3",
     "depends": ["account", "base", "sale", "web"],

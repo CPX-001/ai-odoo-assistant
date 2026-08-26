@@ -157,6 +157,11 @@ class AssistantTurnQueue(models.Model):
             order="sequence",
             limit=_MAX_EVENTS_PAGE,
         )
+        response = (
+            self.result_payload
+            if self.state in {"awaiting_confirmation", "completed"}
+            else None
+        )
         return {
             "ok": True,
             "turn_id": self.turn_uuid,
@@ -166,6 +171,7 @@ class AssistantTurnQueue(models.Model):
             "state": self.state,
             "answer": self.assistant_message_id.content if self.assistant_message_id else None,
             "error_code": self.error_code or None,
+            "response": dict(response) if isinstance(response, dict) else None,
             "last_sequence": self.last_event_sequence,
             "events": [event.browser_view() for event in events],
             "has_more_events": bool(

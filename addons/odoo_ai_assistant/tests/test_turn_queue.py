@@ -109,6 +109,24 @@ class TestAssistantTurnQueue(TransactionCase):
         with self.assertRaises(AccessError):
             env_b["odoo.ai.turn"]._owned_turn(result["turn_id"])
 
+    def test_completed_turn_status_includes_authoritative_response(self):
+        env = self.env(user=self.user_a, su=False)
+        result = env["odoo.ai.turn"].enqueue_for_current_user(
+            message="Saluda",
+            screen=self._screen(),
+            client_request_id="request.queue.response.0001",
+        )
+        turn = env["odoo.ai.turn"]._owned_turn(result["turn_id"])
+        response = {"ok": True, "answer": "Hola", "turn_id": turn.turn_uuid}
+        turn.with_user(SUPERUSER_ID).write(
+            {"state": "completed", "result_payload": response}
+        )
+
+        status = env["odoo.ai.turn"].status_for_current_user(result["turn_id"])
+
+        self.assertEqual(status["state"], "completed")
+        self.assertEqual(status["response"], response)
+
     def test_cancel_queued_turn_is_terminal_and_append_only(self):
         env = self.env(user=self.user_a, su=False)
         result = env["odoo.ai.turn"].enqueue_for_current_user(

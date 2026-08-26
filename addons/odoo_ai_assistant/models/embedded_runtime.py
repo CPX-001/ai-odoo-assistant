@@ -282,17 +282,6 @@ class AssistantTurnEmbeddedStatus(models.Model):
 
     capability_plan_payload = fields.Json(readonly=True)
 
-    def browser_status(self, *, after_sequence=0):
-        payload = super().browser_status(after_sequence=after_sequence)
-        self.ensure_one()
-        response = (
-            self.result_payload
-            if self.state in {"awaiting_confirmation", "completed"}
-            else None
-        )
-        payload["response"] = dict(response) if isinstance(response, dict) else None
-        return payload
-
     @api.model
     def decide_capability_plan_for_current_user(self, plan_id, decision):
         if decision not in {"approve", "reject"}:
