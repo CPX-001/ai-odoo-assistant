@@ -37,6 +37,33 @@ def _turn_scenario():
     }
 
 
+def test_screen_input_builds_fresh_complete_generic_context() -> None:
+    screen = phase0_live_capture._screen_input(None)
+
+    assert set(screen) == phase0_live_capture.SCREEN_KEYS
+    assert screen["action_id"] is None
+    assert screen["allowed_context_subset"] == {}
+    assert screen["menu_id"] is None
+    assert screen["model"] is None
+    assert screen["res_id"] is None
+    assert screen["selected_ids"] == []
+    assert screen["view_type"] is None
+    assert screen["captured_at"].endswith("Z")
+
+
+def test_screen_input_refreshes_stale_timestamp_and_rejects_unexpected_keys() -> None:
+    screen = phase0_live_capture._screen_input(
+        '{"model":"res.partner","view_type":"list","captured_at":"2000-01-01T00:00:00Z"}'
+    )
+
+    assert screen["model"] == "res.partner"
+    assert screen["view_type"] == "list"
+    assert screen["captured_at"] != "2000-01-01T00:00:00Z"
+
+    with pytest.raises(phase0_live_capture.CaptureError, match="screen_invalid"):
+        phase0_live_capture._screen_input('{"uid":1}')
+
+
 def test_live_capture_sanitizes_status_content_and_records_timing() -> None:
     client = _FakeClient(
         [
@@ -92,7 +119,7 @@ def test_live_capture_sanitizes_status_content_and_records_timing() -> None:
         client=client,
         scenario=_turn_scenario(),
         message="hello",
-        screen={"model": None},
+        screen=phase0_live_capture._screen_input(None),
         monotonic=clock,
         sleep=lambda _: None,
     )
@@ -134,7 +161,7 @@ def test_live_capture_records_pre_enqueue_gate_error_without_fabricating_turn() 
         client=client,
         scenario=scenario,
         message="hello",
-        screen={"model": None},
+        screen=phase0_live_capture._screen_input(None),
         monotonic=clock,
         sleep=lambda _: None,
     )

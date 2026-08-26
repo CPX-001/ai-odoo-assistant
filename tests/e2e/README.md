@@ -48,15 +48,18 @@ message text, screen context, assistant answers, plan payloads and general event
 retained. Plain HTTP is accepted only for loopback hosts so credentials are not accidentally sent
 to a remote clear-text endpoint.
 
-Inputs are supplied through environment variables:
+Required inputs are supplied through environment variables:
 
 ```text
 ODOO_AI_PHASE0_DB
 ODOO_AI_PHASE0_LOGIN
 ODOO_AI_PHASE0_PASSWORD
 ODOO_AI_PHASE0_MESSAGE
-ODOO_AI_PHASE0_SCREEN_JSON
 ```
+
+`ODOO_AI_PHASE0_SCREEN_JSON` is optional. Without it, the runner builds a valid generic Odoo screen
+hint. When supplied, it may override the normal screen fields, but the runner always stamps a fresh
+`captured_at` at submission time so a saved fixture cannot expire before the trial runs.
 
 Example:
 
@@ -73,8 +76,10 @@ that value from backend state.
 `phase0_baseline.py` summarizes one trace while preserving the live-capture provenance and outcome
 metadata needed by the aggregate gate. `phase0_report.py` accepts either raw captures or those saved
 summaries, computes simple latency distributions and evaluates the four Phase 0 exit-gate
-conditions. It returns exit status `0` only when the evidence says Phase 1 may start; incomplete
-evidence returns `2`.
+conditions. Timing decomposition closes only when one successful read/action turn contains the
+queue, provider, tool and finalization points together. The failure-pair gate counts distinct
+scenario paths, not repeated trials of the same failure. The command returns exit status `0` only
+when the evidence says Phase 1 may start; incomplete evidence returns `2`.
 
 ## Legacy scripts
 

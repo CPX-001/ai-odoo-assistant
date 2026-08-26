@@ -14,6 +14,7 @@ import os
 import re
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -40,6 +41,16 @@ PUBLIC_ACTIVITY_TYPES = {
     "reasoning.completed",
 }
 DIAGNOSTIC_EVENT_TYPE = "diagnostic.timing"
+SCREEN_KEYS = {
+    "action_id",
+    "allowed_context_subset",
+    "captured_at",
+    "menu_id",
+    "model",
+    "res_id",
+    "selected_ids",
+    "view_type",
+}
 
 
 class CaptureError(RuntimeError):
@@ -102,6 +113,35 @@ def _validated_base_url(value: str) -> str:
     if parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
         raise CaptureError("insecure_remote_http_forbidden")
     return value.strip().rstrip("/")
+
+
+def _screen_input(value: str | None) -> dict[str, Any]:
+    """Build one fresh, bounded browser-context hint for a live capture."""
+
+    supplied: dict[str, Any] = {}
+    if value:
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            raise CaptureError("screen_invalid") from None
+        if not isinstance(parsed, dict) or set(parsed) - SCREEN_KEYS:
+            raise CaptureError("screen_invalid")
+        supplied = parsed
+    screen: dict[str, Any] = {
+        "action_id": None,
+        "allowed_context_subset": {},
+        "captured_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "menu_id": None,
+        "model": None,
+        "res_id": None,
+        "selected_ids": [],
+        "view_type": None,
+    }
+    screen.update(supplied)
+    # A saved fixture may contain a stale captured_at value. The runner is the capture boundary, so
+    # stamp the moment at which this context is actually submitted.
+    screen["captured_at"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    return screen
 
 
 def _catalog(path: Path) -> dict[str, dict[str, Any]]:
@@ -170,7 +210,7 @@ def _elapsed_ms(started_at: float, now: float) -> float:
     return round(max(0.0, now - started_at) * 1000, 3)
 
 
-def _first_diagnostic_code(snapshots: list[dict[str, Any]]) -> str | None:
+def _latest_diagnostic_code(snapshots: list[dict[str, Any]]) -> str | None:
     codes = [
         event.get("diagnostic_code")
         for snapshot in snapshots
@@ -336,7 +376,7 @@ def capture_enqueue_scenario(
         if isinstance(final_status.get("error_code"), str)
         else None
     )
-    original_error = _first_diagnostic_code(snapshots) or final_error
+    original_error = _latest_diagnostic_code(snapshots) or final_error
     return {
         "format_version": 1,
         "capture_kind": "live_http",
@@ -384,17 +424,15 @@ def main() -> int:
     password = os.environ.get("ODOO_AI_PHASE0_PASSWORD")
     message = os.environ.get("ODOO_AI_PHASE0_MESSAGE")
     screen_text = os.environ.get("ODOO_AI_PHASE0_SCREEN_JSON")
-    if not args.db or not args.login or not password or not message or not screen_text:
+    if not args.db or not args.login or not password or not message:
         raise SystemExit(
-            "Set ODOO_AI_PHASE0_DB, ODOO_AI_PHASE0_LOGIN, ODOO_AI_PHASE0_PASSWORD, "
-            "ODOO_AI_PHASE0_MESSAGE and ODOO_AI_PHASE0_SCREEN_JSON."
+            "Set ODOO_AI_PHASE0_DB, ODOO_AI_PHASE0_LOGIN, ODOO_AI_PHASE0_PASSWORD and "
+            "ODOO_AI_PHASE0_MESSAGE. ODOO_AI_PHASE0_SCREEN_JSON is optional."
         )
     try:
-        screen = json.loads(screen_text)
-    except ValueError:
-        raise SystemExit("ODOO_AI_PHASE0_SCREEN_JSON must contain one JSON object.") from None
-    if not isinstance(screen, dict):
-        raise SystemExit("ODOO_AI_PHASE0_SCREEN_JSON must contain one JSON object.")
+        screen = _screen_input(screen_text)
+    except CaptureError as error:
+        raise SystemExit(f"Invalid ODOO_AI_PHASE0_SCREEN_JSON: {error}") from None
 
     scenarios = _catalog(args.catalog)
     scenario = scenarios.get(args.scenario)
