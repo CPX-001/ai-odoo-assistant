@@ -19,7 +19,16 @@ PROVIDER_POINTS = {
     "first_provider_event",
 }
 CLIENT_POINTS = {"submit_received", "turn_persisted", "browser_first_activity", "browser_final"}
+QUEUE_POINTS = {"worker_claimed"}
 TOOL_POINTS = {"first_capability_started", "last_capability_completed"}
+FINALIZATION_POINTS = {"reasoning_completed", "result_persisted"}
+FULL_TURN_POINTS = PROVIDER_POINTS | CLIENT_POINTS | QUEUE_POINTS | TOOL_POINTS | FINALIZATION_POINTS
+SIMPLE_ATTRIBUTION_POINTS = (
+    PROVIDER_POINTS
+    | QUEUE_POINTS
+    | FINALIZATION_POINTS
+    | {"submit_received", "turn_persisted", "browser_final"}
+)
 FAILURE_CATEGORIES = {"authorization_failure", "provider_failure", "capability_failure"}
 
 
@@ -56,18 +65,7 @@ def _summary(value: dict[str, Any], scenarios: dict[str, dict[str, Any]]) -> dic
     if isinstance(value.get("timings_ms"), dict):
         return value
     baseline = _load_baseline_module()
-    summary = baseline.summarize(value, catalog_ids=set(scenarios))
-    summary["capture_kind"] = value.get("capture_kind")
-    summary["expectation_met"] = value.get("expectation_met")
-    summary["request_error_code"] = value.get("request_error_code")
-    summary["outcome_kind"] = (
-        "request_error"
-        if isinstance(value.get("request_error_code"), str)
-        else "turn"
-        if value.get("status_snapshots")
-        else "unknown"
-    )
-    return summary
+    return baseline.summarize(value, catalog_ids=set(scenarios))
 
 
 def _valid_summary(summary: dict[str, Any], scenarios: dict[str, dict[str, Any]]) -> bool:
@@ -85,6 +83,13 @@ def _is_live(summary: dict[str, Any]) -> bool:
 def _has_points(summary: dict[str, Any], required: set[str]) -> bool:
     timings = summary.get("timings_ms")
     return isinstance(timings, dict) and required <= set(timings)
+
+
+def _successful_turn(summary: dict[str, Any]) -> bool:
+    return summary.get("outcome_kind") == "turn" and summary.get("final_state") in {
+        "completed",
+        "awaiting_confirmation",
+    }
 
 
 def _percentile(values: list[float], fraction: float) -> float | None:
@@ -158,27 +163,29 @@ def evaluate(
     }
 
     provider_decomposed = any(
-        item.get("outcome_kind") == "turn"
-        and item.get("final_state") in {"completed", "awaiting_confirmation"}
-        and _has_points(
-            item,
-            PROVIDER_POINTS | CLIENT_POINTS | {"reasoning_completed", "result_persisted"},
-        )
+        _successful_turn(item)
+        and _has_points(item, PROVIDER_POINTS | CLIENT_POINTS | QUEUE_POINTS | FINALIZATION_POINTS)
         for item in live
     )
     tool_decomposed = any(
-        item.get("scenario_id") in (read_ids | write_ids) and _has_points(item, TOOL_POINTS)
+        _successful_turn(item)
+        and item.get("scenario_id") in (read_ids | write_ids)
+        and _has_points(item, TOOL_POINTS)
         for item in live
     )
-    timing_decomposition = provider_decomposed and tool_decomposed
+    fully_decomposed = [
+        item
+        for item in live
+        if _successful_turn(item)
+        and item.get("scenario_id") in (read_ids | write_ids)
+        and _has_points(item, FULL_TURN_POINTS)
+    ]
 
     simple_ids = {"hello"} | read_ids
     simple_attributed = any(
-        item.get("scenario_id") in simple_ids
-        and _has_points(
-            item,
-            PROVIDER_POINTS | {"submit_received", "turn_persisted", "browser_final"},
-        )
+        _successful_turn(item)
+        and item.get("scenario_id") in simple_ids
+        and _has_points(item, SIMPLE_ATTRIBUTION_POINTS)
         for item in live
     )
 
@@ -193,12 +200,13 @@ def evaluate(
         and isinstance(item.get("original_error_code"), str)
         and isinstance(item.get("ui_error_code"), str)
     ]
+    failure_pair_scenarios = sorted({item["scenario_id"] for item in failure_pairs})
 
     gate = {
         "minimum_live_matrix": all(minimum_matrix.values()),
-        "timing_decomposition": timing_decomposition,
+        "timing_decomposition": bool(fully_decomposed),
         "simple_latency_attributed": simple_attributed,
-        "five_failure_pairs": len(failure_pairs) >= 5,
+        "five_failure_pairs": len(failure_pair_scenarios) >= 5,
     }
     return {
         "format_version": 1,
@@ -208,12 +216,16 @@ def evaluate(
         "timing_decomposition": {
             "provider": provider_decomposed,
             "tool": tool_decomposed,
+            "complete_turn": bool(fully_decomposed),
+            "scenario_ids": sorted({item["scenario_id"] for item in fully_decomposed}),
         },
         "latency": {
             "hello": _latency_distribution(live, {"hello"}),
             "simple_read": _latency_distribution(live, read_ids),
         },
         "failure_pairs": failure_pairs,
+        "failure_pair_path_count": len(failure_pair_scenarios),
+        "failure_pair_scenarios": failure_pair_scenarios,
         "exit_gate": gate,
         "ready_for_phase1": all(gate.values()),
     }

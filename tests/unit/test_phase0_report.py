@@ -24,15 +24,15 @@ def _summary(scenario_id, *, timings=None, final_state="completed", error=None, 
     }
 
 
-def test_phase0_report_closes_only_when_all_documented_gate_evidence_exists() -> None:
-    scenarios = phase0_report._catalog(CATALOG_PATH)
-    provider = {
+def _provider_points():
+    return {
         "submit_received": 0,
         "turn_persisted": 20,
+        "worker_claimed": 40,
         "browser_first_activity": 25,
         "browser_final": 1000,
-        "runtime_started": 5,
-        "provider_process_started": 10,
+        "runtime_started": 60,
+        "provider_process_started": 70,
         "provider_initialized": 100,
         "provider_thread_started": 120,
         "provider_turn_started": 140,
@@ -40,6 +40,11 @@ def test_phase0_report_closes_only_when_all_documented_gate_evidence_exists() ->
         "reasoning_completed": 800,
         "result_persisted": 900,
     }
+
+
+def test_phase0_report_closes_only_when_all_documented_gate_evidence_exists() -> None:
+    scenarios = phase0_report._catalog(CATALOG_PATH)
+    provider = _provider_points()
     read = {
         **provider,
         "first_capability_started": 300,
@@ -78,8 +83,14 @@ def test_phase0_report_closes_only_when_all_documented_gate_evidence_exists() ->
         "action": True,
         "failure": True,
     }
-    assert report["timing_decomposition"] == {"provider": True, "tool": True}
+    assert report["timing_decomposition"] == {
+        "provider": True,
+        "tool": True,
+        "complete_turn": True,
+        "scenario_ids": ["read_partner"],
+    }
     assert len(report["failure_pairs"]) == 5
+    assert report["failure_pair_path_count"] == 5
     assert report["ready_for_phase1"] is True
 
 
@@ -99,6 +110,49 @@ def test_phase0_report_keeps_gate_open_without_observed_ui_failure_pairs() -> No
 
     assert report["exit_gate"]["five_failure_pairs"] is False
     assert report["ready_for_phase1"] is False
+
+
+def test_phase0_report_requires_five_distinct_failure_paths() -> None:
+    scenarios = phase0_report._catalog(CATALOG_PATH)
+    repeated = [
+        _summary(
+            "provider_auth_missing",
+            final_state=None,
+            error="codex_not_connected",
+            ui="service_unavailable",
+        )
+        for _ in range(5)
+    ]
+
+    report = phase0_report.evaluate(repeated, scenarios=scenarios)
+
+    assert len(report["failure_pairs"]) == 5
+    assert report["failure_pair_path_count"] == 1
+    assert report["failure_pair_scenarios"] == ["provider_auth_missing"]
+    assert report["exit_gate"]["five_failure_pairs"] is False
+
+
+def test_phase0_report_requires_one_turn_with_full_timing_decomposition() -> None:
+    scenarios = phase0_report._catalog(CATALOG_PATH)
+    provider_only = _provider_points()
+    tool_only = {
+        "first_capability_started": 300,
+        "last_capability_completed": 450,
+        "browser_final": 900,
+    }
+
+    report = phase0_report.evaluate(
+        [
+            _summary("hello", timings=provider_only),
+            _summary("read_partner", timings=tool_only),
+        ],
+        scenarios=scenarios,
+    )
+
+    assert report["timing_decomposition"]["provider"] is True
+    assert report["timing_decomposition"]["tool"] is True
+    assert report["timing_decomposition"]["complete_turn"] is False
+    assert report["exit_gate"]["timing_decomposition"] is False
 
 
 def test_phase0_report_accepts_raw_capture_and_saved_baseline_summary() -> None:
