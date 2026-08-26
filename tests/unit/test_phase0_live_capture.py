@@ -18,7 +18,10 @@ class _FakeClient:
 
     def call(self, path, params):
         self.calls.append((path, params))
-        return self.results.pop(0)
+        result = self.results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
 
 
 class _Clock:
@@ -127,6 +130,7 @@ def test_live_capture_sanitizes_status_content_and_records_timing() -> None:
     assert trace["capture_kind"] == "live_http"
     assert trace["expectation_met"] is True
     assert trace["request_error_code"] is None
+    assert trace["capture_error_code"] is None
     assert [row["point"] for row in trace["timings"]] == [
         "submit_received",
         "turn_persisted",
@@ -142,6 +146,92 @@ def test_live_capture_sanitizes_status_content_and_records_timing() -> None:
         "point": "provider_initialized",
         "elapsed_ms": 12.346,
     }
+
+
+def test_recovered_diagnostic_error_is_not_terminal_original_error() -> None:
+    client = _FakeClient(
+        [
+            {
+                "ok": True,
+                "turn_id": "turn-1",
+                "state": "queued",
+                "last_sequence": 1,
+                "events": [{"sequence": 1, "type": "queued"}],
+            },
+            {
+                "ok": True,
+                "turn_id": "turn-1",
+                "state": "completed",
+                "last_sequence": 3,
+                "error_code": None,
+                "events": [
+                    {
+                        "sequence": 2,
+                        "type": "reasoning.started",
+                        "diagnostic_code": "codex_turn_failed",
+                    },
+                    {"sequence": 3, "type": "reasoning.completed"},
+                ],
+            },
+        ]
+    )
+    clock = _Clock([10.0, 10.01, 10.02, 10.03])
+
+    trace = phase0_live_capture.capture_enqueue_scenario(
+        client=client,
+        scenario=_turn_scenario(),
+        message="hello",
+        screen=phase0_live_capture._screen_input(None),
+        monotonic=clock,
+        sleep=lambda _: None,
+    )
+
+    assert trace["expectation_met"] is True
+    assert trace["original_error_code"] is None
+    assert trace["capture_error_code"] is None
+
+
+def test_live_capture_persists_sanitized_partial_trace_after_transport_failure() -> None:
+    client = _FakeClient(
+        [
+            {
+                "ok": True,
+                "turn_id": "turn-1",
+                "state": "queued",
+                "last_sequence": 1,
+                "events": [
+                    {
+                        "sequence": 1,
+                        "type": "queued",
+                        "payload": {"secret": "drop-me"},
+                    }
+                ],
+                "response": {"answer": "must not be retained"},
+            },
+            phase0_live_capture.CaptureError("odoo_http_unavailable"),
+        ]
+    )
+    clock = _Clock([10.0, 10.01, 10.02, 10.03])
+
+    trace = phase0_live_capture.capture_enqueue_scenario(
+        client=client,
+        scenario=_turn_scenario(),
+        message="hello",
+        screen=phase0_live_capture._screen_input(None),
+        monotonic=clock,
+        sleep=lambda _: None,
+    )
+
+    assert trace["expectation_met"] is False
+    assert trace["capture_error_code"] == "odoo_http_unavailable"
+    assert trace["original_error_code"] is None
+    assert trace["request_error_code"] is None
+    assert trace["status_snapshots"][0]["state"] == "queued"
+    assert trace["timings"][-1]["point"] == "browser_final"
+    assert trace["timings"][-1]["capture_error"] == "odoo_http_unavailable"
+    rendered = str(trace)
+    assert "drop-me" not in rendered
+    assert "must not be retained" not in rendered
 
 
 def test_live_capture_records_pre_enqueue_gate_error_without_fabricating_turn() -> None:
@@ -169,6 +259,7 @@ def test_live_capture_records_pre_enqueue_gate_error_without_fabricating_turn() 
     assert trace["expectation_met"] is True
     assert trace["status_snapshots"] == []
     assert trace["request_error_code"] == "codex_not_connected"
+    assert trace["capture_error_code"] is None
     assert trace["original_error_code"] == "codex_not_connected"
     assert trace["ui_error_code"] is None
     assert [row["point"] for row in trace["timings"]] == [

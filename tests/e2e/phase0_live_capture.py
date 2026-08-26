@@ -28,6 +28,7 @@ TERMINAL_TURN_STATES = {
     "cancelled",
     "recovery_required",
 }
+NON_ERROR_TURN_STATES = {"awaiting_confirmation", "completed"}
 PUBLIC_ACTIVITY_TYPES = {
     "queued",
     "started",
@@ -138,8 +139,6 @@ def _screen_input(value: str | None) -> dict[str, Any]:
         "view_type": None,
     }
     screen.update(supplied)
-    # A saved fixture may contain a stale captured_at value. The runner is the capture boundary, so
-    # stamp the moment at which this context is actually submitted.
     screen["captured_at"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     return screen
 
@@ -220,6 +219,20 @@ def _latest_diagnostic_code(snapshots: list[dict[str, Any]]) -> str | None:
     return codes[-1] if codes else None
 
 
+def _terminal_original_error(
+    snapshots: list[dict[str, Any]], *, final_state: str | None, final_error: str | None
+) -> str | None:
+    """Return an original product error only when the turn actually ended in an error state.
+
+    Diagnostic codes from attempts that later recovered are useful evidence, but they are not the
+    terminal error of a successful turn and must not be promoted to ``original_error_code``.
+    """
+
+    if final_state in NON_ERROR_TURN_STATES:
+        return None
+    return _latest_diagnostic_code(snapshots) or final_error
+
+
 def _has_public_activity(snapshot: dict[str, Any]) -> bool:
     return any(
         isinstance(event, dict) and event.get("type") in PUBLIC_ACTIVITY_TYPES
@@ -242,6 +255,43 @@ def _expectation_met(
         return isinstance(codes, list) and request_error_code in codes
     states = expected.get("states")
     return isinstance(states, list) and final_state in states
+
+
+def _partial_turn_trace(
+    *,
+    scenario_id: str,
+    timings: list[dict[str, Any]],
+    snapshots: list[dict[str, Any]],
+    turn_id: str,
+    started_at: float,
+    interrupted_at: float,
+    final_status: dict[str, Any],
+    capture_error_code: str,
+) -> dict[str, Any]:
+    timings.append(
+        {
+            "point": "browser_final",
+            "elapsed_ms": _elapsed_ms(started_at, interrupted_at),
+            "turn_id": turn_id,
+            "state": final_status.get("state"),
+            "capture_error": capture_error_code,
+        }
+    )
+    return {
+        "format_version": 1,
+        "capture_kind": "live_http",
+        "scenario_id": scenario_id,
+        "timings": timings,
+        "status_snapshots": snapshots,
+        "request_error_code": None,
+        "capture_error_code": capture_error_code,
+        "original_error_code": None,
+        "ui_error_code": None,
+        "model_turns": None,
+        "tool_calls": None,
+        "token_usage": None,
+        "expectation_met": False,
+    }
 
 
 def capture_enqueue_scenario(
@@ -293,6 +343,7 @@ def capture_enqueue_scenario(
             "timings": timings,
             "status_snapshots": [],
             "request_error_code": code,
+            "capture_error_code": None,
             "original_error_code": code,
             "ui_error_code": None,
             "model_turns": None,
@@ -333,17 +384,57 @@ def capture_enqueue_scenario(
     final_status = queued
 
     while final_status.get("state") not in TERMINAL_TURN_STATES:
-        if float(monotonic()) >= deadline:
-            raise CaptureError("capture_timeout")
+        checked_at = float(monotonic())
+        if checked_at >= deadline:
+            return _partial_turn_trace(
+                scenario_id=scenario["id"],
+                timings=timings,
+                snapshots=snapshots,
+                turn_id=turn_id,
+                started_at=started_at,
+                interrupted_at=checked_at,
+                final_status=final_status,
+                capture_error_code="capture_timeout",
+            )
         sleep(poll_interval_seconds)
-        status = client.call(
-            "/odoo_ai/v1/turn/status",
-            {"turn_id": turn_id, "after_sequence": last_sequence},
-        )
+        try:
+            status = client.call(
+                "/odoo_ai/v1/turn/status",
+                {"turn_id": turn_id, "after_sequence": last_sequence},
+            )
+        except CaptureError as error:
+            return _partial_turn_trace(
+                scenario_id=scenario["id"],
+                timings=timings,
+                snapshots=snapshots,
+                turn_id=turn_id,
+                started_at=started_at,
+                interrupted_at=float(monotonic()),
+                final_status=final_status,
+                capture_error_code=str(error),
+            )
         if not isinstance(status, dict) or status.get("ok") is not True:
-            raise CaptureError("turn_status_invalid")
+            return _partial_turn_trace(
+                scenario_id=scenario["id"],
+                timings=timings,
+                snapshots=snapshots,
+                turn_id=turn_id,
+                started_at=started_at,
+                interrupted_at=float(monotonic()),
+                final_status=final_status,
+                capture_error_code="turn_status_invalid",
+            )
         if status.get("turn_id") != turn_id:
-            raise CaptureError("turn_status_mismatch")
+            return _partial_turn_trace(
+                scenario_id=scenario["id"],
+                timings=timings,
+                snapshots=snapshots,
+                turn_id=turn_id,
+                started_at=started_at,
+                interrupted_at=float(monotonic()),
+                final_status=final_status,
+                capture_error_code="turn_status_mismatch",
+            )
         final_status = status
         snapshot = _safe_snapshot(status)
         snapshots.append(snapshot)
@@ -376,7 +467,11 @@ def capture_enqueue_scenario(
         if isinstance(final_status.get("error_code"), str)
         else None
     )
-    original_error = _latest_diagnostic_code(snapshots) or final_error
+    original_error = _terminal_original_error(
+        snapshots,
+        final_state=final_state if isinstance(final_state, str) else None,
+        final_error=final_error,
+    )
     return {
         "format_version": 1,
         "capture_kind": "live_http",
@@ -384,6 +479,7 @@ def capture_enqueue_scenario(
         "timings": timings,
         "status_snapshots": snapshots,
         "request_error_code": None,
+        "capture_error_code": None,
         "original_error_code": original_error,
         "ui_error_code": None,
         "model_turns": None,
@@ -466,6 +562,7 @@ def main() -> int:
                 "scenario_id": trace["scenario_id"],
                 "capture_kind": trace["capture_kind"],
                 "expectation_met": trace["expectation_met"],
+                "capture_error_code": trace.get("capture_error_code"),
                 "trace": str(args.out),
             },
             sort_keys=True,
