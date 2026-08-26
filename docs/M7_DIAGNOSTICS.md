@@ -39,12 +39,17 @@ browser. Distingue como mínimo:
 - authenticated / ready;
 - authenticated / unusable.
 
-Cuando hay una cuenta, `account/read` es la fuente de verdad. Después, un probe
-independiente arranca el mismo HOME temporal credential-only usado por los product
-turns y ejecuta `account/read(refreshToken=true)`. Codex valida/refresca únicamente
-la copia temporal: Odoo no toca ni persiste tokens. Esto permite detectar una sesión
-que exista en el `CODEX_HOME` persistente pero que ya no sea utilizable desde el
-aislamiento productivo.
+Cuando hay una cuenta, `account/read` es la fuente de verdad. Diagnostics pide a
+Codex `account/read(refreshToken=true)` **únicamente sobre el `CODEX_HOME`
+persistente**, de forma que cualquier rotación/actualización de credenciales siga
+perteneciendo al store privado administrado por Codex. Odoo no inspecciona ni
+persiste el token resultante.
+
+Después, un probe independiente arranca el mismo HOME temporal credential-only
+usado por los product turns y ejecuta `account/read(refreshToken=false)`. El HOME
+temporal se usa sólo para comprobar compatibilidad/visibilidad y nunca para
+refrescar, evitando que una posible rotación de refresh token quede atrapada en un
+directorio que se elimina al cerrar el probe.
 
 Email y `planType` sólo se muestran a administradores si el App Server los
 proporciona. `account/rateLimits/read` es opcional; si existe se renderizan los
