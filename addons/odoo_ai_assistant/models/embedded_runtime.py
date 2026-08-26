@@ -164,24 +164,27 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
 
     async def _execute_plan(self, turn, *, lease_token, envelope, plans, policy):
         dbname = self.env.cr.dbname
-        _commit_plan_barrier(
-            dbname,
-            turn.id,
-            lease_token,
-            envelope,
-        )
+
+        def before_effect():
+            _commit_plan_barrier(
+                dbname,
+                turn.id,
+                lease_token,
+                envelope,
+            )
+
         try:
             executed = await plans.execute(
                 envelope["plan"],
                 human_approved=bool(envelope["human_approved"]),
+                before_effect=before_effect,
             )
         except (CapabilityPlanError, CapabilityError) as error:
             raise EmbeddedRuntimeError(error.code) from error
         completed = dict(envelope)
         completed["plan"] = executed.payload
         turn.with_user(SUPERUSER_ID).write({"capability_plan_payload": completed})
-        response = self._plan_response(turn, completed, policy, completed=True)
-        return response
+        return self._plan_response(turn, completed, policy, completed=True)
 
     def _persist_awaiting_plan(self, turn, envelope, response):
         technical = turn.with_user(SUPERUSER_ID)
@@ -310,13 +313,24 @@ class AssistantTurnEmbeddedStatus(models.Model):
             envelope = dict(envelope)
             envelope["plan"] = plan
             response = dict(turn.result_payload or {})
+            response["answer"] = "Acción cancelada. No se ha realizado ningún cambio."
+            response["confidence"] = "high"
             if isinstance(response.get("plan"), dict):
                 response["plan"] = {**response["plan"], "state": "rejected"}
+            assistant_message = self.env["odoo.ai.message"].with_user(SUPERUSER_ID).create(
+                {
+                    "conversation_id": turn.conversation_id.id,
+                    "role": "assistant",
+                    "content": response["answer"],
+                    "internal_workflow": "AGENT",
+                }
+            )
             technical.write(
                 {
                     "state": "completed",
                     "capability_plan_payload": envelope,
                     "result_payload": response,
+                    "assistant_message_id": assistant_message.id,
                     "completed_at": fields.Datetime.now(),
                     "lease_token": False,
                     "lease_expires_at": False,
@@ -332,6 +346,7 @@ class AssistantTurnEmbeddedStatus(models.Model):
                 "plan_id": turn.turn_uuid,
                 "state": "rejected",
                 "plan": response.get("plan"),
+                "response": response,
             }
 
         plan = dict(envelope["plan"])
@@ -363,13 +378,14 @@ class AssistantTurnEmbeddedStatus(models.Model):
             "plan_id": turn.turn_uuid,
             "state": "authorized",
             "plan": _browser_capability_plan(turn, plan, policy),
+            "response": None,
         }
 
     @api.model
     def capability_plan_status_for_current_user(self, plan_id):
         turn = self._owned_turn(plan_id)
-        response = turn.result_payload if isinstance(turn.result_payload, dict) else {}
-        plan = response.get("plan") if isinstance(response.get("plan"), dict) else None
+        response = turn.result_payload if isinstance(turn.result_payload, dict) else None
+        plan = response.get("plan") if isinstance(response, dict) and isinstance(response.get("plan"), dict) else None
         envelope = _plan_envelope(turn.capability_plan_payload)
         if plan is None and envelope is not None:
             policy = resolve_capability_policy(turn.policy_payload or {})
@@ -381,6 +397,8 @@ class AssistantTurnEmbeddedStatus(models.Model):
             "state": state,
             "plan": plan,
             "turn_state": turn.state,
+            "response": response,
+            "error_code": turn.error_code or None,
         }
 
 
@@ -396,7 +414,7 @@ class EmbeddedRuntimeError(RuntimeError):
 
 
 def _commit_plan_barrier(dbname, turn_id, lease_token, envelope):
-    """Persist plan + barrier before any mutation transaction can commit."""
+    """Persist the durable retry barrier immediately before the first effect."""
 
     with Registry(dbname).cursor() as cr:
         env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
@@ -488,6 +506,9 @@ def _browser_capability_plan(turn, plan, policy):
         if not isinstance(step, dict):
             raise EmbeddedRuntimeError("capability_plan_corrupt")
         risk = _max_risk(risk, step.get("risk"))
+        preview = step.get("preview")
+        if not isinstance(preview, dict):
+            raise EmbeddedRuntimeError("capability_plan_corrupt")
         receipt = None
         result = step.get("result")
         if isinstance(result, dict):
@@ -501,19 +522,20 @@ def _browser_capability_plan(turn, plan, policy):
         browser_steps.append(
             {
                 "step_id": f"{turn.turn_uuid}:{step.get('position')}",
+                "capability": step.get("capability"),
                 "title": step.get("title") or step.get("capability"),
+                "summary": _preview_summary(preview),
                 "state": step.get("state"),
                 "risk": step.get("risk"),
                 "effect_scope": step.get("effect"),
+                "approval": step.get("approval"),
+                "preview": preview,
                 "receipt": receipt,
             }
         )
-    state = plan.get("state")
-    if state == "authorized" and plan.get("requires_confirmation"):
-        state = "authorized"
     return {
         "plan_id": turn.turn_uuid,
-        "state": state,
+        "state": plan.get("state"),
         "risk": risk,
         "metadata": {
             "needs_read": False,
@@ -536,6 +558,27 @@ def _browser_capability_plan(turn, plan, policy):
         "requires_confirmation": bool(plan.get("requires_confirmation")),
         "expires_at": None,
     }
+
+
+def _preview_summary(preview):
+    operation = preview.get("operation")
+    display_name = preview.get("display_name")
+    model = preview.get("model")
+    record_id = preview.get("record_id")
+    parts = []
+    if isinstance(operation, str) and operation:
+        parts.append(operation.replace("_", " "))
+    if isinstance(display_name, str) and display_name.strip():
+        parts.append(display_name.strip())
+    elif isinstance(model, str) and model:
+        target = model
+        if type(record_id) is int and record_id > 0:
+            target = f"{target} #{record_id}"
+        parts.append(target)
+    changes = preview.get("changes")
+    if isinstance(changes, list) and changes:
+        parts.append(f"{len(changes)} cambio(s)")
+    return " · ".join(parts)[:500] or "Revisa el preview antes de continuar."
 
 
 def _browser_policy(policy):
