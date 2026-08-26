@@ -81,7 +81,9 @@ The browser polls Odoo-owned turn/event state. Persisted events are sanitized pu
 
 At the current audited baseline, completed and approval-waiting turn status includes the persisted authoritative result payload as the browser `response`.
 
-For Foundation Stabilization Phase 0 measurement, `streamAssistantChat()` also accepts optional diagnostic-only `onTiming` and `nowCall` hooks. The normal product caller does not need to provide them. The current client records monotonic checkpoints for `submit_received`, `turn_persisted`, `browser_first_activity` and `browser_final`. These hooks do not change the transport and do **not** imply real assistant answer streaming; `browser_first_answer_delta` remains unavailable until the later streaming phase is implemented.
+For Foundation Stabilization Phase 0 measurement, `streamAssistantChat()` also accepts optional diagnostic-only `onTiming` and `nowCall` hooks. The normal product caller does not need to provide them. The client records monotonic checkpoints for `submit_received`, `turn_persisted`, `browser_first_activity` and `browser_final`.
+
+The Codex adapter also emits content-free `diagnostic.timing` events for runtime/provider lifecycle checkpoints (`runtime_started`, process start, initialize, thread/turn start, first provider event and first provider answer delta). Their payload is limited to checkpoint name plus process-local elapsed milliseconds. The answer delta text itself is neither persisted nor forwarded by this instrumentation. These measurement hooks do not change the polling transport and do **not** imply real assistant answer streaming; `browser_first_answer_delta` remains unavailable until the later streaming phase is implemented.
 
 ## Conversation persistence
 
