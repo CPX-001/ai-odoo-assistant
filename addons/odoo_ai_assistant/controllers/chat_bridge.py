@@ -18,6 +18,8 @@ class BrowserChatController(http.Controller):
         methods=["POST"],
     )
     def chat(self, message=None, screen=None, conversation_id=None, **unexpected):
+        """Compatibility ingress for cached pre-queue frontend assets."""
+
         if unexpected:
             _logger.info(
                 "Browser chat rejected unexpected payload keys: %s",
@@ -37,7 +39,7 @@ class BrowserChatController(http.Controller):
         methods=["POST"],
     )
     def chat_stream(self, message=None, screen=None, conversation_id=None, **unexpected):
-        """Relay Assistant SSE while keeping browser auth/authority entirely in Odoo."""
+        """Compatibility SSE ingress for cached pre-queue frontend assets."""
 
         bridge = request.env["odoo.ai.assistant.bridge"]
         if unexpected:
@@ -140,42 +142,6 @@ class BrowserChatController(http.Controller):
         return request.env["odoo.ai.assistant.bridge"].set_agent_autonomy_preference(
             profile
         )
-
-    @http.route(
-        "/odoo_ai/v1/agent-plan-decision",
-        type="json",
-        auth="user",
-        methods=["POST"],
-    )
-    def agent_plan_decision(self, plan_id=None, decision=None, **unexpected):
-        if unexpected:
-            return {"error": {"code": "invalid_context"}, "ok": False}
-        return request.env["odoo.ai.assistant.bridge"].decide_agent_plan(
-            plan_id,
-            decision,
-        )
-
-    @http.route(
-        "/odoo_ai/v1/agent-plan-execute",
-        type="json",
-        auth="user",
-        methods=["POST"],
-    )
-    def agent_plan_execute(self, plan_id=None, **unexpected):
-        if unexpected:
-            return {"error": {"code": "invalid_context"}, "ok": False}
-        return request.env["odoo.ai.assistant.bridge"].execute_agent_plan(plan_id)
-
-    @http.route(
-        "/odoo_ai/v1/agent-plan-status",
-        type="json",
-        auth="user",
-        methods=["POST"],
-    )
-    def agent_plan_status(self, plan_id=None, **unexpected):
-        if unexpected:
-            return {"error": {"code": "invalid_context"}, "ok": False}
-        return request.env["odoo.ai.assistant.bridge"].agent_plan_status(plan_id)
 
     # Legacy policy endpoints remain available for older cached assets during module
     # upgrades. New clients use the single autonomy-profile endpoints above.
