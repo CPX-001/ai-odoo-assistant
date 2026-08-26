@@ -1,130 +1,308 @@
 {
-  "format_version": 1,
+  "format_version": 2,
   "scenarios": [
     {
       "id": "hello",
       "category": "read_only",
-      "requires": ["authenticated_codex"],
-      "expected_terminal_states": ["completed"],
+      "entrypoint": "enqueue",
+      "requires": [
+        "authenticated_codex"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "completed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Simple turn with no Odoo business data requirement."
     },
     {
       "id": "read_partner",
       "category": "read_only",
-      "requires": ["authenticated_codex", "known_partner"],
-      "expected_terminal_states": ["completed"],
+      "entrypoint": "enqueue",
+      "requires": [
+        "authenticated_codex",
+        "known_partner"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "completed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Find one known partner through bounded Odoo reads."
     },
     {
       "id": "query_sales",
       "category": "read_only",
-      "requires": ["authenticated_codex", "sale_module", "known_sale_orders"],
-      "expected_terminal_states": ["completed"],
+      "entrypoint": "enqueue",
+      "requires": [
+        "authenticated_codex",
+        "sale_module",
+        "known_sale_orders"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "completed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Exercise schema-first bounded sale.order querying."
     },
     {
       "id": "aggregate_sales",
       "category": "read_only",
-      "requires": ["authenticated_codex", "sale_module", "known_sale_orders"],
-      "expected_terminal_states": ["completed"],
+      "entrypoint": "enqueue",
+      "requires": [
+        "authenticated_codex",
+        "sale_module",
+        "known_sale_orders"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "completed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Exercise one bounded aggregate/read_group path."
     },
     {
       "id": "write_preview",
       "category": "write",
-      "requires": ["authenticated_codex", "known_partner"],
-      "expected_terminal_states": ["awaiting_confirmation"],
+      "entrypoint": "enqueue",
+      "requires": [
+        "authenticated_codex",
+        "known_partner"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "awaiting_confirmation"
+        ],
+        "error_codes": []
+      },
       "purpose": "Prepare a harmless partner update and stop at host approval."
     },
     {
       "id": "write_execute_verify",
       "category": "write",
-      "requires": ["authenticated_codex", "known_partner", "approved_preview"],
-      "expected_terminal_states": ["completed"],
+      "entrypoint": "plan_decision",
+      "requires": [
+        "authenticated_codex",
+        "known_partner",
+        "approved_preview"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "completed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Approve an existing preview, execute it, and verify the result."
     },
     {
       "id": "acl_denied",
       "category": "authorization_failure",
-      "requires": ["authenticated_codex", "limited_user", "inaccessible_fixture"],
-      "expected_terminal_states": ["failed", "completed"],
+      "entrypoint": "enqueue",
+      "requires": [
+        "authenticated_codex",
+        "limited_user",
+        "inaccessible_fixture"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "failed",
+          "completed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Confirm effective-user ACL/record-rule denial is preserved without sudo."
     },
     {
       "id": "provider_auth_missing",
       "category": "provider_failure",
-      "requires": ["codex_runtime", "disconnected_account"],
-      "expected_terminal_states": ["failed"],
-      "purpose": "Capture the original and browser-visible error when provider auth is absent."
+      "entrypoint": "enqueue",
+      "requires": [
+        "codex_runtime",
+        "disconnected_account"
+      ],
+      "expected": {
+        "kind": "request_error",
+        "states": [],
+        "error_codes": [
+          "codex_not_connected"
+        ]
+      },
+      "purpose": "Capture the pre-enqueue account-gate error when provider authentication is absent."
     },
     {
       "id": "provider_process_missing",
       "category": "provider_failure",
-      "requires": ["missing_codex_executable"],
-      "expected_terminal_states": ["failed"],
-      "purpose": "Capture runtime-not-found handling without starting a provider process."
+      "entrypoint": "enqueue",
+      "requires": [
+        "missing_codex_executable"
+      ],
+      "expected": {
+        "kind": "request_error",
+        "states": [],
+        "error_codes": [
+          "codex_unavailable"
+        ]
+      },
+      "purpose": "Capture the pre-enqueue runtime gate when the Codex executable is unavailable."
     },
     {
       "id": "provider_disconnect",
       "category": "provider_failure",
-      "requires": ["provider_eof_injection"],
-      "expected_terminal_states": ["failed"],
+      "entrypoint": "enqueue",
+      "requires": [
+        "provider_eof_injection"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "failed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Inject provider EOF/disconnect and preserve the originating diagnostic code."
     },
     {
       "id": "provider_timeout",
       "category": "provider_failure",
-      "requires": ["provider_timeout_injection"],
-      "expected_terminal_states": ["failed"],
+      "entrypoint": "enqueue",
+      "requires": [
+        "provider_timeout_injection"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "failed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Exercise bounded provider timeout handling."
     },
     {
       "id": "tool_invalid_input",
       "category": "capability_failure",
-      "requires": ["capability_invalid_input_fixture"],
-      "expected_terminal_states": ["failed", "completed"],
+      "entrypoint": "enqueue",
+      "requires": [
+        "capability_invalid_input_fixture"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "failed",
+          "completed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Reject invalid capability arguments through host schema validation."
     },
     {
       "id": "tool_handler_failure",
       "category": "capability_failure",
-      "requires": ["capability_failure_fixture"],
-      "expected_terminal_states": ["failed", "completed"],
+      "entrypoint": "enqueue",
+      "requires": [
+        "capability_failure_fixture"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "failed",
+          "completed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Preserve a sanitized capability handler failure."
     },
     {
       "id": "invalid_final_output",
       "category": "provider_failure",
-      "requires": ["invalid_provider_output_fixture"],
-      "expected_terminal_states": ["failed"],
+      "entrypoint": "enqueue",
+      "requires": [
+        "invalid_provider_output_fixture"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "failed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Reject a provider result that violates the authoritative final output contract."
     },
     {
       "id": "cancel_queued",
       "category": "cancellation",
-      "requires": ["queued_turn_fixture"],
-      "expected_terminal_states": ["cancelled"],
+      "entrypoint": "cancel",
+      "requires": [
+        "queued_turn_fixture"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "cancelled"
+        ],
+        "error_codes": []
+      },
       "purpose": "Cancel before the worker claims the turn."
     },
     {
       "id": "cancel_running",
       "category": "cancellation",
-      "requires": ["running_turn_fixture"],
-      "expected_terminal_states": ["cancelled"],
+      "entrypoint": "cancel",
+      "requires": [
+        "running_turn_fixture"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "cancelled"
+        ],
+        "error_codes": []
+      },
       "purpose": "Request cancellation while the provider/runtime is active."
     },
     {
       "id": "worker_restart_before_write",
       "category": "recovery",
-      "requires": ["stale_worker_before_write_fixture"],
-      "expected_terminal_states": ["queued", "completed", "failed"],
+      "entrypoint": "recovery",
+      "requires": [
+        "stale_worker_before_write_fixture"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "queued",
+          "completed",
+          "failed"
+        ],
+        "error_codes": []
+      },
       "purpose": "Verify safe replay/requeue before the write barrier."
     },
     {
       "id": "worker_loss_after_write_barrier",
       "category": "recovery",
-      "requires": ["stale_worker_after_write_barrier_fixture"],
-      "expected_terminal_states": ["recovery_required"],
+      "entrypoint": "recovery",
+      "requires": [
+        "stale_worker_after_write_barrier_fixture"
+      ],
+      "expected": {
+        "kind": "turn",
+        "states": [
+          "recovery_required"
+        ],
+        "error_codes": []
+      },
       "purpose": "Never auto-retry after the durable effect barrier becomes authoritative."
     }
   ]

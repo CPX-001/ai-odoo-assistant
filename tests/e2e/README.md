@@ -1,6 +1,9 @@
 # E2E tests
 
-The scripts in this directory were created for earlier sidecar/delegation milestones and are retained mainly as historical/regression evidence. Their old service URL, machine-secret, Assistant DB or standalone API assumptions are **not** current product requirements.
+The scripts in this directory were created across several product generations. Older
+sidecar/delegation scripts are retained mainly as historical/regression evidence. Their old service
+URL, machine-secret, Assistant DB or standalone API assumptions are **not** current product
+requirements.
 
 ## Current embedded-product E2E target
 
@@ -31,8 +34,53 @@ Important scenarios include:
 - sanitized progress/diagnostics with no secrets or chain-of-thought;
 - prompt injection/untrusted record/document text when relevant.
 
+## Foundation Stabilization Phase 0 capture
+
+`embedded_phase0_scenarios.json` is the machine-readable Phase 0 scenario catalog.
+Its format distinguishes persisted-turn outcomes from failures rejected by the current
+pre-enqueue runtime/account gate. In particular, a disconnected Codex account currently returns
+`codex_not_connected` before a turn exists, and a missing Codex executable returns
+`codex_unavailable`.
+
+`phase0_live_capture.py` captures supported `enqueue` scenarios against a real Odoo HTTP endpoint.
+It authenticates through an Odoo session and writes a deliberately redacted trace: credentials,
+message text, screen context, assistant answers, plan payloads and general event payloads are not
+retained. Plain HTTP is accepted only for loopback hosts so credentials are not accidentally sent
+to a remote clear-text endpoint.
+
+Inputs are supplied through environment variables:
+
+```text
+ODOO_AI_PHASE0_DB
+ODOO_AI_PHASE0_LOGIN
+ODOO_AI_PHASE0_PASSWORD
+ODOO_AI_PHASE0_MESSAGE
+ODOO_AI_PHASE0_SCREEN_JSON
+```
+
+Example:
+
+```bash
+python tests/e2e/phase0_live_capture.py \
+  --scenario hello \
+  --out /tmp/phase0/hello-001.json
+```
+
+For a failure capture, `--ui-error-code` (or `ODOO_AI_PHASE0_UI_ERROR_CODE`) may be supplied only
+after the final product/browser error code has actually been observed. The runner does not invent
+that value from backend state.
+
+`phase0_baseline.py` summarizes one trace. `phase0_report.py` aggregates traces or summaries,
+computes simple latency distributions and evaluates the four Phase 0 exit-gate conditions. It
+returns exit status `0` only when the evidence says Phase 1 may start; incomplete evidence returns
+`2`.
+
 ## Legacy scripts
 
-Existing sidecar-era helper scripts may still be run when validating preserved legacy code or when a current migration deliberately reuses one of their contracts. Passing them does not prove the embedded runtime works; failing them after an intentional retirement does not by itself indicate a current-product regression.
+Existing sidecar-era helper scripts may still be run when validating preserved legacy code or when
+a current migration deliberately reuses one of their contracts. Passing them does not prove the
+embedded runtime works; failing them after an intentional retirement does not by itself indicate a
+current-product regression.
 
-For current test priorities see `../AGENTS.md` and root `docs/CURRENT_STATE.md`.
+For current test priorities see `../AGENTS.md`, `../docs/CURRENT_STATE.md` and
+`../docs/research/PHASE0_BASELINE.md`.
