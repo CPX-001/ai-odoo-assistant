@@ -1,12 +1,12 @@
 # Current implementation state
 
-Validated against `main` immediately before this documentation close-out, with code baseline `045de466996049f41b85fa2eb5fd0ea54d72e948` (26 August 2026). This document describes implementation, not the desired roadmap. Revalidate code if `main` has advanced.
+Validated against `main` at `a16825b159a25caca3b48fcab15b9b21b0169ab6` on 26 August 2026. This document describes implementation, not the desired roadmap. Revalidate code if `main` has advanced.
 
 ## Product baseline
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Installable product: `addons/odoo_ai_assistant`.
-- Addon version at the inspected baseline: `18.0.10.4.5`.
+- Addon version at the inspected baseline: `18.0.10.4.6`.
 - Operational runtime: embedded in Odoo.
 - Reasoning provider: Codex App Server launched as an ephemeral subprocess.
 - Browser transport: Odoo RPC only.
@@ -24,11 +24,13 @@ browser
   -> effective CapabilityRegistry views for reasoning/planning
   -> Codex reasoning and capability calls
   -> host validation/policy/approval/execution/verification
-  -> persisted events/final message
+  -> persisted events/final message/result payload
   -> browser polling/rendering
 ```
 
 Turn claiming is Odoo-native and uses bounded leases/recovery. The queue uses an internal `FOR UPDATE SKIP LOCKED` claim primitive to coordinate workers; this is infrastructure locking, not a model-visible arbitrary SQL capability.
+
+At the inspected baseline the generic turn status endpoint returns the authoritative `result_payload` as `response` for `awaiting_confirmation` and `completed` turns, so the browser can render the completed/approval response without relying on a subclass-specific override.
 
 ## Capability host implemented now
 
@@ -59,7 +61,7 @@ Fields and operators are filtered by effective runtime visibility. Returned reco
 
 ## Writes and host authority
 
-The reasoning model never gains authority by selecting a tool. The host validates the effective catalog, JSON schema, current user context, risk/policy and approval requirements before an effect. Write paths are designed around preview/authorization/execution/verification rather than unrestricted `write()` or arbitrary method calls exposed to the model.
+The reasoning model never gains authority by selecting a capability. The host validates the effective catalog, JSON schema, current user context, risk/policy and approval requirements before an effect. Write paths are designed around preview/authorization/execution/verification rather than unrestricted `write()` or arbitrary method calls exposed to the model.
 
 Business operations must continue to respect ACLs, record rules, field access and active companies. Generic SQL, Python, shell, sudo and unrestricted `execute_method`/`execute_kw` are not model capabilities.
 

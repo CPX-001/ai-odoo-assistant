@@ -1,160 +1,116 @@
-# Addon-local Capability Framework
+# Capability Framework
 
-## Goal
+The Capability Framework is the host-owned contract between probabilistic reasoning and deterministic Odoo execution.
 
-`odoo_ai_assistant` behaves as a small capability host inside the addon. New tools are
-declared once and discovered automatically. The agent runtime, planner, policy layer and
-future transports consume the same catalog instead of maintaining parallel lists.
+## Core principle
 
-The framework is intentionally transport-neutral. Its wire descriptor is MCP-shaped
-(JSON Schema input/output plus metadata), but it does not start an MCP daemon or another
-HTTP service. A future MCP/OpenAPI adapter can expose the same catalog without changing
-provider code.
+Declare an executable operation once as a `CapabilityDefinition`, then derive the views needed by reasoning, planning, diagnostics and future transports from that same definition.
 
-## Layout
+Do not create separate registries for chat tools, actions, MCP tools or automations when they represent the same operation.
+
+## Atomic definition
+
+A capability definition carries both model-facing and host-facing metadata. The exact dataclass/code is authoritative, but conceptually it includes:
 
 ```text
-odoo_ai_assistant/
-  runtime/
-    capabilities/
-      contracts.py
-      decorators.py
-      registry.py
-      executor.py
-      validation.py
-      providers/
-        odoo_runtime.py
-        <new capability files>.py
+stable id/name
+summary/description
+input JSON Schema
+output JSON Schema
+risk
+side-effect/effect classification
+approval semantics
+groups/guards/dependencies
+budgets/limits
+handler
 ```
 
-`providers/**` is recursively discovered with `pkgutil.walk_packages`. A provider does
-not need to be imported from `providers/__init__.py` and does not need an Odoo model,
-XML record, registry edit, or relation.
+The handler is never inferred from a model-generated name or arbitrary Odoo method. Registration is explicit/deterministic through trusted installed code.
 
-## Adding a tool
+## Decorator and discovery
 
-Create one Python file under `runtime/capabilities/providers/`:
+Core providers define capabilities with the framework decorator and are discovered by `CapabilityRegistry`. Current provider modules are:
 
-```python
-from ..contracts import CapabilityEffect, CapabilityRisk
-from ..decorators import tool
+- `odoo_query`;
+- `odoo_actions`;
+- `odoo_batch`;
+- `odoo_runtime`.
 
+Discovery today is intentionally scoped to the installed core provider package. That keeps the current surface deterministic but is not yet the desired third-party extension model.
 
-@tool(
-    name="odoo.partner_lookup",
-    description="Find visible partners by name.",
-    input_schema={
-        "type": "object",
-        "properties": {"query": {"type": "string", "minLength": 1}},
-        "required": ["query"],
-        "additionalProperties": False,
-    },
-    output_schema={
-        "type": "object",
-        "properties": {"records": {"type": "array"}},
-        "required": ["records"],
-        "additionalProperties": False,
-    },
-    risk=CapabilityRisk.READ,
-    effect=CapabilityEffect.READ_ONLY,
-)
-def partner_lookup(context, arguments):
-    records = context.env["res.partner"].search(
-        [("name", "ilike", arguments["query"])],
-        limit=10,
-    )
-    return {
-        "records": [
-            {"id": record.id, "name": record.display_name}
-            for record in records
-        ]
-    }
+## Registry
+
+The registry is the source of truth for effective availability. It resolves definitions and filters by host-known conditions such as groups, guards, dependencies/configuration and run context.
+
+Consumers use purpose-specific projections, not handler objects:
+
+- reasoning view: enough description/schema for tool selection;
+- planning view: enough effect/risk/dependency metadata for plan validation;
+- diagnostics view: sanitized availability/issue metadata;
+- future transport adapters: generated from the same effective definition.
+
+The model cannot make an unavailable definition available by naming it.
+
+## Executor
+
+`CapabilityExecutor` receives a resolved definition and validated input/context. It enforces schema/availability/budget/policy checks around the trusted handler and normalizes capability errors/results.
+
+Handlers must remain bounded and use the effective Odoo user for business access. A handler must not use `sudo()` or a technical service account as a shortcut around normal permissions unless an explicitly host-internal operation is separately designed and justified.
+
+## Query provider
+
+`odoo_query` implements schema-first, bounded business reads. Model/field/operator availability is derived from the live installation/user. Query limits are host constants, not prompt suggestions.
+
+See `QUERY_CONTRACT.md`.
+
+## Action provider
+
+`odoo_actions` owns controlled effect semantics around effective write schema, previews/preconditions and verification. The framework deliberately does not expose arbitrary `execute_kw`/method execution.
+
+## Batch provider
+
+`odoo_batch` extends controlled effects to bounded collections without bypassing the same authority/policy model. Batch behavior should favor deterministic summaries/receipts and avoid hundreds of unconstrained model-authored writes.
+
+## Runtime provider
+
+`odoo_runtime` exposes only narrow runtime information needed by reasoning. Runtime metadata is not a back door to filesystem/shell/secrets.
+
+## Extension direction
+
+The project research uses the following conceptual model:
+
+```text
+CapabilityProvider
+    -> CapabilityBundle / Skill
+        -> CapabilityDefinition
 ```
 
-That file is sufficient for discovery. The composition root later asks
-`discover_capabilities()` for the effective turn catalog.
+This is **direction**, not current implementation.
 
-## Definition contract
+- `CapabilityDefinition` remains the atomic executable/authority contract.
+- A future `CapabilityProvider` should let trusted installed addons contribute definitions/bundles without editing the core package.
+- A future `CapabilityBundle/Skill` should group instructions, capability selectors and activation metadata; it must not duplicate handlers or authorization.
+- If the catalog becomes large, availability/disclosure can evolve toward `discovered -> available -> revealed -> active` and lazy loading.
 
-Each capability is the single source of truth for:
+Pydantic AI Capabilities/Toolsets and FastMCP Providers are useful references for composition/progressive disclosure, but importing either as a second agent runtime is not required.
 
-- stable tool name and version/executor id;
-- human description;
-- JSON Schema input and output;
-- risk and effect class;
-- approval requirement;
-- optional Odoo groups and dynamic guard;
-- default enablement;
-- per-tool call/input/output budgets;
-- handler function;
-- source module/qualname for diagnostics.
+## Security rules for new capabilities
 
-Actions are not a second extension mechanism. A mutating action is a capability with a
-write/action risk, effect metadata and approval policy. Reads, retrieval, diagnostics,
-host utilities and future low-level integrations use the same protocol.
+Every new definition must answer:
 
-## Per-turn execution
+1. What exact host operation is allowed?
+2. What input/output schema bounds it?
+3. What user/company/field permissions apply?
+4. Is returned content trusted or untrusted data?
+5. What risk/effect classification applies?
+6. Is preview/approval required?
+7. How is success verified?
+8. What happens on timeout/retry/restart?
+9. What budgets/record/byte limits prevent blast-radius growth?
+10. What deterministic tests and agentic eval cover it?
 
-`CapabilityContext` carries the effective Odoo `Environment`, turn/conversation ids,
-screen data, bounded metadata and an event sink.
+Never add arbitrary SQL/Python/shell/sudo/unrestricted method execution merely to increase apparent agent flexibility.
 
-The environment is deliberately the originating user's environment. Normal Odoo
-capabilities therefore inherit ACLs and record rules naturally. The framework itself
-does not add `sudo()` or silently switch identity.
+## Compatibility/transport rule
 
-A capability implementation can technically use lower-level facilities already
-reachable from that environment, including `env.cr`. That is an explicit provider
-decision, not a hidden framework feature. The core addon does not ship a generic SQL
-tool. Introducing one later must be an explicit policy/security decision, but it would
-not require a new orchestration architecture.
-
-Handlers can be synchronous or async. They execute in-process; synchronous Odoo code is
-not moved to a thread. Inputs and outputs are validated against the declared bounded
-schema before crossing the model boundary.
-
-## Discovery and safety
-
-Discovery is deterministic and cached per Odoo worker:
-
-1. recursively import provider modules;
-2. inspect decorated functions defined by each module;
-3. reject duplicate names/executor ids;
-4. build one `CapabilityRegistry`;
-5. filter availability against the effective turn context;
-6. advertise only the resulting definitions.
-
-Discovery grants no authority by itself. Risk/effect/approval metadata remains
-host-declared, and the eventual composition root decides which discovered capabilities
-are exposed for each turn.
-
-## Transport adapters
-
-The current descriptor is deliberately close to MCP:
-
-```json
-{
-  "name": "odoo.runtime_identity",
-  "description": "...",
-  "inputSchema": {"type": "object"},
-  "outputSchema": {"type": "object"},
-  "meta": {
-    "executor_id": "odoo.runtime_identity.v1",
-    "risk": "metadata",
-    "effect": "read-only",
-    "approval_required": false,
-    "tags": ["odoo", "runtime", "identity"]
-  }
-}
-```
-
-The embedded Codex adapter will compile these definitions into the existing reasoning
-engine's tool contracts. A future actual MCP or OpenAPI adapter should translate this
-same registry rather than introduce another tool registry.
-
-## Migration rule
-
-Legacy hard-coded tool lists such as `agent_tool_specs()`,
-`agent_tool_policy_specs()` and hand-composed query/action/retrieval registries are
-migration inputs, not the desired final architecture. As each old tool moves into the
-addon, its schema, policy metadata and handler binding should converge into one
-`@tool(...)` definition.
+If MCP, automation or another client is added later, implement an adapter over the effective catalog. Do not maintain a second list of tools with divergent permissions.

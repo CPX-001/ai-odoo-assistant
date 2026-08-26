@@ -1,221 +1,139 @@
-# Operación del agente unificado
+# Unified agent runtime
 
-Este documento describe el runtime activo definido por ADR-014. Los informes
-M5/M6 anteriores son evidencia histórica de gates, no el mecanismo de routing
-actual.
+The current runtime is a single host-authorized agent loop embedded in Odoo. It supersedes the old workflow router that split requests into GENERAL/QUERY/HOW_TO/EXPLAIN/ACTION services.
 
-## Qué puede descubrir
+## Goal
 
-El agente no está limitado a una lista de módulos compilada en el Assistant
-Service. Al iniciar un turn, Odoo aporta una lista pequeña de modelos visibles
-relacionados con la pantalla y el mensaje. Si la petición se refiere a otro
-concepto, `odoo.search_models` consulta el registry de la base en ejecución.
-
-Esto cubre modelos aportados por:
-
-- Odoo Community y módulos oficiales instalados;
-- OCA;
-- proveedores terceros;
-- addons propios del cliente.
-
-Un resultado de búsqueda no concede permisos. Odoo repite la comprobación del
-modelo y construye el schema efectivo antes de leer o preparar un write.
-
-El agente dispone además de `odoo.get_instance_facts`, que obtiene mediante el
-endpoint machine-authenticated de inventario la versión real del servidor y los
-nombres técnicos de módulos instalados. No expone la base de datos ni las rutas
-físicas de addons. Esta consulta es lazy: no se ejecuta en todos los turnos, pero
-sí debe usarse cuando una respuesta pueda cambiar según versión o módulos. La
-lista retornada está acotada a 64 nombres por llamada; el resultado conserva el
-recuento real y marca truncado cuando corresponde.
-
-## Capacidad genérica y capacidad tipada
-
-| Necesidad | Cobertura dinámica actual |
-| --- | --- |
-| Detectar versión/módulos instalados | Inventario runtime machine-authenticated |
-| Buscar modelos instalados | Registry runtime + ACL de lectura |
-| Consultar registros/agregados | Schema efectivo, domains y campos acotados |
-| Explorar addon conocido | Índice Python/XML acotado + refs fingerprinted |
-| Crear un registro | Schema create efectivo + `default_get` real |
-| Cambiar campos escalares/many2one | Schema write efectivo, máximo 16 campos |
-| Archivar | Acción reversible tipada sobre un registro elegible |
-| Borrar | Un registro por proposal ACTION actual, con ACL `unlink` y preview |
-| Ejecutar un método empresarial | Sólo business action tipada/versionada |
-
-Los campos x2many, binary, HTML de escritura, referencias polimórficas, JSON y
-familias sensibles permanecen fuera del CRUD genérico. No se traducen a command
-lists de Odoo desde texto libre.
-
-### Evolución batch
-
-ADR-015 define la evolución de create/patch/delete hacia mutaciones masivas. Ya
-existen cuatro piezas separadas:
-
-1. contratos provider-neutral de filas/resultados (`contracts/batch.py`);
-2. planner determinista de chunks (`application/batching.py`);
-3. orquestador provider-neutral con resultado por fila (`application/batch_execution.py`);
-4. helper ORM Odoo que intenta el camino bulk y, si falla, aísla filas mediante
-   savepoints (`addons/.../services/batch_tools.py`).
-
-Defaults iniciales para servidores self-hosted modestos:
-
-- create: 50 filas por chunk;
-- patch: 50 filas por chunk;
-- delete: 100 ids por chunk;
-- máximo host-side: 200 filas por chunk;
-- un `BatchMutationRequest` en memoria: máximo 500 filas.
-
-Los patches con valores idénticos se agrupan para poder ejecutar un
-`recordset.write(vals)`. Creates usan como estrategia objetivo multi-create y
-deletes `recordset.unlink()` por chunk.
-
-El modo genérico por defecto es `continue_on_error`: primero se intenta la
-operación optimizada del chunk; si Odoo la rechaza, se revierte únicamente ese
-savepoint y se reintentan sus filas de forma aislada. Una fila fallida queda sin
-aplicar, el resto continúa y el resultado conserva `source_ref` para notificar
-exactamente qué dato falló. `atomic_chunk` queda reservado para operaciones cuya
-semántica empresarial requiera todo-o-nada.
-
-Una importación grande no se modelará como miles de AgentPlanSteps: se persistirá
-como job y alimentará batches acotados. El pipeline de archivos futuro será
-parser determinista/streaming -> perfil y muestra -> mapping semántico asistido
-por Codex -> validación Odoo -> filas normalizadas persistidas -> ejecución
-batch. Codex no será el parser de volumen.
-
-Estas piezas todavía no convierten el tool ACTION individual en un proposal
-batch de primera clase; falta cablear preview, authority, receipt y plan como una
-única operación masiva antes de exponerlo al ReasoningEngine.
-
-## Resolución de una petición
-
-El ReasoningEngine aplica:
+A user should be able to ask one natural-language request. The model chooses among the capabilities actually available for that turn; the host decides what is valid and authorized.
 
 ```text
-mensaje -> conversación -> pantalla/registro/compañía
--> versión/módulos si son relevantes
--> búsqueda de modelos/registros o retrieval mínimo
--> defaults/schema -> inferencia segura -> pregunta mínima
+user request
+   |
+   v
+screen + conversation + effective Odoo context
+   |
+   v
+AgentTurnService
+   |
+   +--> effective capability catalog
+   +--> ReasoningEngine (Codex adapter today)
+   |
+   v
+validated capability calls / plan
+   |
+   v
+CapabilityExecutor + policy + approval + verification
+   |
+   v
+persisted result/events
 ```
 
-El modelo puede pedir lecturas y previews, pero el host vuelve a validar todas
-las llamadas. En la salida estructurada sólo se aceptan pasos que correspondan
-exactamente a previews realmente emitidas en ese turn.
+## Context
 
-El riesgo no es por sí mismo una ambigüedad. Si el usuario ha expresado un
-alcance inequívoco (por ejemplo, "todos los pedidos visibles"), Codex no debe
-usar una pregunta conversacional como segunda capa de aprobación; el host decide
-si corresponde confirmar según el perfil de autonomía del usuario.
+The host reconstructs context from Odoo rather than trusting browser/model assertions. Relevant context includes authenticated user, active/allowed companies, conversation, screen/model/record information and policy snapshot.
 
-### Preguntas teóricas, configuración y HOW_TO
+Screen/record text is context data, not permission. Retrieved or user-controlled text must never enable a capability, lower risk or grant approval.
 
-Una pregunta teórica no debe convertirse automáticamente en una respuesta
-enciclopédica genérica. Se distingue entre conocimiento realmente general y una
-pregunta sobre **esta instalación**.
+## Reasoning vs execution
 
-Para una petición como "¿hay alguna configuración de facturación que habilite
-opciones adicionales como analítica?", el comportamiento esperado es:
+`ReasoningEngine` decides/proposes. `AgentTurnService` and the capability host validate.
 
-1. comprobar versión y módulos instalados si pueden cambiar la respuesta;
-2. consultar knowledge configurado y leer el excerpt verificado si hay
-   documentación relevante;
-3. usar schema/navigation runtime cuando aporte una ubicación o capacidad real;
-4. si interviene un addon custom/OCA/tercero, verificar que está instalado y,
-   cuando no se conoce el símbolo exacto, usar `source.inspect_module` para
-   obtener estructura Python y registros XML indexados; después abrir sólo los
-   excerpts relevantes mediante refs con fingerprint;
-5. responder primero con la conclusión y después sólo con los detalles útiles.
+The reasoning side can see model-facing capability descriptors. It cannot directly access an Odoo Environment, bypass registry availability, execute arbitrary ORM methods or convert text into authority.
 
-`res.config.settings` es transient y no se trata como una tabla de negocio para
-consultas genéricas. Para comprobar que una opción existe o cómo funciona, el
-agente puede inspeccionar las extensiones Python de `res.config.settings`. Eso no
-prueba por sí solo su posición visual. Si el usuario pide la ubicación exacta en
-Settings/menús/vistas, debe localizar además un `kind=xml_id` relevante y leer el
-excerpt XML antes de afirmar dónde aparece.
+The host validates model output and plan structure. Effectful plan growth is bounded; current service logic also bounds write-step count rather than accepting an unbounded generated workflow.
 
-El agente no debe inventar un menú, sección de Settings, checkbox, dependencia o
-campo exacto. Si puede validar la funcionalidad pero no la ubicación visual,
-debe decirlo expresamente en vez de rellenar el hueco con "seguramente está en
-Ajustes". Si el retrieval necesario está temporalmente indisponible, puede dar
-orientación general claramente marcada como tal y bajar la confianza, pero no
-presentarla como un hecho observado en el servidor.
+## Effective capability catalog
 
-`source.inspect_module` no concede acceso libre al filesystem: enumera como
-máximo 24 entradas de la estructura persistida de un módulo técnico exacto,
-intercalando símbolos Python y registros XML para que ninguno de los dos tipos
-quede oculto por truncado. Los XML sólo se exponen cuando disponen de un rango de
-líneas verificable. El contenido sigue requiriendo `source.read_excerpt`, que
-vuelve a validar el fingerprint contra el fichero actual y acepta tanto refs de
-`SourceSymbol` como de `XmlRecord`. No se ejecuta shell, grep libre ni rescan
-durante el turno.
+The catalog is built per run/turn from installed definitions and context. The registry exposes reduced views for reasoning and planning instead of leaking handler internals.
 
-## Decisión y commit
+Current state:
 
-`AgentTurnService` normaliza el plan. El Policy Engine calcula el riesgo y
-resuelve los límites host-side. La confirmación del Assistant se deriva del
-**perfil visible del usuario**, no de una intersección oculta que pueda volver
-más estricto el selector. Las capas de sistema/administrador/conversación pueden
-seguir reduciendo budgets técnicos o desactivar datos sintéticos, pero no
-cambiar silenciosamente `confirmation_mode`/`max_auto_risk` elegidos por el
-usuario.
+- atomic `CapabilityDefinition`: implemented;
+- deterministic discovery of core provider modules: implemented;
+- guards/groups/dependencies/effective filtering: implemented;
+- provider-neutral adapters/views: implemented;
+- external addon `CapabilityProvider`: not yet first-class;
+- configurable Skill/CapabilityBundle: not yet implemented;
+- `discovered -> available -> revealed -> active` progressive disclosure: design direction, not current runtime behavior.
 
-Perfiles:
+## Reads
 
-- `strict`: confirma cualquier escritura;
-- `balanced`: autoejecuta hasta riesgo moderado;
-- `autonomous`: autoejecuta hasta riesgo alto y confirma efectos protegidos;
-- `full_access`: no añade confirmaciones del Assistant, incluso para riesgo
-  protegido, conservando permisos/reglas reales de Odoo y límites host-side.
+The general read path is schema-first. Query capabilities inspect models/fields visible to the effective user, issue schema fingerprints and require bounded inputs before querying. Aggregate/query limits are enforced host-side.
 
-Un plan autoautorizado se ejecuta en el mismo turn. Después del commit, la
-respuesta mostrada al usuario se deriva del estado host-side real: completado y
-verificado, parcial o fallido. El texto previo de Codex no puede afirmar que una
-operación sigue "sólo previsualizada" después de que el host ya la ejecutó.
+A read result is untrusted content for reasoning. It can answer the user but cannot alter policy.
 
-Una denegación ACL/record rule y una `UserError`/`ValidationError` de negocio son
-causas distintas de fallo y se reportan como tales; ninguna se presenta como si
-faltara otra confirmación.
+## Effects
 
-Estados persistidos:
+Effectful capabilities carry explicit effect/risk/approval metadata. The intended lifecycle is:
 
 ```text
-planning -> awaiting_confirmation | authorized -> executing
--> completed | partial | failed
+intent
+ -> effective schema/preconditions
+ -> prepare/preview
+ -> policy decision
+ -> approval when required
+ -> execute under effective user
+ -> verify
+ -> receipt/public result
 ```
 
-También pueden aparecer `rejected` y `expired`. Cualquier cambio en payload,
-orden, dependencias, preview, actor, compañías, revisión, policy o estado stale
-invalida la autorización.
+An approval must bind to the prepared effect/preconditions rather than act as a generic conversational “yes”. Stale or ambiguous effects should fail/recover safely instead of being replayed blindly.
 
-## Flujo comercial incluido
+## Durable turns
 
-`sale.order.build_flow.v1` se ejecuta en una transacción Odoo bajo el usuario
-real:
+Long turns are Odoo records. The browser does not hold the transaction/runtime alive.
 
-- `quotation`: crea presupuesto borrador (`low`);
-- `sale_order`: crea y confirma el presupuesto (`moderate`);
-- `invoice_draft`: confirma y crea factura borrador (`high`).
+Queue properties include:
 
-"Crear un presupuesto y validarlo" termina en `sale_order`. No se crea factura
-salvo que el usuario la pida o la intención completa la implique claramente.
-Contabilizar, pagar o comunicar fuera de Odoo requiere otra acción protegida;
-esas capabilities no se exponen por inferencia.
+- queued claim by cron;
+- lease ownership/expiry;
+- bounded attempts;
+- cancellation requests;
+- stale recovery;
+- explicit terminal/recovery states;
+- persisted events consumed by cursor/polling.
 
-`full_access` no salta reglas de negocio del modelo. Por ejemplo, si Odoo no
-permite `unlink()` en el estado actual de un documento, el commit devuelve
-`business_rule_rejected`; para automatizar esa intención hace falta una business
-action tipada que realice la transición válida, no `sudo()` ni SQL.
+For completed and approval-waiting turns, the generic turn status returns the persisted authoritative result payload to the browser. Retries are safe only for replayable work. Effectful ambiguity requires verification/recovery semantics, not unconditional retry.
 
-## Diagnóstico de modelos de terceros
+## Progress events
 
-Si un modelo esperado no aparece, comprobar en orden:
+Persisted public events are projections of host state. They may communicate classes of work such as queued/analyzing/tool activity/awaiting approval/verifying/completed/failed, but must not reveal private chain-of-thought, raw prompts, sensitive tool arguments, provider credentials or unsanitized stdout.
 
-1. el módulo está instalado en esa base y el modelo existe en el registry;
-2. el usuario real tiene ACL de lectura;
-3. no es abstract/transient ni técnico bloqueado;
-4. sus campos útiles pasan field access y los tipos soportados;
-5. para writes, el usuario tiene `create`/`write`/`unlink` según la operación.
+The current transport is Odoo polling. SSE/WebSocket is not required by the architecture; introduce streaming transport only if it improves UX without moving authority out of Odoo.
 
-No se debe ampliar una allowlist en el prompt para resolverlo. La corrección es
-instalar/configurar el módulo o los permisos de Odoo, o añadir una business
-action tipada si lo que falta es semántica de proceso.
+## Codex lifecycle
+
+The current provider starts Codex App Server as a subprocess. Account lifecycle is separate from turn lifecycle: credentials live in provider-owned `CODEX_HOME`; the database only controls whether it is connected/enabled.
+
+The UI account service refreshes while the Assistant is active/visible, with faster polling during device-code login and slower refresh while authenticated. Chat/history are not bootstrapped until authentication is usable.
+
+## Failure classes
+
+The runtime must distinguish at least:
+
+- invalid model/provider output before an effect;
+- unavailable/denied capability;
+- ACL/record-rule/field-access denial;
+- provider unavailable/timeout;
+- cancellation before effect;
+- failed verified effect;
+- uncertain/partial effect requiring recovery;
+- stale lease/restart recovery.
+
+Do not collapse all of these into a generic assistant error when the host knows a more precise safe state.
+
+## Product directions
+
+The next architecture layers should compose around this runtime rather than fork it:
+
+- Agent/Profile configuration;
+- Skill/CapabilityBundle grouping/instructions;
+- external-addon CapabilityProvider extension point;
+- context providers and semantic metadata;
+- knowledge/source retrieval with provenance;
+- domain business-action packs;
+- agentic evals;
+- richer public progress/approval UX;
+- future non-chat invocation modes using the same host.
+
+They are not license to reintroduce rigid request routers or a second operational agent runtime.

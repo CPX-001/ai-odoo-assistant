@@ -1,13 +1,32 @@
 # Architecture Decision Records
 
-Crear un ADR únicamente cuando se cambie o concrete una decisión arquitectónica significativa. Los ADR documentan el contexto, la decisión, consecuencias, alternativas y referencias; no sustituyen la actualización explícita del Source of Truth cuando cambie una invariante.
+ADRs capture decisions that intentionally constrain the current architecture. They are authoritative together with current code; if implementation and an accepted ADR diverge, investigate the divergence rather than falling back to older milestone documents.
 
-Los ADR-001 a ADR-013 ya están definidos en el Source of Truth y no se recrean como archivos independientes en esta fase. Para nuevas decisiones, copiar [`ADR-000-template.md`](ADR-000-template.md), asignar el siguiente identificador y mantener su estado actualizado.
+## Current accepted decisions
 
-ADR activos en el repositorio:
+| ADR | Status | Decision |
+| --- | --- | --- |
+| ADR-014 | accepted | Unified host-authorized agent runtime; retire rigid workflow routing as the target architecture. |
+| ADR-015 | accepted | Controlled batch capability/action foundation. |
+| ADR-016 | accepted | Embedded Odoo runtime, Odoo-native persistence/cron queue, ephemeral Codex provider; retire operational sidecar. |
+| ADR-017 | accepted | Addon Capability Framework with `CapabilityDefinition` as the atomic executable contract. |
+| ADR-018 | accepted | Installation-scoped provider credentials plus database-scoped non-secret Codex activation. |
 
-- [`ADR-014`](ADR-014-unified-host-authorized-agent.md): agente unificado con autoridad host-side.
-- [`ADR-015`](ADR-015-batch-mutations-and-file-ingestion.md): mutaciones masivas, chunking e ingesta futura de archivos.
-- [`ADR-016`](ADR-016-embedded-odoo-runtime.md): runtime operacionalmente autocontenido en el addon Odoo.
-- [`ADR-017`](ADR-017-addon-capability-framework.md): framework interno de capabilities auto-descubiertas.
-- [`ADR-018`](ADR-018-database-scoped-codex-activation.md): activación explícita de Codex por base Odoo sin duplicar el credential store.
+`ADR-000-template.md` is only the template.
+
+## Authority
+
+Use this order when deciding what is true now:
+
+1. current code + accepted ADR;
+2. current docs indexed by `../README.md`;
+3. current tests;
+4. historical milestone reports/task packets/research PDFs.
+
+The old `docs/source-of-truth/` name does not make those PDFs more authoritative than newer ADRs/code. Their own recent Atlas/Benchmark snapshots require revalidation against `main`.
+
+## Creating/superseding an ADR
+
+Use an ADR for changes to durable architecture boundaries such as deployment unit, authority, persistence, capability contract, credential ownership or a major execution protocol. Do not edit an old accepted ADR to pretend a later decision was always part of it; add a superseding ADR and update this index/current docs.
+
+Implementation-only refinements that remain inside an accepted decision normally belong in code/tests/current docs rather than a new ADR.

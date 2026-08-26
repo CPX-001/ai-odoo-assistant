@@ -1,145 +1,159 @@
-# Arquitectura operativa
+# Architecture
 
-Esta referencia resume decisiones del [Source of Truth v1.1](source-of-truth/Odoo_AI_Assistant_Source_of_Truth_v1.1.pdf). No lo sustituye ni añade decisiones nuevas. La política concreta de autodetección/overrides está en [DEPLOYMENT_CONFIG.md](DEPLOYMENT_CONFIG.md) y el runtime del agente en [UNIFIED_AGENT_RUNTIME.md](UNIFIED_AGENT_RUNTIME.md).
+Current product architecture for `ai-odoo-assistant`. For an implementation snapshot, see `CURRENT_STATE.md`; for decisions, see `adr/`.
 
-```text
-Odoo addon
-    ↓
-Assistant Service
-    ↓
-Evidence / Tools / Reasoning
-```
+## 1. Deployment unit
 
-## Boundaries
-
-- **Browser/Owl:** captura navegación y ofrece UX. Habla sólo con Odoo durante el MVP; no decide permisos ni aporta identidad confiable.
-- **Odoo addon:** deriva identidad, ejecuta ORM bajo el usuario real, gestiona settings, delegación y approvals. No ejecuta el LLM ni scans pesados.
-- **Assistant Service:** orquesta turns, retrieval, tools, persistencia y observabilidad. No accede por SQL a la DB Odoo ni usa `sudo()`.
-- **ReasoningEngine:** razona y solicita tools dentro de contratos y límites. No posee autoridad Odoo ni conoce detalles de transporte.
-- **Source/Log providers:** recuperan evidencia acotada del host; no reciben instrucciones libres del modelo.
-
-## Deployment adaptable
-
-El perfil inicial probado es Odoo 18 Community sobre Linux self-hosted con PostgreSQL, pero el layout del cliente es runtime data, no arquitectura.
-
-No asumir rutas o nombres concretos para `odoo.conf`, service unit, usuario Odoo, addons, `data_dir`, logs o PostgreSQL. Las rutas convencionales pueden usarse como hints de autodetección siempre que exista override explícito.
-
-Prioridad conceptual de resolución:
+The managed application is the Odoo 18 Community addon `odoo_ai_assistant`.
 
 ```text
-override de administrador
-    ↓
-runtime Odoo confirmado
-    ↓
-metadata de proceso/supervisor
-    ↓
-config Odoo
-    ↓
-hints convencionales
+Browser (OWL)
+    |
+    | Odoo RPC
+    v
+Odoo 18 + odoo_ai_assistant
+    |
+    +-- PostgreSQL used by Odoo
+    +-- ir.cron workers
+    +-- <data_dir>/odoo_ai_assistant/*
+    +-- Codex App Server subprocess per runtime use/turn
 ```
 
-Si un dato sigue desconocido o ambiguo, se representa como tal y se resuelve por configuración/capability; no se inventa. Odoo Settings será la superficie normal para overrides administrables, mientras los cambios que requieran privilegios del host permanecen detrás del bootstrap/setup boundary.
+The supported architecture does not require a FastAPI/Uvicorn sidecar, a second Assistant database, a dedicated internal HTTP port or a shared Odoo-to-Assistant machine secret. Those belonged to the retired `service/`/`installer/` lineage.
 
-El Assistant Service puede usar systemd en el perfil MVP aunque Odoo use un supervisor distinto. Igualmente, la Assistant DB puede estar en el mismo cluster PostgreSQL por defecto sin que las interfaces generales dependan de `localhost` o de ese cluster concreto.
+## 2. Authority boundary
 
-## Persistencia separada
+Odoo is authoritative for:
 
-El Assistant usa una DB PostgreSQL propia para conversaciones, índices, scans, approvals, auditoría y trazas. No replica datos vivos de negocio ni recibe credenciales SQL de la DB productiva de Odoo.
+- authenticated user and allowed companies;
+- ACLs, record rules and field access;
+- model/schema visibility;
+- conversation and turn persistence;
+- capability availability and host policy;
+- approval state;
+- execution and post-write verification;
+- diagnostics and audit-relevant public events.
 
-## Identidad
+The reasoning model is not an authority boundary. It can propose plans and capability calls, but every call is resolved again through host-owned registry/schema/policy/executor logic.
 
-La identidad efectiva, compañías y contexto de seguridad se derivan server-side. Cada tool vuelve a validar delegación y policy; Odoo aplica ACL, record rules, restricciones de campos y reglas de negocio. `ScreenContext` es sólo una pista de navegación y los registros se releen por ORM bajo el usuario real.
+Business capabilities run under the effective user Environment and must reject accidental `su=True` execution. Internal infrastructure may use privileged mechanics only for bounded host operations that do not grant model-visible business authority (for example queue coordination).
 
-## Runtime schemas y módulos instalados
+## 3. Main components
 
-Los schemas efectivos se descubren en runtime bajo el usuario, compañías y policy actuales. No se crean clases por major de Odoo ni catálogos por módulo. El catálogo de instancia sirve para descubrimiento; sólo `EffectiveModelSchema`/`EffectiveWriteSchema` gobiernan la exposición y validación de fields durante un turn.
+### Browser/OWL
 
-La lista inicial de modelos es una pista. `odoo.search_models` consulta el registry real y descubre modelos instalados de Odoo, OCA, terceros o addons propios. Cada candidato se revalida bajo el usuario real antes de buscar, leer o preparar un write. El CRUD genérico escalar se adapta al schema runtime; los métodos y transiciones empresariales siguen necesitando business actions tipadas.
+The floating assistant panel manages conversation UX, composer state, account gating, polling and rendering. It communicates with Odoo only. The browser never receives Codex token material or direct capability authority.
 
-## ReasoningEngine y agente unificado
+### Odoo conversation/turn models
 
-`ReasoningEngine` es un port estable. Codex App Server por stdio es el adapter inicial y su acoplamiento queda confinado al engine. Cada turn recibe un `ContextPack` compacto y tools explícitas. No existen categorías de routing ni workflows excluyentes: el modelo puede combinar lecturas y propuestas en un único plan.
+Conversations, messages, turns and public events are persisted in Odoo. A submitted request becomes durable state before long reasoning/execution proceeds.
 
-Codex sólo solicita tools de lectura/preview y propone argumentos. `AgentTurnService`, `ToolExecutor`, el Policy Engine y Odoo validan registry, schemas, ACL, record rules, budgets, riesgo, autorización, commit y verificación. La memoria de producto vive en la DB del Assistant, no en threads de Codex.
+### Turn queue
 
-### Streaming y recuperación de fallos
+`odoo.ai.turn` is claimed by native `ir.cron` workers. The queue supports leases, bounded attempts, cancellation and stale recovery. Worker coordination uses an internal `FOR UPDATE SKIP LOCKED` claim; this is not exposed to the model as SQL.
 
-El chat puede transportar texto provisional mediante SSE sin cambiar las fronteras de autoridad:
+### Agent runtime
+
+`AgentTurnService` is the current turn-level host. `ReasoningEngine` is the provider-neutral reasoning port used by the service. The runtime builds effective capability views, asks the provider for reasoning/tool calls, validates plans and executes through the host.
+
+### Capability framework
+
+`CapabilityDefinition` is the atomic executable unit. `CapabilityRegistry` discovers installed core definitions, resolves dependency/guard/group availability and creates effective views. `CapabilityExecutor` validates and executes a definition with policy/budget controls.
+
+Current core provider modules are:
 
 ```text
-Codex App Server delta
-    → Assistant Service SSE
-    → relay SSE autenticado de Odoo
-    → Owl
+runtime/capabilities/providers/
+  odoo_query.py
+  odoo_actions.py
+  odoo_batch.py
+  odoo_runtime.py
 ```
 
-Los eventos provisionales contienen únicamente texto incremental extraído de `answer_markdown`; nunca incluyen plan, argumentos, fingerprints, receipts, authority ni razonamiento interno. El único estado autoritativo del turn llega en un evento terminal `final`, validado por el Assistant Service y después de nuevo por el bridge Odoo antes de exponerse al navegador. Si el stream se corta, termina sin `final` o entrega un payload no válido, el texto provisional no se acepta como resultado definitivo y se sustituye por un turn fallido conversacional.
+There is currently no first-class external-addon `CapabilityProvider` API or configurable `CapabilityBundle/Skill` layer. Those are planned composition layers around, not replacements for, `CapabilityDefinition`.
 
-El navegador continúa autenticándose sólo contra Odoo. El shared secret Assistant↔Odoo nunca se entrega a JavaScript y el POST SSE de Odoo conserva la protección CSRF. La preparación ORM —usuario, compañías, policy, capability y modelo— se completa antes de devolver el iterador WSGI; el relay no reutiliza recordsets ni `request.env` una vez que la transacción del controlador ha terminado.
+### Codex adapter
 
-Los fallos esperables del agente se presentan como respuestas del Assistant, no como códigos internos. Cuando Codex sigue disponible, un recovery separado y read-only puede recibir estado de Diagnostics y extractos de logs acotados, redactados y correlacionados con el `turn_id`. Ese recovery no dispone de tools, no repite la operación fallida y no puede escribir. Su salida debe explicar el problema en lenguaje normal y sólo puede ofrecer un reintento/corrección si el host ha marcado explícitamente esa siguiente acción como válida. Si el recovery no puede ejecutarse o su salida filtra identificadores internos, se usa un fallback host-owned corto.
+Codex App Server is a local subprocess owned by the Odoo runtime identity. The adapter uses stdio/event protocol integration; it is not a long-lived product daemon. Product turns use bounded workspace/runtime state and a private `CODEX_HOME` below Odoo's `data_dir`.
 
-Una pérdida de comunicación o timeout no demuestra que una escritura no llegara a ejecutarse. En esos casos la UI no afirma “no hubo cambios”: marca el resultado como no confirmado y pide comprobar el estado actual antes de repetir una operación. Los códigos técnicos permanecen en logs/Diagnostics.
-
-El perfil actual mantiene un App Server acotado por turn y threads efímeros, con cierre bounded al terminar. No se usa un daemon Codex compartido como memoria de conversación; la continuidad vive en la DB del Assistant. Esto conserva aislamiento entre turns y evita que el estado interno de un proceso defectuoso se convierta en autoridad o memoria de producto.
-
-## Retrieval y evidencia
-
-Primero retrieval estructural y lexical: símbolos/relaciones para source, PostgreSQL FTS para documentos y búsqueda temporal acotada para logs. Los providers de source y logs son obligatorios para `FULLY_READY`. La evidencia recuperada se trata como datos no confiables, se redacta y se entrega en resultados estructurados.
-
-Los scanners/providers reciben roots, units y paths resueltos/validados. No contienen paths de cliente como constantes y nunca escanean todo el host para compensar una detección incompleta.
-
-## Writes, autonomía y riesgo
-
-Los efectos siguen el flujo:
+## 4. End-to-end turn
 
 ```text
-proposal → preview → autorización host-side → commit → verification → audit
+1. Browser submits user message + screen context to Odoo.
+2. Odoo validates caller/context and persists conversation/message/turn.
+3. Odoo schedules/awakens cron processing.
+4. A worker claims the turn with a lease.
+5. Host reconstructs effective user/company context and policy snapshot.
+6. AgentTurnService builds effective reasoning/planning capability views.
+7. Codex reasons and may request capability calls.
+8. Host validates capability id, input schema, availability, policy and budgets.
+9. Read calls execute under effective user authority.
+10. Effectful calls pass required prepare/preview/approval gates.
+11. Host executes and verifies effects.
+12. Sanitized progress/final events and assistant message/result are persisted.
+13. Browser polls Odoo and renders authoritative turn state/response.
 ```
 
-Odoo sigue siendo la autoridad real: ACL, record rules, field access, compañías y reglas de negocio. Encima de esa autoridad el usuario elige un perfil simple de autonomía del Assistant:
+A provider error after a potential effect is not proof that no effect happened. Recovery/verification state must distinguish confirmed failure from uncertain/partial outcomes.
 
-- `strict`: confirma cualquier escritura;
-- `balanced`: autoejecuta hasta riesgo moderado;
-- `autonomous`: autoejecuta hasta riesgo alto y confirma efectos protegidos;
-- `full_access`: no añade confirmaciones del Assistant.
+## 5. Data and persistence
 
-`full_access` no implica `sudo()`, métodos arbitrarios ni eliminación de límites host-side. Sólo retira la capa adicional de confirmación del Assistant. El host sigue calculando riesgo para trazabilidad y UI, pero el riesgo no se convierte por sí mismo en una pregunta conversacional. Si el usuario expresó un alcance inequívoco, Codex debe preparar la acción y dejar que el perfil decida si corresponde confirmar.
+Current operational persistence is Odoo-native:
 
-La autorización se liga al plan ordenado, payloads, previews, dependencias, actor, base, compañías, revisiones y snapshot de policy. Los business actions usan handlers allowlisted; nunca métodos arbitrarios.
+- PostgreSQL tables owned by Odoo models for conversations/turns/events/action state;
+- `ir.config_parameter` for non-secret database configuration;
+- Odoo `data_dir` for runtime filesystem state and provider-owned credentials.
 
-Antes de preguntar se resuelve `mensaje → conversación → contexto Odoo → búsqueda de registros → defaults/schema → inferencia segura → preguntar`. Datos sintéticos sólo en prueba/demo explícita o con autorización, siempre marcados `AI TEST`.
+There is no current separate SQLAlchemy/Alembic Assistant database. Historical root `migrations/` files refer to the retired service.
 
-Los límites máximos host-side actuales son 32 tool calls, 12 write steps por plan, dos replans y tres fallos consecutivos. Una llamada canónica no se repite sin cambio de precondición y un write incierto nunca se reintenta automáticamente.
+## 6. Filesystem layout
 
-### Mutaciones masivas e importaciones
-
-ADR-015 separa semántica de volumen. El camino objetivo es:
+`RuntimePaths.from_odoo()` derives:
 
 ```text
-archivo/datos
-  → parsing determinista
-  → mapping semántico asistido
-  → schema/ACL validation
-  → filas normalizadas persistidas
-  → chunks batch
-  → preview/autorización
-  → ORM optimizado
-  → receipts por origen
+<data_dir>/odoo_ai_assistant/
+  codex/    # CODEX_HOME, provider-owned account material
+  runtime/  # ephemeral/bounded runtime state
+  cache/
+  source/
 ```
 
-Codex interpreta headers, muestras y ambigüedades; no procesa miles de filas dentro del prompt. El planner batch ya existe como capa independiente. Create aprovechará multi-create, delete recordsets y patch agrupará valores idénticos antes de ejecutar. La integración del batch con proposals/approval/execution se realiza como fase separada para no mezclar responsabilidades.
+Addon-owned directories are created/tightened to mode `0700`. The code rejects unsafe/unresolvable `data_dir` and symlinked runtime directories.
 
-## Prohibiciones principales
+## 7. Authentication
 
-- `sudo()` en los caminos normales del agente.
-- SQL directo del Assistant Service contra Odoo.
-- Shell libre, SQL arbitrario o Python arbitrario.
-- `execute_method` / `execute_kw` genérico como tool del modelo.
-- Identidad confiada desde JavaScript.
-- Secretos en prompts.
-- Writes sin validación y approval cuando corresponda.
-- Checks de major de Odoo dentro de `application`, salvo excepción documentada por ADR.
-- Paths/nombres del entorno DEV convertidos en contratos de deployment.
+The Codex account is installation-scoped on the host, while each Odoo database has a non-secret activation gate. Odoo asks App Server for account status/login/logout; it does not parse or copy provider refresh/access tokens.
 
-Para contratos, flujos y threat model completos, consultar el Source of Truth.
+See `codex/CODEX_AUTH.md` and ADR-018.
+
+## 8. Query and write design
+
+Reads follow schema-first discovery:
+
+```text
+discover model -> inspect effective schema -> bounded query/aggregate
+```
+
+Writes follow host-controlled effect semantics:
+
+```text
+discover -> effective write schema -> prepare/preview -> policy/approval -> execute -> verify
+```
+
+The exact sequence varies by capability, but authority never moves into the prompt. Generic arbitrary model methods, SQL, Python or shell are intentionally absent.
+
+## 9. Retrieval/current limitations
+
+The embedded core capability package does not currently contain the former sidecar `knowledge.search`, `knowledge.read_excerpt` or structural source providers. Old FTS/source documents remain historical evidence. New knowledge/source retrieval should be introduced as embedded capabilities/providers that preserve provenance, ACL and untrusted-data boundaries.
+
+## 10. Architecture evolution rules
+
+Before adding a subsystem:
+
+1. reuse the current turn/capability/policy infrastructure where possible;
+2. keep Odoo as authority and persistence owner;
+3. separate model-facing description from host authorization;
+4. make external frameworks optional unless they replace real complexity;
+5. use an ADR for changes to deployment/authority/persistence invariants.
+
+Current public Odoo AI and external agent frameworks are references for product/contract patterns, not runtime requirements.
