@@ -1,11 +1,10 @@
-"""Narrow server-side HTTP client for the local Assistant Service."""
+"""Narrow server-side HTTP client for temporary source/retrieval services."""
 
 from __future__ import annotations
 
 import http.client
 import ipaddress
 import json
-import re
 import stat
 from pathlib import Path
 from typing import Any
@@ -14,7 +13,6 @@ from urllib.parse import urlsplit
 MAX_REQUEST_BYTES = 16 * 1024
 MAX_RESPONSE_BYTES = 128 * 1024
 SHARED_SECRET_HEADER = "X-Odoo-AI-Shared-Secret"
-_MODEL_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 
 
 class AssistantServiceError(RuntimeError):
@@ -64,25 +62,6 @@ class AssistantServiceClient:
         self._port = port
         self._shared_secret_file = shared_secret_file
         self._timeout = timeout
-        self._reasoning_model: str | None = None
-
-    def bind_reasoning_model(self, model: str | None):
-        if model is not None and not _MODEL_PATTERN.fullmatch(model):
-            raise AssistantServiceError("configuration_invalid")
-        self._reasoning_model = model
-        return self
-
-    def _with_reasoning_model(self, payload: dict[str, object]) -> dict[str, object]:
-        if self._reasoning_model is None:
-            return payload
-        user = payload.get("user")
-        if not isinstance(user, dict):
-            return payload
-        result = dict(payload)
-        bound_user = dict(user)
-        bound_user["reasoning_model"] = self._reasoning_model
-        result["user"] = bound_user
-        return result
 
     def health(self) -> dict[str, Any]:
         payload = self._get_json("/health")
@@ -121,6 +100,7 @@ class AssistantServiceClient:
         return self._admin_post("/v1/admin/maintenance/reasoning/test", payload)
 
     def maintenance_action_self_test(self, payload: dict[str, object]) -> dict[str, Any]:
+        """Temporary diagnostic endpoint retained until the M7 settings UI is simplified."""
         return self._admin_post("/v1/admin/maintenance/action/self-test", payload)
 
     def maintenance_configuration_revalidate(
@@ -164,34 +144,20 @@ class AssistantServiceClient:
     def explain(self, payload: dict[str, object]) -> dict[str, Any]:
         return self._turn_post("/v1/turns/explain", payload)
 
-    def query(self, payload: dict[str, object]) -> dict[str, Any]:
-        return self._turn_post("/v1/turns/query", payload)
-
     def how_to(self, payload: dict[str, object]) -> dict[str, Any]:
         return self._turn_post("/v1/turns/how-to", payload)
 
-    def action(self, payload: dict[str, object]) -> dict[str, Any]:
-        return self._turn_post("/v1/turns/action", payload)
-
-    def action_decision(self, payload: dict[str, object]) -> dict[str, Any]:
-        return self._admin_post("/v1/actions/decision-execute", payload)
-
-    def _turn_post(
-        self, path: str, payload: dict[str, object]
-    ) -> dict[str, Any]:
+    def _turn_post(self, path: str, payload: dict[str, object]) -> dict[str, Any]:
         if path not in {
             "/v1/turns/context-read",
             "/v1/turns/explain",
             "/v1/turns/how-to",
-            "/v1/turns/query",
-            "/v1/turns/action",
         }:
             raise AssistantServiceError("invalid_request")
-
         secret = self._read_shared_secret()
         try:
             body = json.dumps(
-                self._with_reasoning_model(payload),
+                payload,
                 allow_nan=False,
                 ensure_ascii=False,
                 separators=(",", ":"),
@@ -287,21 +253,9 @@ class AssistantServiceClient:
         if response.status == 401:
             raise AssistantServiceError("authentication_rejected")
         if response.status == 403:
-            if _response_error_code(response_body) == "approval_binding_mismatch":
-                raise AssistantServiceError("approval_binding_mismatch")
             raise AssistantServiceError("access_denied")
         if response.status in {404, 409, 410, 422}:
             error_code = _response_error_code(response_body)
-            action_codes = {
-                "action_budget_exceeded",
-                "action_rejected",
-                "approval_binding_mismatch",
-                "approval_expired",
-                "approval_not_found",
-                "proposal_already_decided",
-                "proposal_not_found",
-                "record_context_required",
-            }
             configuration_codes = {
                 "configuration_invalid",
                 "configuration_revision_conflict",
@@ -312,20 +266,17 @@ class AssistantServiceClient:
                 "maintenance_job_not_found",
                 "maintenance_unavailable",
             }
-            if error_code in action_codes | configuration_codes | maintenance_codes:
+            if error_code in configuration_codes | maintenance_codes:
                 raise AssistantServiceError(error_code)
             if response.status == 404:
                 raise AssistantServiceError("diagnostic_not_found")
             if response.status == 409:
                 raise AssistantServiceError("diagnostic_unavailable")
             if response.status == 410:
-                raise AssistantServiceError("action_rejected")
+                raise AssistantServiceError("diagnostic_unavailable")
+            raise AssistantServiceError("invalid_context")
         if response.status == 413:
             raise AssistantServiceError("invalid_request")
-        if response.status == 422:
-            if _response_error_code(response_body) == "query_rejected":
-                raise AssistantServiceError("query_rejected")
-            raise AssistantServiceError("invalid_context")
         if response.status in {502, 503, 504}:
             error_code = _response_error_code(response_body)
             if error_code in {
@@ -333,7 +284,6 @@ class AssistantServiceClient:
                 "engine_unavailable",
                 "evidence_unavailable",
                 "maintenance_unavailable",
-                "query_budget_exceeded",
             }:
                 raise AssistantServiceError(error_code)
             raise AssistantServiceError("service_unavailable")
