@@ -254,11 +254,10 @@ class TestEmbeddedCodexAccount(TransactionCase):
     def test_worker_start_failure_does_not_leave_starting_state(self):
         manager = self._manager()
         with patch(
-            "odoo_ai_assistant.runtime.account.subprocess.Popen",
+            "odoo.addons.odoo_ai_assistant.runtime.account.subprocess.Popen",
             side_effect=OSError("SECRET-CANARY"),
-        ):
-            with self.assertRaises(CodexAccountError) as caught:
-                manager.start_login()
+        ), self.assertRaises(CodexAccountError) as caught:
+            manager.start_login()
         self.assertEqual(caught.exception.code, "codex_login_worker_start_failed")
         state = _read_state(manager.state_path)
         self.assertEqual(state["state"], "failed")

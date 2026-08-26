@@ -61,13 +61,10 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
         dbname = self.env.cr.dbname
 
         def event_sink(event_type, title, payload):
-            from .turn_queue import _append_event
-
-            _append_event(
-                dbname,
-                turn.id,
-                event_type,
-                title,
+            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+                turn=turn.with_user(SUPERUSER_ID),
+                event_type=event_type,
+                title=title,
                 payload=dict(payload),
             )
 
