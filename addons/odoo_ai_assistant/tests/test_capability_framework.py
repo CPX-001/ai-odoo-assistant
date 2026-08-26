@@ -13,8 +13,10 @@ from ..runtime.capabilities import (
     CapabilityError,
     CapabilityExecutor,
     CapabilityExposure,
+    CapabilityPreview,
     CapabilityRegistry,
     CapabilityRisk,
+    CapabilityVerification,
     ExecutionAuthority,
     clear_discovery_cache,
     discover_capabilities,
@@ -27,6 +29,23 @@ _EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": Fal
 def _ok_handler(context, arguments):
     del context, arguments
     return {"ok": True}
+
+
+def _ok_preview(context, arguments):
+    del context, arguments
+    return CapabilityPreview(
+        summary={"operation": "restart", "target": "test-machine"},
+        precondition_fingerprint="sha256:" + "0" * 64,
+    )
+
+
+def _ok_verify(context, arguments):
+    del arguments
+    result = context.metadata.get("capability_result")
+    return CapabilityVerification(
+        verified=bool(isinstance(result, dict) and result.get("ok") is True),
+        summary={"verified": True},
+    )
 
 
 class TestCapabilityFramework(TransactionCase):
@@ -117,6 +136,8 @@ class TestCapabilityFramework(TransactionCase):
             exposure=CapabilityExposure.PLAN,
             approval=CapabilityApproval.ALWAYS,
             handler=_ok_handler,
+            preview_handler=_ok_preview,
+            verify_handler=_ok_verify,
         )
         registry = CapabilityRegistry((definition,))
         context = self._context()
