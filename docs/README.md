@@ -31,6 +31,7 @@ A dated document never overrides newer code. Architecture changes that intention
 | `codex/CODEX_AUTH.md` | current | Provider-owned Codex account lifecycle and database gate. |
 | `adr/README.md` + accepted ADRs | current decisions | Architecture decision log. |
 | `HISTORICAL_DOCUMENTATION.md` | current index | Classification of archived/superseded material. |
+| `DOCUMENTATION_AUDIT.md` | close-out record | Repository-wide documentation reconciliation baseline and exit criteria. |
 
 ## Historical by default
 
@@ -43,15 +44,21 @@ The following material records earlier milestones and must not be read as curren
 - PDFs and generator scripts under `docs/source-of-truth/`;
 - root `design-qa.md`, which is visual QA evidence for one UI snapshot.
 
+Every `docs/codex/tasks/M0/README.md` through `M7/README.md` is now an **archive index** for its directory, not a milestone status/backlog document. Individual task packets remain unchanged so their historical acceptance evidence is preserved.
+
 See `HISTORICAL_DOCUMENTATION.md` for the reason and superseding current documents.
 
 ## Retired implementation lineage
 
-`service/`, `installer/` and root `migrations/` describe or support the former Assistant Service architecture. They are not the current product runtime. Their local `AGENTS.md` files make this explicit.
+`service/`, `installer/` and root `migrations/` describe or support the former Assistant Service architecture. They are not the current product runtime. Their local `AGENTS.md`/README entry points make this explicit.
 
 ## Plans/task packets
 
 Root `PLANS.md` defines current planning rules. `docs/codex/TASK_PACKET_TEMPLATE.md` is the current hand-off template. Old packets/plans are archives, not backlog.
+
+## Documentation close-out
+
+`DOCUMENTATION_AUDIT.md` records the 2026-08-26 repository-wide close-out performed before feature expansion. It states the inspected implementation baseline, current-vs-historical classification, external sanity checks and intentional non-changes.
 
 ## Updating documentation
 

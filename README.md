@@ -82,8 +82,9 @@ Primary current documents:
 - [`docs/DEPLOYMENT_CONFIG.md`](docs/DEPLOYMENT_CONFIG.md) — deployment/configuration.
 - [`docs/codex/CODEX_AUTH.md`](docs/codex/CODEX_AUTH.md) — Codex authentication lifecycle.
 - [`docs/adr/`](docs/adr/) — accepted architecture decisions.
+- [`docs/DOCUMENTATION_AUDIT.md`](docs/DOCUMENTATION_AUDIT.md) — 2026-08-26 repository-wide documentation close-out checkpoint.
 
-The research PDFs in `docs/source-of-truth/` are dated reference material. They intentionally do not override newer code or ADRs.
+The research PDFs in `docs/source-of-truth/` are dated reference material. They intentionally do not override newer code or ADRs. Old milestone/task documents and the retained `service/`, `installer/` and root `migrations/` trees are explicitly classified as historical and are not the current backlog or deployment path.
 
 ## Development and tests
 

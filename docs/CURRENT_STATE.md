@@ -1,6 +1,6 @@
 # Current implementation state
 
-Validated against `main` at `a16825b159a25caca3b48fcab15b9b21b0169ab6` on 26 August 2026. This document describes implementation, not the desired roadmap. Revalidate code if `main` has advanced.
+Implementation claims were validated against code commit `a16825b159a25caca3b48fcab15b9b21b0169ab6` on 26 August 2026. The documentation close-out commits immediately after that baseline are documentation-only and do not change product behavior. Revalidate this document if product code advances.
 
 ## Product baseline
 
@@ -111,3 +111,5 @@ Historical implementations remain useful as design evidence, but porting a featu
 ## Near-term architecture direction, not implementation
 
 Project research converges on preserving `CapabilityDefinition` and host authority while adding composition around it (`CapabilityProvider -> CapabilityBundle/Skill -> CapabilityDefinition`), agentic evals, stronger context/retrieval and better progress/approval UX. These are targets to evaluate after the documentation baseline is stable; they do not change the current-state claims above.
+
+The repository-wide documentation close-out for this baseline is recorded in `DOCUMENTATION_AUDIT.md`.

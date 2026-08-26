@@ -16,7 +16,9 @@ The `M*.md` files in this directory, `tasks/`, `exec-plans/` and `MILESTONES.md`
 
 In particular, references to a standalone Assistant Service, old routing milestones, service APIs, separate Assistant DB or instructions such as “do not start the next milestone” are historical context only.
 
-See [`../HISTORICAL_DOCUMENTATION.md`](../HISTORICAL_DOCUMENTATION.md).
+`tasks/README.md` defines the archive policy for task packets, and every `tasks/M0/README.md` through `tasks/M7/README.md` is now an archive index rather than a live milestone-status page. Individual packets are intentionally preserved unchanged as dated evidence.
+
+See [`../HISTORICAL_DOCUMENTATION.md`](../HISTORICAL_DOCUMENTATION.md) and [`../DOCUMENTATION_AUDIT.md`](../DOCUMENTATION_AUDIT.md).
 
 ## Current integration rules
 
