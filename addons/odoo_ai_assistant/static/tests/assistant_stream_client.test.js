@@ -193,3 +193,50 @@ test("product chat uses Odoo-native queue and status without assistant secret", 
         "Preparando respuesta…\n",
     ]);
 });
+
+test("native polling returns awaiting_confirmation instead of timing out", async () => {
+    const calls = [];
+    const previewResponse = {
+        ok: true,
+        turn_id: "turn-action-1",
+        conversation_id: "conversation-1",
+        workflow: "AGENT",
+        answer: "He preparado el cambio.",
+        confidence: "high",
+        limitations: [],
+        citations: [],
+        plan: { state: "awaiting_confirmation" },
+    };
+
+    const result = await streamAssistantChat({
+        payload: {
+            message: "Cambia el nombre",
+            screen: { model: "res.partner", res_id: 10 },
+            conversation_id: "conversation-1",
+        },
+        waitCall: async () => {},
+        fetchCall: async (path) => {
+            calls.push(path);
+            if (path === "/odoo_ai/v1/turn") {
+                return jsonResponse({
+                    ok: true,
+                    turn_id: "turn-action-1",
+                    state: "queued",
+                    last_sequence: 1,
+                    events: [{ type: "queued" }],
+                });
+            }
+            return jsonResponse({
+                ok: true,
+                turn_id: "turn-action-1",
+                state: "awaiting_confirmation",
+                last_sequence: 5,
+                events: [{ type: "approval.required" }],
+                response: previewResponse,
+            });
+        },
+    });
+
+    expect(result).toEqual(previewResponse);
+    expect(calls).toEqual(["/odoo_ai/v1/turn", "/odoo_ai/v1/turn/status"]);
+});
