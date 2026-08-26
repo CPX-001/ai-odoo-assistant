@@ -1,8 +1,7 @@
-"""PostgreSQL persistence infrastructure for the Assistant Service."""
+"""PostgreSQL persistence infrastructure for residual service responsibilities."""
 
 from odoo_ai.storage.action_repository import ActionStoreError, SqlActionApprovalStore
 from odoo_ai.storage.base import Base
-from odoo_ai.storage.chat_models import ChatConversation, ChatMessage
 from odoo_ai.storage.config import DatabaseConfigurationError, DatabaseSettings
 from odoo_ai.storage.database import create_database_engine, create_session_factory, session_scope
 from odoo_ai.storage.knowledge_repository import (
@@ -63,22 +62,20 @@ from odoo_ai.storage.source_repository import (
 )
 
 __all__ = [
-    "Base",
-    "ActionProposalRecord",
     "ActionAuditRecord",
+    "ActionProposalRecord",
     "ActionStoreError",
+    "Base",
     "CapabilitySnapshot",
-    "ChatConversation",
-    "ChatMessage",
     "DatabaseConfigurationError",
     "DatabaseSettings",
+    "IndexedSourcePointer",
+    "IndexedSourceSymbol",
     "InstanceProfile",
     "KnowledgeChunk",
     "KnowledgeDocument",
     "KnowledgeDocumentUpsert",
     "KnowledgeSearchRows",
-    "IndexedSourcePointer",
-    "IndexedSourceSymbol",
     "ScanRun",
     "SourceFile",
     "SourceFileUpsert",
@@ -95,30 +92,30 @@ __all__ = [
     "create_session_factory",
     "create_trace_event",
     "delete_stale_source_files",
-    "find_source_symbols",
     "find_indexed_model_extensions",
+    "find_source_symbols",
     "find_unchanged_source_file_id",
     "find_xml_records",
     "finish_scan",
+    "get_current_knowledge_chunk",
     "get_indexed_source_pointer",
     "get_instance_profile",
-    "get_current_knowledge_chunk",
     "get_knowledge_document",
     "get_latest_capability_snapshot",
     "get_latest_instance_profile",
     "get_latest_scan_run",
-    "list_trace_events",
     "list_knowledge_chunks",
-    "record_source_capability",
-    "record_log_capability",
-    "record_reasoning_capability",
+    "list_trace_events",
     "mark_stale_source_files",
     "open_scan",
+    "record_log_capability",
+    "record_reasoning_capability",
+    "record_source_capability",
     "replace_file_derivatives",
-    "search_indexed_source_symbols",
-    "session_scope",
-    "upsert_source_file",
     "retire_missing_knowledge_documents",
     "search_current_knowledge_chunks",
+    "search_indexed_source_symbols",
+    "session_scope",
     "upsert_knowledge_document",
+    "upsert_source_file",
 ]
