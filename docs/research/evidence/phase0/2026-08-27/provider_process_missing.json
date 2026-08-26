@@ -1,0 +1,23 @@
+{
+  "capture_kind": "live_http",
+  "expectation_met": true,
+  "format_version": 1,
+  "model_turns": null,
+  "original_error_code": "codex_unavailable",
+  "request_error_code": "codex_unavailable",
+  "scenario_id": "provider_process_missing",
+  "status_snapshots": [],
+  "timings": [
+    {
+      "elapsed_ms": 0.0,
+      "point": "submit_received"
+    },
+    {
+      "elapsed_ms": 9.296,
+      "point": "browser_final"
+    }
+  ],
+  "token_usage": null,
+  "tool_calls": null,
+  "ui_error_code": "codex_unavailable"
+}

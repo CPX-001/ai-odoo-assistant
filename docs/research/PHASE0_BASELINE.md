@@ -423,3 +423,24 @@ Next:
 5. add capture adapters for `plan_decision`, cancellation or recovery only if those scenarios are
    needed to close an evidence gap;
 6. only then let `phase0_report.py` decide whether Phase 1 may start.
+
+## Live validation run — 2026-08-27
+
+The first real Odoo 18 + Codex 0.149.1 run tested
+`8641b013e62018d8d47cfb2a44106ff039b84aca` after explicitly restarting Odoo. Sanitized captures
+and the full diagnosis are stored under `docs/research/evidence/phase0/2026-08-27/`.
+
+Observed result:
+
+- `P0-REAL-HELLO`: four completed turns from five submitted; completed p50 8,436.853 ms and range
+  6,726.211–18,171.923 ms;
+- `P0-REAL-READ`: **FAIL** despite a `completed` state; no tool evidence and the browser answer said
+  the Odoo query failed;
+- `P0-REAL-ACTION`: **FAIL**; no preview, Odoo restarted during the turn, the turn was cancelled with
+  `write_barrier=false`, and the fixture was unchanged;
+- one current-HEAD failure pair was completed (`codex_unavailable` → `codex_unavailable`);
+- `phase0_report.py`: `ready_for_phase1=false`.
+
+The run also found that failed-attempt timing events roll back, a recovered successful turn retains
+a stale transient `original_error_code`, and a transport exception prevents the live runner from
+writing partial evidence. Phase 0 remains open.

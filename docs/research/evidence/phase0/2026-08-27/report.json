@@ -1,0 +1,51 @@
+{
+  "exit_gate": {
+    "five_failure_pairs": false,
+    "minimum_live_matrix": false,
+    "simple_latency_attributed": true,
+    "timing_decomposition": false
+  },
+  "failure_pair_path_count": 1,
+  "failure_pair_scenarios": [
+    "provider_process_missing"
+  ],
+  "failure_pairs": [
+    {
+      "original_error_code": "codex_unavailable",
+      "scenario_id": "provider_process_missing",
+      "ui_error_code": "codex_unavailable"
+    }
+  ],
+  "format_version": 1,
+  "latency": {
+    "hello": {
+      "max_ms": 18171.923,
+      "min_ms": 6726.211,
+      "p50_ms": 8436.853,
+      "p95_ms": 16788.097,
+      "samples": 4
+    },
+    "simple_read": {
+      "max_ms": 17130.115,
+      "min_ms": 17130.115,
+      "p50_ms": 17130.115,
+      "p95_ms": 17130.115,
+      "samples": 1
+    }
+  },
+  "live_capture_count": 7,
+  "minimum_matrix": {
+    "action": false,
+    "failure": true,
+    "hello": true,
+    "read": true
+  },
+  "ready_for_phase1": false,
+  "scenario_count": 8,
+  "timing_decomposition": {
+    "complete_turn": false,
+    "provider": true,
+    "scenario_ids": [],
+    "tool": false
+  }
+}

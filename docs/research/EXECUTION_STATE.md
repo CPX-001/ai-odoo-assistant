@@ -1,8 +1,8 @@
 # Stabilization execution state
 
 State format: 2  
-Updated: 2026-08-26  
-Product/code baseline inspected: `4eb8502e04f54feccc5ad47a69fb5d0a51910416`  
+Updated: 2026-08-27
+Product/code baseline inspected and materially tested: `8641b013e62018d8d47cfb2a44106ff039b84aca`
 Execution protocol revision introduced at: `278f3cc2b8899b5e3ca1c9c34287e8049ba4ba50`  
 Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 
@@ -34,7 +34,8 @@ The purpose is to batch compatible real Odoo+Codex tests without accumulating se
 
 ## Current fact pattern
 
-Phase 0 implementation tooling is already present and documented in `PHASE0_BASELINE.md`:
+Phase 0 implementation tooling is present and the first live run is documented in
+`PHASE0_BASELINE.md` plus `evidence/phase0/2026-08-27/`:
 
 - machine-readable scenario matrix;
 - browser/provider timing instrumentation;
@@ -42,7 +43,8 @@ Phase 0 implementation tooling is already present and documented in `PHASE0_BASE
 - one-trace summarizer;
 - aggregate Phase 0 gate evaluator.
 
-The remaining Phase 0 exit gate depends on real Odoo 18 + authenticated/configured Codex evidence.
+Real Odoo 18 + authenticated Codex evidence now exists, but READ and ACTION failed, only one current
+failure pair is complete, and the aggregate report remains not ready.
 
 Phase 0 is a **hard gate for architecture-changing provider/runtime work** because its purpose is to measure latency/failure behavior before those mechanisms are redesigned.
 
@@ -54,7 +56,7 @@ Objective: collect enough real-environment evidence for `phase0_report.py` to de
 
 Required real validations:
 
-- [ ] `P0-REAL-HELLO`
+- [x] `P0-REAL-HELLO` (four completions, one provider failure; instability retained)
 - [ ] `P0-REAL-READ`
 - [ ] `P0-REAL-ACTION`
 - [ ] at least five distinct `P0-REAL-FAILURE-PAIR-*` paths
@@ -81,12 +83,13 @@ validation_ids:
   - P0-REAL-FAILURE-PAIR-* (>= 5 distinct paths)
 gate_type: HARD
 origin_slice: P0-LIVE-BASELINE
-commit_materially_tested: pending
+commit_materially_tested: 8641b013e62018d8d47cfb2a44106ff039b84aca
 downstream_scope_blocked:
   - Phase 1 runtime/provider contract refactor
   - provider lifecycle optimization
   - architecture decisions based on measured latency/failure attribution
-reason: real Odoo+Codex evidence is not available in repository-only execution context
+reason: live READ did not execute a successful capability-backed query; ACTION crashed before
+  preview and coincided with an Odoo service restart; only one current original/UI pair exists
 ```
 
 This debt prevents the main provider refactor, but does not prevent explicitly authorized preparation work below.
@@ -189,10 +192,25 @@ A 40-minute ChatGPT schedule is not supported by the current task scheduler; hou
 ## Current blocker
 
 ```text
-REAL_ENVIRONMENT_EVIDENCE_MISSING
+LIVE_READ_ACTION_AND_FAILURE_MATRIX_FAILED
 ```
 
-This blocker is scoped: it blocks Phase 0 closure and Phase 1 production architecture changes, but not the explicitly authorized `P1-PREP-CONFORMANCE` preparation slice.
+Evidence and diagnosis: `docs/research/evidence/phase0/2026-08-27/README.md`.
+
+This blocker is scoped: it blocks Phase 0 closure and Phase 1 production architecture changes, but
+not the explicitly authorized `P1-PREP-CONFORMANCE` preparation slice.
+
+## Exact next action after 2026-08-27 live run
+
+1. Fix/extend Phase 0 capture so transport failures persist sanitized partial traces and recovered
+   transient errors do not become terminal `original_error_code` values.
+2. Reproduce and diagnose the partner READ failure with bounded capability evidence; require actual
+   tool execution and real fixture values before PASS.
+3. Isolate the Codex 0.149.1 child signal-5 crashes and the Odoo service exit before retrying ACTION.
+4. Add controlled EOF/timeout/invalid-output fixtures, then complete four more browser-observed
+   failure pairs.
+
+`P1-PREP-CONFORMANCE` remains look-ahead eligible. Phase 1 is not unlocked.
 
 ## Resume instructions
 

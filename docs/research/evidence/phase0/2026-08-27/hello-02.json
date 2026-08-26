@@ -1,0 +1,381 @@
+{
+  "capture_kind": "live_http",
+  "expectation_met": true,
+  "format_version": 1,
+  "model_turns": null,
+  "original_error_code": "codex_turn_failed",
+  "request_error_code": null,
+  "scenario_id": "hello",
+  "status_snapshots": [
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:43.000000Z",
+          "sequence": 1,
+          "type": "queued"
+        }
+      ],
+      "last_sequence": 1,
+      "state": "queued"
+    },
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:43.000000Z",
+          "sequence": 2,
+          "type": "started"
+        }
+      ],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": "codex_turn_failed",
+          "occurred_at": "2026-08-26T22:28:47.000000Z",
+          "sequence": 3,
+          "type": "requeued"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:47.000000Z",
+          "sequence": 4,
+          "type": "started"
+        }
+      ],
+      "last_sequence": 4,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 4,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 4,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 4,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 4,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 4,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 4,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 4,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 4,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 4,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": "codex_turn_failed",
+          "occurred_at": "2026-08-26T22:28:52.000000Z",
+          "sequence": 5,
+          "type": "requeued"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:52.000000Z",
+          "sequence": 6,
+          "type": "started"
+        }
+      ],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 6,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:52.000000Z",
+          "sequence": 7,
+          "type": "reasoning.started"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:52.000000Z",
+          "payload": {
+            "elapsed_ms": 0.002,
+            "point": "runtime_started"
+          },
+          "sequence": 8,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:52.000000Z",
+          "payload": {
+            "elapsed_ms": 3.239,
+            "point": "provider_process_started"
+          },
+          "sequence": 9,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:52.000000Z",
+          "payload": {
+            "elapsed_ms": 392.015,
+            "point": "provider_initialized"
+          },
+          "sequence": 10,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:53.000000Z",
+          "payload": {
+            "elapsed_ms": 932.435,
+            "point": "provider_thread_started"
+          },
+          "sequence": 11,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:53.000000Z",
+          "payload": {
+            "elapsed_ms": 947.17,
+            "point": "provider_turn_started"
+          },
+          "sequence": 12,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:53.000000Z",
+          "payload": {
+            "elapsed_ms": 950.034,
+            "point": "first_provider_event"
+          },
+          "sequence": 13,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:28:59.000000Z",
+          "payload": {
+            "elapsed_ms": 6944.704,
+            "point": "first_answer_delta"
+          },
+          "sequence": 14,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:00.000000Z",
+          "sequence": 15,
+          "type": "reasoning.completed"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:00.000000Z",
+          "sequence": 16,
+          "type": "completed"
+        }
+      ],
+      "last_sequence": 16,
+      "state": "completed"
+    }
+  ],
+  "timings": [
+    {
+      "elapsed_ms": 0.0,
+      "point": "submit_received"
+    },
+    {
+      "elapsed_ms": 311.313,
+      "point": "turn_persisted",
+      "turn_id": "be9a776d-fdc8-4be2-84ea-1c6c2d163a59"
+    },
+    {
+      "elapsed_ms": 311.313,
+      "point": "browser_first_activity",
+      "turn_id": "be9a776d-fdc8-4be2-84ea-1c6c2d163a59"
+    },
+    {
+      "elapsed_ms": 18171.923,
+      "point": "browser_final",
+      "state": "completed",
+      "turn_id": "be9a776d-fdc8-4be2-84ea-1c6c2d163a59"
+    }
+  ],
+  "token_usage": null,
+  "tool_calls": null,
+  "ui_error_code": null
+}

@@ -1,0 +1,217 @@
+{
+  "capture_kind": "live_http",
+  "expectation_met": true,
+  "format_version": 1,
+  "model_turns": null,
+  "original_error_code": null,
+  "request_error_code": null,
+  "scenario_id": "hello",
+  "status_snapshots": [
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:33.000000Z",
+          "sequence": 1,
+          "type": "queued"
+        }
+      ],
+      "last_sequence": 1,
+      "state": "queued"
+    },
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:33.000000Z",
+          "sequence": 2,
+          "type": "started"
+        }
+      ],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:33.000000Z",
+          "sequence": 3,
+          "type": "reasoning.started"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:33.000000Z",
+          "payload": {
+            "elapsed_ms": 0.002,
+            "point": "runtime_started"
+          },
+          "sequence": 4,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:33.000000Z",
+          "payload": {
+            "elapsed_ms": 2.653,
+            "point": "provider_process_started"
+          },
+          "sequence": 5,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:33.000000Z",
+          "payload": {
+            "elapsed_ms": 397.52,
+            "point": "provider_initialized"
+          },
+          "sequence": 6,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:34.000000Z",
+          "payload": {
+            "elapsed_ms": 861.263,
+            "point": "provider_thread_started"
+          },
+          "sequence": 7,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:34.000000Z",
+          "payload": {
+            "elapsed_ms": 879.396,
+            "point": "provider_turn_started"
+          },
+          "sequence": 8,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:34.000000Z",
+          "payload": {
+            "elapsed_ms": 883.507,
+            "point": "first_provider_event"
+          },
+          "sequence": 9,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:38.000000Z",
+          "payload": {
+            "elapsed_ms": 5371.734,
+            "point": "first_answer_delta"
+          },
+          "sequence": 10,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:39.000000Z",
+          "sequence": 11,
+          "type": "reasoning.completed"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-26T22:29:39.000000Z",
+          "sequence": 12,
+          "type": "completed"
+        }
+      ],
+      "last_sequence": 12,
+      "state": "completed"
+    }
+  ],
+  "timings": [
+    {
+      "elapsed_ms": 0.0,
+      "point": "submit_received"
+    },
+    {
+      "elapsed_ms": 621.208,
+      "point": "turn_persisted",
+      "turn_id": "51dece86-f97d-4c6b-8024-c1ae51edcc72"
+    },
+    {
+      "elapsed_ms": 621.208,
+      "point": "browser_first_activity",
+      "turn_id": "51dece86-f97d-4c6b-8024-c1ae51edcc72"
+    },
+    {
+      "elapsed_ms": 6726.211,
+      "point": "browser_final",
+      "state": "completed",
+      "turn_id": "51dece86-f97d-4c6b-8024-c1ae51edcc72"
+    }
+  ],
+  "token_usage": null,
+  "tool_calls": null,
+  "ui_error_code": null
+}
