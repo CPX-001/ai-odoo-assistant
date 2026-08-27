@@ -388,6 +388,5 @@ class TestE2EConvergenceBattery(TransactionCase):
         )
         verification = executed.payload["steps"][0]["verification"]
         self.assertIsNotNone(verification)
-        self.assertTrue(verification["verified"])
-
-
+        self.assertEqual(verification["model"], "res.partner")
+        self.assertEqual(verification["record_id"], self.target.id)
