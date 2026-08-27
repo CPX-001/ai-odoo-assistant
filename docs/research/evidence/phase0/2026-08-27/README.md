@@ -196,3 +196,15 @@ Start from this directory and `report.json`; do not repeat environment discovery
 process-missing injection or the initial latency series. The disposable partner is 215 and its
 phone is empty. First inspect P0-D1 and P0-D2. Keep Phase 0 open and do not start the Phase 1
 provider refactor.
+
+## Subsequent P0.2 validation
+
+`P0-D2` was closed for the P0.2 slice at
+`a05e75006f53b056f31ab96c3864092d89199480` in an adapted disposable local Odoo 18 environment
+using Codex CLI 0.144.2. The new `read_partner` capture completed with two bounded tool
+start/completion pairs, passed the machine acceptance gate, and its authenticated browser-history
+answer matched the actual fixture name/email. See `P0.2-read-acceptance-evidence.md`,
+`read-partner-a05e750.json` and `read-partner-a05e750-acceptance.json`.
+
+This does not clear `P0-D1`: P0.3 must still bound the prior provider-child/Odoo service-loss path
+before ACTION is retried. The overall Phase 0 gate and failure-pair matrix remain open.

@@ -1,0 +1,11 @@
+{
+  "accepted": true,
+  "final_state": "completed",
+  "format_version": 1,
+  "missing_tool_events": [],
+  "required_tool_events": [
+    "tool.completed",
+    "tool.started"
+  ],
+  "scenario_id": "read_partner"
+}

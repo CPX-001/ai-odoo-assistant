@@ -2,10 +2,10 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `ffa8dfd04449bcd04e95f27519e455f5d314b9ea`<br>
+Latest repository checkpoint inspected: `a05e75006f53b056f31ab96c3864092d89199480`<br>
 Latest product/tooling implementation checkpoint: `fee7c4ee8b532e4529ad5dfd6249caab2c877a88`  
 Latest P0.1 validation checkpoint materially tested: `121108e55ef0ff91adb0377920f73128875536ac`  
-Last real Odoo+Codex commit materially tested: `121108e55ef0ff91adb0377920f73128875536ac`  
+Last real Odoo+Codex commit materially tested: `a05e75006f53b056f31ab96c3864092d89199480`<br>
 Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 
 ## Current cursor
@@ -14,8 +14,8 @@ Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 phase: 0
 phase_name: reproducible baseline
 phase_state: REAL_ENV_VALIDATION_REQUIRED
-active_slice: P0.2-read-failure-diagnosis
-active_slice_state: REAL_ENV_VALIDATION_REQUIRED
+active_slice: P0.3-provider-crash-reproduction
+active_slice_state: READY
 current_gate_type: HARD
 next_phase: 1
 ```
@@ -28,11 +28,11 @@ Phase 1 provider/runtime architecture work remains locked.
 max_phase_distance_ahead: 1
 max_unvalidated_implementation_slices: 2
 max_stacked_unvalidated_contract_layers: 1
-currently_consumed_implementation_slices: 1
+currently_consumed_implementation_slices: 0
 currently_stacked_unvalidated_contract_layers: 0
 ```
 
-The consumed slice is Phase 0 measurement/evidence tooling only; it does not create a production runtime contract layer.
+No unvalidated look-ahead implementation slice is currently carried.
 
 ## Real evidence already processed
 
@@ -42,7 +42,8 @@ The first real Odoo 18 + Codex 0.149.1 run is recorded under
 Observed state:
 
 - `P0-REAL-HELLO`: four completed captures from five submissions, with material provider instability;
-- `P0-REAL-READ`: FAIL — no successful capability-backed read/tool evidence;
+- initial `P0-REAL-READ`: FAIL — no capability-backed evidence in the original capture;
+- current `P0-REAL-READ`: PASS at `a05e750` — completed capability-backed read with matching browser-history answer;
 - `P0-REAL-ACTION`: FAIL — no preview/approval, provider child crashes coincided with Odoo service loss/restart;
 - failure-pair matrix: only one current complete original/UI pair;
 - `phase0_report.py`: `ready_for_phase1=false`.
@@ -65,7 +66,7 @@ recovered transient real observation: NOT OBSERVED (deterministic regression PAS
 
 `VD-P0.1-LOCAL` and `VD-P0.1-REAL` are closed.
 
-## Active corrective slice — P0.2
+## Completed corrective slice — P0.2
 
 Evidence record:
 `docs/research/evidence/phase0/2026-08-27/P0.2-read-acceptance-evidence.md`
@@ -109,29 +110,47 @@ credentials or message variables were available, the service configuration was n
 current user, and the documented/default `admin`/`admin` probe did not authenticate. No credentials
 were guessed beyond that single standard probe and no live evidence was manufactured.
 
-This closes the acceptance false-positive part of P0.2, but not the real READ diagnosis/pass requirement.
+The earlier blocked attempt was resolved by adapting the available disposable Odoo environment,
+updating the addon, restarting the service, and creating an isolated internal user/partner fixture.
+
+Real validation at `a05e75006f53b056f31ab96c3864092d89199480`:
+
+```text
+P0-REAL-READ: PASS
+Odoo: 18.0
+Codex CLI: 0.144.2
+final state: completed
+tool.started + tool.completed: observed (two bounded tool pairs)
+machine acceptance: accepted=true, missing_tool_events=[]
+browser history answer matches actual fixture name/email: true
+browser final: 16120.006 ms
+Odoo restarts during validation: 0
+```
+
+The sanitized capture and acceptance result are stored beside the P0.2 evidence record. P0.2 is
+complete; this does not authorize ACTION until P0.3 bounds the previously observed provider/Odoo
+crash path.
 
 ## Validation debt
 
-### VD-P0.2-REAL-READ
+### VD-P0.2-REAL-READ — CLOSED
 
 ```text
 validation_id: P0-REAL-READ
 gate_type: HARD
 origin_slice: P0.2-read-failure-diagnosis
-commit_materially_tested: pending
-downstream_scope_blocked:
-  - marking P0.2 COMPLETE
-  - retrying P0-REAL-ACTION
-  - Phase 1 runtime/provider contract refactor
-reason: exact current implementation has not yet produced a capability-backed known-partner READ in the real Odoo+Codex environment; the 2026-08-27 attempt at ffa8dfd lacked the matching Phase 0 database/service restart authority and capture credentials
+commit_materially_tested: a05e75006f53b056f31ab96c3864092d89199480
+result: PASS
+evidence:
+  - read-partner-a05e750.json
+  - read-partner-a05e750-acceptance.json
+remaining_downstream_blocker: P0.3 provider crash reproduction must complete before ACTION retry
 ```
 
 ### VD-P0-LIVE-BASELINE
 
 ```text
 validation_ids:
-  - P0-REAL-READ
   - P0-REAL-ACTION
   - P0-REAL-FAILURE-PAIR-* (>= 5 distinct paths)
 gate_type: HARD
@@ -140,42 +159,38 @@ downstream_scope_blocked:
   - Phase 1 runtime/provider contract refactor
   - provider lifecycle optimization
   - architecture decisions that depend on successful read/action/failure baseline evidence
-reason: READ and ACTION failed and the failure-pair matrix is incomplete
+reason: READ now passes; ACTION remains frozen by the unbounded provider/Odoo crash path and the failure-pair matrix is incomplete
 ```
 
 ## Current blocker
 
 ```text
-P0_REAL_READ_REQUIRED_AND_PROVIDER_RUNTIME_UNSTABLE
+P0_PROVIDER_CRASH_REPRODUCTION_REQUIRED
 ```
 
-P0.2 cannot complete until the real known-partner READ is rerun on current `main`. The local endpoint
-available during the `ffa8dfd` validation attempt was not the recorded Phase 0 environment and could
-not be authenticated or restarted from the current session. ACTION must remain frozen until READ
-passes and the provider/Odoo crash path is bounded.
+P0.2 is complete. ACTION remains frozen until P0.3 reproduces or safely bounds the prior Codex child
+crash/Odoo service-loss path. Phase 1 remains blocked by the broader Phase 0 gate.
 
 ## Exact next action selection
 
-1. Provide access to the recorded Phase 0 Odoo database (or explicitly nominate an equivalent disposable environment), plus normal-user capture credentials and service update/restart authority.
-2. In that real Odoo 18 + Codex environment, update/restart from current `main`.
-3. Run one bounded `read_partner` capture using the known disposable/demo partner and non-sensitive fields.
-4. Run `tests/e2e/phase0_read_acceptance.py <capture.json> --out <acceptance.json>`.
-5. Require exit `0`, `accepted=true`, observed `tool.started` + `tool.completed`, and a browser answer matching the actual partner data.
-6. If READ fails, classify the sanitized evidence as provider/account/runtime vs capability selection/input/execution and create the smallest corrective child slice.
-7. If READ passes, close `VD-P0.2-REAL-READ`, mark P0.2 COMPLETE, then begin `P0.3-provider-crash-reproduction` before any ACTION retry.
-8. Do not begin Phase 1 production provider/runtime work.
+1. Start `P0.3-provider-crash-reproduction` from current `main`.
+2. Inspect the current Codex subprocess boundary, service logs and prior signal-5/service-loss evidence.
+3. Define a bounded read-only reproduction that cannot perform a business write.
+4. Determine whether the child crash can terminate/restart Odoo; preserve sanitized process/service evidence.
+5. Add the smallest deterministic regression or diagnostic fixture justified by the result.
+6. Do not retry ACTION until the crash path is bounded, and do not begin Phase 1 production work.
 
 ## Planned corrective Phase 0 slices
 
 - `P0.1-partial-capture-and-retry-attribution` — **COMPLETE**;
-- `P0.2-read-failure-diagnosis` — **REAL_ENV_VALIDATION_REQUIRED**;
-- `P0.3-provider-crash-reproduction` — next normal slice after P0.2 closes;
+- `P0.2-read-failure-diagnosis` — **COMPLETE**;
+- `P0.3-provider-crash-reproduction` — **READY**;
 - `P0.4-fault-injection-fixtures` — bounded EOF/timeout/invalid-output fixtures;
 - repeat READ/ACTION only under the stop rules, then aggregate Phase 0 report.
 
 ## Authorized look-ahead
 
-`P1-PREP-CONFORMANCE` remains potentially eligible only if a later run is blocked solely by unavailable real-environment evidence and the protocol's eligibility test is satisfied. It is not authorized as a substitute for the current HARD P0.2 real READ gate.
+`P1-PREP-CONFORMANCE` remains potentially eligible only if a later run is blocked solely by unavailable real-environment evidence and the protocol's eligibility test is satisfied. It is not the current priority while P0.3 is READY.
 
 No Phase 1 production provider/runtime refactor is authorized.
 
@@ -193,4 +208,4 @@ Phase 0 remains incomplete until the mandatory real matrix, timing/tool decompos
 
 ## Resume instructions
 
-Every new run must re-read current `main`, this file, the P0.2 evidence record, current code/tests and the continuous execution protocol before selecting work. Process new real READ evidence first. Do not retry ACTION or begin Phase 1 while `VD-P0.2-REAL-READ` remains open.
+Every new run must re-read current `main`, this file, the P0.2 evidence record, current code/tests and the continuous execution protocol before selecting work. Start P0.3; do not retry ACTION or begin Phase 1 until the provider/Odoo crash path is bounded.

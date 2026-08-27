@@ -3,7 +3,7 @@
     "five_failure_pairs": false,
     "minimum_live_matrix": false,
     "simple_latency_attributed": true,
-    "timing_decomposition": false
+    "timing_decomposition": true
   },
   "failure_pair_path_count": 1,
   "failure_pair_scenarios": [
@@ -27,13 +27,13 @@
     },
     "simple_read": {
       "max_ms": 17130.115,
-      "min_ms": 17130.115,
-      "p50_ms": 17130.115,
-      "p95_ms": 17130.115,
-      "samples": 1
+      "min_ms": 16120.006,
+      "p50_ms": 16625.06,
+      "p95_ms": 17079.61,
+      "samples": 2
     }
   },
-  "live_capture_count": 7,
+  "live_capture_count": 8,
   "minimum_matrix": {
     "action": false,
     "failure": true,
@@ -41,11 +41,13 @@
     "read": true
   },
   "ready_for_phase1": false,
-  "scenario_count": 8,
+  "scenario_count": 9,
   "timing_decomposition": {
-    "complete_turn": false,
+    "complete_turn": true,
     "provider": true,
-    "scenario_ids": [],
-    "tool": false
+    "scenario_ids": [
+      "read_partner"
+    ],
+    "tool": true
   }
 }

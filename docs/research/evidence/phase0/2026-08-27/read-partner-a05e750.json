@@ -1,0 +1,356 @@
+{
+  "capture_error_code": null,
+  "capture_kind": "live_http",
+  "expectation_met": true,
+  "format_version": 1,
+  "model_turns": null,
+  "original_error_code": null,
+  "request_error_code": null,
+  "scenario_id": "read_partner",
+  "status_snapshots": [
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:25:56.000000Z",
+          "sequence": 1,
+          "type": "queued"
+        }
+      ],
+      "last_sequence": 1,
+      "state": "queued"
+    },
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:25:56.000000Z",
+          "sequence": 2,
+          "type": "started"
+        }
+      ],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [],
+      "last_sequence": 2,
+      "state": "running"
+    },
+    {
+      "error_code": null,
+      "events": [
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:25:56.000000Z",
+          "sequence": 3,
+          "type": "reasoning.started"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:25:56.000000Z",
+          "payload": {
+            "elapsed_ms": 0.003,
+            "point": "runtime_started"
+          },
+          "sequence": 4,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:25:56.000000Z",
+          "payload": {
+            "elapsed_ms": 2.805,
+            "point": "provider_process_started"
+          },
+          "sequence": 5,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:25:56.000000Z",
+          "payload": {
+            "elapsed_ms": 192.119,
+            "point": "provider_initialized"
+          },
+          "sequence": 6,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:25:57.000000Z",
+          "payload": {
+            "elapsed_ms": 1118.417,
+            "point": "provider_thread_started"
+          },
+          "sequence": 7,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:25:57.000000Z",
+          "payload": {
+            "elapsed_ms": 1122.988,
+            "point": "provider_turn_started"
+          },
+          "sequence": 8,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:25:57.000000Z",
+          "payload": {
+            "elapsed_ms": 1125.771,
+            "point": "first_provider_event"
+          },
+          "sequence": 9,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:26:02.000000Z",
+          "sequence": 10,
+          "type": "tool.started"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:26:02.000000Z",
+          "sequence": 11,
+          "type": "tool.completed"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:26:09.000000Z",
+          "sequence": 12,
+          "type": "tool.started"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:26:09.000000Z",
+          "sequence": 13,
+          "type": "tool.completed"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:26:12.000000Z",
+          "payload": {
+            "elapsed_ms": 14568.026,
+            "point": "first_answer_delta"
+          },
+          "sequence": 14,
+          "type": "diagnostic.timing"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:26:13.000000Z",
+          "sequence": 15,
+          "type": "reasoning.completed"
+        },
+        {
+          "diagnostic_code": null,
+          "occurred_at": "2026-08-27T00:26:13.000000Z",
+          "sequence": 16,
+          "type": "completed"
+        }
+      ],
+      "last_sequence": 16,
+      "state": "completed"
+    }
+  ],
+  "timings": [
+    {
+      "elapsed_ms": 0.0,
+      "point": "submit_received"
+    },
+    {
+      "elapsed_ms": 383.163,
+      "point": "turn_persisted",
+      "turn_id": "08100326-29c1-4f6a-aa69-b4214bd4a330"
+    },
+    {
+      "elapsed_ms": 383.163,
+      "point": "browser_first_activity",
+      "turn_id": "08100326-29c1-4f6a-aa69-b4214bd4a330"
+    },
+    {
+      "elapsed_ms": 16120.006,
+      "point": "browser_final",
+      "state": "completed",
+      "turn_id": "08100326-29c1-4f6a-aa69-b4214bd4a330"
+    }
+  ],
+  "token_usage": null,
+  "tool_calls": null,
+  "ui_error_code": null
+}

@@ -414,16 +414,16 @@ Current status:
 
 - [ ] `hello`, one read, one action and one failure have live reproducible captures in a real
   embedded Odoo + authenticated Codex environment.
-- [ ] A live turn has been decomposed into queue/provider/tool/finalization timing using the
+- [x] A live turn has been decomposed into queue/provider/tool/finalization timing using the
   implemented checkpoints.
-- [ ] The simple-turn latency has been attributed from measured live data rather than guessed.
+- [x] The simple-turn latency has been attributed from measured live data rather than guessed.
 - [ ] At least five important failure paths have original code + final UI code recorded side by
   side.
 
 The repository now has the scenario contract, client/provider instrumentation, redacted live
 capture runner, summarizer and aggregate gate evaluator needed for those measurements. The gate
-remains open because this environment does not provide the real authenticated Odoo/Codex instance
-or browser observations required to produce the evidence.
+remains open because ACTION is still frozen by the provider/Odoo crash path and the required
+five-path failure-pair matrix is incomplete.
 
 ## Next work inside Phase 0
 
@@ -475,6 +475,25 @@ P0.1 was materially validated at `121108e55ef0ff91adb0377920f73128875536ac`.
   `runtime_unavailable` diagnostics, so real recovered-retry attribution remains not observed while
   its deterministic regression is PASS.
 
-The P0.1 local and real validation debts are closed. This does not close Phase 0: READ, ACTION,
-timing decomposition and the required failure-pair matrix remain incomplete. The next normal slice
-is `P0.2-read-failure-diagnosis`; ACTION must not be repeated yet.
+The P0.1 local and real validation debts are closed. At that checkpoint, READ, ACTION, timing
+decomposition and the required failure-pair matrix remained incomplete, so the next normal slice
+was `P0.2-read-failure-diagnosis` and ACTION remained frozen.
+
+## P0.2 corrective validation — 2026-08-27
+
+P0.2 was materially validated at `a05e75006f53b056f31ab96c3864092d89199480` after updating the
+addon and restarting Odoo 18 in an adapted disposable local environment using Codex CLI 0.144.2.
+
+- deterministic READ acceptance regression: **PASS**, 3 tests;
+- capture and acceptance scripts: **PASS** compilation;
+- historical false-positive capture: correctly rejected with exit `2` and both tool events missing;
+- `P0-REAL-READ`: **PASS** with final `completed`, two tool start/completion pairs and machine
+  `accepted=true`;
+- authenticated browser-history payload: exact fixture name/email matched the actual Odoo partner;
+- queue/provider/tool/finalization evidence captured; browser final 16,120.006 ms;
+- Odoo remained active with zero service restarts during the READ.
+
+Sanitized artifacts and the full evidence record are under
+`docs/research/evidence/phase0/2026-08-27/`. P0.2 and `VD-P0.2-REAL-READ` are closed. Phase 0 remains
+open: P0.3 must bound the provider/Odoo crash path before ACTION is retried, and the failure-pair
+matrix still requires additional distinct paths.
