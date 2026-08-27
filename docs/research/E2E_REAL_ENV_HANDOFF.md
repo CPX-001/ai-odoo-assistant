@@ -2,17 +2,25 @@
 
 Date: 2026-08-27  
 Status: `REAL_ENV_VALIDATION_REQUIRED`  
-Implementation/test SHA to validate: `ee723a7d715970681ef1addffebcceb54dbd2027`
+Implementation/test SHA to validate: `e9420ae80cf1d6a030312e5e4e76a911c60c7b18`
 
 This document is a validation-only handoff. E2E-0 through E2E-4 and the final automated battery are implemented at the SHA above. No real Odoo/Codex/browser PASS is claimed by this handoff. The commit containing this document is expected to be a docs-only descendant of the SHA under test; validate the exact implementation/test SHA above unless a later product/test change intentionally supersedes it.
 
+This SHA supersedes `ee723a7d715970681ef1addffebcceb54dbd2027` after its real HELLO failed
+before the first `assistant_decision`. The observed App Server 0.149.1 event was an HTTP 400
+`invalid_json_schema` because the one-decision `outputSchema` used root `oneOf`; the adapter had
+reduced it to `codex_turn_failed`. The replacement uses an App Server-compatible wire envelope and
+keeps the sanitized diagnostic `codex_output_schema_invalid`. Host loop, transcript, capabilities
+and ACTION lifecycle behavior are unchanged.
+
 ## 1. What is already automated
 
-The final battery covers hello, READ, multi-read, patch, create, repairable errors, access denied, unsupported action, restart/idempotency, approval, exactly-once and verification in two layers:
+The final battery covers hello, READ, multi-read, patch, create, repairable errors, access denied, unsupported action, restart/idempotency, approval, exactly-once and verification across three test surfaces:
 
 - `tests/e2e/test_e2e_convergence_battery.py`: dependency-light 12-case contract/regression battery;
 - `addons/odoo_ai_assistant/tests/test_e2e_convergence_battery.py`: executable Odoo `TransactionCase` battery using the real `AgentTurnService`, capability registry/executor and real `res.partner` plan lifecycle;
 - `addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py`: focused canonical patch/create stage-only, approval, barrier and verification coverage.
+- `addons/odoo_ai_assistant/tests/test_codex_decision_adapter.py`: App Server wire-schema, strict-envelope normalization and captured `invalid_json_schema` diagnostic regression.
 
 In the available connector environment the dependency-light final battery was executed from a reconstructed checkout mirror of the committed test/fixture/transcript and current asserted source boundaries:
 
@@ -23,14 +31,18 @@ Ran 12 tests
 OK
 ```
 
-The Odoo `TransactionCase` battery is intentionally **UNRUN** here because this environment does not provide an Odoo 18 checkout plus PostgreSQL service. Do not convert that into a PASS.
+At the superseded SHA, real validation reported the standalone battery PASS, Odoo convergence
+12/12 PASS and canonical PLAN 2/2 PASS. They must be rerun after installing the exact replacement
+SHA because provider adapter/test registration changed. A direct real App Server one-decision probe
+at the replacement SHA returned `final_answer`, but the supported Odoo worker/account HELLO remains
+the authoritative product-path gate.
 
 ## 2. Exact checkout and standalone commands
 
 Use a dedicated/disposable validation host. The repository installed by `installer/odoo18_install.sh` normally lives at `/odoo/custom/addons/ai-odoo-assistant` and Odoo at `/odoo/odoo-server` with virtualenv `/odoo/venv`.
 
 ```bash
-export E2E_SHA='ee723a7d715970681ef1addffebcceb54dbd2027'
+export E2E_SHA='e9420ae80cf1d6a030312e5e4e76a911c60c7b18'
 export REPO='/odoo/custom/addons/ai-odoo-assistant'
 
 sudo -u odoo git -C "$REPO" fetch origin main
@@ -45,6 +57,8 @@ python tests/e2e/test_next_decision_contract.py
 python tests/e2e/test_working_transcript_contract.py
 python tests/e2e/test_canonical_plan_proposal.py
 python -m py_compile \
+  addons/odoo_ai_assistant/runtime/agent/codex_decision.py \
+  addons/odoo_ai_assistant/tests/test_codex_decision_adapter.py \
   addons/odoo_ai_assistant/tests/test_e2e_convergence_battery.py \
   addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py
 ```
@@ -92,6 +106,13 @@ sudo -u odoo "$ODOO_PY" "$ODOO_BIN" \
   -c "$ODOO_CONF" -d "$E2E_DB" \
   -u odoo_ai_assistant --test-enable \
   --test-tags=/odoo_ai_assistant:TestCanonicalPlanHostLoop \
+  --stop-after-init --no-http
+
+# Exact App Server adapter regression, including the captured invalid-schema event.
+sudo -u odoo "$ODOO_PY" "$ODOO_BIN" \
+  -c "$ODOO_CONF" -d "$E2E_DB" \
+  -u odoo_ai_assistant --test-enable \
+  --test-tags=/odoo_ai_assistant:TestCodexDecisionAdapter \
   --stop-after-init --no-http
 ```
 
@@ -312,7 +333,7 @@ Create a result note under a new date/SHA-specific evidence directory. Record bo
 
 ```text
 validation_id: E2E-REAL-ENV
-implementation_test_sha: ee723a7d715970681ef1addffebcceb54dbd2027
+implementation_test_sha: e9420ae80cf1d6a030312e5e4e76a911c60c7b18
 date:
 odoo_version:
 codex_version:

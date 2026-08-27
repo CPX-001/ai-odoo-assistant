@@ -4,7 +4,7 @@ Research/playbook source: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 Phase started from main: `3f175cdc9b38aa3fc5aac4f231c0aee5d86b46ef`  
 Latest real ACTION checkpoint materially tested: `59957173510ec7f5da6d0ac39e9ea52244dbba86`<br>
 Target: Odoo 18 Community / embedded runtime / Codex primary  
-Status: **blocked — ACTION v2 exposed the catalog but Codex selected no tool or PLAN proposal**
+Status: **blocked — exact-SHA real validation required after one-decision App Server repair**
 
 ## Purpose
 
@@ -533,3 +533,23 @@ The first missing boundary is now precise: `plan_step_staged(odoo.record.patch)`
 Phase 0 must not repeat a prompt-only correction. The next ordered work is E2E-0 then E2E-1 from
 `E2E_AGENT_LOOP_CONVERGENCE.md`, leading to the host-owned loop and canonical plan proposal. The
 real ACTION and aggregate report remain the hard exit gates after that convergence.
+
+## E2E convergence real validation and one-decision repair — 2026-08-27
+
+Real validation of `ee723a7d715970681ef1addffebcceb54dbd2027` reported the complete
+standalone battery PASS, Odoo convergence 12/12 PASS and canonical PLAN 2/2 PASS. Real HELLO then
+failed after three `codex_turn_failed` attempts. Odoo remained stable, `write_barrier=false`, and
+the private working transcript contained only `user_input`; no `assistant_decision`, capability
+call or plan proposal existed. The last good boundary was worker claim plus persisted input. The
+first failed boundary was `CodexDecisionEngine.next_decision`.
+
+The failure was reproduced directly against Codex App Server 0.149.1. `turn/start` was accepted,
+then App Server emitted a non-retryable HTTP 400 `invalid_json_schema` event because root `oneOf`
+is not permitted by Structured Outputs. The adapter discarded that structure as
+`codex_turn_failed`.
+
+Implementation checkpoint `e9420ae80cf1d6a030312e5e4e76a911c60c7b18` replaces only the Codex
+one-decision transport schema and its diagnostic normalization. The provider-neutral strict union,
+host loop, private transcript, capability framework and ACTION lifecycle remain unchanged. The
+standalone suites, three adapter regressions and a direct real App Server greeting decision pass at
+that checkpoint. Exact-SHA Odoo worker/account HELLO, READ and ACTION remain hard validation debt.
