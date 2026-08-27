@@ -1,0 +1,43 @@
+{
+  "attempt_count": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "capture": {
+        "capture_error_code": null,
+        "expectation_met": true,
+        "final_state": "completed",
+        "original_error_code": null,
+        "request_error_code": null,
+        "scenario_id": "read_partner"
+      },
+      "journal": {
+        "available": true,
+        "code_mode_failure_lines": 0,
+        "signal5_lines": 0
+      },
+      "service_after": {
+        "active_state": "active",
+        "exec_main_start_monotonic": 479232362,
+        "main_pid": 9226,
+        "n_restarts": 0,
+        "sub_state": "running"
+      },
+      "service_before": {
+        "active_state": "active",
+        "exec_main_start_monotonic": 479232362,
+        "main_pid": 9226,
+        "n_restarts": 0,
+        "sub_state": "running"
+      },
+      "service_healthy_after": true,
+      "service_restarted": false
+    }
+  ],
+  "format_version": 1,
+  "odoo_restart_observed": false,
+  "odoo_unhealthy_observed": false,
+  "probe_kind": "phase0_provider_crash_read_only",
+  "provider_signal5_observed": false,
+  "scenario_id": "read_partner"
+}

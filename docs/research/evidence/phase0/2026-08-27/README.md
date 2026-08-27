@@ -208,3 +208,16 @@ answer matched the actual fixture name/email. See `P0.2-read-acceptance-evidence
 
 This does not clear `P0-D1`: P0.3 must still bound the prior provider-child/Odoo service-loss path
 before ACTION is retried. The overall Phase 0 gate and failure-pair matrix remain open.
+
+## Subsequent P0.3 validation
+
+`P0-D1` was bounded for the current supported local environment at
+`c114f15a1fe82d102df3c129661fca87ceaeb235`. Odoo 18 Community with addon `18.0.10.4.6` and
+Codex CLI `0.144.2` completed three `hello` probes plus one capability-backed `read_partner`
+probe. The read persisted three `tool.started` events. All four attempts retained stable service
+PID/start identity/restart count, remained `active/running`, had journal access and recorded zero
+signal-5 or `codex-code-mode-host` failure lines.
+
+See `P0.3-provider-crash-reproduction.md` and the two sanitized
+`p0.3-provider-crash-probe*-c114f15.json` artifacts. This closes P0.3, not the aggregate Phase 0
+gate: ACTION and at least four additional complete failure pairs remain pending.

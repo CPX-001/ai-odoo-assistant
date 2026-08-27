@@ -2,10 +2,11 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `aa1e24d904ca34d0f9b7e842f5b0504dc9dc36ba`  
+Latest repository checkpoint inspected: `c114f15a1fe82d102df3c129661fca87ceaeb235`
 Latest product/tooling implementation checkpoint: `aa1e24d904ca34d0f9b7e842f5b0504dc9dc36ba`  
 Latest P0.1 validation checkpoint materially tested: `121108e55ef0ff91adb0377920f73128875536ac`  
 Latest P0.2 / real READ checkpoint materially tested: `a05e75006f53b056f31ab96c3864092d89199480`  
+Latest P0.3 real crash-probe checkpoint materially tested: `c114f15a1fe82d102df3c129661fca87ceaeb235`
 Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 
 ## Current cursor
@@ -13,9 +14,9 @@ Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 ```text
 phase: 0
 phase_name: reproducible baseline
-phase_state: REAL_ENV_VALIDATION_REQUIRED
-active_slice: P0.3-provider-crash-reproduction
-active_slice_state: REAL_ENV_VALIDATION_REQUIRED
+phase_state: IN_PROGRESS
+active_slice: P0.4-fault-injection-fixtures
+active_slice_state: READY
 current_gate_type: HARD
 next_phase: 1
 ```
@@ -28,24 +29,24 @@ Phase 1 production provider/runtime architecture remains locked.
 max_phase_distance_ahead: 1
 max_unvalidated_implementation_slices: 2
 max_stacked_unvalidated_contract_layers: 1
-currently_consumed_implementation_slices: 2
+currently_consumed_implementation_slices: 1
 currently_stacked_unvalidated_contract_layers: 0
 ```
 
 Consumed work:
 
-1. P0.3 diagnostic probe tooling;
-2. `P1-PREP-CONFORMANCE`, adapter-neutral test/fixture preparation only.
+1. `P1-PREP-CONFORMANCE`, adapter-neutral test/fixture preparation only.
 
-The look-ahead budget is now exhausted. Do not start another look-ahead implementation slice until
-the P0.3 real gate is processed.
+P0.4 is normal Phase 0 work and does not consume look-ahead budget. Phase 1 production work remains
+locked by the aggregate Phase 0 gate.
 
 ## Real evidence already processed
 
 - `P0-REAL-HELLO`: baseline exists, with provider instability in the original Codex 0.149.1 run.
 - `P0-REAL-READ`: PASS at `a05e750` with capability-backed known-partner data and matching browser answer.
+- `P0.3-REAL-READONLY-CRASH-PROBE`: PASS at `c114f15`; three greetings and one
+  capability-backed read completed without Odoo restart, unhealthy state or signal-5 observation.
 - `P0-REAL-ACTION`: FAIL in the original run; ACTION remains frozen.
-- No new P0.3 real probe evidence is present on current `main`.
 - failure-pair matrix remains incomplete.
 - Phase 0 aggregate gate remains `ready_for_phase1=false`.
 
@@ -53,13 +54,14 @@ the P0.3 real gate is processed.
 
 - `P0.1-partial-capture-and-retry-attribution` — **COMPLETE**.
 - `P0.2-read-failure-diagnosis` — **COMPLETE**.
+- `P0.3-provider-crash-reproduction` — **COMPLETE**.
 
-## Active corrective slice — P0.3
+## Closed corrective slice — P0.3
 
 Evidence:
 `docs/research/evidence/phase0/2026-08-27/P0.3-provider-crash-reproduction.md`
 
-State: `REAL_ENV_VALIDATION_REQUIRED`.
+State: `COMPLETE`.
 
 Deterministic P0.3 probe validation already recorded:
 
@@ -71,18 +73,31 @@ python -m pytest -q tests/unit/test_phase0_provider_crash_probe.py
 3 passed in 0.07s
 ```
 
-### VD-P0.3-REAL
+Real validation executed on Odoo 18 Community with addon `18.0.10.4.6` and Codex CLI `0.144.2`:
 
 ```text
-validation_id: P0.3-REAL-READONLY-CRASH-PROBE
-gate_type: HARD
-origin_slice: P0.3-provider-crash-reproduction
-commit_materially_tested: pending
-downstream_scope_blocked:
-  - marking P0.3 COMPLETE
-  - retrying P0-REAL-ACTION
-  - Phase 1 production provider/runtime refactor
-reason: the bounded read-only crash probe has not yet run inside real Odoo 18 + Codex
+3 hello attempts: completed
+1 read_partner attempt: completed; tool.started=3; reasoning.completed=1
+Odoo restart/unhealthy observations: 0
+signal-5 / code-mode-host failure lines: 0 / 0
+journal available: 4 of 4 attempts
+```
+
+Sanitized artifacts and the detailed result are stored alongside the P0.3 evidence record. The
+historical 0.149.1 event remains historical evidence; this PASS bounds the current environment and
+does not claim a universal provider fix.
+
+Deterministic revalidation on the pulled checkpoint:
+
+```text
+python -m py_compile tests/e2e/phase0_provider_crash_probe.py tests/contracts/codex_provider_conformance.py
+PASS
+
+python -m pytest -q tests/unit/test_phase0_provider_crash_probe.py tests/unit/test_codex_provider_conformance.py
+7 passed in 0.04s
+
+python -m pytest -q tests/unit/test_phase0_*.py tests/unit/test_codex_provider_conformance.py
+27 passed in 0.10s
 ```
 
 ## Completed authorized look-ahead — P1-PREP-CONFORMANCE
@@ -121,27 +136,24 @@ gate_type: HARD
 downstream_scope_blocked:
   - Phase 1 runtime/provider contract refactor
   - provider lifecycle optimization
-reason: ACTION remains frozen by P0.3 and the failure-pair matrix is incomplete
+reason: ACTION has not yet been rerun after P0.3 closed, and the failure-pair matrix is incomplete
 ```
 
 ## Current blocker
 
 ```text
-P0_3_REAL_READONLY_CRASH_PROBE_REQUIRED
+PHASE0_ACTION_AND_FAILURE_PAIR_EVIDENCE_REQUIRED
 ```
 
-No eligible look-ahead budget remains.
+This blocks Phase 1 production runtime/provider changes but does not block normal P0.4 work.
 
 ## Exact next action
 
-1. Update/restart the disposable Odoo 18 environment from current `main`.
-2. Run `P0.3-REAL-READONLY-CRASH-PROBE` with three `hello` attempts using `tests/e2e/phase0_provider_crash_probe.py`.
-3. Require Odoo to remain `active/running` with stable MainPID, NRestarts and start identity.
-4. Correlate only sanitized signal-5/code-mode-host counters.
-5. If necessary, repeat once with the validated `read_partner` fixture; never use a write scenario.
-6. If Odoo restarts or becomes unhealthy, stop and create the smallest corrective P0.3 child slice.
-7. If safely bounded, close P0.3 and start normal `P0.4-fault-injection-fixtures`.
-8. Do not retry ACTION or start Phase 1 production implementation before P0.3 closes.
+1. Start normal `P0.4-fault-injection-fixtures`.
+2. Add bounded EOF/disconnect, timeout and invalid-output fixtures without weakening host authority.
+3. Run deterministic fixture tests, then collect the corresponding real original/UI failure pairs.
+4. Retry the safe disposable ACTION baseline only after the relevant Phase 0 stop rules remain satisfied.
+5. Do not start Phase 1 production implementation until the aggregate Phase 0 hard gate passes.
 
 ## Automation / publication policy
 
