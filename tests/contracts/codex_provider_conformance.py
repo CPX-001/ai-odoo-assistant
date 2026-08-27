@@ -1,4 +1,4 @@
-"""Adapter-neutral Codex provider conformance contract used by stabilization look-ahead tests."""
+"""Adapter-neutral Codex provider conformance contract for the stabilized host loop."""
 from __future__ import annotations
 
 import argparse
@@ -8,8 +8,8 @@ from typing import Any, Protocol
 
 REQUIRED_CASE_IDS = frozenset({
     "initialize", "thread_isolation", "turn_output_schema", "agent_message_delta",
-    "completed_agent_message", "dynamic_tool_mapping", "capability_success",
-    "capability_failure", "unknown_notification", "malformed_critical_event",
+    "completed_agent_message", "reasoning_decision_mapping", "plan_decision_mapping",
+    "final_answer_mapping", "unknown_notification", "malformed_critical_event",
     "identity_mismatch", "cancellation", "terminal_failure", "overload_backpressure",
 })
 VALID_OUTCOMES = frozenset({"accepted", "rejected", "cancelled", "retryable"})
@@ -22,7 +22,7 @@ class ConformanceAdapter(Protocol):
 
 def load_contract(path: Path) -> list[dict[str, Any]]:
     raw = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict) or raw.get("format_version") != 1:
+    if not isinstance(raw, dict) or raw.get("format_version") != 2:
         raise ValueError("conformance_contract_invalid")
     cases = raw.get("cases")
     if not isinstance(cases, list):
@@ -83,7 +83,7 @@ async def run_suite(adapter: ConformanceAdapter, cases: list[dict[str, Any]]) ->
         observation = await adapter.observe(case)
         results.append(evaluate(case, observation))
     return {
-        "format_version": 1,
+        "format_version": 2,
         "case_count": len(results),
         "passed": all(row["passed"] for row in results),
         "results": results,

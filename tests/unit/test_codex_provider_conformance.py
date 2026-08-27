@@ -15,20 +15,22 @@ def test_contract_contains_exact_required_phase1_cases() -> None:
     cases = contract.load_contract(FIXTURE)
     assert {case["id"] for case in cases} == contract.REQUIRED_CASE_IDS
     assert len(cases) == 14
+    assert {"reasoning_decision_mapping", "plan_decision_mapping", "final_answer_mapping"} <= contract.REQUIRED_CASE_IDS
+    assert {"dynamic_tool_mapping", "capability_success", "capability_failure"}.isdisjoint(contract.REQUIRED_CASE_IDS)
 
 
 def test_evaluator_fails_on_missing_safety_assertion() -> None:
     case = {
-        "id": "thread_isolation",
+        "id": "plan_decision_mapping",
         "expected_outcome": "accepted",
-        "required_assertions": ("approval_never", "sandbox_read_only", "ephemeral_thread"),
+        "required_assertions": ("plan_proposal_decoded", "stage_only", "host_action_lifecycle_preserved"),
     }
     result = contract.evaluate(
         case,
-        {"outcome": "accepted", "assertions": {"approval_never": True, "sandbox_read_only": True}},
+        {"outcome": "accepted", "assertions": {"plan_proposal_decoded": True, "stage_only": True}},
     )
     assert result["passed"] is False
-    assert result["missing_assertions"] == ["ephemeral_thread"]
+    assert result["missing_assertions"] == ["host_action_lifecycle_preserved"]
 
 
 def test_same_harness_runs_adapter_without_product_runtime_imports() -> None:
@@ -44,10 +46,22 @@ def test_same_harness_runs_adapter_without_product_runtime_imports() -> None:
     report = asyncio.run(contract.run_suite(FakeAdapter(), cases))
     assert report["passed"] is True
     assert report["case_count"] == 14
+    assert report["format_version"] == 2
 
 
-def test_incomplete_contract_is_rejected(tmp_path: Path) -> None:
+def test_v1_or_incomplete_contract_is_rejected(tmp_path: Path) -> None:
     data = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    data["format_version"] = 1
+    path = tmp_path / "v1.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    try:
+        contract.load_contract(path)
+    except ValueError as error:
+        assert str(error) == "conformance_contract_invalid"
+    else:
+        raise AssertionError("stale v1 contract was accepted")
+
+    data["format_version"] = 2
     data["cases"] = data["cases"][:-1]
     path = tmp_path / "incomplete.json"
     path.write_text(json.dumps(data), encoding="utf-8")
@@ -57,3 +71,32 @@ def test_incomplete_contract_is_rejected(tmp_path: Path) -> None:
         assert str(error) == "conformance_contract_incomplete"
     else:
         raise AssertionError("incomplete contract was accepted")
+
+
+def test_reasoning_provider_port_matches_current_codex_decision_engine_signature() -> None:
+    import ast
+
+    repo = Path(__file__).resolve().parents[2]
+    provider_source = repo / "addons" / "odoo_ai_assistant" / "runtime" / "agent" / "provider.py"
+    codex_source = repo / "addons" / "odoo_ai_assistant" / "runtime" / "agent" / "codex_decision.py"
+
+    def keyword_only_args(path: Path, class_name: str) -> list[str]:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "next_decision":
+                        return [arg.arg for arg in item.args.kwonlyargs]
+        raise AssertionError(f"next_decision missing from {class_name}")
+
+    expected = [
+        "message",
+        "conversation_summary",
+        "context",
+        "reasoning_capabilities",
+        "planning_capabilities",
+        "working_items",
+        "remaining_budgets",
+    ]
+    assert keyword_only_args(provider_source, "ReasoningProvider") == expected
+    assert keyword_only_args(codex_source, "CodexDecisionEngine") == expected
