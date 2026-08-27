@@ -2,7 +2,7 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `8c21be0671bfb8f7df158cf32e6f624c043f7de6`  
+Latest repository checkpoint inspected: `f3ddd4ffe5be2a2168b7d9ca8f18e06a78c7f66b`  
 Latest product/tooling implementation checkpoint: `85086dad0f04c534d447b279e4e15c1afb879148`  
 Latest P0.1 validation checkpoint materially tested: `121108e55ef0ff91adb0377920f73128875536ac`  
 Latest P0.2 / real READ checkpoint materially tested: `a05e75006f53b056f31ab96c3864092d89199480`  
