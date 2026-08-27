@@ -1,0 +1,99 @@
+{
+  "format_version": 1,
+  "defaults": {
+    "max_provider_decisions": 12,
+    "max_capability_calls": 8,
+    "max_consecutive_correctable_failures": 3,
+    "max_transcript_bytes": 131072,
+    "max_result_bytes": 32768
+  },
+  "cases": [
+    {
+      "id": "hello",
+      "category": "hello",
+      "max_provider_decisions": 1,
+      "max_capability_calls": 0,
+      "expected_decisions": [
+        {"kind": "final_answer"}
+      ]
+    },
+    {
+      "id": "read_partner",
+      "category": "read",
+      "max_provider_decisions": 3,
+      "max_capability_calls": 2,
+      "expected_decisions": [
+        {"kind": "reasoning_capability_call", "capability": "odoo.get_effective_schema"},
+        {"kind": "reasoning_capability_call", "capability": "odoo.query_records"},
+        {"kind": "final_answer"}
+      ]
+    },
+    {
+      "id": "multi_read_synthesis",
+      "category": "multi-read",
+      "max_provider_decisions": 5,
+      "max_capability_calls": 4,
+      "expected_decisions": [
+        {"kind": "reasoning_capability_call", "capability": "odoo.get_effective_schema"},
+        {"kind": "reasoning_capability_call", "capability": "odoo.query_records"},
+        {"kind": "reasoning_capability_call", "capability": "odoo.get_effective_schema"},
+        {"kind": "reasoning_capability_call", "capability": "odoo.query_records"},
+        {"kind": "final_answer"}
+      ]
+    },
+    {
+      "id": "supported_patch",
+      "category": "patch",
+      "max_provider_decisions": 4,
+      "max_capability_calls": 3,
+      "expected_decisions": [
+        {"kind": "reasoning_capability_call", "capability": "odoo.get_effective_schema"},
+        {"kind": "reasoning_capability_call", "capability": "odoo.query_records"},
+        {"kind": "reasoning_capability_call", "capability": "odoo.get_effective_write_schema"},
+        {"kind": "plan_step_proposal", "capability": "odoo.record.patch"}
+      ]
+    },
+    {
+      "id": "supported_create",
+      "category": "create",
+      "max_provider_decisions": 3,
+      "max_capability_calls": 2,
+      "expected_decisions": [
+        {"kind": "reasoning_capability_call", "capability": "odoo.get_effective_write_schema"},
+        {"kind": "reasoning_capability_call", "capability": "odoo.get_effective_schema"},
+        {"kind": "plan_step_proposal", "capability": "odoo.record.create"}
+      ]
+    },
+    {
+      "id": "validation_repair",
+      "category": "repair",
+      "max_provider_decisions": 4,
+      "max_capability_calls": 3,
+      "expected_decisions": [
+        {"kind": "reasoning_capability_call", "capability": "odoo.query_records", "host_result": "agent_capability_arguments_invalid"},
+        {"kind": "reasoning_capability_call", "capability": "odoo.get_effective_schema"},
+        {"kind": "reasoning_capability_call", "capability": "odoo.query_records"},
+        {"kind": "final_answer"}
+      ]
+    },
+    {
+      "id": "access_denied",
+      "category": "denied",
+      "max_provider_decisions": 2,
+      "max_capability_calls": 1,
+      "expected_decisions": [
+        {"kind": "reasoning_capability_call", "capability": "odoo.query_records", "host_result": "access_denied"},
+        {"kind": "final_answer"}
+      ]
+    },
+    {
+      "id": "unsupported_action",
+      "category": "unsupported-action",
+      "max_provider_decisions": 1,
+      "max_capability_calls": 0,
+      "expected_decisions": [
+        {"kind": "final_answer"}
+      ]
+    }
+  ]
+}
