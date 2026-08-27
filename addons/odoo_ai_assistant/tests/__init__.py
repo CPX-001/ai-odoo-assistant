@@ -12,5 +12,6 @@ from . import test_e2e_convergence_battery as test_e2e_convergence_battery
 from . import test_embedded_agent_runtime as test_embedded_agent_runtime
 from . import test_runtime_account as test_runtime_account
 from . import test_runtime_account_gate as test_runtime_account_gate
+from . import test_turn_failure as test_turn_failure
 from . import test_turn_queue as test_turn_queue
 from . import test_user_preferences as test_user_preferences
