@@ -10,13 +10,16 @@ Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md` and `E2E_AGENT_LOOP_CONVERGENCE
 phase: 0
 phase_name: reproducible baseline
 phase_state: BLOCKED
-active_slice: E2E-real-environment-validation
-active_slice_state: REAL_ENV_VALIDATION_REQUIRED
+active_slice: E2E-turn-event-serialization-correction
+active_slice_state: READY
 current_gate_type: HARD
 next_phase: 1
 ```
 
-The implementation/convergence work requested through E2E-4 and the final automated battery is complete. General Phase 1 work remains locked until the real environment validates the exact implementation/test SHA below.
+The implementation/convergence work requested through E2E-4 and the final automated battery is
+complete. Exact-SHA validation proved the Codex adapter repair and exposed a separate turn/event
+transaction defect. General Phase 1 work remains locked until that defect is corrected and the full
+real gate passes.
 
 ## Exact implementation/test SHA
 
@@ -84,8 +87,32 @@ Python compilation: PASS
 real Codex App Server one-decision greeting: PASS (final_answer)
 ```
 
-The last check used the real installed App Server and an authenticated local provider home, but it
-does not replace an exact-SHA product-path HELLO under the Odoo worker/account environment.
+The last check used the real installed App Server and an authenticated local provider home.
+
+The exact-SHA product-path rerun then executed on Odoo 18 with Codex 0.149.1 in a new disposable
+database:
+
+```text
+standalone convergence: 12/12 PASS
+decision sequences: 4/4 PASS
+NextDecision contract: 4/4 PASS
+working transcript contract: 4/4 PASS
+canonical plan contract: 5/5 PASS
+Python compilation: PASS
+fresh install and explicit addon update: PASS
+Odoo convergence: 12/12 PASS
+Odoo canonical PLAN: 2/2 PASS
+Odoo one-decision adapter: 3/3 PASS
+real HELLO: completed after 1 runtime_unavailable requeue (hard-gate FAIL)
+real READ: failed/runtime_unavailable after 3 attempts (FAIL)
+real ACTION: NOT RUN because READ failed
+fixture/database cleanup: PASS
+```
+
+The adapter returned valid decisions. The new first failed product boundary was an independent
+event append updating `odoo_ai_turn.last_event_sequence` while the primary turn transaction still
+held the same record. Its next flush/commit raised PostgreSQL `SerializationFailure`. See
+`docs/research/evidence/phase0/2026-08-27/E2E-REAL-ENV-result-e9420ae.md`.
 
 ## Required invariants preserved
 
@@ -99,20 +126,27 @@ The last pre-convergence real ACTION evidence at `5995717` remains FAIL evidence
 
 ## Remaining validation debt
 
-All remaining items are exact-SHA real-environment validation, not speculative implementation:
+The exact-SHA standalone and Odoo test debts are closed. Remaining debt is:
 
-- exact-SHA standalone rerun from a real checkout;
-- Odoo addon install/update and `TransactionCase` battery;
-- real Codex one-decision round trip under the supported Odoo worker/account path;
+- a deterministic Odoo regression for the primary-turn versus independent-event serialization
+  collision;
+- a bounded product correction that preserves the current host/capability/ACTION invariants;
+- a retry-free real Codex one-decision round trip under the supported Odoo worker/account path;
 - durable transcript persistence across real worker/process restart;
-- real HELLO;
-- real READ against a disposable known partner;
+- clean real HELLO without a runtime requeue;
+- real READ against a disposable known partner without serialization failure;
 - real ACTION against a disposable partner through preview, one explicit approval, exactly one barrier/effect and verification;
-- sanitized evidence and fixture/database cleanup;
+- a final sanitized PASS record and fixture/database cleanup;
 - broad Odoo/Codex account test isolation remains follow-up debt after this hard gate.
 
 ## Exact next action
 
-Follow `docs/research/E2E_REAL_ENV_HANDOFF.md` against implementation/test SHA `e9420ae80cf1d6a030312e5e4e76a911c60c7b18` on a disposable Odoo 18/WSL2 validation database. Begin with the adapter regression and real HELLO; continue to READ/ACTION only after HELLO passes.
+Correct the turn/event serialization collision reproduced at `e9420ae80cf1d6a030312e5e4e76a911c60c7b18`.
+Add an Odoo regression that keeps a primary turn transaction active while independent activity
+events are persisted and proves that the final flush/commit does not fail or lose monotonic event
+ordering. Do not weaken Odoo authority, `su=False`, transcript privacy, capability contracts,
+approval, write barrier, verification, or recovery semantics.
 
-Do not claim `REAL_ENV_VALIDATION_REQUIRED` has passed until the handoff's standalone, Odoo test, HELLO, READ and ACTION criteria all pass. On failure, record the first failing boundary and return to implementation only if the evidence proves a product/test defect.
+After publishing the bounded product/test SHA, update `docs/research/E2E_REAL_ENV_HANDOFF.md` and
+rerun its full standalone, Odoo, HELLO, READ and ACTION sequence in a fresh disposable database.
+Do not claim the real gate passed until all criteria pass without hidden runtime retries.

@@ -1,10 +1,13 @@
 # E2E real-environment validation handoff
 
 Date: 2026-08-27  
-Status: `REAL_ENV_VALIDATION_REQUIRED`  
-Implementation/test SHA to validate: `e9420ae80cf1d6a030312e5e4e76a911c60c7b18`
+Status: `REAL_ENV_VALIDATION_FAILED`<br>
+Implementation/test SHA materially validated: `e9420ae80cf1d6a030312e5e4e76a911c60c7b18`
 
-This document is a validation-only handoff. E2E-0 through E2E-4 and the final automated battery are implemented at the SHA above. No real Odoo/Codex/browser PASS is claimed by this handoff. The commit containing this document is expected to be a docs-only descendant of the SHA under test; validate the exact implementation/test SHA above unless a later product/test change intentionally supersedes it.
+This document records the failed exact-SHA validation and remains the rerun procedure after the
+next bounded product correction. E2E-0 through E2E-4 and the final automated battery are implemented
+at the SHA above. No complete real Odoo/Codex/browser PASS is claimed. The commit containing this
+document is a docs-only descendant of the SHA under test.
 
 This SHA supersedes `ee723a7d715970681ef1addffebcceb54dbd2027` after its real HELLO failed
 before the first `assistant_decision`. The observed App Server 0.149.1 event was an HTTP 400
@@ -12,6 +15,30 @@ before the first `assistant_decision`. The observed App Server 0.149.1 event was
 reduced it to `codex_turn_failed`. The replacement uses an App Server-compatible wire envelope and
 keeps the sanitized diagnostic `codex_output_schema_invalid`. Host loop, transcript, capabilities
 and ACTION lifecycle behavior are unchanged.
+
+## Latest exact-SHA result
+
+The adapter correction passed its real boundary. On the supported Odoo worker path, HELLO obtained
+a valid final answer and READ obtained valid `assistant_decision` plus `capability_call` items.
+The exact-SHA run then exposed a separate host/event transaction defect:
+
+```text
+independent event append updates odoo_ai_turn.last_event_sequence
+  -> active primary turn cursor flush/commit
+  -> psycopg2.errors.SerializationFailure: concurrent update
+```
+
+HELLO completed only after one `runtime_unavailable` requeue. READ exhausted three attempts and
+ended `failed/runtime_unavailable`, with `write_barrier=false` and the disposable record unchanged.
+ACTION was not started because READ is a hard predecessor. Standalone, addon install/update, Odoo
+convergence 12/12, canonical PLAN 2/2 and adapter 3/3 all passed. The database was dropped and Odoo
+was active after cleanup.
+
+The sanitized evidence is
+`docs/research/evidence/phase0/2026-08-27/E2E-REAL-ENV-result-e9420ae.md`. The next implementation
+must correct the turn/event serialization collision and add a reproducing Odoo regression without
+weakening host authority, ACLs, transcript privacy, capabilities, approval, write barrier,
+verification, or recovery. Then update the implementation/test SHA here and rerun all sections.
 
 ## 1. What is already automated
 
@@ -51,12 +78,12 @@ test "$(sudo -u odoo git -C "$REPO" rev-parse HEAD)" = "$E2E_SHA"
 test -z "$(sudo -u odoo git -C "$REPO" status --porcelain)"
 
 cd "$REPO"
-python tests/e2e/test_e2e_convergence_battery.py
-python tests/e2e/test_e2e_decision_sequences.py
-python tests/e2e/test_next_decision_contract.py
-python tests/e2e/test_working_transcript_contract.py
-python tests/e2e/test_canonical_plan_proposal.py
-python -m py_compile \
+python3 tests/e2e/test_e2e_convergence_battery.py
+python3 tests/e2e/test_e2e_decision_sequences.py
+python3 tests/e2e/test_next_decision_contract.py
+python3 tests/e2e/test_working_transcript_contract.py
+python3 tests/e2e/test_canonical_plan_proposal.py
+python3 -m py_compile \
   addons/odoo_ai_assistant/runtime/agent/codex_decision.py \
   addons/odoo_ai_assistant/tests/test_codex_decision_adapter.py \
   addons/odoo_ai_assistant/tests/test_e2e_convergence_battery.py \
@@ -206,7 +233,7 @@ export ODOO_AI_PHASE0_PASSWORD="$E2E_PASSWORD"
 export ODOO_AI_PHASE0_MESSAGE='Reply with one short greeting.'
 unset ODOO_AI_PHASE0_SCREEN_JSON
 
-python tests/e2e/phase0_live_capture.py \
+python3 tests/e2e/phase0_live_capture.py \
   --scenario hello \
   --out /tmp/odoo-ai-e2e/hello.json
 ```
@@ -230,7 +257,7 @@ Use the same disposable partner and identify it in the screen hint. The text may
 export ODOO_AI_PHASE0_MESSAGE="Find the disposable partner named ${E2E_MARKER} and report its phone."
 export ODOO_AI_PHASE0_SCREEN_JSON="{\"model\":\"res.partner\",\"res_id\":${E2E_PARTNER_ID},\"view_type\":\"form\"}"
 
-python tests/e2e/phase0_live_capture.py \
+python3 tests/e2e/phase0_live_capture.py \
   --scenario read_partner \
   --out /tmp/odoo-ai-e2e/read-partner.json
 ```
@@ -320,7 +347,7 @@ For the Phase 0 aggregate report, run a **separate preview-only** turn after res
 export ODOO_AI_PHASE0_MESSAGE='Prepare exactly one harmless reversible phone update on the disposable partner; do not claim it was executed.'
 export ODOO_AI_PHASE0_SCREEN_JSON="{\"model\":\"res.partner\",\"res_id\":${E2E_PARTNER_ID},\"view_type\":\"form\"}"
 
-python tests/e2e/phase0_live_capture.py \
+python3 tests/e2e/phase0_live_capture.py \
   --scenario write_preview \
   --out /tmp/odoo-ai-e2e/write-preview.json
 ```
@@ -387,3 +414,4 @@ If the database must be retained temporarily for diagnosis, archive/remove only 
 6. fixture cleanup and sanitized evidence recorded.
 
 Until all six are observed, Phase 0 remains blocked and no real-environment PASS should be claimed.
+The `e9420ae` run stopped after item 4 failed; item 5 was deliberately not attempted.

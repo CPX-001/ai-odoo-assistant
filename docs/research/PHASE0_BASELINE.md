@@ -3,8 +3,9 @@
 Research/playbook source: `FOUNDATION_STABILIZATION_PLAYBOOK.md`  
 Phase started from main: `3f175cdc9b38aa3fc5aac4f231c0aee5d86b46ef`  
 Latest real ACTION checkpoint materially tested: `59957173510ec7f5da6d0ac39e9ea52244dbba86`<br>
+Latest exact convergence checkpoint materially tested: `e9420ae80cf1d6a030312e5e4e76a911c60c7b18`<br>
 Target: Odoo 18 Community / embedded runtime / Codex primary  
-Status: **blocked — exact-SHA real validation required after one-decision App Server repair**
+Status: **blocked — exact-SHA real validation failed at the turn/event transaction boundary**
 
 ## Purpose
 
@@ -553,3 +554,27 @@ one-decision transport schema and its diagnostic normalization. The provider-neu
 host loop, private transcript, capability framework and ACTION lifecycle remain unchanged. The
 standalone suites, three adapter regressions and a direct real App Server greeting decision pass at
 that checkpoint. Exact-SHA Odoo worker/account HELLO, READ and ACTION remain hard validation debt.
+
+## Exact-SHA convergence validation result — 2026-08-27
+
+The real validation host installed and explicitly updated the addon using product/test code
+equivalent to `e9420ae80cf1d6a030312e5e4e76a911c60c7b18`. Standalone convergence 12/12,
+decision sequences 4/4, NextDecision 4/4, working transcript 4/4, canonical plan 5/5 and compilation
+passed. In a fresh disposable Odoo database, convergence 12/12, canonical PLAN 2/2 and the App
+Server adapter regression 3/3 also passed.
+
+The real adapter boundary is repaired: HELLO obtained a valid final answer and READ durably recorded
+valid `assistant_decision` and `capability_call` items. A different product defect then surfaced.
+Independent activity-event persistence updates `odoo_ai_turn.last_event_sequence` while the primary
+turn cursor still has the same row active. PostgreSQL rejected the primary flush/commit with
+`SerializationFailure: could not serialize access due to concurrent update`.
+
+HELLO eventually completed only after one `runtime_unavailable` requeue. READ exhausted all three
+attempts and ended `failed/runtime_unavailable`; it had three decisions and three capability calls,
+`write_barrier=false`, and the disposable partner remained unchanged. Odoo stayed on the same PID.
+Because READ is a hard predecessor, ACTION was not started and there were zero approval clicks.
+
+The disposable database was dropped, credentials were unset and Odoo was active after cleanup.
+See `evidence/phase0/2026-08-27/E2E-REAL-ENV-result-e9420ae.md` for the sanitized result. The next
+bounded implementation is the turn/event transaction collision plus a reproducing Odoo regression;
+the full real handoff must then run again against the new product SHA.
