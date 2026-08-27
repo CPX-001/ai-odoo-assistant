@@ -1,14 +1,15 @@
 # Current implementation state
 
 Revalidated through the completed Phase 1 provider boundary on 27 August 2026. The Phase 0 product
-path, P1.3 Codex version/100-turn soak and final host-tool/cancellation gates have passed real Odoo
-18 + authenticated Codex validation. Phase 2's structured failure contract is now `READY`; the
-exact cursor is tracked in `docs/research/EXECUTION_STATE.md`.
+path, P1.3 Codex version/100-turn soak and final host-tool/cancellation gates passed real Odoo 18 +
+authenticated Codex validation. Phase 2 is now in progress through the implemented P2.3 terminal
+failure-persistence slice; its new Odoo stored field/model path still requires the hard local Odoo
+validation recorded in `docs/research/EXECUTION_STATE.md`.
 
 ## Product baseline
 
 - Target: Odoo 18 Community, self-hosted Linux.
-- Installable product: `addons/odoo_ai_assistant`, version `18.0.10.7.0`.
+- Installable product: `addons/odoo_ai_assistant`, version `18.0.10.8.0`.
 - Runtime: embedded in Odoo; browser uses Odoo RPC only.
 - Durable work: `odoo.ai.turn`, native `ir.cron`, private working transcript and sanitized events.
 - Business authority: originating effective Odoo user with `su=False`.
@@ -38,6 +39,11 @@ strict identity/critical-event checks. Terminal provider failures retain only bo
 Explicit `serverOverloaded` terminal facts are marked with an advisory `provider_retryable` hint only
 at the effect-free one-decision boundary. The adapter does not retry provider calls itself, and this
 classification does not weaken the existing durable write-barrier/recovery rules.
+
+Phase 2 now wraps provider failures in a validated host-owned `FailureEnvelope`. When such a failure
+becomes terminal, the queue persistence layer can retain its bounded provider facts on the turn.
+Generic terminal host/queue failures receive a bounded fallback envelope instead of being reduced to
+presentation prose.
 
 ## Canonical actions
 
@@ -69,17 +75,29 @@ still future work, not implementation claims.
 ## Persistence and UI
 
 `working_items_payload` is private active-turn state. `odoo.ai.turn.event` and normal result payloads
-are sanitized projections for the existing interface. The panel/interface has not been redesigned.
+remain sanitized projections for the existing interface.
+
+P2.3 adds nullable readonly `odoo.ai.turn.failure_payload`. Terminal `failed` and
+`recovery_required` turns persist a validated `FailureEnvelope`, while `browser_status()` now returns
+that structure as `failure` and preserves the existing `error_code` field for compatibility. The
+queue `write_barrier` is authoritative for effect certainty: without it the terminal envelope is
+effect-free; after it the result is forced to `effect_state=unknown`, `retryability=never` and
+`user_action=review` unless later authoritative verification establishes stronger facts.
+
+The browser presentation layer has not yet been migrated to consume this structure. Existing error
+copy and the streaming catch-all behavior remain later Phase 2 work.
 
 The legacy monolithic Codex adapter remains a non-default ADR-019 rollback seam only. The active
 product path uses the host-owned decision loop.
 
 ## Validation status
 
-Dependency-light provider, unit and E2E contract suites plus the complete addon install/update
-battery are green. Real Odoo 18 Community evidence has passed `P1-REAL-VERSION` and
-`P1-REAL-SOAK-100` at the recorded P1.3 checkpoint, including 100/100 normal product-path turns.
-The final checkpoint `db6e5c1` additionally passed `P1-REAL-TOOLCALL` and `P1-REAL-CANCEL`: the read
-used host capabilities with the effective user and `su=False`; the intended active turn cancelled
-without a write barrier/effect; and a subsequent distinct turn remained healthy. No mandatory
-Phase 1 validation debt remains.
+The completed Phase 1 checkpoint remains fully validated: its dependency-light suites, addon
+install/update battery and real Odoo/Codex gates passed on their recorded SHAs. `P1-REAL-VERSION`,
+`P1-REAL-SOAK-100`, `P1-REAL-TOOLCALL` and `P1-REAL-CANCEL` remain retained evidence.
+
+For P2.3, syntax validation passed and an isolated dependency-light contract harness passed 5 tests.
+The current P2.3 implementation has **not** yet passed an Odoo 18 module update or the newly added
+`test_turn_failure.py` + existing `test_turn_queue.py` integration battery. Therefore P2.3 remains
+`LOCAL_VALIDATION_REQUIRED`; the earlier Phase 1 addon battery must not be treated as validation of
+the new `failure_payload` field/model override. See `docs/research/EXECUTION_STATE.md`.
