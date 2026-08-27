@@ -1,0 +1,109 @@
+{
+  "cases": [
+    {
+      "expected_outcome": "accepted",
+      "id": "initialize",
+      "required_assertions": [
+        "initialized"
+      ]
+    },
+    {
+      "expected_outcome": "accepted",
+      "id": "thread_isolation",
+      "required_assertions": [
+        "approval_never",
+        "sandbox_read_only",
+        "ephemeral_thread",
+        "workspace_roots_empty"
+      ]
+    },
+    {
+      "expected_outcome": "accepted",
+      "id": "turn_output_schema",
+      "required_assertions": [
+        "output_schema_present"
+      ]
+    },
+    {
+      "expected_outcome": "accepted",
+      "id": "agent_message_delta",
+      "required_assertions": [
+        "delta_accepted"
+      ]
+    },
+    {
+      "expected_outcome": "accepted",
+      "id": "completed_agent_message",
+      "required_assertions": [
+        "completed_message_accepted"
+      ]
+    },
+    {
+      "expected_outcome": "accepted",
+      "id": "dynamic_tool_mapping",
+      "required_assertions": [
+        "logical_capability_mapped",
+        "host_executor_used"
+      ]
+    },
+    {
+      "expected_outcome": "accepted",
+      "id": "capability_success",
+      "required_assertions": [
+        "structured_tool_success"
+      ]
+    },
+    {
+      "expected_outcome": "accepted",
+      "id": "capability_failure",
+      "required_assertions": [
+        "structured_tool_failure"
+      ]
+    },
+    {
+      "expected_outcome": "accepted",
+      "id": "unknown_notification",
+      "required_assertions": [
+        "unknown_notification_ignored_safely"
+      ]
+    },
+    {
+      "expected_outcome": "rejected",
+      "id": "malformed_critical_event",
+      "required_assertions": [
+        "failed_closed"
+      ]
+    },
+    {
+      "expected_outcome": "rejected",
+      "id": "identity_mismatch",
+      "required_assertions": [
+        "failed_closed"
+      ]
+    },
+    {
+      "expected_outcome": "cancelled",
+      "id": "cancellation",
+      "required_assertions": [
+        "correct_turn_interrupted"
+      ]
+    },
+    {
+      "expected_outcome": "rejected",
+      "id": "terminal_failure",
+      "required_assertions": [
+        "structured_error_preserved"
+      ]
+    },
+    {
+      "expected_outcome": "retryable",
+      "id": "overload_backpressure",
+      "required_assertions": [
+        "retryable_classified",
+        "unsafe_host_effect_not_retried"
+      ]
+    }
+  ],
+  "format_version": 1,
+  "suite_id": "codex-provider-conformance-v1"
+}
