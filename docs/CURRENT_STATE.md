@@ -1,16 +1,18 @@
 # Current implementation state
 
-Implementation claims were validated against code commit `a16825b159a25caca3b48fcab15b9b21b0169ab6` on 26 August 2026. The documentation close-out commits immediately after that baseline are documentation-only and do not change product behavior. Revalidate this document if product code advances.
+Implementation claims in this document were revalidated against the E2E-3 host-loop checkpoint on
+27 August 2026. Real Odoo 18 + authenticated Codex validation of that checkpoint is still pending
+and is tracked in `docs/research/EXECUTION_STATE.md`.
 
 ## Product baseline
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Installable product: `addons/odoo_ai_assistant`.
-- Addon version at the inspected baseline: `18.0.10.4.6`.
+- Addon version: `18.0.10.6.0`.
 - Operational runtime: embedded in Odoo.
 - Reasoning provider: Codex App Server launched as an ephemeral subprocess.
 - Browser transport: Odoo RPC only.
-- Durable execution: `odoo.ai.turn` + persisted turn events + `ir.cron` workers.
+- Durable execution: `odoo.ai.turn` + private working transcript + persisted public events + `ir.cron` workers.
 - Business authority: effective Odoo user Environment with `su=False`.
 
 ## Runtime flow
@@ -22,15 +24,47 @@ browser
   -> cron claims queued turn
   -> AgentTurnService
   -> effective CapabilityRegistry views for reasoning/planning
-  -> Codex reasoning and capability calls
-  -> host validation/policy/approval/execution/verification
-  -> persisted events/final message/result payload
+  -> CodexDecisionEngine returns exactly one NextDecision
+  -> host validates the decision
+  -> REASONING call: execute -> persist bounded private result/error -> ask again
+  -> final answer (E2E-3)
+  -> PLAN proposal is parsed/validated but dispatch remains disabled until E2E-4
+  -> persisted result/events/final message
   -> browser polling/rendering
 ```
 
-Turn claiming is Odoo-native and uses bounded leases/recovery. The queue uses an internal `FOR UPDATE SKIP LOCKED` claim primitive to coordinate workers; this is infrastructure locking, not a model-visible arbitrary SQL capability.
+Turn claiming is Odoo-native and uses bounded leases/recovery. The queue uses an internal `FOR
+UPDATE SKIP LOCKED` claim primitive to coordinate workers; this is infrastructure locking, not a
+model-visible arbitrary SQL capability.
 
-At the inspected baseline the generic turn status endpoint returns the authoritative `result_payload` as `response` for `awaiting_confirmation` and `completed` turns, so the browser can render the completed/approval response without relying on a subclass-specific override.
+The generic turn status endpoint returns the authoritative `result_payload` as `response` for
+`awaiting_confirmation` and `completed` turns. Private `working_items_payload` is not part of the
+browser response.
+
+## Host-owned decision loop implemented now
+
+ADR-019 is active for the product composition. Codex no longer owns a monolithic sequence of
+dynamic tool callbacks for READ turns. Instead it returns one strict provider-neutral decision:
+
+- `final_answer`;
+- `reasoning_capability_call`;
+- `plan_step_proposal`.
+
+`AgentTurnService` validates every non-final decision again against the effective registry and JSON
+schema. Only REASONING definitions may execute during the loop and they execute through
+`CapabilityExecutor` with `ExecutionAuthority.REASONING`.
+
+The loop has explicit bounds for provider decisions, capability calls, per-definition calls,
+consecutive correctable failures, transcript bytes and per-result bytes. Cancellation is checked
+before provider/capability work. Read calls use the current Odoo cursor/savepoint.
+
+The active turn owns a private monotonic working transcript with typed items including decisions,
+calls, results/errors and terminal boundaries. A pending persisted call id is closed as an
+interrupted call after restart rather than blindly executing the same call id again. Completed
+terminal answers can be resumed without another provider call.
+
+The previous monolithic `CodexReasoningEngine` remains installed only as the ADR-019 rollback seam;
+it is not the active embedded composition.
 
 ## Capability host implemented now
 
@@ -41,9 +75,14 @@ The installed core provider package contains exactly these provider modules:
 - `odoo_batch` — bounded batch operations built on the same authority model;
 - `odoo_runtime` — narrow runtime information required by the agent.
 
-`CapabilityDefinition` is the executable unit. A definition contains model-facing schemas and descriptions plus host-facing risk/effect/approval, groups/guards, budgets and handler metadata. The registry discovers the installed core provider package deterministically, applies availability rules, and exposes reduced views for reasoning/planning/diagnostics.
+`CapabilityDefinition` is the executable unit. A definition contains model-facing schemas and
+descriptions plus host-facing risk/effect/approval, groups/guards, budgets and handler metadata.
+The registry discovers the installed core provider package deterministically, applies availability
+rules, and exposes reduced views for reasoning/planning/diagnostics.
 
-The current framework does **not** yet have a first-class addon extension point named `CapabilityProvider`, a configurable `Skill/CapabilityBundle` product layer or lazy/progressive capability disclosure. Those are design directions, not implementation claims.
+The current framework does **not** yet have a first-class addon extension point named
+`CapabilityProvider`, a configurable `Skill/CapabilityBundle` product layer or lazy/progressive
+capability disclosure. Those are design directions, not implementation claims.
 
 ## Query behavior
 
@@ -57,19 +96,38 @@ Queries are schema-first and bounded. The current query provider enforces, among
 - up to 8 aggregate metrics;
 - up to 50 aggregate groups.
 
-Fields and operators are filtered by effective runtime visibility. Returned record/document text is data, not authority.
+Fields and operators are filtered by effective runtime visibility. Returned record/document text is
+data, not authority.
 
 ## Writes and host authority
 
-The reasoning model never gains authority by selecting a capability. The host validates the effective catalog, JSON schema, current user context, risk/policy and approval requirements before an effect. Write paths are designed around preview/authorization/execution/verification rather than unrestricted `write()` or arbitrary method calls exposed to the model.
+The reasoning model never gains authority by selecting a capability. The host validates the
+effective catalog, JSON schema, current user context, risk/policy and approval requirements before
+an effect.
 
-Business operations must continue to respect ACLs, record rules, field access and active companies. Generic SQL, Python, shell, sudo and unrestricted `execute_method`/`execute_kw` are not model capabilities.
+At this E2E-3 checkpoint a validated PLAN decision is intentionally not yet dispatched by the active
+loop; `agent_plan_proposal_not_enabled` closes that boundary before any preview or effect. E2E-4 is
+the next authorized slice and will feed one canonical validated proposal into the existing
+`CapabilityPlanService.prepare` lifecycle.
+
+The existing write implementation remains unchanged and still enforces preview, bound
+preconditions, policy/approval, durable write barrier, execute under the effective user,
+verification and post-barrier recovery. Generic SQL, Python, shell, sudo and unrestricted
+`execute_method`/`execute_kw` are not model capabilities.
 
 ## Conversations, turns and progress
 
-Conversation/turn state is persisted in Odoo. Long work is not held inside a browser request. Turn states include queued/execution and terminal/recovery states, with cancellation and stale-lease recovery. Events are persisted and consumed by the UI; they are public/sanitized state, not chain-of-thought.
+Conversation/turn state is persisted in Odoo. Long work is not held inside a browser request. Turn
+states include queued/execution and terminal/recovery states, with cancellation and stale-lease
+recovery.
 
-The latest inspected UI account service polls authentication state only while the Assistant is open and the page is visible: pending login uses a short poll interval and an authenticated account uses a slower refresh interval. Chat/history remain gated until the runtime account is usable.
+Two persistence projections are deliberately separate:
+
+- `working_items_payload`: private bounded active-turn host-loop state;
+- `odoo.ai.turn.event`: public/sanitized progress consumed by the UI.
+
+Capability arguments/results stored for provider continuation are not automatically projected into
+browser events or diagnostics.
 
 ## Codex account lifecycle
 
@@ -91,7 +149,8 @@ System administrators can configure:
 
 ## Not current product features
 
-These concepts exist in historical code, research or roadmap material but are **not** completed current embedded product features unless newer code says otherwise:
+These concepts exist in historical code, research or roadmap material but are **not** completed
+current embedded product features unless newer code says otherwise:
 
 - separate FastAPI/Uvicorn Assistant Service;
 - separate Assistant PostgreSQL database/Alembic runtime;
@@ -106,10 +165,13 @@ These concepts exist in historical code, research or roadmap material but are **
 - governed long-term memory;
 - multimodal/attachment ingestion.
 
-Historical implementations remain useful as design evidence, but porting a feature back into the embedded runtime requires a fresh design against current invariants.
+Historical implementations remain useful as design evidence, but porting a feature back into the
+embedded runtime requires a fresh design against current invariants.
 
-## Near-term architecture direction, not implementation
+## Validation status
 
-Project research converges on preserving `CapabilityDefinition` and host authority while adding composition around it (`CapabilityProvider -> CapabilityBundle/Skill -> CapabilityDefinition`), agentic evals, stronger context/retrieval and better progress/approval UX. These are targets to evaluate after the documentation baseline is stable; they do not change the current-state claims above.
+Dependency-light E2E-3 host-loop tests and Python compilation passed in the implementation
+environment. Odoo `TransactionCase`, module-update, real Codex and browser/Odoo tests were not
+available there and are explicitly pending. No real-environment PASS is claimed by this document.
 
-The repository-wide documentation close-out for this baseline is recorded in `DOCUMENTATION_AUDIT.md`.
+See `docs/research/EXECUTION_STATE.md` for the active validation debt and next slice.

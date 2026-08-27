@@ -8,9 +8,10 @@ from .contracts import FinalAnswer, NextDecision, PlanStepProposal, ReasoningCap
 
 
 class NextDecisionValidationError(RuntimeError):
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, decision: NextDecision | None = None) -> None:
         super().__init__(code)
         self.code = code
+        self.decision = decision
 
 
 def validate_next_decision(
@@ -26,7 +27,10 @@ def validate_next_decision(
     if isinstance(decision, ReasoningCapabilityCall):
         definition = _allowed(decision.capability, reasoning_capabilities)
         if definition is None:
-            raise NextDecisionValidationError("agent_reasoning_capability_not_allowed")
+            raise NextDecisionValidationError(
+                "agent_reasoning_capability_not_allowed",
+                decision,
+            )
         try:
             validate_payload(
                 decision.arguments,
@@ -35,7 +39,7 @@ def validate_next_decision(
                 error_code="agent_capability_arguments_invalid",
             )
         except CapabilityError as error:
-            raise NextDecisionValidationError(error.code) from error
+            raise NextDecisionValidationError(error.code, decision) from error
         return ReasoningCapabilityCall(
             kind=decision.kind,
             call_id=decision.call_id,
@@ -45,7 +49,10 @@ def validate_next_decision(
     if isinstance(decision, PlanStepProposal):
         definition = _allowed(decision.capability, planning_capabilities)
         if definition is None:
-            raise NextDecisionValidationError("agent_plan_capability_not_allowed")
+            raise NextDecisionValidationError(
+                "agent_plan_capability_not_allowed",
+                decision,
+            )
         try:
             validate_payload(
                 decision.arguments,
@@ -54,7 +61,7 @@ def validate_next_decision(
                 error_code="agent_plan_arguments_invalid",
             )
         except CapabilityError as error:
-            raise NextDecisionValidationError(error.code) from error
+            raise NextDecisionValidationError(error.code, decision) from error
         return PlanStepProposal(
             kind=decision.kind,
             call_id=decision.call_id,
@@ -62,7 +69,7 @@ def validate_next_decision(
             arguments=dict(decision.arguments),
             user_summary=" ".join(decision.user_summary.split()),
         )
-    raise NextDecisionValidationError("agent_next_decision_invalid")
+    raise NextDecisionValidationError("agent_next_decision_invalid", decision)
 
 
 def _allowed(name: str, definitions: tuple[CapabilityDefinition, ...]):

@@ -91,6 +91,23 @@ def transcript_payload(items: tuple[WorkingItem, ...]) -> list[JsonObject]:
     return payload
 
 
+def working_transcript_bytes(items: tuple[WorkingItem, ...]) -> int:
+    """Return the canonical serialized size used by the transcript budget."""
+    payload = [item.payload() for item in items]
+    try:
+        return len(
+            json.dumps(
+                payload,
+                allow_nan=False,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        )
+    except (TypeError, ValueError):
+        raise WorkingTranscriptError("agent_working_transcript_invalid") from None
+
+
 def call_state(items: tuple[WorkingItem, ...], call_id: str) -> str | None:
     state = None
     for item in items:

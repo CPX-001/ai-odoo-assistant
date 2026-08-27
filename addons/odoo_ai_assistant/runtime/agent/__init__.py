@@ -5,6 +5,7 @@ from .service import (
     AgentReasoningResult,
     AgentTurnResult,
     AgentTurnService,
+    NextDecisionEngine,
     PlannedCapability,
     ReasoningEngine,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "CapabilityPlanError",
     "CapabilityPlanExecution",
     "CapabilityPlanService",
+    "NextDecisionEngine",
     "PlannedCapability",
     "ReasoningEngine",
 ]
