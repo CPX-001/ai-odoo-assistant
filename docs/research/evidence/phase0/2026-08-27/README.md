@@ -268,3 +268,20 @@ evaluator rejected the evidence with `action_plan_missing`, `approval_preview_mi
 
 See `P0-REAL-ACTION-corrected-result-97617fe.md`. Phase 0 remains blocked; repeating the same ACTION
 without a materially new correction is not authorized, and Phase 1 remains locked.
+
+## ACTION v2 run at 5995717
+
+The stage-only PLAN projection and diagnostic correction first passed 30 standalone tests and 44
+targeted Odoo planning/action/runtime/capability tests. The primary addon was then upgraded and the
+authenticated product path rerun with a disposable partner and strict temporary user.
+
+Codex saw six reasoning and six planning definitions but selected no tool, staged no proposal and
+completed with a low-confidence read-only result. All plan counts were zero, no preview appeared,
+no approval/barrier/effect/verification occurred, the record remained unchanged and Odoo stayed on
+the same active process. Fixtures were archived/restored and the disposable test database was
+removed.
+
+The last successful boundary was `planning_catalog_exposed`; the first missing required boundary
+was `plan_step_staged(odoo.record.patch)`. See
+`P0-REAL-ACTION-v2-result-5995717.md`. The next correction is the bounded host-owned decision loop
+defined in `../../../E2E_AGENT_LOOP_CONVERGENCE.md`, not another prompt-only retry.

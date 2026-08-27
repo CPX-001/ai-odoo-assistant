@@ -21,6 +21,8 @@ Every playbook must record the inspected commit and research date. Revalidate it
 | Document | Purpose |
 | --- | --- |
 | `FOUNDATION_STABILIZATION_PLAYBOOK.md` | Step-by-step path from the current fragile chat/runtime experience to a stable, observable, provider-neutral foundation before adding major RAG/features. |
+| `E2E_AGENT_LOOP_CONVERGENCE.md` | Detailed Apexive-vs-Assistant diagnosis and ordered convergence plan for a host-owned Codex decision loop without changing the UI or authority model. |
+| `IMPLEMENTATION_PROMPT_CODEX_E2E.md` | Self-contained prompt for implementing the convergence one validated slice at a time. |
 | `EXECUTION_STATE.md` | Persistent cursor for recursive/multi-run execution: active phase/slice, blockers, validations and exact next action. |
 | `CONTINUOUS_EXECUTION_PROTOCOL.md` | Rules for repeatedly resuming the roadmap from Git without relying on chat memory, including slice sizing, stop rules and validation semantics. |
 | `REAL_ENV_VALIDATION_PROTOCOL.md` | Named tests that must be performed against real Odoo 18 + Codex before selected slices/phases may close. |

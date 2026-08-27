@@ -41,6 +41,8 @@ Current entry points:
 
 - `research/README.md` — index, scope and authority for the research/execution layer;
 - `research/FOUNDATION_STABILIZATION_PLAYBOOK.md` — ordered path for provider stability, failure contracts, live public activity, real answer streaming, chat UX, latency, regression gates and capability-framework evolution before major feature/RAG expansion;
+- `research/E2E_AGENT_LOOP_CONVERGENCE.md` — Apexive-informed diagnosis and ordered host-loop convergence that keeps the current Assistant UI and authoritative Odoo capability/action lifecycle;
+- `research/IMPLEMENTATION_PROMPT_CODEX_E2E.md` — implementation prompt for executing that convergence in validated slices;
 - `research/EXECUTION_STATE.md` — persistent current cursor used to resume the roadmap across independent runs;
 - `research/CONTINUOUS_EXECUTION_PROTOCOL.md` — recursive/restartable execution algorithm, stop rules and validation semantics;
 - `research/REAL_ENV_VALIDATION_PROTOCOL.md` — named checks that require the real Odoo 18 + Codex product path;

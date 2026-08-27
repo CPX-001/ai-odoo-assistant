@@ -2,10 +2,10 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `e8431c7709d09e869faec9df6398a86461a272e2`  
-Latest product/tooling implementation checkpoint: `e8431c7709d09e869faec9df6398a86461a272e2`  
-Latest P0 ACTION real checkpoint materially tested: `97617fefe40c22803a140b03023fd0df67594be1`  
-Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
+Latest repository checkpoint inspected: `4b5d510e6f8a61e9d2378b0bb00c678f95b67b4e`
+Latest product/tooling implementation checkpoint: `4b5d510e6f8a61e9d2378b0bb00c678f95b67b4e`
+Latest P0 ACTION real checkpoint materially tested: `59957173510ec7f5da6d0ac39e9ea52244dbba86`
+Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md` and `E2E_AGENT_LOOP_CONVERGENCE.md`
 
 ## Current cursor
 
@@ -13,13 +13,15 @@ Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 phase: 0
 phase_name: reproducible baseline
 phase_state: BLOCKED
-active_slice: P0-REAL-ACTION-plan-omission-correction-v2
-active_slice_state: LOCAL_VALIDATION_REQUIRED
+active_slice: P0-E2E-host-loop-convergence
+active_slice_state: DESIGN_COMPLETE_IMPLEMENTATION_REQUIRED
 current_gate_type: HARD
 next_phase: 1
 ```
 
-Phase 1 production provider/runtime architecture remains locked.
+General Phase 1 work remains locked. A narrow host-loop correction is authorized inside Phase 0
+because the real v2 evidence disproved the assumption that another prompt-only correction could
+close ACTION.
 
 ## Look-ahead budget
 
@@ -27,11 +29,12 @@ Phase 1 production provider/runtime architecture remains locked.
 max_phase_distance_ahead: 1
 max_unvalidated_implementation_slices: 2
 max_stacked_unvalidated_contract_layers: 1
-currently_consumed_implementation_slices: 1
-currently_stacked_unvalidated_contract_layers: 1
+currently_consumed_implementation_slices: 0
+currently_stacked_unvalidated_contract_layers: 0
 ```
 
-`P1-PREP-CONFORMANCE` is already COMPLETE. No additional Phase 1 look-ahead is authorized while the ACTION planning/output correction is unvalidated.
+`P1-PREP-CONFORMANCE` is already COMPLETE. Only E2E-0 and then E2E-1 from
+`E2E_AGENT_LOOP_CONVERGENCE.md` are authorized; no unrelated Phase 1 look-ahead is authorized.
 
 ## Processed real evidence
 
@@ -40,6 +43,7 @@ currently_stacked_unvalidated_contract_layers: 1
 - aggregate Phase 0 report remains `ready_for_phase1=false` because ACTION is absent.
 - `P0-REAL-ACTION`: FAIL at `38c7c9a`; one real browser turn completed after three bounded tool pairs with no error, `write_barrier=false`, `plan_step_count=0`, no approval preview and no effect. The disposable record remained unchanged and Odoo service identity stayed stable.
 - `P0-REAL-ACTION-CORRECTED`: FAIL at `97617fe`; after the first planning-obligation correction, the real browser turn reproduced the same three bounded tool pairs and completed zero-step plan. No approval or effect occurred, the record remained unchanged and Odoo retained PID `75689`.
+- `P0-REAL-ACTION-V2`: FAIL at `5995717`; six reasoning and six planning tools were exposed, but Codex selected no tool and staged no plan step. The turn completed read-only with low confidence, zero plan steps, no preview and no effect. Odoo remained stable and the disposable fixture remained unchanged.
 
 ## Completed ACTION diagnosis
 
@@ -108,7 +112,36 @@ Deterministic tests were added/extended to cover:
 - conflicting staged and structured plans -> fail closed;
 - sanitized ACTION reports may carry validated capability identifiers and bounded planning diagnostics while dropping arbitrary content.
 
-These new tests have **not yet been executed in an Odoo-capable environment**. They are validation debt, not assumed PASS.
+These tests were executed on 2026-08-27. The relevant standalone suite passed 30/30, and the
+targeted Odoo planning/action/runtime/capability suites passed 44 tests with zero failures or
+errors. A separate full-module run exposed one account connect/disconnect test-isolation failure;
+that remains separate debt and does not invalidate the ACTION-specific suites.
+
+## Real ACTION v2 result and architecture conclusion
+
+Evidence:
+`docs/research/evidence/phase0/2026-08-27/P0-REAL-ACTION-v2-result-5995717.md`
+
+The real run closed the v2 local validation debt but failed the hard product gate. Its last
+successful boundary was:
+
+```text
+planning_catalog_exposed(reasoning_tool_count=6, planning_tool_count=6)
+```
+
+Its first missing required boundary was:
+
+```text
+plan_step_staged(capability=odoo.record.patch)
+```
+
+The terminal reconciliation was `source=read_only`, `staged_plan_count=0`,
+`structured_plan_count=0`, `final_plan_count=0`. No capability call occurred. The staged fallback
+was therefore not reached.
+
+The next correction is no longer another provider-instruction tweak. The approved research
+direction is the Apexive-inspired, Odoo-owned iterative `NextDecision` loop in
+`E2E_AGENT_LOOP_CONVERGENCE.md`. It keeps the current UI and authoritative action lifecycle.
 
 ## Improved ACTION diagnostic evidence
 
@@ -151,35 +184,45 @@ downstream_scope_blocked:
 reason: first corrected planning contract was validated in real Odoo 18 + authenticated Codex + browser and did not change the zero-step outcome
 ```
 
-### VD-P0-ACTION-V2-LOCAL
+### VD-P0-ACTION-V2-REAL
 
 ```text
-validation_id: P0-ACTION-V2-LOCAL
+validation_id: P0-REAL-ACTION-V2
 gate_type: HARD
 origin_slice: P0-REAL-ACTION-plan-omission-correction-v2
-commit_materially_tested: e8431c7709d09e869faec9df6398a86461a272e2
+commit_materially_tested: 59957173510ec7f5da6d0ac39e9ea52244dbba86
 downstream_scope_blocked:
-  - P0-REAL-ACTION-V2
   - closing P0-REAL-ACTION
   - completing Phase 0
-reason: materially new stage-only planning boundary and diagnostics have not yet run in the local/Odoo test environment
+reason: effective PLAN catalog was exposed, but Codex selected no tool and staged no action proposal
+```
+
+### VD-ACCOUNT-TEST-ISOLATION
+
+```text
+validation_id: ODOO-CODEX-ACCOUNT-TEST-ISOLATION
+gate_type: SOFT for E2E-0; HARD before broad module regression is claimed green
+origin_slice: P0-ACTION-V2 local validation
+observed_in: fresh disposable full-module test run
+reason: TestEmbeddedCodexAccount connect/disconnect expectation failed while all targeted ACTION suites passed
 ```
 
 ## Current blocker
 
 ```text
-P0_ACTION_V2_LOCAL_VALIDATION_REQUIRED
+P0_ACTION_PROVIDER_CONTROL_LOOP_REQUIRED
 ```
 
 ## Exact next action
 
-1. Pull the current main containing `e8431c7709d09e869faec9df6398a86461a272e2` and run the standalone Phase 0/action acceptance suite, including the new diagnostic sanitizer tests.
-2. Run the targeted Odoo planning/action/revalidation suite and the embedded runtime/framework/batch suite on fresh disposable databases.
-3. If any deterministic test fails, fix that failure before touching the real ACTION gate and record the exact failure.
-4. Only after local PASS, restart/update the real Odoo 18 addon on that exact tested code and run **one** disposable browser ACTION through the normal product path using `phase0_live_diagnostic_capture.py`.
-5. Require: intended PLAN capability staged, final plan count >= 1, exact preview, record unchanged before approval, approval required, exactly one approval, exactly one effect, verification PASS, terminal success and stable Odoo service identity.
-6. If the real ACTION fails, record the safe tool sequence and `diagnostic.planning` checkpoints plus last-successful/first-missing boundary before making another correction. Do not repeat a vague zero-step report.
-7. Only after ACTION PASS, create/reject the separate `write_preview` capture and rerun `phase0_report.py`; Phase 1 remains locked until `ready_for_phase1=true`.
+1. Implement E2E-0 only: table-driven decision-sequence evals and explicit provider/capability/byte budgets for hello, read, multi-read, patch, create, repair, denial and unsupported action.
+2. Validate E2E-0 without changing runtime behavior; record actual standalone and Odoo results.
+3. If E2E-0 passes, implement E2E-1: the strict provider-neutral `NextDecision` union and one-decision Codex structured-output adapter, using local `llm_codex` as behavioral reference only.
+4. Do not implement the durable transcript or host loop in the same unvalidated slice.
+5. After E2E-1 deterministic conformance passes, advance in order through E2E-2 and E2E-3. Revalidate real hello/READ before routing PLAN.
+6. Implement E2E-4 by making one validated `PlanStepProposal` canonical and feeding it into the unchanged `CapabilityPlanService.prepare` lifecycle.
+7. Then run one disposable real ACTION. Require exact preview, unchanged pre-approval record, one approval, exactly one verified effect, stable Odoo and fixture restoration.
+8. Only after ACTION PASS, create/reject the separate `write_preview` capture and rerun `phase0_report.py`; later phases remain locked until `ready_for_phase1=true`.
 
 ## Publication policy
 

@@ -24,6 +24,7 @@ def test_preserves_only_validated_capability_identifier_on_tool_events():
     assert safe == {
         "sequence": 7,
         "type": "tool.completed",
+        "diagnostic_code": None,
         "payload": {"capability": "odoo.get_effective_write_schema"},
     }
     assert "drop-me" not in str(safe)
@@ -50,6 +51,7 @@ def test_preserves_bounded_content_free_planning_checkpoint():
     assert safe == {
         "sequence": 8,
         "type": "diagnostic.planning",
+        "diagnostic_code": None,
         "payload": {
             "point": "final_plan_reconciled",
             "capability": "odoo.record.patch",
@@ -70,4 +72,4 @@ def test_invalid_capability_identifier_is_not_preserved():
         }
     )
 
-    assert safe == {"type": "tool.started"}
+    assert safe == {"type": "tool.started", "diagnostic_code": None}

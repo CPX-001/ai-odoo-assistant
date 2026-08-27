@@ -2,9 +2,9 @@
 
 Research/playbook source: `FOUNDATION_STABILIZATION_PLAYBOOK.md`  
 Phase started from main: `3f175cdc9b38aa3fc5aac4f231c0aee5d86b46ef`  
-Latest real ACTION checkpoint materially tested: `97617fefe40c22803a140b03023fd0df67594be1`<br>
+Latest real ACTION checkpoint materially tested: `59957173510ec7f5da6d0ac39e9ea52244dbba86`<br>
 Target: Odoo 18 Community / embedded runtime / Codex primary  
-Status: **blocked — corrected real ACTION still produced a completed zero-step plan with no approval preview**
+Status: **blocked — ACTION v2 exposed the catalog but Codex selected no tool or PLAN proposal**
 
 ## Purpose
 
@@ -509,3 +509,27 @@ aggregate report counts five distinct original/UI pairs.
 `phase0_report.py` now passes the timing, latency-attribution and five-failure-pair gates. It exits
 `2` only because `minimum_live_matrix.action=false`. The exact next gate is the safe disposable
 ACTION rerun; Phase 1 remains locked.
+
+## P0 ACTION v2 validation — 2026-08-27
+
+The stage-only PLAN correction was validated locally before the real run:
+
+- standalone ACTION/diagnostic suite: **PASS**, 30 tests;
+- targeted Odoo planning/action/runtime/capability suites: **PASS**, 44 tests, zero failures/errors;
+- broader full-module run: one separate Codex account connect/disconnect test-isolation failure,
+  retained as explicit debt.
+
+The primary addon was upgraded and Odoo restarted before the authenticated product-path attempt at
+`5995717`. The turn completed in 19,599.361 ms with six reasoning and six planning tools exposed,
+but no `tool.started`, no staged step, no structured step and no preview. Final reconciliation was
+`source=read_only`, all plan counts were zero and confidence was low. The disposable record stayed
+unchanged, no approval or write barrier occurred, Odoo remained stable and all fixtures were
+archived/restored.
+
+The first missing boundary is now precise: `plan_step_staged(odoo.record.patch)` immediately after
+`planning_catalog_exposed`. See
+`evidence/phase0/2026-08-27/P0-REAL-ACTION-v2-result-5995717.md`.
+
+Phase 0 must not repeat a prompt-only correction. The next ordered work is E2E-0 then E2E-1 from
+`E2E_AGENT_LOOP_CONVERGENCE.md`, leading to the host-owned loop and canonical plan proposal. The
+real ACTION and aggregate report remain the hard exit gates after that convergence.

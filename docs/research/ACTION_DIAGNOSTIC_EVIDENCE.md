@@ -1,6 +1,6 @@
 # Phase 0 ACTION diagnostic evidence contract
 
-Status: current validation guidance for `P0-REAL-ACTION-plan-omission-correction-v2`.
+Status: current validation guidance for `P0-E2E-host-loop-convergence` and the eventual ACTION rerun.
 
 ## Purpose
 
@@ -54,7 +54,14 @@ effect_count
 service_identity_stable
 ```
 
-For the v2 correction, a successful planning boundary is expected to show one `plan_step_staged` for the intended PLAN capability and then `final_plan_reconciled` with `final_plan_count >= 1`. The subsequent authoritative path is still `CapabilityPlanService.prepare -> preview -> policy/approval -> execute -> verify`.
+The failed v2 run at `5995717` observed `planning_catalog_exposed(6, 6)` followed by
+`final_plan_reconciled(source=read_only, staged=0, structured=0, final=0)`. No tool event occurred.
+Its first missing boundary was `plan_step_staged(odoo.record.patch)`.
+
+After the host-loop convergence, the equivalent successful planning boundary is one validated
+`PlanStepProposal` for the intended PLAN capability. That host-observed proposal is canonical and
+must feed the unchanged capability-plan prepare/preview/policy/approval/execute/verify path; it
+must not depend on a duplicated final `plan=[]` serialization.
 
 ## Failure reporting rule
 
@@ -91,12 +98,13 @@ Never commit or copy into roadmap evidence:
 
 Capability names are installed-code identifiers and are allowed. Counts, state names, normalized error codes, timings and content-free planning source labels are allowed.
 
-## Validation order for v2
+## Validation order for the next ACTION
 
-1. Run deterministic standalone tests, including ACTION acceptance and diagnostic-capture sanitizer tests.
-2. Run targeted Odoo planning/action/revalidation tests plus embedded runtime/framework/batch tests.
-3. Only after local PASS, run one disposable browser ACTION on the exact tested commit using the diagnostic capture.
-4. Require correct preview while the record is unchanged.
-5. Approve once; require exactly one effect and verification PASS.
-6. If it fails, persist the sanitized boundary evidence above before attempting another correction.
-7. Only after ACTION PASS should the separate `write_preview` capture and aggregate Phase 0 report be used to decide `ready_for_phase1`.
+1. Complete and validate E2E-0 through E2E-3 from `E2E_AGENT_LOOP_CONVERGENCE.md`, including real hello/READ parity.
+2. Implement E2E-4 so one validated `PlanStepProposal` is canonical and stage-only.
+3. Run deterministic ACTION/diagnostic tests and targeted Odoo planning/action/revalidation/runtime tests.
+4. Only after local PASS, run one disposable browser ACTION on the exact tested commit using the diagnostic capture.
+5. Require correct preview while the record is unchanged.
+6. Approve once; require exactly one effect and verification PASS.
+7. If it fails, persist the sanitized boundary evidence above before attempting another correction.
+8. Only after ACTION PASS should the separate `write_preview` capture and aggregate Phase 0 report be used to decide `ready_for_phase1`.

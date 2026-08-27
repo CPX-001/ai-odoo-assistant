@@ -13,6 +13,19 @@ The current product already has a valuable kernel: effective-user Odoo authority
 
 Use this document as a checklist. Do not start a later phase because it looks more interesting. A phase is complete only when its exit gate is satisfied.
 
+## 2026-08-27 ACTION evidence correction
+
+The real ACTION v2 run at `5995717` exposed all effective reasoning and planning tools but Codex
+selected none, staged no plan step and completed a low-confidence read-only response. This
+invalidates the earlier assumption that Phase 0 ACTION could be closed with another bounded prompt
+or final-plan reconciliation correction inside the monolithic provider turn.
+
+`E2E_AGENT_LOOP_CONVERGENCE.md` now governs the narrow corrective path permitted inside Phase 0:
+adopt Apexive's host-controlled one-decision/tool-result loop while preserving the Assistant's UI,
+effective-user capability authority and full preview/approval/barrier/verify lifecycle. Execute
+E2E-0 through E2E-4 in order. This exception does not unlock unrelated streaming, UX, RAG or
+provider expansion work.
+
 ---
 
 # 1. What the current code actually does
@@ -1499,4 +1512,7 @@ Do not preserve a roadmap item merely because this document predicted it.
 
 ## Progress log
 
-No implementation package from this playbook has been marked complete yet.
+- 2026-08-27: deterministic ACTION v2 validation passed (30 standalone and 44 targeted Odoo
+  tests), but real ACTION failed at the provider decision boundary: catalog exposed, no tool
+  selected, no plan staged. Added the E2E host-loop convergence roadmap; no production runtime
+  slice from that roadmap has been implemented yet.
