@@ -2,10 +2,10 @@
 
 Research/playbook source: `FOUNDATION_STABILIZATION_PLAYBOOK.md`  
 Phase started from main: `3f175cdc9b38aa3fc5aac4f231c0aee5d86b46ef`  
-Latest real ACTION checkpoint materially tested: `59957173510ec7f5da6d0ac39e9ea52244dbba86`<br>
-Latest exact convergence checkpoint materially tested: `e9420ae80cf1d6a030312e5e4e76a911c60c7b18`<br>
+Latest real ACTION checkpoint materially tested: `9f832af4d6b1e6b74659bcd30aab21db481fd4b9`<br>
+Latest exact convergence checkpoint materially tested: `9f832af4d6b1e6b74659bcd30aab21db481fd4b9`<br>
 Target: Odoo 18 Community / embedded runtime / Codex primary  
-Status: **blocked — exact-SHA real validation failed at the turn/event transaction boundary**
+Status: **complete — real HELLO, READ, strict ACTION and aggregate report PASS**
 
 ## Purpose
 
@@ -413,7 +413,7 @@ These tests validate the measurement tooling. They do **not** substitute for the
 
 Current status:
 
-- [ ] `hello`, one read, one action and one failure have live reproducible captures in a real
+- [x] `hello`, one read, one action and one failure have live reproducible captures in a real
   embedded Odoo + authenticated Codex environment.
 - [x] A live turn has been decomposed into queue/provider/tool/finalization timing using the
   implemented checkpoints.
@@ -421,21 +421,16 @@ Current status:
 - [x] At least five important failure paths have original code + final UI code recorded side by
   side.
 
-The repository now has the scenario contract, client/provider instrumentation, redacted live
-capture runner, summarizer and aggregate gate evaluator needed for those measurements. The gate
-remains open only because the safe disposable ACTION baseline has not yet been rerun.
+The repository has the scenario contract, client/provider instrumentation, redacted live capture
+runner, summarizer and aggregate gate evaluator. The final strict disposable ACTION and separate
+preview-only aggregate member passed at `9f832af`; `phase0_report.py` now exits `0` with
+`ready_for_phase1=true`.
 
-## Next work inside Phase 0
+## Next work after Phase 0
 
-Stay in Phase 0. Do **not** begin the provider-boundary refactor yet.
-
-Next:
-
-1. prepare one disposable partner for a reversible update;
-2. rerun `P0-REAL-ACTION` through preview, explicit browser approval and verification;
-3. restore the disposable fixture after capturing the authoritative result;
-4. rerun `phase0_report.py`;
-5. only then let the aggregate report decide whether Phase 1 may start.
+Phase 0 is complete. Begin Phase 1 with the existing adapter-neutral conformance harness: bind the
+current custom Codex adapter, define the smallest provider port needed by the host, and compare any
+experimental SDK binding before choosing an implementation. Do not add another provider in Phase 1.
 
 ## Live validation run — 2026-08-27
 
@@ -578,3 +573,26 @@ The disposable database was dropped, credentials were unset and Odoo was active 
 See `evidence/phase0/2026-08-27/E2E-REAL-ENV-result-e9420ae.md` for the sanitized result. The next
 bounded implementation is the turn/event transaction collision plus a reproducing Odoo regression;
 the full real handoff must then run again against the new product SHA.
+
+## Turn/event correction and Phase 0 PASS — 2026-08-27
+
+Implementation/test checkpoint `9f832af4d6b1e6b74659bcd30aab21db481fd4b9` removes the competing
+turn-row update by committing reasoning checkpoints and the ACTION pre-effect barrier on the
+primary worker cursor. A real-cursor Odoo regression verifies checkpoint persistence and monotonic
+event ordering without the former PostgreSQL serialization collision.
+
+Standalone convergence 12/12, decision sequences 4/4, NextDecision 4/4, working transcript 4/4,
+canonical plan 5/5, compilation, fresh addon installation, the focused checkpoint regression and a
+combined selected 38-test Odoo suite all passed.
+
+In a fresh disposable Odoo database, HELLO completed on its first claim, READ completed through the
+bounded host loop without runtime/database retry, and the authoritative strict browser ACTION
+reached an exact preview while the record was unchanged. One approval produced one durable barrier,
+one effect and one verified receipt; the final plan/turn completed without recovery. The field was
+restored, a separate preview-only aggregate member was rejected without execution, and
+`phase0_report.py` exited `0` with the full minimum matrix, five failure pairs and
+`ready_for_phase1=true`.
+
+The disposable database was removed, temporary scripts and credential variables were cleared, and
+Odoo was left active. See
+`evidence/phase0/2026-08-27/E2E-REAL-ENV-result-9f832af.md`. Phase 0 is complete; Phase 1 may start.

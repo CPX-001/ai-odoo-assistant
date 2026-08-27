@@ -9,25 +9,26 @@ Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md` and `E2E_AGENT_LOOP_CONVERGENCE
 ```text
 phase: 0
 phase_name: reproducible baseline
-phase_state: BLOCKED
-active_slice: E2E-turn-event-serialization-correction
-active_slice_state: READY
-current_gate_type: HARD
+phase_state: COMPLETE
+active_slice: P0-E2E-host-loop-convergence
+active_slice_state: COMPLETE
+current_gate_type: NONE
 next_phase: 1
 ```
 
-The implementation/convergence work requested through E2E-4 and the final automated battery is
-complete. Exact-SHA validation proved the Codex adapter repair and exposed a separate turn/event
-transaction defect. General Phase 1 work remains locked until that defect is corrected and the full
-real gate passes.
+The implementation/convergence work through E2E-4, its automated battery, the Codex one-decision
+adapter correction and the turn/event transaction correction are complete. The full real Odoo +
+Codex + browser HELLO -> READ -> ACTION gate passed, the disposable environment was removed and the
+aggregate Phase 0 report returned `ready_for_phase1=true`.
 
 ## Exact implementation/test SHA
 
 ```text
-e9420ae80cf1d6a030312e5e4e76a911c60c7b18
+9f832af4d6b1e6b74659bcd30aab21db481fd4b9
 ```
 
-Commits after that SHA in this close-out are documentation-only. `docs/research/E2E_REAL_ENV_HANDOFF.md` is the authoritative validation procedure.
+Commits after that SHA in this close-out are documentation-only.
+`docs/research/E2E_REAL_ENV_HANDOFF.md` is the authoritative validation record/procedure.
 
 ## Published convergence checkpoints
 
@@ -38,6 +39,7 @@ Commits after that SHA in this close-out are documentation-only. `docs/research/
 - E2E-4: one validated `PlanStepProposal` is canonical and stage-only. It feeds `CapabilityPlanService.prepare`; preview/approval/revalidation/write barrier/execute/verify/recovery remain authoritative and a verified private receipt is persisted with the effect result.
 - E2E-final: added the aggregate 12-case dependency-light battery and an executable Odoo `TransactionCase` battery covering hello, READ, multi-read, patch, create, repairable errors, access denied, unsupported action, restart/idempotency, approval, exactly-once and verification. The focused canonical PLAN tests are now registered in the addon test suite.
 - E2E-real-adapter repair: the one-decision Codex adapter now translates the strict provider-neutral union into an App Server-compatible Structured Outputs envelope, decodes bounded `arguments_json` back into the unchanged contract, and preserves `codex_output_schema_invalid` for the observed rejection.
+- E2E-turn/event repair: private reasoning checkpoints and the ACTION pre-effect barrier now commit pending turn/event/transcript state on the primary worker cursor, eliminating the competing-row update that caused PostgreSQL `SerializationFailure` while preserving the pre-effect barrier.
 
 The E2E-final slice changed tests/test registration and documentation only relative to `ff7631c6cb09cfc07a52638cd6d62664666fa781`; no runtime architecture was changed. The later adapter repair changes only the provider wire representation and diagnostic normalization, not host authority or lifecycle architecture.
 
@@ -114,39 +116,66 @@ event append updating `odoo_ai_turn.last_event_sequence` while the primary turn 
 held the same record. Its next flush/commit raised PostgreSQL `SerializationFailure`. See
 `docs/research/evidence/phase0/2026-08-27/E2E-REAL-ENV-result-e9420ae.md`.
 
+The bounded correction at `9f832af4d6b1e6b74659bcd30aab21db481fd4b9` was then validated from a
+fresh disposable Odoo database:
+
+```text
+git diff and Python compilation: PASS
+standalone convergence: 12/12 PASS
+decision sequences: 4/4 PASS
+NextDecision: 4/4 PASS
+working transcript: 4/4 PASS
+canonical plan: 5/5 PASS
+fresh addon install: PASS
+targeted Odoo checkpoint regression: PASS
+combined Odoo queue/runtime/convergence/PLAN/adapter/capability/action suites:
+  38 tests, 0 failed, 0 errors
+real HELLO: PASS, first claim, no diagnostic/requeue
+real READ: PASS, bounded schema correction, no runtime/database retry
+real ACTION: PASS, exact preview, record unchanged, one approval, one barrier/effect, verification
+preview-only aggregate member: PASS and rejected without execution
+phase0_report.py: exit 0, ready_for_phase1=true
+fixture/database cleanup: PASS; Odoo left active
+```
+
+The authoritative ACTION used the user-visible `strict` autonomy profile. A preliminary inspection
+showed that the existing `balanced` preference legitimately auto-authorized a moderate reversible
+patch; the fixture was restored before the authoritative strict run. Prompt wording was not treated
+as a substitute for host approval policy. See
+`docs/research/evidence/phase0/2026-08-27/E2E-REAL-ENV-result-9f832af.md`.
+
 ## Required invariants preserved
 
-Odoo remains operational authority. Business capabilities use the originating effective user with `su=False`; ACLs, record rules, field access and company scope remain effective. `CapabilityDefinition` and the effective catalog remain authoritative. The existing prepare, preview, approval, revalidation, durable write barrier, PLAN execute, verification and recovery path is unchanged by the final slice.
+Odoo remains operational authority. Business capabilities use the originating effective user with
+`su=False`; ACLs, record rules, field access and company scope remain effective.
+`CapabilityDefinition` and the effective catalog remain authoritative. Prepare, preview, approval,
+revalidation, durable write barrier, PLAN execution, verification and recovery remain the existing
+host-owned lifecycle. The correction changes only which worker cursor commits pre-effect turn
+metadata; it does not move business authority or expose model-controlled execution.
 
 No provider/API/RAG/router/tool selector, arbitrary SQL/Python/shell/sudo or generic ORM method surface was added.
 
 ## Existing real evidence
 
-The last pre-convergence real ACTION evidence at `5995717` remains FAIL evidence. It is not converted into a PASS by automated tests or by this handoff. Its first missing boundary was the action proposal/staging boundary that E2E-3/E2E-4 were designed to replace with the host-owned decision loop and canonical plan proposal.
+The pre-convergence ACTION evidence at `5995717` and the failed exact-SHA evidence at `e9420ae`
+remain historical FAIL records; they are not rewritten. The new `9f832af` evidence is a separate
+PASS after the bounded corrections.
 
 ## Remaining validation debt
 
-The exact-SHA standalone and Odoo test debts are closed. Remaining debt is:
+All mandatory Phase 0 hard-gate debt is closed. Follow-up debt that does not reopen Phase 0:
 
-- a deterministic Odoo regression for the primary-turn versus independent-event serialization
-  collision;
-- a bounded product correction that preserves the current host/capability/ACTION invariants;
-- a retry-free real Codex one-decision round trip under the supported Odoo worker/account path;
-- durable transcript persistence across real worker/process restart;
-- clean real HELLO without a runtime requeue;
-- real READ against a disposable known partner without serialization failure;
-- real ACTION against a disposable partner through preview, one explicit approval, exactly one barrier/effect and verification;
-- a final sanitized PASS record and fixture/database cleanup;
-- broad Odoo/Codex account test isolation remains follow-up debt after this hard gate.
+- exercise durable transcript resumption across a real worker/process restart as part of the
+  provider/lifecycle hardening suites;
+- isolate the broad Codex account connect/disconnect test so full-module runs do not depend on
+  shared installation account state;
+- run the Phase 1 provider conformance bindings and the required repeated hello/simple-read soak
+  before Phase 1 is marked complete.
 
 ## Exact next action
 
-Correct the turn/event serialization collision reproduced at `e9420ae80cf1d6a030312e5e4e76a911c60c7b18`.
-Add an Odoo regression that keeps a primary turn transaction active while independent activity
-events are persisted and proves that the final flush/commit does not fail or lose monotonic event
-ordering. Do not weaken Odoo authority, `su=False`, transcript privacy, capability contracts,
-approval, write barrier, verification, or recovery semantics.
-
-After publishing the bounded product/test SHA, update `docs/research/E2E_REAL_ENV_HANDOFF.md` and
-rerun its full standalone, Odoo, HELLO, READ and ACTION sequence in a fresh disposable database.
-Do not claim the real gate passed until all criteria pass without hidden runtime retries.
+Begin Phase 1 at the provider boundary. Bind the existing custom Codex App Server adapter to the
+already-prepared adapter-neutral conformance harness, then define/confirm the smallest
+`ReasoningProvider` port required by the current host. Do not add another provider or replace the
+adapter until the conformance spike compares the required safety and protocol behavior. Preserve
+Odoo authority, `su=False`, capability contracts and the validated ACTION lifecycle.

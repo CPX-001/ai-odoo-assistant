@@ -285,3 +285,25 @@ The last successful boundary was `planning_catalog_exposed`; the first missing r
 was `plan_step_staged(odoo.record.patch)`. See
 `P0-REAL-ACTION-v2-result-5995717.md`. The next correction is the bounded host-owned decision loop
 defined in `../../../E2E_AGENT_LOOP_CONVERGENCE.md`, not another prompt-only retry.
+
+## E2E convergence, adapter repair and final PASS
+
+The host-owned decision loop and canonical plan path first exposed an App Server 0.149.1 Structured
+Outputs incompatibility at `ee723a7`: the root `oneOf` schema was rejected before the first
+decision. The adapter-only correction at `e9420ae` preserved the specific
+`codex_output_schema_invalid` diagnostic and reached valid real decisions, but exact-tree product
+validation then exposed a separate PostgreSQL turn/event serialization collision. HELLO required a
+runtime requeue, READ failed after three attempts and ACTION was correctly not attempted. See
+`E2E-REAL-ENV-result-e9420ae.md`.
+
+Checkpoint `9f832af4d6b1e6b74659bcd30aab21db481fd4b9` commits reasoning checkpoints and
+the ACTION pre-effect barrier on the primary worker cursor and adds a real-cursor Odoo regression.
+Standalone suites, fresh installation and 38 selected Odoo tests passed with zero failures/errors.
+Real HELLO completed cleanly; real READ completed without runtime/database retry; and the strict
+browser ACTION produced an exact preview with the record unchanged, then one approval caused one
+barrier/effect and one verified receipt with no recovery.
+
+After restoring the field, a separate preview-only capture was rejected without execution. The
+aggregate report exited `0` with the full live matrix, five failure pairs and
+`ready_for_phase1=true`. The disposable database was removed and Odoo was left active. See
+`E2E-REAL-ENV-result-9f832af.md`. Phase 0 is complete.

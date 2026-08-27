@@ -1,26 +1,28 @@
 # E2E real-environment validation handoff
 
 Date: 2026-08-27  
-Status: `REAL_ENV_VALIDATION_FAILED`<br>
-Implementation/test SHA materially validated: `e9420ae80cf1d6a030312e5e4e76a911c60c7b18`
+Status: `REAL_ENV_VALIDATION_PASSED`<br>
+Implementation/test SHA materially validated: `9f832af4d6b1e6b74659bcd30aab21db481fd4b9`
 
-This document records the failed exact-SHA validation and remains the rerun procedure after the
-next bounded product correction. E2E-0 through E2E-4 and the final automated battery are implemented
-at the SHA above. No complete real Odoo/Codex/browser PASS is claimed. The commit containing this
-document is a docs-only descendant of the SHA under test.
+This document records the completed exact-tree validation and remains the rerun procedure. E2E-0
+through E2E-4, the final automated battery, the App Server output-schema correction and the
+turn/event transaction correction are implemented at the SHA above. HELLO, READ and the
+authoritative browser ACTION all passed in a fresh disposable Odoo database. The commit containing
+this document is a docs-only descendant of the implementation/test SHA.
 
 This SHA supersedes `ee723a7d715970681ef1addffebcceb54dbd2027` after its real HELLO failed
 before the first `assistant_decision`. The observed App Server 0.149.1 event was an HTTP 400
 `invalid_json_schema` because the one-decision `outputSchema` used root `oneOf`; the adapter had
 reduced it to `codex_turn_failed`. The replacement uses an App Server-compatible wire envelope and
-keeps the sanitized diagnostic `codex_output_schema_invalid`. Host loop, transcript, capabilities
-and ACTION lifecycle behavior are unchanged.
+keeps the sanitized diagnostic `codex_output_schema_invalid`. That adapter-only replacement did
+not change host behavior; the later `9f832af` checkpoint contains the separate bounded transaction
+correction described below.
 
-## Latest exact-SHA result
+## Latest exact-tree result
 
-The adapter correction passed its real boundary. On the supported Odoo worker path, HELLO obtained
-a valid final answer and READ obtained valid `assistant_decision` plus `capability_call` items.
-The exact-SHA run then exposed a separate host/event transaction defect:
+The adapter correction passed its real boundary. The follow-up correction commits reasoning
+checkpoints and the ACTION pre-effect barrier on the primary worker cursor, removing the competing
+update of `odoo_ai_turn` that previously caused:
 
 ```text
 independent event append updates odoo_ai_turn.last_event_sequence
@@ -28,17 +30,17 @@ independent event append updates odoo_ai_turn.last_event_sequence
   -> psycopg2.errors.SerializationFailure: concurrent update
 ```
 
-HELLO completed only after one `runtime_unavailable` requeue. READ exhausted three attempts and
-ended `failed/runtime_unavailable`, with `write_barrier=false` and the disposable record unchanged.
-ACTION was not started because READ is a hard predecessor. Standalone, addon install/update, Odoo
-convergence 12/12, canonical PLAN 2/2 and adapter 3/3 all passed. The database was dropped and Odoo
-was active after cleanup.
+At `9f832af`, standalone suites passed, the focused Odoo checkpoint regression passed, and the
+combined selected Odoo queue/runtime/convergence/PLAN/adapter/capability/action suites completed 38
+tests with zero failures or errors. Real HELLO completed on its first claim. Real READ completed
+after one bounded model correction with no runtime/database retry. The strict browser ACTION reached
+an exact canonical preview with the record unchanged, accepted one approval click, crossed one
+barrier/effect, verified the result and completed without recovery. The aggregate Phase 0 report
+returned `ready_for_phase1=true`. The disposable database was removed and Odoo was left active.
 
-The sanitized evidence is
-`docs/research/evidence/phase0/2026-08-27/E2E-REAL-ENV-result-e9420ae.md`. The next implementation
-must correct the turn/event serialization collision and add a reproducing Odoo regression without
-weakening host authority, ACLs, transcript privacy, capabilities, approval, write barrier,
-verification, or recovery. Then update the implementation/test SHA here and rerun all sections.
+The sanitized PASS evidence is
+`docs/research/evidence/phase0/2026-08-27/E2E-REAL-ENV-result-9f832af.md`. The earlier `e9420ae`
+record remains the historical failure evidence for the corrected collision.
 
 ## 1. What is already automated
 
@@ -48,6 +50,7 @@ The final battery covers hello, READ, multi-read, patch, create, repairable erro
 - `addons/odoo_ai_assistant/tests/test_e2e_convergence_battery.py`: executable Odoo `TransactionCase` battery using the real `AgentTurnService`, capability registry/executor and real `res.partner` plan lifecycle;
 - `addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py`: focused canonical patch/create stage-only, approval, barrier and verification coverage.
 - `addons/odoo_ai_assistant/tests/test_codex_decision_adapter.py`: App Server wire-schema, strict-envelope normalization and captured `invalid_json_schema` diagnostic regression.
+- `addons/odoo_ai_assistant/tests/test_turn_queue.py`: real-cursor checkpoint/event ordering and stale-worker barrier/recovery coverage.
 
 In the available connector environment the dependency-light final battery was executed from a reconstructed checkout mirror of the committed test/fixture/transcript and current asserted source boundaries:
 
@@ -58,18 +61,16 @@ Ran 12 tests
 OK
 ```
 
-At the superseded SHA, real validation reported the standalone battery PASS, Odoo convergence
-12/12 PASS and canonical PLAN 2/2 PASS. They must be rerun after installing the exact replacement
-SHA because provider adapter/test registration changed. A direct real App Server one-decision probe
-at the replacement SHA returned `final_answer`, but the supported Odoo worker/account HELLO remains
-the authoritative product-path gate.
+At `9f832af`, these standalone contracts and the selected 38-test Odoo suite passed before the real
+product-path validation. The supported Odoo worker/account HELLO, READ and strict browser ACTION
+remain the authoritative checks for future behavior-changing replacements.
 
 ## 2. Exact checkout and standalone commands
 
 Use a dedicated/disposable validation host. The repository installed by `installer/odoo18_install.sh` normally lives at `/odoo/custom/addons/ai-odoo-assistant` and Odoo at `/odoo/odoo-server` with virtualenv `/odoo/venv`.
 
 ```bash
-export E2E_SHA='e9420ae80cf1d6a030312e5e4e76a911c60c7b18'
+export E2E_SHA='9f832af4d6b1e6b74659bcd30aab21db481fd4b9'
 export REPO='/odoo/custom/addons/ai-odoo-assistant'
 
 sudo -u odoo git -C "$REPO" fetch origin main
@@ -84,7 +85,11 @@ python3 tests/e2e/test_next_decision_contract.py
 python3 tests/e2e/test_working_transcript_contract.py
 python3 tests/e2e/test_canonical_plan_proposal.py
 python3 -m py_compile \
+  addons/odoo_ai_assistant/models/turn_working_transcript.py \
+  addons/odoo_ai_assistant/models/embedded_runtime.py \
+  addons/odoo_ai_assistant/models/embedded_runtime_host_loop.py \
   addons/odoo_ai_assistant/runtime/agent/codex_decision.py \
+  addons/odoo_ai_assistant/tests/test_turn_queue.py \
   addons/odoo_ai_assistant/tests/test_codex_decision_adapter.py \
   addons/odoo_ai_assistant/tests/test_e2e_convergence_battery.py \
   addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py
@@ -140,6 +145,13 @@ sudo -u odoo "$ODOO_PY" "$ODOO_BIN" \
   -c "$ODOO_CONF" -d "$E2E_DB" \
   -u odoo_ai_assistant --test-enable \
   --test-tags=/odoo_ai_assistant:TestCodexDecisionAdapter \
+  --stop-after-init --no-http
+
+# Turn/event checkpoint regression for the former PostgreSQL row collision.
+sudo -u odoo "$ODOO_PY" "$ODOO_BIN" \
+  -c "$ODOO_CONF" -d "$E2E_DB" \
+  -u odoo_ai_assistant --test-enable \
+  --test-tags=/odoo_ai_assistant:TestAssistantTurnQueue.test_primary_cursor_commits_event_and_working_checkpoint_without_row_collision \
   --stop-after-init --no-http
 ```
 
@@ -274,19 +286,25 @@ A fabricated/mismatched answer, access bypass, mutation, approval prompt, termin
 
 ## 7. Real ACTION — authoritative browser path
 
-This is the hard gate. Use the same disposable partner and the dedicated test user. Open the partner form and the real Assistant panel. Request exactly one reversible change of `phone` from `E2E_ORIGINAL_PHONE` to `E2E_TARGET_PHONE`.
+This is the hard gate. Use the same disposable partner and the dedicated test user. Open the partner
+form and the real Assistant panel. Before submitting, select the user-visible **Strict** autonomy
+profile and verify that the picker displays **Estricto**. The user's stored autonomy profile is the
+authoritative per-turn policy; prompt prose asking for confirmation does not override a permissive
+profile, and the installation config parameter alone does not replace this browser check. Request
+exactly one reversible change of `phone` from `E2E_ORIGINAL_PHONE` to `E2E_TARGET_PHONE`.
 
 Required sequence:
 
-1. the turn reaches `awaiting_confirmation`;
-2. preview identifies the exact disposable partner, field, previous value and intended value;
-3. directly verify in Odoo that the phone is still the original value before approval;
-4. click the supported **Approve** control exactly once;
-5. do not repeat the request or approval;
-6. wait for normal completion;
-7. require the partner phone to equal the target value;
-8. require verification to complete and no `recovery_required`/ambiguous-write state;
-9. require Odoo service stability throughout.
+1. the autonomy picker displays `Estricto` before submission;
+2. the turn reaches `awaiting_confirmation`;
+3. preview identifies the exact disposable partner, field, previous value and intended value;
+4. directly verify in Odoo that the phone is still the original value before approval;
+5. click the supported **Approve/Continuar** control exactly once;
+6. do not repeat the request or approval;
+7. wait for normal completion;
+8. require the partner phone to equal the target value;
+9. require verification to complete and no `recovery_required`/ambiguous-write state;
+10. require Odoo service stability throughout.
 
 Immediate ACTION FAIL/stop conditions:
 
@@ -360,7 +378,7 @@ Create a result note under a new date/SHA-specific evidence directory. Record bo
 
 ```text
 validation_id: E2E-REAL-ENV
-implementation_test_sha: e9420ae80cf1d6a030312e5e4e76a911c60c7b18
+implementation_test_sha: 9f832af4d6b1e6b74659bcd30aab21db481fd4b9
 date:
 odoo_version:
 codex_version:
@@ -404,7 +422,7 @@ If the database must be retained temporarily for diagnosis, archive/remove only 
 
 ## Final gate
 
-`REAL_ENV_VALIDATION_REQUIRED` becomes PASS only when the exact implementation/test SHA above has:
+`REAL_ENV_VALIDATION_REQUIRED` is PASS for the implementation/test SHA above because it has:
 
 1. standalone battery PASS;
 2. Odoo `TransactionCase` battery PASS after addon update;
@@ -413,5 +431,6 @@ If the database must be retained temporarily for diagnosis, archive/remove only 
 5. real ACTION PASS through canonical preview, one explicit approval, exactly one barrier/effect, verification and no recovery ambiguity;
 6. fixture cleanup and sanitized evidence recorded.
 
-Until all six are observed, Phase 0 remains blocked and no real-environment PASS should be claimed.
-The `e9420ae` run stopped after item 4 failed; item 5 was deliberately not attempted.
+All six were observed at `9f832af`; the aggregate Phase 0 report also exited `0` with
+`ready_for_phase1=true`. Future behavior-changing changes must rerun the affected sections rather
+than inheriting this PASS automatically.
