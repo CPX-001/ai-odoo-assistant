@@ -338,15 +338,16 @@ class TestEmbeddedCodexAccount(TransactionCase):
         auth = self.paths.codex_home / "auth.json"
         auth.write_text("{}", encoding="utf-8")
         auth.chmod(0o600)
-        settings = self.env["res.config.settings"]
+        settings = self.env["res.config.settings"].create({})
         diagnostics = self.env["odoo.ai.assistant.diagnostics"]
         with patch.object(RuntimePaths, "from_odoo", return_value=self.paths):
+            settings.action_assistant_codex_login_start()
             values = settings.get_values()
             self.assertTrue(values["assistant_codex_account_connected"])
             self.assertEqual(values["assistant_codex_plan_type"], "plus")
             before = diagnostics._diagnostic_values()
             self.assertIn("Authenticated", before["codex_account_state"])
-            self._manager().logout()
+            settings.action_assistant_codex_logout()
             after = diagnostics._diagnostic_values()
             self.assertEqual(after["codex_account_state"], "Not connected")
 
