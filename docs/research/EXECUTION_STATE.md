@@ -2,8 +2,8 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `ce794792be40b6d5420752c2f2c7530e35135eca`  
-Latest product/tooling implementation checkpoint: pending P0.4 checkpoint  
+Latest repository checkpoint inspected: `85086dad0f04c534d447b279e4e15c1afb879148`  
+Latest product/tooling implementation checkpoint: `85086dad0f04c534d447b279e4e15c1afb879148`  
 Latest P0.1 validation checkpoint materially tested: `121108e55ef0ff91adb0377920f73128875536ac`  
 Latest P0.2 / real READ checkpoint materially tested: `a05e75006f53b056f31ab96c3864092d89199480`  
 Latest P0.3 real crash-probe checkpoint materially tested: `c114f15a1fe82d102df3c129661fca87ceaeb235`  
@@ -63,7 +63,7 @@ Implemented test-only bounded App Server fixtures for:
 
 The timeout fixture stalls only the reasoning client's initialize request, leaving the account gate healthy and using the host-owned 5-second startup timeout. No dynamic tools or business writes are emitted by any fixture.
 
-Deterministic validation actually run:
+Deterministic validation actually run against the exact published fixture contents:
 
 ```text
 python -m py_compile \
@@ -88,7 +88,7 @@ validation_ids:
   - P0.4-REAL-INVALID-OUTPUT-PAIR
 gate_type: HARD
 origin_slice: P0.4-fault-injection-fixtures
-commit_materially_tested: pending
+commit_materially_tested: 85086dad0f04c534d447b279e4e15c1afb879148
 downstream_scope_blocked:
   - marking P0.4 COMPLETE
   - counting these three failure paths toward the Phase 0 five-pair gate
