@@ -110,8 +110,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
         def persist(items):
             try:
                 persist_working_transcript(
-                    dbname,
-                    turn.id,
+                    turn,
                     lease_token,
                     items,
                 )
@@ -193,7 +192,6 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
     ):
         """Execute the unchanged action lifecycle and persist a verified private receipt."""
 
-        dbname = self.env.cr.dbname
         if working_items is None:
             try:
                 working_items = turn._working_items_from_turn(turn)
@@ -201,20 +199,13 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 raise EmbeddedRuntimeError(error.code) from error
 
         def before_effect():
-            # Existing separately committed barrier remains the no-blind-retry authority.
+            # Commit pending preview activity, the plan transcript and the barrier together on
+            # the primary worker cursor before the first effect.
             _commit_plan_barrier(
-                dbname,
-                turn.id,
+                turn,
                 lease_token,
                 envelope,
-            )
-            # The plan boundary is durable before the first effect. If this second commit
-            # is interrupted the already-durable barrier still forces recovery.
-            persist_working_transcript(
-                dbname,
-                turn.id,
-                lease_token,
-                working_items,
+                working_items_payload=transcript_payload(working_items),
             )
 
         try:

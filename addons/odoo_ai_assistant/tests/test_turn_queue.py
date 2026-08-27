@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from odoo import SUPERUSER_ID, Command, api, fields
 from odoo.exceptions import AccessError
@@ -6,6 +7,8 @@ from odoo.modules.registry import Registry
 from odoo.tests.common import TransactionCase
 
 from ..models.turn_queue import _recover_stale_turns
+from ..models.turn_working_transcript import persist_working_transcript
+from ..runtime.agent.working_transcript import append_working_item
 
 
 class TestAssistantTurnQueue(TransactionCase):
@@ -156,6 +159,89 @@ class TestAssistantTurnQueue(TransactionCase):
         status = env["odoo.ai.turn"].status_for_current_user(result["turn_id"], after_sequence=1)
         self.assertEqual(len(status["events"]), 1)
         self.assertEqual(status["events"][0]["payload"], {"count": 2, "detail": "bounded"})
+
+    def test_primary_cursor_commits_event_and_working_checkpoint_without_row_collision(self):
+        """Durable transcript checkpoints must not update the turn from a competing cursor."""
+
+        dbname = self.env.cr.dbname
+        turn_id = None
+        lease_token = "primary-cursor-checkpoint"
+        try:
+            with Registry(dbname).cursor() as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+                admin = env.ref("base.user_admin")
+                turn = env["odoo.ai.turn"].create(
+                    {
+                        "turn_uuid": str(uuid4()),
+                        "user_id": admin.id,
+                        "company_id": admin.company_id.id,
+                        "state": "running",
+                        "input_message": "Comprueba el checkpoint",
+                        "queued_at": fields.Datetime.now(),
+                        "started_at": fields.Datetime.now(),
+                        "heartbeat_at": fields.Datetime.now(),
+                        "lease_expires_at": fields.Datetime.now() + timedelta(minutes=5),
+                        "lease_token": lease_token,
+                        "attempt_count": 1,
+                        "max_attempts": 3,
+                        "allowed_company_ids": [admin.company_id.id],
+                    }
+                )
+                turn_id = turn.id
+                env["odoo.ai.turn.event"].append_for_turn(
+                    turn=turn,
+                    event_type="reasoning.started",
+                    title="Analizando petición",
+                )
+                items = append_working_item(
+                    (),
+                    "user_input",
+                    {"message": "Comprueba el checkpoint"},
+                )
+
+                persist_working_transcript(turn, lease_token, items)
+
+                turn.invalidate_recordset()
+                self.assertEqual(turn.last_event_sequence, 1)
+                self.assertEqual(
+                    [item.kind for item in turn._working_items_from_turn(turn)],
+                    ["user_input"],
+                )
+                env["odoo.ai.turn.event"].append_for_turn(
+                    turn=turn,
+                    event_type="reasoning.completed",
+                    title="Respuesta preparada",
+                )
+                turn.write(
+                    {
+                        "state": "completed",
+                        "completed_at": fields.Datetime.now(),
+                        "lease_token": False,
+                        "lease_expires_at": False,
+                    }
+                )
+                cr.commit()
+
+            with Registry(dbname).cursor() as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+                turn = env["odoo.ai.turn"].browse(turn_id).exists()
+                self.assertTrue(turn)
+                self.assertEqual(turn.state, "completed")
+                self.assertEqual(turn.last_event_sequence, 2)
+                self.assertEqual(
+                    env["odoo.ai.turn.event"].search(
+                        [("turn_id", "=", turn.id)], order="sequence"
+                    ).mapped("event_type"),
+                    ["reasoning.started", "reasoning.completed"],
+                )
+        finally:
+            if turn_id is not None:
+                with Registry(dbname).cursor() as cr:
+                    env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+                    turn = env["odoo.ai.turn"].browse(turn_id).exists()
+                    if turn:
+                        turn.unlink()
+                    cr.commit()
 
     def test_stale_worker_after_write_barrier_requires_recovery_without_retry(self):
         """A persisted barrier is a one-way retry boundary even with attempts remaining."""

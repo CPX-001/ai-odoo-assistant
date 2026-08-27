@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from odoo import SUPERUSER_ID, api, fields, models
-from odoo.modules.registry import Registry
 
 from ..runtime.agent.working_transcript import (
     WorkingItem,
@@ -23,18 +22,30 @@ class AssistantTurnWorkingTranscript(models.Model):
 
 
 def persist_working_transcript(
-    dbname: str,
-    turn_id: int,
+    turn,
     lease_token: str,
     items: tuple[WorkingItem, ...],
 ) -> None:
-    """Commit private active-turn state without changing business authority."""
+    """Commit private active-turn state on the primary worker cursor.
+
+    Reasoning checkpoints are pre-effect boundaries. Committing them on the cursor that also owns
+    pending activity events prevents a second cursor from updating ``odoo_ai_turn`` underneath a
+    repeatable-read worker transaction.
+    """
 
     payload = transcript_payload(items)
-    with Registry(dbname).cursor() as cr:
-        env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
-        turn = env["odoo.ai.turn"].browse(turn_id).exists()
-        if not turn or turn.state != "running" or turn.lease_token != lease_token:
-            raise RuntimeError("agent_turn_lease_lost")
-        turn.write({"working_items_payload": payload, "heartbeat_at": fields.Datetime.now()})
-        cr.commit()
+    technical = turn.with_user(SUPERUSER_ID).exists()
+    technical.invalidate_recordset(["state", "lease_token"])
+    if (
+        not technical
+        or technical.state != "running"
+        or technical.lease_token != lease_token
+    ):
+        raise RuntimeError("agent_turn_lease_lost")
+    technical.write(
+        {
+            "working_items_payload": payload,
+            "heartbeat_at": fields.Datetime.now(),
+        }
+    )
+    technical.env.cr.commit()

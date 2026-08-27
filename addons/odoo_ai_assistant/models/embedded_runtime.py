@@ -7,7 +7,6 @@ import re
 
 from odoo import SUPERUSER_ID, api, fields, models
 from odoo.exceptions import AccessError, ValidationError
-from odoo.modules.registry import Registry
 
 from ..runtime import RuntimePaths, detect_codex
 from ..runtime.agent import AgentTurnService, CapabilityPlanError, CapabilityPlanService
@@ -160,12 +159,9 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
         )
 
     async def _execute_plan(self, turn, *, lease_token, envelope, plans, policy):
-        dbname = self.env.cr.dbname
-
         def before_effect():
             _commit_plan_barrier(
-                dbname,
-                turn.id,
+                turn,
                 lease_token,
                 envelope,
             )
@@ -399,31 +395,31 @@ class EmbeddedRuntimeError(RuntimeError):
         self.code = normalized
 
 
-def _commit_plan_barrier(dbname, turn_id, lease_token, envelope):
-    """Persist the durable retry barrier immediately before the first effect."""
+def _commit_plan_barrier(turn, lease_token, envelope, *, working_items_payload=None):
+    """Commit pending pre-effect activity and the durable barrier on the worker cursor."""
 
-    with Registry(dbname).cursor() as cr:
-        env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
-        turn = env["odoo.ai.turn"].browse(turn_id).exists()
-        if (
-            not turn
-            or turn.state != "running"
-            or turn.lease_token != lease_token
-        ):
-            raise EmbeddedRuntimeError("agent_turn_lease_lost")
-        turn.write(
-            {
-                "capability_plan_payload": envelope,
-                "write_barrier": True,
-                "heartbeat_at": fields.Datetime.now(),
-            }
-        )
-        env["odoo.ai.turn.event"].append_for_turn(
-            turn=turn,
-            event_type="execution.barrier",
-            title="Ejecutando acción autorizada",
-        )
-        cr.commit()
+    technical = turn.with_user(SUPERUSER_ID).exists()
+    technical.invalidate_recordset(["state", "lease_token"])
+    if (
+        not technical
+        or technical.state != "running"
+        or technical.lease_token != lease_token
+    ):
+        raise EmbeddedRuntimeError("agent_turn_lease_lost")
+    values = {
+        "capability_plan_payload": envelope,
+        "write_barrier": True,
+        "heartbeat_at": fields.Datetime.now(),
+    }
+    if working_items_payload is not None:
+        values["working_items_payload"] = working_items_payload
+    technical.write(values)
+    technical.env["odoo.ai.turn.event"].append_for_turn(
+        turn=technical,
+        event_type="execution.barrier",
+        title="Ejecutando acción autorizada",
+    )
+    technical.env.cr.commit()
 
 
 def _plan_envelope(value):
