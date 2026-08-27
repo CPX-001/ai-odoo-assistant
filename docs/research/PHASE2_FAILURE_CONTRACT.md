@@ -372,3 +372,42 @@ Implement `P2.3-turn-failure-persistence`: persist the validated envelope on ter
 and project it through `browser_status()` without yet rewriting browser copy or adding retry
 buttons. The queue write barrier must remain the authority for `effect_state` when the failure
 occurs after effect execution has become possible.
+
+---
+
+# P2.3 — terminal turn persistence closeout
+
+```text
+phase: 2
+state: COMPLETE
+materially_validated_checkpoint: 8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc
+gate_type: HARD
+```
+
+The validated `FailureEnvelope` is now stored on terminal `odoo.ai.turn` records and projected as
+`browser_status().failure`, while the compatibility `error_code` remains unchanged. The queue write
+barrier still owns effect certainty and forces uncertain effectful failures into the no-blind-retry
+recovery path.
+
+Real Odoo 18 validation on a disposable database passed addon install/update, the focused failure
+persistence and queue suites, and the full addon battery. The initial focused run found and repaired
+an overwrite bug in which a later event-sequence write replaced the carried provider envelope with a
+generic fallback. After repair, unrelated writes preserve the original validated envelope.
+
+```text
+P2.3-ODOO-UPDATE  PASS
+P2.3-ODOO-FAILURE PASS
+full addon battery 95 passed, 0 failed, 0 errors
+HOOT addon battery 78 passed, 0 failed
+```
+
+Evidence: `docs/research/evidence/phase2/2026-08-28/P2.3-ODOO-VALIDATION-8683ef6.md`.
+
+Phase 2 remains `IN_PROGRESS`. Its browser consumer/presentation slice is not implemented, so the
+five `P2-REAL-*` presentation validations are not yet materially executable and remain mandatory.
+
+## Next action
+
+Implement `P2.4-browser-failure-presentation` as the smallest coherent consumer of the persisted
+browser-safe failure projection. Then run `P2-REAL-AUTH`, `P2-REAL-ACL`, `P2-REAL-TIMEOUT`,
+`P2-REAL-TOOLFAIL` and `P2-REAL-RECOVERY` before selecting Phase 3.

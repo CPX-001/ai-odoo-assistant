@@ -3,8 +3,9 @@
 Revalidated through the completed Phase 1 provider boundary on 27 August 2026. The Phase 0 product
 path, P1.3 Codex version/100-turn soak and final host-tool/cancellation gates passed real Odoo 18 +
 authenticated Codex validation. Phase 2 is now in progress through the implemented P2.3 terminal
-failure-persistence slice; its new Odoo stored field/model path still requires the hard local Odoo
-validation recorded in `docs/research/EXECUTION_STATE.md`.
+failure-persistence slice. P2.3 passed its hard local Odoo 18 update, focused failure/queue and full
+addon gates on `8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc`; the browser failure consumer remains the next
+Phase 2 slice recorded in `docs/research/EXECUTION_STATE.md`.
 
 ## Product baseline
 
@@ -96,8 +97,9 @@ The completed Phase 1 checkpoint remains fully validated: its dependency-light s
 install/update battery and real Odoo/Codex gates passed on their recorded SHAs. `P1-REAL-VERSION`,
 `P1-REAL-SOAK-100`, `P1-REAL-TOOLCALL` and `P1-REAL-CANCEL` remain retained evidence.
 
-For P2.3, syntax validation passed and an isolated dependency-light contract harness passed 5 tests.
-The current P2.3 implementation has **not** yet passed an Odoo 18 module update or the newly added
-`test_turn_failure.py` + existing `test_turn_queue.py` integration battery. Therefore P2.3 remains
-`LOCAL_VALIDATION_REQUIRED`; the earlier Phase 1 addon battery must not be treated as validation of
-the new `failure_payload` field/model override. See `docs/research/EXECUTION_STATE.md`.
+P2.3 is `COMPLETE`. On a disposable Odoo 18 database, addon install/update passed; the focused
+failure persistence suite passed 3 tests, the queue suite passed 9 tests, and the full addon battery
+passed 95 tests with 0 failures/errors. The available deterministic suites also passed 201 unit
+tests, 344 repository tests with 36 explicit legacy/opt-in skips, and 78 addon HOOT tests. The five
+Phase 2 real presentation gates remain pending because the browser does not yet consume the new
+structured failure projection. See `docs/research/EXECUTION_STATE.md` and the sanitized P2.3 evidence.

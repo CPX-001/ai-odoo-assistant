@@ -11,18 +11,19 @@ phase: 2
 phase_name: structured failure contract
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/PHASE2_FAILURE_CONTRACT.md
-active_slice: P2.3-turn-failure-persistence
-active_slice_record: docs/research/P2.3_TURN_FAILURE_PERSISTENCE.md
-active_slice_state: LOCAL_VALIDATION_REQUIRED
-current_gate_type: HARD_LOCAL_ODOO
-blocking_validations: P2.3-ODOO-UPDATE, P2.3-ODOO-FAILURE
+active_slice: P2.4-browser-failure-presentation
+active_slice_record: not yet created
+active_slice_state: READY
+current_gate_type: NONE_FOR_READY_SLICE
+blocking_validations: none
 phase_completion_validations: P2-REAL-AUTH, P2-REAL-ACL, P2-REAL-TIMEOUT, P2-REAL-TOOLFAIL, P2-REAL-RECOVERY
-next_slice: NONE_UNTIL_P2.3_ODOO_VALIDATION
+next_slice: P2.4-browser-failure-presentation
 ```
 
 Phase 0 and Phase 1 are complete. Phase 2 has implemented its schema, provider normalization and
-terminal turn persistence slices. P2.3 is **not complete yet** because the new stored Odoo field and
-model override have not been exercised by an Odoo 18 module update/test run.
+terminal turn persistence slices. P2.3 is `COMPLETE` after real Odoo 18 validation and repair of a
+failure-envelope overwrite discovered by the focused integration gate. The next coherent work is the
+browser consumer/presentation slice; Phase 3 and Phase 4 are not yet eligible.
 
 ## P2.3 implementation checkpoint
 
@@ -42,6 +43,12 @@ The following docs-only handoff then recorded the validation gate:
 
 ```text
 e90264ab3c1d72afbdbe92b79fdc5a2b6012c718
+```
+
+The exact repaired checkpoint materially validated on Odoo 18 is:
+
+```text
+8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc
 ```
 
 ## Phase 2 progress
@@ -76,7 +83,7 @@ credentials, stdout/stderr, prompts and unrestricted payloads are not copied.
 
 ### P2.3 — terminal turn persistence
 
-`LOCAL_VALIDATION_REQUIRED`.
+`COMPLETE`.
 
 Implemented behavior:
 
@@ -108,47 +115,61 @@ envelope through the model `write()` overlay. Requeues clear any stale failure p
 
 Addon version is now `18.0.10.8.0` because `odoo.ai.turn` gains the stored `failure_payload` field.
 
-## Deterministic validation actually executed for P2.3
+## Validation actually executed for P2.3
 
-Available Python validation:
+Deterministic Python validation on the repaired checkpoint:
 
 ```text
-syntax compilation of exact proposed P2.3 Python files
-PASS
+tests/unit
+201 passed
 
-isolated dependency-light P2.3 contract harness
-5 passed in 0.05s
+full tests collection
+344 passed, 36 explicit legacy/opt-in skips
+
+focused dependency-light E2E contracts
+29 passed
+
+syntax compilation and git diff checks
+PASS
 ```
 
-The harness used the exact P2.3 terminal/model/test sources plus a compatible P2.1
-`FailureEnvelope` stub. It is supporting deterministic evidence only; it is **not** a substitute for
-loading the actual Odoo model registry/database schema.
-
-Added but not executed here:
+Real Odoo 18 validation on a disposable database:
 
 ```text
-addons/odoo_ai_assistant/tests/test_turn_failure.py
-addons/odoo_ai_assistant/tests/test_turn_queue.py
+addon install/update
+PASS
+
+TestAssistantTurnFailurePersistence
+3 tests, 5 executions, 0 failed, 0 errors
+
+TestAssistantTurnQueue
+9 tests, 11 executions, 0 failed, 0 errors
+
+full addon battery
+95 tests, 131 executions, 0 failed, 0 errors
+
+HOOT desktop @odoo_ai_assistant
+78 passed, 0 failed
+```
+
+The first focused failure run exposed an overwrite bug: a later event-sequence update replaced a
+carried provider envelope with a generic fallback. The repaired model only synthesizes fallback
+payloads on terminal/error transitions or when no payload exists. The complete gates above were then
+rerun against the repaired code.
+
+Sanitized evidence:
+
+```text
+docs/research/evidence/phase2/2026-08-28/P2.3-ODOO-VALIDATION-8683ef6.md
 ```
 
 No GitHub Actions were used.
 
-## Hard validation debt
+## Closed P2.3 hard validation debt
 
 ```text
-P2.3-ODOO-UPDATE
-  gate_type: HARD
-  origin_slice: P2.3-turn-failure-persistence
-  commit_materially_tested: pending; must include 00d963e0bdf1a14efe55fb974c2642de038313ee
-  downstream_scope_blocked: later Phase 2 browser/presentation consumer work
-  reason: prove addon 18.0.10.8.0 creates/loads failure_payload cleanly on Odoo 18
-
-P2.3-ODOO-FAILURE
-  gate_type: HARD
-  origin_slice: P2.3-turn-failure-persistence
-  commit_materially_tested: pending; must include 00d963e0bdf1a14efe55fb974c2642de038313ee
-  downstream_scope_blocked: later Phase 2 browser/presentation consumer work
-  reason: run test_turn_failure.py + test_turn_queue.py with 0 failures/errors
+P2.3-ODOO-UPDATE  | PASS | 8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc
+P2.3-ODOO-FAILURE | PASS | 8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc
 ```
 
 Phase 2 real presentation gates remain pending:
@@ -161,7 +182,8 @@ P2-REAL-TOOLFAIL
 P2-REAL-RECOVERY
 ```
 
-These are not cleared by the P2.3 dependency-light harness.
+These are not cleared by storage/addon/HOOT tests. They become materially applicable only after
+P2.4 consumes the structured failure in the browser and defines retry/presentation behavior.
 
 ## Retained Phase 1 real-environment evidence
 
@@ -187,17 +209,16 @@ P1-REAL-CANCEL   | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
 
 ## Exact next action
 
-Do **not** start P2.4 or Phase 3 yet.
-
-Run the P2.3 Odoo 18 validation gate on the exact implementation checkpoint:
+Create the P2.4 slice record and implement only the browser failure consumer/presentation layer:
 
 ```text
-1. install/update addon version 18.0.10.8.0 on a disposable Odoo 18 database;
-2. run addons/odoo_ai_assistant/tests/test_turn_failure.py;
-3. run addons/odoo_ai_assistant/tests/test_turn_queue.py;
-4. require 0 failures and 0 errors;
-5. record the exact tested SHA and environment evidence.
+1. parse and validate browser_status().failure without trusting arbitrary browser input;
+2. preserve distinct category, retryability, effect_state and user_action behavior;
+3. remove the streaming catch-all that flattens unknown failures to service_unavailable;
+4. drive retry affordances from retryability/effect authority;
+5. add focused HOOT and Odoo projection coverage;
+6. run all five P2-REAL-* gates on real Odoo 18 + Codex.
 ```
 
-If both P2.3 gates pass, mark the slice `COMPLETE` and select the next Phase 2 failure-browser slice.
-If either fails, repair P2.3 first.
+Do not start Phase 3 until the Phase 2 exit criteria and real presentation gates pass. Phase 4 is
+therefore not enabled: Phase 3 public activity has not been implemented or validated.
