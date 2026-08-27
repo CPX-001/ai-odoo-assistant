@@ -416,12 +416,12 @@ This preserves host safety while making additive provider notifications less des
 
 ## Phase 1 exit gate
 
-- [ ] Provider conformance suite exists.
-- [ ] Codex runtime/version compatibility is explicit and testable.
-- [ ] Additive benign notifications no longer kill valid turns.
-- [ ] Dynamic tools still execute only through `CapabilityExecutor`.
-- [ ] Provider-specific code is confined behind one adapter/port.
-- [ ] At least 100 repeated `hello`/simple-read turns do not show protocol-shape failures.
+- [x] Provider conformance suite exists.
+- [x] Codex runtime/version compatibility is explicit and testable.
+- [x] Additive benign notifications no longer kill valid turns.
+- [x] Dynamic tools still execute only through `CapabilityExecutor`.
+- [x] Provider-specific code is confined behind one adapter/port.
+- [x] At least 100 repeated `hello`/simple-read turns do not show protocol-shape failures.
 
 ---
 

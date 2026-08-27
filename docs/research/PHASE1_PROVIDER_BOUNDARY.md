@@ -2,7 +2,8 @@
 
 Date: 2026-08-27
 Inspected implementation/test base: `bc26a894324d9404d66bc2dacba433d67dea2336`
-Status: `IN_PROGRESS`
+Final live-tested checkpoint: `db6e5c12c53e9a99ad3a55f7472eb13f93855a06`
+Status: `COMPLETE`
 
 ## Goal
 
@@ -331,10 +332,10 @@ regression, the dependency-light provider-conformance tests that do not require 
 and Python compilation. The complete repository, Odoo addon/module-update and real Odoo+Codex gates
 remain separately tracked in `EXECUTION_STATE.md` and are not claimed as passed here.
 
-P1.5 creates no new real-environment validation ID because it introduces classification metadata
-only and no automatic retry/effect behavior. Phase 1 still cannot close until the existing
-`P1-REAL-TOOLCALL` and `P1-REAL-CANCEL` HARD completion gates pass against the final P1.5
-checkpoint.
+P1.5 created no new real-environment validation ID because it introduced classification metadata
+only and no automatic retry/effect behavior. The existing `P1-REAL-TOOLCALL` and
+`P1-REAL-CANCEL` HARD completion gates subsequently passed against the final checkpoint, as
+recorded below.
 
 ## Invariants
 
@@ -364,13 +365,19 @@ Cleared evidence retained from P1.3:
 
 P1.4 and P1.5 create no additional mandatory real-environment gate.
 
-Phase 1 completion debt remains open:
+Final completion evidence:
 
-- `P1-REAL-TOOLCALL` — HARD before Phase 1 completion;
-- `P1-REAL-CANCEL` — HARD before Phase 1 completion.
+- `P1-REAL-TOOLCALL`: **PASS** at `db6e5c12c53e9a99ad3a55f7472eb13f93855a06`;
+- `P1-REAL-CANCEL`: **PASS** at `db6e5c12c53e9a99ad3a55f7472eb13f93855a06`;
+- complete addon install/update battery: **PASS**, 0 failed / 0 errors;
+- dependency-light provider/unit/E2E matrices: **PASS**.
+
+The sanitized close-out evidence is
+`docs/research/evidence/phase1/2026-08-27/P1-REAL-TOOLCALL-CANCEL-db6e5c1.md`.
+No mandatory Phase 1 validation debt remains.
 
 ## Exact next action
 
-Stop at the Phase 1 real-environment boundary. Validate the exact final P1.5 commit with
-`P1-REAL-TOOLCALL` and `P1-REAL-CANCEL` following `REAL_ENV_VALIDATION_PROTOCOL.md`. Do not start
-Phase 2 failure-contract work until both HARD gates pass and their sanitized evidence is committed.
+Phase 1 is closed. Reconstruct Phase 2 from `EXECUTION_STATE.md`, create its atomic phase/slice
+record, and start with the structured `FailureEnvelope` contract. Do not mix public-activity,
+answer-streaming or chat-UX work into that first failure-contract slice.

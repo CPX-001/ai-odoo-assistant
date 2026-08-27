@@ -87,15 +87,15 @@ stdout/stderr or private reasoning.
 
 ## Compatibility
 
-The previous `CodexReasoningEngine.run_agent_turn()` remains installed only as the ADR-019 rollback
-seam while the remaining Phase 1 completion gates are validated. It is not the active embedded
-product composition. The Assistant UI, Odoo RPC boundary, account lifecycle from ADR-018 and the
-existing approval UX remain unchanged.
+The previous `CodexReasoningEngine.run_agent_turn()` remains installed only as the bounded ADR-019
+rollback seam pending an explicit cleanup slice. It is not the active embedded product composition.
+The Assistant UI, Odoo RPC boundary, account lifecycle from ADR-018 and the existing approval UX
+remain unchanged.
 
 ## Current validation status
 
 E2E-0 through E2E-4 are implemented. Real Odoo 18 Community + authenticated Codex validation has
-passed the Phase 0 product gates and the P1.3 `P1-REAL-VERSION` / `P1-REAL-SOAK-100` gates on their
-recorded exact checkpoints. The final Phase 1 provider checkpoint still requires the independent
-`P1-REAL-TOOLCALL` and `P1-REAL-CANCEL` gates; unrun checks must not be inferred from earlier live
-passes. See `docs/research/EXECUTION_STATE.md`.
+passed the Phase 0 product gates, the P1.3 `P1-REAL-VERSION` / `P1-REAL-SOAK-100` gates and the
+final-checkpoint `P1-REAL-TOOLCALL` / `P1-REAL-CANCEL` gates on their recorded exact SHAs. Phase 1
+is complete and the structured Phase 2 failure-contract work is ready. See
+`docs/research/EXECUTION_STATE.md`.

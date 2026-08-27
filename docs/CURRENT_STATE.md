@@ -1,9 +1,9 @@
 # Current implementation state
 
-Revalidated through the Phase 1 provider-boundary slices on 27 August 2026. The Phase 0 product
-path and the P1.3 Codex version/100-turn soak have passed real Odoo 18 + authenticated Codex
-validation. Phase 1 completion still requires `P1-REAL-TOOLCALL` and `P1-REAL-CANCEL`; the exact
-cursor and validation debt are tracked in `docs/research/EXECUTION_STATE.md`.
+Revalidated through the completed Phase 1 provider boundary on 27 August 2026. The Phase 0 product
+path, P1.3 Codex version/100-turn soak and final host-tool/cancellation gates have passed real Odoo
+18 + authenticated Codex validation. Phase 2's structured failure contract is now `READY`; the
+exact cursor is tracked in `docs/research/EXECUTION_STATE.md`.
 
 ## Product baseline
 
@@ -76,9 +76,10 @@ product path uses the host-owned decision loop.
 
 ## Validation status
 
-Dependency-light contract tests and Python compilation cover the current provider-boundary
-slices. Real Odoo 18 Community + Codex 0.149.1 evidence has passed `P1-REAL-VERSION` and
+Dependency-light provider, unit and E2E contract suites plus the complete addon install/update
+battery are green. Real Odoo 18 Community evidence has passed `P1-REAL-VERSION` and
 `P1-REAL-SOAK-100` at the recorded P1.3 checkpoint, including 100/100 normal product-path turns.
-The final Phase 1 provider checkpoint must still pass the independent `P1-REAL-TOOLCALL` and
-`P1-REAL-CANCEL` gates before Phase 2 begins. Unexecuted Odoo/module-update tests remain explicit
-validation debt rather than assumed passes.
+The final checkpoint `db6e5c1` additionally passed `P1-REAL-TOOLCALL` and `P1-REAL-CANCEL`: the read
+used host capabilities with the effective user and `su=False`; the intended active turn cancelled
+without a write barrier/effect; and a subsequent distinct turn remained healthy. No mandatory
+Phase 1 validation debt remains.

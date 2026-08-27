@@ -28,7 +28,8 @@ Every playbook must record the inspected commit and research date. Revalidate it
 | `REAL_ENV_VALIDATION_PROTOCOL.md` | Named tests that must be performed against real Odoo 18 + Codex before selected slices/phases may close. |
 | `ACTION_DIAGNOSTIC_EVIDENCE.md` | Sanitized boundary-level evidence required when debugging the active Phase 0 ACTION gate. |
 | `SLICE_TEMPLATE.md` | Template for atomic roadmap slices with deterministic and real-environment gates. |
-| `PHASE0_BASELINE.md` | Active execution record for the reproducible-baseline phase: scenario catalog, timing/error capture contract, implemented measurement hooks and the remaining exit-gate work. |
+| `PHASE0_BASELINE.md` | Completed reproducible-baseline record: scenario catalog, timing/error capture contract, measurement hooks and exact real-environment evidence. |
+| `PHASE1_PROVIDER_BOUNDARY.md` | Completed provider-boundary record, deterministic coverage and exact real Odoo+Codex completion evidence. |
 
 ## Recursive execution rule
 

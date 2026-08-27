@@ -1,177 +1,148 @@
 # Stabilization execution state
 
 State format: 3
-Updated: 2026-08-27
+Updated: 2026-08-28
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md` and `E2E_AGENT_LOOP_CONVERGENCE.md`
 
 ## Current cursor
 
 ```text
-phase: 1
-phase_name: provider boundary stabilization
-phase_state: IN_PROGRESS
-active_phase_record: docs/research/PHASE1_PROVIDER_BOUNDARY.md
-active_slice: P1.5-overload-backpressure-classification
-active_slice_state: COMPLETE
-current_gate_type: HARD_REAL_ENV
-blocking_validations: P1-REAL-TOOLCALL, P1-REAL-CANCEL
-phase_completion_validations: P1-REAL-TOOLCALL, P1-REAL-CANCEL
-next_slice: NONE_UNTIL_PHASE1_REAL_ENV_VALIDATION
+phase: 2
+phase_name: structured failure contract
+phase_state: READY
+active_phase_record: NONE_CREATE_BEFORE_IMPLEMENTATION
+active_slice: P2.1-failure-envelope-schema
+active_slice_state: READY
+current_gate_type: DETERMINISTIC
+blocking_validations: none
+phase_completion_validations: P2-REAL-AUTH, P2-REAL-ACL, P2-REAL-TIMEOUT, P2-REAL-TOOLFAIL, P2-REAL-RECOVERY
+next_slice: P2.1-failure-envelope-schema
 ```
 
-Phase 0 is complete. The exact implementation/test SHA
-`9f832af4d6b1e6b74659bcd30aab21db481fd4b9` passed the real Odoo 18 + Codex + browser HELLO,
-READ and strict ACTION gate; the docs-only close-out is `9cf9a8d3553cf8bc5a0b39ada63f2fba1c5f21ae`.
+Phase 0 and Phase 1 are complete. Phase 2 has not started; `READY` means the next run must first
+inspect current failure projections/browser contracts and create the atomic Phase 2 phase/slice
+record before changing behavior.
 
-## New evidence processed
+## Phase 1 close-out checkpoint
 
-This run reconstructed remote `main` at `bc26a894324d9404d66bc2dacba433d67dea2336` before writing.
-No newer commit, failed validation, regression report or handoff appeared after P1.4, so the exact
-READY slice remained P1.5.
-
-Previously committed Phase 1 real-environment evidence remains:
+The run reconstructed `origin/main` at `77853109f75ee1b7e43511ad7a15e450f43026bb`.
+The full Odoo battery then exposed a stale test that bypassed the already-accepted database-scoped
+Codex connection gate. The test-only repair uses the supported settings connect/logout actions and
+was committed as:
 
 ```text
-P1-REAL-VERSION  | PASS | 49bdac1f732acaaee3154ed60baffd675130991a
-P1-REAL-SOAK-100 | PASS | 49bdac1f732acaaee3154ed60baffd675130991a
-Odoo             | 18.0 Community
-Codex            | 0.149.1
-selected Odoo regression battery | 46 tests, 0 failures/errors
-soak             | 100/100 turns, 0 protocol/provider/authority/binding failures
+db6e5c12c53e9a99ad3a55f7472eb13f93855a06
 ```
 
-Those passes cover the P1.3 compatibility checkpoint and are retained as historical evidence. They
-do not satisfy the independent Phase 1 completion gates for tool mapping and cancellation on the
-final provider checkpoint.
-
-## P1.4 retained provider-failure contract
-
-P1.4 preserved only bounded terminal provider facts on `CodexDecisionError`:
-
-- provider category from `codexErrorInfo`;
-- optional HTTP status in 100-599;
-- optional bounded upstream machine code;
-- no raw provider message, `additionalDetails`, prompt, credentials, request body, stdout/stderr or
-  unrestricted provider payload.
-
-`invalid_json_schema` continues to map to `codex_output_schema_invalid`; other terminal provider
-failures keep the current sanitized `codex_turn_failed` product code.
-
-## P1.5 implementation
-
-P1.5 closes the remaining static `overload_backpressure` conformance gap without adding an automatic
-retry loop.
-
-`CodexDecisionError` now exposes a separate advisory `provider_retryable` boolean. The classifier is
-intentionally narrow:
-
-```text
-provider category == serverOverloaded
-AND host_effect_safe == True
-    -> provider_retryable = True
-otherwise
-    -> provider_retryable = False
-```
-
-The one-decision Codex adapter marks its two terminal provider routes `host_effect_safe=True` because
-that adapter has no capability executor and cannot itself produce an Odoo business effect. The
-classifier does not infer retryability from a generic HTTP 503, `httpConnectionFailed`,
-`usageLimitExceeded`, schema errors or unknown categories. Calling the same classifier with
-`host_effect_safe=False` suppresses retryability even for `serverOverloaded`.
-
-This flag is metadata only in P1.5. It does not retry a provider request, replay a reasoning
-capability, re-run a PLAN handler, cross the write barrier or change recovery semantics. The later
-host-owned failure contract may consume this fact only together with authoritative effect state.
-
-## Tests added or updated
-
-```text
-addons/odoo_ai_assistant/runtime/agent/codex_decision.py
-tests/contracts/current_codex_decision_conformance.py
-tests/unit/test_codex_provider_conformance.py
-tests/unit/test_codex_terminal_failure_projection.py
-docs/CURRENT_STATE.md
-docs/UNIFIED_AGENT_RUNTIME.md
-docs/research/PHASE1_PROVIDER_BOUNDARY.md
-docs/research/EXECUTION_STATE.md
-```
-
-The P1.5 regression coverage checks:
-
-- `serverOverloaded` is retryable at the explicit effect-safe provider boundary;
-- the same category is not retryable when effect state is unsafe;
-- generic transport HTTP 503 is not treated as overload;
-- usage-limit and schema failures remain outside this narrow backpressure classifier;
-- P1.4 bounded redaction and schema-error mapping remain intact;
-- the dependency-light conformance binding expects 14/14 cases after P1.5.
+No product runtime behavior changed in that checkpoint. The addon install/update, complete Odoo
+battery and both final real-environment gates were executed against that exact checkout.
 
 ## Tests actually executed
 
-The current ChatGPT execution environment ran a focused extracted classifier harness against the
-same P1.5 logic prepared for publication:
+Dependency-light validation:
 
 ```text
-serverOverloaded + host_effect_safe=True  -> provider_retryable=True
-serverOverloaded + host_effect_safe=False -> provider_retryable=False
-httpConnectionFailed + HTTP 503           -> provider_retryable=False
-usageLimitExceeded                         -> provider_retryable=False
-invalid_json_schema                        -> provider_retryable=False
-result: PASS
+.venv/bin/python -m pytest -q tests/unit/test_codex_provider_conformance.py
+8 passed
+
+.venv/bin/python -m pytest -q tests/unit
+184 passed
+
+.venv/bin/python -m pytest -q \
+  tests/e2e/test_e2e_convergence_battery.py \
+  tests/e2e/test_e2e_decision_sequences.py \
+  tests/e2e/test_next_decision_contract.py \
+  tests/e2e/test_working_transcript_contract.py \
+  tests/e2e/test_canonical_plan_proposal.py
+29 passed
+
+provider/contract Python compilation
+PASS
 ```
 
-The immediately preceding preparation run also executed the dependency-light P1.5 test snapshot
-before publication was interrupted: six terminal/backpressure regressions passed; seven
-provider-conformance tests passed with the complete-checkout matrix deselected; Python compilation
-passed. Those results are supporting preparation evidence, not a substitute for the still-unrun full
-repository/Odoo gates.
-
-## Tests not executed
+Real Odoo 18 Community validation on a fresh disposable database:
 
 ```text
-complete tests/unit/test_codex_provider_conformance.py matrix in a full repository checkout
-full unit suite
-dependency-light E2E convergence suite
-Odoo addon/module-update suites
-P1-REAL-TOOLCALL
-P1-REAL-CANCEL
+fresh addon install
+PASS
+
+explicit addon update
+PASS
+
+initial complete addon battery
+1 stale test failed; 0 errors
+
+focused repaired database-connection test
+PASS
+
+complete addon battery after repair
+odoo_ai_assistant test stats: 126 executions
+Odoo result: 0 failed, 0 errors of 92 tests
+process exit: 0
 ```
 
 No GitHub Actions were used.
 
-## Static conformance expectation
+## Phase 1 real-environment evidence
 
-After P1.5 the dependency-light source binding is expected to report:
+Previously cleared and retained:
 
 ```text
-14 PASS / 0 FAIL
+P1-REAL-VERSION  | PASS | 49bdac1f732acaaee3154ed60baffd675130991a | Codex 0.149.1
+P1-REAL-SOAK-100 | PASS | 49bdac1f732acaaee3154ed60baffd675130991a | 100/100 turns
 ```
 
-P1.5 does not by itself close Phase 1 because the final checkpoint still requires the real host/tool
-mapping and cancellation evidence below.
+Final completion gates on `db6e5c12c53e9a99ad3a55f7472eb13f93855a06`:
+
+```text
+P1-REAL-TOOLCALL | PASS
+final state: completed
+host capabilities: odoo.get_effective_schema, odoo.query_records
+effective user: dedicated internal non-admin, su=false
+fixture changed: false
+
+P1-REAL-CANCEL | PASS
+cancel response: cancel_requested
+final state: cancelled
+write barrier observed: false
+fixture changed: false
+provider subprocesses remaining: 0
+subsequent distinct turn: completed
+```
+
+The final gates used Odoo 18.0 Community and the installed Codex CLI/App Server 0.144.2 through the
+normal HTTP -> persisted turn -> cron -> embedded runtime path. Sanitized evidence is stored at
+`docs/research/evidence/phase1/2026-08-27/P1-REAL-TOOLCALL-CANCEL-db6e5c1.md`.
 
 ## Validation debt
 
-Cleared historical Phase 1 evidence:
-
 ```text
-P1-REAL-SOAK-100 | HARD | PASS | 49bdac1f732acaaee3154ed60baffd675130991a
-P1-REAL-VERSION  | HARD | PASS | 49bdac1f732acaaee3154ed60baffd675130991a
+Phase 1 mandatory validation debt: none
+Phase 2 validation debt: none yet; phase has not started
+look-ahead slices consumed: 0
+stacked unvalidated contract layers: 0
 ```
 
-Open Phase 1 completion debt on the final P1.5 checkpoint (`THIS_COMMIT`):
+No mandatory Phase 1 test remains unexecuted. Broader sidecar-era/legacy suites and frontend UX
+work are outside the completed provider-boundary gate and were not used as substitutes for it.
 
-```text
-P1-REAL-TOOLCALL | HARD | prove host/provider capability mapping under effective user | blocks Phase 2
-P1-REAL-CANCEL   | HARD | prove cancellation binds to intended active provider turn | blocks Phase 2
-```
+## Invariants carried into Phase 2
 
-P1.5 creates no new mandatory validation ID because it adds advisory classification metadata and no
-automatic retry/effect behavior.
+- Odoo remains operational and persistence authority.
+- Business capabilities execute with the effective user and `su=False`.
+- `CapabilityDefinition` remains the atomic executable contract.
+- The provider proposes; the host validates and owns all effects.
+- Preserved provider facts and retryability metadata remain bounded and advisory only.
+- Raw provider messages/details, credentials, prompts and unrestricted tool payloads remain private.
+- No provider/capability/write retry may be inferred from Phase 1 metadata alone.
+- The durable write barrier and `recovery_required` semantics remain authoritative.
+- No GitHub Actions are available for roadmap execution or validation.
 
 ## Exact next action
 
-Do not select a Phase 2 implementation slice yet. Install/update the addon from the exact P1.5
-checkpoint represented by this commit and run `P1-REAL-TOOLCALL` plus `P1-REAL-CANCEL` exactly as
-defined in `REAL_ENV_VALIDATION_PROTOCOL.md`. Commit sanitized PASS/FAIL evidence. If either gate
-fails, select the smallest Phase 1 repair; if both pass and the deterministic conformance matrix is
-green, close Phase 1 and make the first Phase 2 failure-contract slice READY.
+Create the Phase 2 phase/slice record from section 6 of
+`FOUNDATION_STABILIZATION_PLAYBOOK.md`. Inspect the current backend turn errors and browser failure
+projection, then implement only `P2.1-failure-envelope-schema`: one bounded structured
+`FailureEnvelope` contract with deterministic validation. Do not yet rewrite UI copy, implement
+public activity/answer streaming, or add automatic retries. Define the affected real validation IDs
+before the slice leaves `READY`.
