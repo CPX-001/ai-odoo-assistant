@@ -8,6 +8,7 @@ from odoo import SUPERUSER_ID, api, fields, models
 from odoo.modules.registry import Registry
 
 from ..runtime.agent.failure import (
+    FailureEnvelope,
     FailureEnvelopeError,
     failure_envelope_payload,
     parse_failure_envelope,
@@ -18,6 +19,7 @@ from .turn_queue import (
     _append_event,
     _claim_next_turn,
     _execute_claimed_turn,
+    _fail_claimed_turn,
     _recover_stale_turns,
     _runtime_error_code,
     _trigger_turn_crons,
@@ -101,13 +103,18 @@ class AssistantTurnFailurePersistence(models.Model):
         except Exception as error:  # noqa: BLE001 - queue boundary stays sanitized
             code = _runtime_error_code(error)
             _logger.exception("Embedded Assistant turn %s crashed: %s", turn_id, code)
-            _fail_claimed_turn_with_failure(
-                dbname,
-                turn_id,
-                lease_token,
-                error,
-                code,
-            )
+            if isinstance(getattr(error, "failure", None), FailureEnvelope):
+                _fail_claimed_turn_with_failure(
+                    dbname,
+                    turn_id,
+                    lease_token,
+                    error,
+                    code,
+                )
+            else:
+                # Keep the original queue/retry state machine for non-provider failures. The
+                # model write overlay adds a bounded fallback envelope to terminal transitions.
+                _fail_claimed_turn(dbname, turn_id, lease_token, code)
 
 
 def _needs_per_record_projection(vals):
@@ -138,7 +145,7 @@ def _fail_claimed_turn_with_failure(
     error,
     error_code,
 ):
-    """Mirror the queue terminal transition while persisting the validated envelope atomically."""
+    """Preserve a carried provider envelope without changing queue retry semantics."""
 
     with Registry(dbname).cursor() as cr:
         env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
