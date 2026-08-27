@@ -49,6 +49,8 @@ def test_accepts_supported_write_stopped_at_required_preview():
         "plan_state": "awaiting_confirmation",
         "plan_step_count": 1,
         "preview_observed": True,
+        "tool_sequence": [],
+        "planning_diagnostics": [],
     }
 
 
@@ -59,3 +61,50 @@ def test_rejects_preview_when_preapproval_unchanged_state_is_not_proven():
 
     assert result["accepted"] is False
     assert result["reasons"] == ["preapproval_state_not_proven"]
+
+
+def test_preserves_only_bounded_content_free_action_diagnostics():
+    value = {
+        **_base(),
+        "tool_sequence": [
+            "odoo.get_effective_schema",
+            "odoo.get_effective_write_schema",
+            "odoo.query_records",
+            "odoo.record.patch",
+        ],
+        "planning_diagnostics": [
+            {
+                "point": "plan_step_staged",
+                "capability": "odoo.record.patch",
+                "staged_plan_count": 1,
+                "secret": "drop-me",
+            },
+            {
+                "point": "final_plan_reconciled",
+                "structured_plan_count": 0,
+                "staged_plan_count": 1,
+                "final_plan_count": 1,
+                "source": "staged_fallback",
+                "arguments": {"phone": "drop-me"},
+            },
+        ],
+    }
+
+    result = acceptance.evaluate(value)
+
+    assert result["tool_sequence"] == value["tool_sequence"]
+    assert result["planning_diagnostics"] == [
+        {
+            "point": "plan_step_staged",
+            "capability": "odoo.record.patch",
+            "staged_plan_count": 1,
+        },
+        {
+            "point": "final_plan_reconciled",
+            "structured_plan_count": 0,
+            "staged_plan_count": 1,
+            "final_plan_count": 1,
+            "source": "staged_fallback",
+        },
+    ]
+    assert "drop-me" not in str(result)

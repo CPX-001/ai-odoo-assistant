@@ -69,6 +69,10 @@ See `QUERY_CONTRACT.md`.
 
 Provider adapters must make the planning contract explicit: when the user's requested outcome is an Odoo state change that an available planning capability exactly supports, the reasoning provider is expected to ground the necessary model/record/schema/fields through read-only capabilities and emit the corresponding plan step. Returning a normal read-only answer with an empty plan does not satisfy that supported mutation request. This remains probabilistic model guidance, not host authority: the host does not infer write intent from prompt text, and every emitted step is still validated against the effective planning catalog, schema, policy, preview/approval and verification path.
 
+For Codex, PLAN definitions may also be projected as **stage-only dynamic tools** derived directly from the same effective planning catalog. Calling one of these tools never invokes the capability handler, never previews, never approves and never mutates Odoo; it only submits one schema-validated `PlannedCapability` candidate to the provider adapter. This avoids making reliable action planning depend solely on hand-authored final JSON while preserving the same host authority boundary. A single unambiguous staged step may recover an accidentally empty structured plan; conflicting or ambiguous staged/structured plans fail closed. The normal `CapabilityPlanService` still performs preview, policy/approval, execution and verification afterwards.
+
+Provider planning diagnostics must remain content-free. Capability identifiers and bounded counts/state labels may be persisted for diagnosis, but plan arguments, tool results, prompts, business values and private reasoning are not diagnostic payloads.
+
 ## Batch provider
 
 `odoo_batch` extends controlled effects to bounded collections without bypassing the same authority/policy model. Batch behavior should favor deterministic summaries/receipts and avoid hundreds of unconstrained model-authored writes.

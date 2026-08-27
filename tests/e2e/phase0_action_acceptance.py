@@ -5,10 +5,58 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 REQUEST_KIND = "explicit_supported_write"
+_CAPABILITY = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]{0,127}$")
+_DIAGNOSTIC_TOKEN = re.compile(r"^[a-z0-9_]{1,64}$")
+_DIAGNOSTIC_COUNT_KEYS = frozenset(
+    {
+        "reasoning_tool_count",
+        "planning_tool_count",
+        "staged_plan_count",
+        "structured_plan_count",
+        "final_plan_count",
+    }
+)
+
+
+def _safe_tool_sequence(value: Any) -> list[str]:
+    if not isinstance(value, list) or len(value) > 64:
+        return []
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or _CAPABILITY.fullmatch(item) is None:
+            return []
+        result.append(item)
+    return result
+
+
+def _safe_planning_diagnostics(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or len(value) > 32:
+        return []
+    result: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            return []
+        point = item.get("point")
+        if not isinstance(point, str) or _DIAGNOSTIC_TOKEN.fullmatch(point) is None:
+            return []
+        safe: dict[str, Any] = {"point": point}
+        capability = item.get("capability")
+        if isinstance(capability, str) and _CAPABILITY.fullmatch(capability):
+            safe["capability"] = capability
+        source = item.get("source")
+        if isinstance(source, str) and _DIAGNOSTIC_TOKEN.fullmatch(source):
+            safe["source"] = source
+        for key in _DIAGNOSTIC_COUNT_KEYS:
+            count = item.get(key)
+            if type(count) is int and 0 <= count <= 32:
+                safe[key] = count
+        result.append(safe)
+    return result
 
 
 def evaluate(value: dict[str, Any]) -> dict[str, Any]:
@@ -48,6 +96,10 @@ def evaluate(value: dict[str, Any]) -> dict[str, Any]:
         "plan_state": plan_state,
         "plan_step_count": plan_step_count if type(plan_step_count) is int else None,
         "preview_observed": preview_observed is True,
+        "tool_sequence": _safe_tool_sequence(value.get("tool_sequence")),
+        "planning_diagnostics": _safe_planning_diagnostics(
+            value.get("planning_diagnostics")
+        ),
     }
 
 
