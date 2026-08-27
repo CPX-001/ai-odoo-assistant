@@ -2,8 +2,8 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `c7ea9dbaba2cc0305ff0f3af2a34c8a3e9f7a829`  
-Latest product/tooling implementation checkpoint: pending P1-PREP-CONFORMANCE commit  
+Latest repository checkpoint inspected: `aa1e24d904ca34d0f9b7e842f5b0504dc9dc36ba`  
+Latest product/tooling implementation checkpoint: `aa1e24d904ca34d0f9b7e842f5b0504dc9dc36ba`  
 Latest P0.1 validation checkpoint materially tested: `121108e55ef0ff91adb0377920f73128875536ac`  
 Latest P0.2 / real READ checkpoint materially tested: `a05e75006f53b056f31ab96c3864092d89199480`  
 Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
