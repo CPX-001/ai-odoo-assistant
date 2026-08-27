@@ -167,6 +167,28 @@ def test_unknown_notification_policy_tolerates_only_bounded_inert_additions() ->
             raise AssertionError(f"notification {method!r} was not rejected")
 
 
+def test_final_answer_mapping_uses_shared_contract_not_prompt_literal(tmp_path: Path) -> None:
+    agent = tmp_path / "addons" / "odoo_ai_assistant" / "runtime" / "agent"
+    agent.mkdir(parents=True)
+    (agent / "codex.py").write_text("", encoding="utf-8")
+    (agent / "codex_decision.py").write_text(
+        "def decode(value):\n    return parse_next_decision(value)\n",
+        encoding="utf-8",
+    )
+    (agent / "contracts.py").write_text(
+        'if kind == "final_answer":\n    return FinalAnswer(kind=kind)\n',
+        encoding="utf-8",
+    )
+
+    adapter = current_adapter.CurrentCodexDecisionConformanceAdapter(tmp_path)
+    observation = asyncio.run(adapter.observe({"id": "final_answer_mapping"}))
+
+    assert observation == {
+        "outcome": "accepted",
+        "assertions": {"final_answer_decoded": True, "no_host_effect": True},
+    }
+
+
 def test_current_codex_decision_engine_matrix_after_unknown_notification_repair() -> None:
     repo = Path(__file__).resolve().parents[2]
     cases = contract.load_contract(FIXTURE)

@@ -19,6 +19,18 @@ class CurrentCodexDecisionConformanceAdapter:
         self._codex = (
             repo_root / "addons" / "odoo_ai_assistant" / "runtime" / "agent" / "codex.py"
         ).read_text(encoding="utf-8")
+        self._contracts = (
+            repo_root / "addons" / "odoo_ai_assistant" / "runtime" / "agent" / "contracts.py"
+        ).read_text(encoding="utf-8")
+
+    def _decision_kind_is_decoded(self, kind: str, result_type: str) -> bool:
+        return all(
+            (
+                "return parse_next_decision(" in self._decision,
+                f'if kind == "{kind}":' in self._contracts,
+                f"return {result_type}(" in self._contracts,
+            )
+        )
 
     async def observe(self, case: dict[str, Any]) -> dict[str, Any]:
         case_id = case["id"]
@@ -71,13 +83,12 @@ class CurrentCodexDecisionConformanceAdapter:
         return ("accepted" if ok else "rejected", {"completed_message_accepted": ok})
 
     def _observe_reasoning_decision_mapping(self):
-        decoded = all(
-            token in self._decision
-            for token in (
-                '"reasoning_capability_call"',
-                "return parse_next_decision(",
-                "return validate_next_decision(",
+        decoded = (
+            self._decision_kind_is_decoded(
+                "reasoning_capability_call",
+                "ReasoningCapabilityCall",
             )
+            and "return validate_next_decision(" in self._decision
         )
         host_owned = "executor.execute" not in self._decision
         checks = {
@@ -87,7 +98,7 @@ class CurrentCodexDecisionConformanceAdapter:
         return ("accepted" if all(checks.values()) else "rejected", checks)
 
     def _observe_plan_decision_mapping(self):
-        decoded = '"plan_step_proposal"' in self._decision and "return parse_next_decision(" in self._decision
+        decoded = self._decision_kind_is_decoded("plan_step_proposal", "PlanStepProposal")
         stage_only = "executor.execute" not in self._decision
         checks = {
             "plan_proposal_decoded": decoded,
@@ -97,7 +108,7 @@ class CurrentCodexDecisionConformanceAdapter:
         return ("accepted" if all(checks.values()) else "rejected", checks)
 
     def _observe_final_answer_mapping(self):
-        decoded = '"final_answer"' in self._decision and "return parse_next_decision(" in self._decision
+        decoded = self._decision_kind_is_decoded("final_answer", "FinalAnswer")
         no_effect = "executor.execute" not in self._decision
         checks = {"final_answer_decoded": decoded, "no_host_effect": no_effect}
         return ("accepted" if all(checks.values()) else "rejected", checks)
