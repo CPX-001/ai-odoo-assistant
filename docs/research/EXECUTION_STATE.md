@@ -2,7 +2,7 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `baef228d47c25a7ecfdf582938bf5416fcae9121`  
+Latest repository checkpoint inspected: `ffa8dfd04449bcd04e95f27519e455f5d314b9ea`<br>
 Latest product/tooling implementation checkpoint: `fee7c4ee8b532e4529ad5dfd6249caab2c877a88`  
 Latest P0.1 validation checkpoint materially tested: `121108e55ef0ff91adb0377920f73128875536ac`  
 Last real Odoo+Codex commit materially tested: `121108e55ef0ff91adb0377920f73128875536ac`  
@@ -88,6 +88,27 @@ python -m py_compile tests/e2e/phase0_read_acceptance.py
 PASS
 ```
 
+Revalidated after fast-forwarding to `ffa8dfd04449bcd04e95f27519e455f5d314b9ea`:
+
+```text
+python -m pytest -q tests/unit/test_phase0_read_acceptance.py
+3 passed in 0.02s
+
+python -m py_compile tests/e2e/phase0_read_acceptance.py tests/e2e/phase0_live_capture.py
+PASS
+
+python tests/e2e/phase0_read_acceptance.py \
+  docs/research/evidence/phase0/2026-08-27/read-partner-01.json
+expected rejection: exit 2, accepted=false, missing tool.started + tool.completed
+```
+
+A fresh real READ could not be run from this session. The reachable Odoo endpoint exposed database
+`odoo_ai_m1_08_9473`, whereas the recorded Phase 0 fixture/evidence environment used
+`codex_m7_odoo_test`; the active Odoo process also predates the current checkout. No Phase 0 capture
+credentials or message variables were available, the service configuration was not readable by the
+current user, and the documented/default `admin`/`admin` probe did not authenticate. No credentials
+were guessed beyond that single standard probe and no live evidence was manufactured.
+
 This closes the acceptance false-positive part of P0.2, but not the real READ diagnosis/pass requirement.
 
 ## Validation debt
@@ -103,7 +124,7 @@ downstream_scope_blocked:
   - marking P0.2 COMPLETE
   - retrying P0-REAL-ACTION
   - Phase 1 runtime/provider contract refactor
-reason: exact current implementation has not yet produced a capability-backed known-partner READ in the real Odoo+Codex environment
+reason: exact current implementation has not yet produced a capability-backed known-partner READ in the real Odoo+Codex environment; the 2026-08-27 attempt at ffa8dfd lacked the matching Phase 0 database/service restart authority and capture credentials
 ```
 
 ### VD-P0-LIVE-BASELINE
@@ -128,17 +149,21 @@ reason: READ and ACTION failed and the failure-pair matrix is incomplete
 P0_REAL_READ_REQUIRED_AND_PROVIDER_RUNTIME_UNSTABLE
 ```
 
-P0.2 cannot complete until the real known-partner READ is rerun on current `main`. ACTION must remain frozen until READ passes and the provider/Odoo crash path is bounded.
+P0.2 cannot complete until the real known-partner READ is rerun on current `main`. The local endpoint
+available during the `ffa8dfd` validation attempt was not the recorded Phase 0 environment and could
+not be authenticated or restarted from the current session. ACTION must remain frozen until READ
+passes and the provider/Odoo crash path is bounded.
 
 ## Exact next action selection
 
-1. In the real Odoo 18 + Codex environment, update/restart from current `main`.
-2. Run one bounded `read_partner` capture using the known disposable/demo partner and non-sensitive fields.
-3. Run `tests/e2e/phase0_read_acceptance.py <capture.json> --out <acceptance.json>`.
-4. Require exit `0`, `accepted=true`, observed `tool.started` + `tool.completed`, and a browser answer matching the actual partner data.
-5. If READ fails, classify the sanitized evidence as provider/account/runtime vs capability selection/input/execution and create the smallest corrective child slice.
-6. If READ passes, close `VD-P0.2-REAL-READ`, mark P0.2 COMPLETE, then begin `P0.3-provider-crash-reproduction` before any ACTION retry.
-7. Do not begin Phase 1 production provider/runtime work.
+1. Provide access to the recorded Phase 0 Odoo database (or explicitly nominate an equivalent disposable environment), plus normal-user capture credentials and service update/restart authority.
+2. In that real Odoo 18 + Codex environment, update/restart from current `main`.
+3. Run one bounded `read_partner` capture using the known disposable/demo partner and non-sensitive fields.
+4. Run `tests/e2e/phase0_read_acceptance.py <capture.json> --out <acceptance.json>`.
+5. Require exit `0`, `accepted=true`, observed `tool.started` + `tool.completed`, and a browser answer matching the actual partner data.
+6. If READ fails, classify the sanitized evidence as provider/account/runtime vs capability selection/input/execution and create the smallest corrective child slice.
+7. If READ passes, close `VD-P0.2-REAL-READ`, mark P0.2 COMPLETE, then begin `P0.3-provider-crash-reproduction` before any ACTION retry.
+8. Do not begin Phase 1 production provider/runtime work.
 
 ## Planned corrective Phase 0 slices
 
