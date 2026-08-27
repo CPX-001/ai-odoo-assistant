@@ -56,7 +56,7 @@ class CurrentCodexDecisionConformanceAdapter:
         return ("accepted" if all(checks.values()) else "rejected", checks)
 
     def _observe_agent_message_delta(self):
-        ok = '"item/agentMessage/"' in self._codex and "_validate_notification" in self._decision
+        ok = '"item/agentMessage/"' in self._codex and "_validate_decision_notification" in self._decision
         return ("accepted" if ok else "rejected", {"delta_accepted": ok})
 
     def _observe_completed_agent_message(self):
@@ -103,7 +103,18 @@ class CurrentCodexDecisionConformanceAdapter:
         return ("accepted" if all(checks.values()) else "rejected", checks)
 
     def _observe_unknown_notification(self):
-        tolerant = 'raise CodexAgentError("codex_event_not_allowed")' not in self._codex
+        tolerant = all(
+            token in self._decision
+            for token in (
+                "def _validate_decision_notification(",
+                'if error.code != "codex_event_not_allowed":',
+                'if "threadId" in params',
+                'if "turnId" in params',
+                'if "callId" in params:',
+                'raise CodexAgentError("codex_event_identity_mismatch")',
+                'raise CodexAgentError("codex_event_identity_unverified")',
+            )
+        )
         return (
             "accepted" if tolerant else "rejected",
             {"unknown_notification_ignored_safely": tolerant},

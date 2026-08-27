@@ -11,10 +11,11 @@ phase: 1
 phase_name: provider boundary stabilization
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/PHASE1_PROVIDER_BOUNDARY.md
-active_slice: P1.2-current-adapter-conformance-binding
-active_slice_state: COMPLETE
-current_gate_type: NONE
-next_slice: P1.3-benign-unknown-notification-tolerance
+active_slice: P1.3-benign-unknown-notification-tolerance
+active_slice_state: REAL_ENV_VALIDATION_REQUIRED
+current_gate_type: HARD
+blocking_validations: P1-REAL-SOAK-100, P1-REAL-VERSION
+next_slice: BLOCKED_PENDING_P1.3_REAL_ENV
 ```
 
 Phase 0 is complete. The exact implementation/test SHA
@@ -23,100 +24,108 @@ READ and strict ACTION gate; the docs-only close-out is `9cf9a8d3553cf8bc5a0b39a
 
 ## New evidence processed
 
-No newer committed real-environment failure or handoff evidence exists after P1.1 at
-`b86a64bcd0a76cee44a5efe090dc6f067459f585`. The latest real product-path evidence remains the
-passing Phase 0 exact-SHA handoff, so Phase 1 may continue.
+No commit newer than the P1.2 checkpoint `2bf5fdd7c96a0729a8eb03f6bbdf0d9e3dc246f5` existed when this
+run reconstructed `main`. No newer real-environment failure or passing handoff was therefore
+available to process before selecting P1.3.
 
-## P1.2 published content
+## P1.3 implementation
 
-P1.2 binds the current custom `CodexDecisionEngine` to the v2 conformance harness without changing
-runtime behavior. The binding is dependency-light and source-observational: it reads the committed
-custom adapter and shared Codex protocol implementation and emits only sanitized contract facts.
-It is not presented as a live App Server probe.
+P1.3 repairs only the active one-decision adapter's additive-notification compatibility boundary.
+The shared legacy Codex protocol validator remains strict; `CodexDecisionEngine` now wraps it with a
+bounded compatibility rule:
 
-Current adapter matrix:
+- known notifications still go through the existing validator unchanged;
+- an unknown method is tolerated only after the shared validator identifies it specifically as
+  `codex_event_not_allowed`;
+- malformed/empty/oversized unknown notification methods or non-object params fail closed;
+- an unknown notification carrying a mismatched `threadId` or `turnId` fails closed;
+- an unknown notification carrying any unverified `callId` fails closed;
+- server requests remain rejected before notification handling because an event carrying a JSON-RPC
+  request `id` never reaches the compatibility helper;
+- the event is otherwise inert: it is ignored and cannot execute a capability or create host effects.
 
-```text
-PASS initialize
-PASS thread_isolation
-PASS turn_output_schema
-PASS agent_message_delta
-PASS completed_agent_message
-PASS reasoning_decision_mapping
-PASS plan_decision_mapping
-PASS final_answer_mapping
-FAIL unknown_notification
-PASS malformed_critical_event
-PASS identity_mismatch
-PASS cancellation
-FAIL terminal_failure
-FAIL overload_backpressure
-
-11 PASS / 3 FAIL
-```
-
-Observed failing boundaries:
-
-- `unknown_notification`: the shared notification validator ends unknown methods with
-  `codex_event_not_allowed` instead of safely ignoring a benign forward-compatible notification;
-- `terminal_failure`: `_decision_failure_code()` preserves only the known invalid-output-schema
-  special case and otherwise collapses provider terminal detail to `codex_turn_failed`;
-- `overload_backpressure`: the current adapter has no explicit sanitized retryable overload/rate-limit
-  classification. `willRetry=true` provider events are allowed to continue internally, but terminal
-  overload is not exposed as the v2 retryable class.
-
-The smallest compatibility repair is unknown-notification tolerance. It is independent of failure
-semantics redesign and must remain bounded so malformed/identity-bearing critical events continue
-to fail closed.
+No terminal-error normalization, overload/backpressure classification, provider replacement, SDK
+adapter or capability/action behavior is included in this slice.
 
 ## Tests added or updated
 
-- added `tests/contracts/current_codex_decision_conformance.py` as the current custom-adapter binding;
-- extended `tests/unit/test_codex_provider_conformance.py` with the exact expected 11/14 matrix and
-  the three observed failing case IDs.
+- `tests/contracts/current_codex_decision_conformance.py` now requires the bounded compatibility
+  helper and its identity guards before classifying `unknown_notification` as accepted;
+- `tests/unit/test_codex_provider_conformance.py` adds a dependency-light executable regression that
+  extracts the exact compatibility helper from committed source and verifies benign tolerance,
+  malformed rejection, thread/turn mismatch rejection, unverified `callId` rejection and propagation
+  of a known critical-event failure;
+- the expected static conformance projection moves from 11/14 to 12/14, leaving only
+  `terminal_failure` and `overload_backpressure` unresolved.
 
 ## Tests actually executed
 
-No repository test runner is available through the connected GitHub execution path in this run.
-No GitHub Actions were used. The matrix above is a direct sanitized inspection result from current
-`main`, not a claim that the newly added pytest assertion was executed.
+No repository-capable Python/Odoo runner is exposed by the connected GitHub execution path. No
+GitHub Actions were used. The attempted auxiliary Python facility was unavailable during this run,
+so no executable repository test is claimed as passed.
 
 ## Tests not executed
 
 ```text
 python -m pytest -q tests/unit/test_codex_provider_conformance.py
-python -m py_compile tests/contracts/current_codex_decision_conformance.py
+python -m py_compile \
+  tests/contracts/current_codex_decision_conformance.py \
+  addons/odoo_ai_assistant/runtime/agent/codex_decision.py
 ```
 
-These remain deterministic validation to execute when a repository-capable Python runner is
-available. Real Codex App Server behavior remains governed by the Phase 1 live gates below.
+The source-level conformance projection is not a substitute for these executable checks or the real
+Odoo+Codex gate.
 
-## Remaining validation debt
+## Validation debt
 
-All Phase 0 mandatory hard debt is closed.
-
-Phase 1 mandatory completion debt:
+P1.3 materially changes provider protocol behavior. Its publication commit must therefore be tested
+as the exact installed addon revision before another dependent provider-behavior slice proceeds.
+The exact publication SHA is the `main` commit containing this state record and must be copied into
+the real-environment evidence.
 
 ```text
-P1-REAL-SOAK-100 | HARD | provider boundary | Phase 2+
-P1-REAL-TOOLCALL | HARD | host/provider capability mapping | Phase 2+
-P1-REAL-CANCEL   | HARD | provider turn identity/cancellation | Phase 2+
-P1-REAL-VERSION  | HARD | supported Codex protocol/version | Phase 2+
+P1-REAL-SOAK-100
+  gate_type: HARD
+  origin_slice: P1.3-benign-unknown-notification-tolerance
+  commit_materially_tested: pending exact P1.3 publication HEAD
+  downstream_scope_blocked: further dependent provider-behavior work and Phase 2+
+  reason: prove additive provider notifications no longer cause protocol-shape turn failures
+
+P1-REAL-VERSION
+  gate_type: HARD
+  origin_slice: P1.3-benign-unknown-notification-tolerance
+  commit_materially_tested: pending exact P1.3 publication HEAD
+  downstream_scope_blocked: further dependent provider-behavior work and Phase 2+
+  reason: bind the compatibility result to the supported Codex App Server version/protocol
 ```
 
-P1.2 changes no active provider behavior, so it does not itself invalidate the passing Phase 0
-product-path evidence or create a new exact-SHA real-environment gate.
+Other Phase 1 completion debt remains open but was not created by P1.3:
+
+```text
+P1-REAL-TOOLCALL | HARD | host/provider capability mapping | Phase 2+
+P1-REAL-CANCEL   | HARD | provider turn identity/cancellation | Phase 2+
+```
+
+## Required real-environment procedure
+
+Validate the exact P1.3 publication SHA under the assumptions in
+`REAL_ENV_VALIDATION_PROTOCOL.md`.
+
+1. `P1-REAL-VERSION`: install/update the addon from the exact publication SHA, record Odoo 18 and
+   Codex versions, and verify startup/initialize/thread/turn behavior on that exact supported Codex
+   runtime.
+2. `P1-REAL-SOAK-100`: run at least 100 turns composed of trivial greetings and simple reads.
+3. Capture completion count, protocol-shape failures, provider process failures, median/p95 latency,
+   unexpected retries and any unknown-notification diagnostics.
+4. PASS requires `protocol-shape failures = 0`, `host-authority bypasses = 0` and
+   `wrong-turn/call binding = 0`.
+5. Commit sanitized evidence containing both validation IDs, exact commit tested, Odoo/Codex
+   versions and PASS/FAIL outcome. Do not commit credentials, prompts, provider stdout/stderr or
+   unrestricted business payloads.
 
 ## Exact next action
 
-Execute `P1.3-benign-unknown-notification-tolerance`:
-
-1. change only the current Codex notification compatibility boundary so genuinely unknown benign
-   notification methods are ignored safely;
-2. preserve fail-closed validation for malformed events and any known event carrying thread/turn or
-   other critical identity;
-3. add focused deterministic regressions for benign unknown notification tolerance and malformed /
-   identity mismatch rejection;
-4. do not combine terminal structured-error preservation or overload classification into this slice;
-5. after the behavior-changing repair, attach the relevant exact-SHA Phase 1 real-environment debt
-   before Phase 1 can complete.
+Do not implement the remaining `terminal_failure` or `overload_backpressure` repairs yet. First
+process committed PASS/FAIL evidence for `P1-REAL-VERSION` and `P1-REAL-SOAK-100` against the exact
+P1.3 publication SHA. On PASS, clear only those debt items and reconstruct the next Phase 1 repair
+from current `main`; on FAIL, select the smallest corrective slice for the observed boundary.

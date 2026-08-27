@@ -111,7 +111,63 @@ def test_reasoning_provider_port_matches_current_codex_decision_engine_signature
     assert keyword_only_args(codex_source, "CodexDecisionEngine") == expected
 
 
-def test_current_codex_decision_engine_matrix_is_recorded_without_repairs() -> None:
+def test_unknown_notification_policy_tolerates_only_bounded_inert_additions() -> None:
+    import ast
+
+    repo = Path(__file__).resolve().parents[2]
+    source = (
+        repo / "addons" / "odoo_ai_assistant" / "runtime" / "agent" / "codex_decision.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    helper = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_validate_decision_notification"
+    )
+    module = ast.fix_missing_locations(ast.Module(body=[helper], type_ignores=[]))
+
+    class FakeCodexAgentError(RuntimeError):
+        def __init__(self, code: str) -> None:
+            super().__init__(code)
+            self.code = code
+
+    def shared_validator(method, params, *, thread_id, turn_id):
+        del params, thread_id, turn_id
+        if method == "known-critical":
+            raise FakeCodexAgentError("codex_item_event_mismatch")
+        raise FakeCodexAgentError("codex_event_not_allowed")
+
+    namespace = {
+        "CodexAgentError": FakeCodexAgentError,
+        "_validate_notification": shared_validator,
+    }
+    exec(compile(module, "codex_decision_notification_helper", "exec"), namespace)
+    validate = namespace["_validate_decision_notification"]
+
+    validate("future/telemetry", {"value": 1}, thread_id="thread-1", turn_id="turn-1")
+    validate(
+        "future/scoped",
+        {"threadId": "thread-1", "turnId": "turn-1"},
+        thread_id="thread-1",
+        turn_id="turn-1",
+    )
+
+    for method, params, code in (
+        ("", {}, "codex_event_invalid"),
+        ("future/bad-thread", {"threadId": "thread-2"}, "codex_event_identity_mismatch"),
+        ("future/bad-turn", {"turnId": "turn-2"}, "codex_event_identity_mismatch"),
+        ("future/call", {"callId": "call-1"}, "codex_event_identity_unverified"),
+        ("known-critical", {}, "codex_item_event_mismatch"),
+    ):
+        try:
+            validate(method, params, thread_id="thread-1", turn_id="turn-1")
+        except FakeCodexAgentError as error:
+            assert error.code == code
+        else:
+            raise AssertionError(f"notification {method!r} was not rejected")
+
+
+def test_current_codex_decision_engine_matrix_after_unknown_notification_repair() -> None:
     repo = Path(__file__).resolve().parents[2]
     cases = contract.load_contract(FIXTURE)
     adapter = current_adapter.CurrentCodexDecisionConformanceAdapter(repo)
@@ -120,5 +176,5 @@ def test_current_codex_decision_engine_matrix_is_recorded_without_repairs() -> N
     assert report["case_count"] == 14
     assert report["passed"] is False
     failed = {row["case_id"] for row in report["results"] if not row["passed"]}
-    assert failed == {"unknown_notification", "terminal_failure", "overload_backpressure"}
-    assert sum(1 for row in report["results"] if row["passed"]) == 11
+    assert failed == {"terminal_failure", "overload_backpressure"}
+    assert sum(1 for row in report["results"] if row["passed"]) == 12

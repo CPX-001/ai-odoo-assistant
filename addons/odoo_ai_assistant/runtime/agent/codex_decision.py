@@ -142,7 +142,7 @@ class CodexDecisionEngine:
                     turn_id=turn_id,
                 )
                 continue
-            _validate_notification(method, params, thread_id=thread_id, turn_id=turn_id)
+            _validate_decision_notification(method, params, thread_id=thread_id, turn_id=turn_id)
             if method == "item/completed":
                 item = _validate_completed_item(
                     params,
@@ -226,6 +226,27 @@ def _codex_next_decision_schema() -> dict[str, object]:
         "properties": {"decision": {"anyOf": wire_alternatives}},
         "required": ["decision"],
     }
+
+
+def _validate_decision_notification(method, params, *, thread_id: str, turn_id: str) -> None:
+    """Allow additive inert notifications while preserving known/identity-critical validation."""
+
+    try:
+        _validate_notification(method, params, thread_id=thread_id, turn_id=turn_id)
+    except CodexAgentError as error:
+        if error.code != "codex_event_not_allowed":
+            raise
+    else:
+        return
+
+    if not method or len(method) > 256 or not isinstance(params, dict):
+        raise CodexAgentError("codex_event_invalid")
+    if "threadId" in params and params.get("threadId") not in (None, thread_id):
+        raise CodexAgentError("codex_event_identity_mismatch")
+    if "turnId" in params and params.get("turnId") not in (None, turn_id):
+        raise CodexAgentError("codex_event_identity_mismatch")
+    if "callId" in params:
+        raise CodexAgentError("codex_event_identity_unverified")
 
 
 def _validate_decision_error_event(params, *, thread_id: str, turn_id: str) -> None:
