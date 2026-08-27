@@ -51,6 +51,7 @@ def test_accepts_supported_write_stopped_at_required_preview():
         "preview_observed": True,
         "tool_sequence": [],
         "planning_diagnostics": [],
+        "boundary_events": [],
     }
 
 
@@ -70,7 +71,6 @@ def test_preserves_only_bounded_content_free_action_diagnostics():
             "odoo.get_effective_schema",
             "odoo.get_effective_write_schema",
             "odoo.query_records",
-            "odoo.record.patch",
         ],
         "planning_diagnostics": [
             {
@@ -106,5 +106,62 @@ def test_preserves_only_bounded_content_free_action_diagnostics():
             "final_plan_count": 1,
             "source": "staged_fallback",
         },
+    ]
+    assert "drop-me" not in str(result)
+
+
+def test_derives_boundary_log_from_diagnostic_capture_snapshots():
+    value = {
+        **_base(),
+        "status_snapshots": [
+            {
+                "state": "running",
+                "events": [
+                    {
+                        "type": "tool.started",
+                        "payload": {
+                            "capability": "odoo.get_effective_write_schema",
+                            "secret": "drop-me",
+                        },
+                    },
+                    {
+                        "type": "tool.completed",
+                        "payload": {"capability": "odoo.get_effective_write_schema"},
+                    },
+                    {
+                        "type": "diagnostic.planning",
+                        "payload": {
+                            "point": "plan_step_staged",
+                            "capability": "odoo.record.patch",
+                            "staged_plan_count": 1,
+                            "arguments": {"phone": "drop-me"},
+                        },
+                    },
+                    {"type": "approval.required", "payload": {"plan_id": "drop-me"}},
+                ],
+            }
+        ],
+    }
+
+    result = acceptance.evaluate(value)
+
+    assert result["tool_sequence"] == ["odoo.get_effective_write_schema"]
+    assert result["planning_diagnostics"] == [
+        {
+            "point": "plan_step_staged",
+            "capability": "odoo.record.patch",
+            "staged_plan_count": 1,
+        }
+    ]
+    assert result["boundary_events"] == [
+        {"type": "tool.started", "capability": "odoo.get_effective_write_schema"},
+        {"type": "tool.completed", "capability": "odoo.get_effective_write_schema"},
+        {
+            "type": "diagnostic.planning",
+            "point": "plan_step_staged",
+            "capability": "odoo.record.patch",
+            "staged_plan_count": 1,
+        },
+        {"type": "approval.required"},
     ]
     assert "drop-me" not in str(result)

@@ -12,6 +12,7 @@ from typing import Any
 REQUEST_KIND = "explicit_supported_write"
 _CAPABILITY = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]{0,127}$")
 _DIAGNOSTIC_TOKEN = re.compile(r"^[a-z0-9_]{1,64}$")
+_EVENT_TYPE = re.compile(r"^[a-z][a-z0-9_.:-]{0,63}$")
 _DIAGNOSTIC_COUNT_KEYS = frozenset(
     {
         "reasoning_tool_count",
@@ -21,6 +22,21 @@ _DIAGNOSTIC_COUNT_KEYS = frozenset(
         "final_plan_count",
     }
 )
+_LIFECYCLE_EVENTS = frozenset(
+    {
+        "reasoning.started",
+        "reasoning.completed",
+        "approval.required",
+        "approval.approved",
+        "approval.rejected",
+        "execution.barrier",
+        "recovery.required",
+    }
+)
+
+
+def _safe_capability(value: Any) -> str | None:
+    return value if isinstance(value, str) and _CAPABILITY.fullmatch(value) else None
 
 
 def _safe_tool_sequence(value: Any) -> list[str]:
@@ -28,10 +44,31 @@ def _safe_tool_sequence(value: Any) -> list[str]:
         return []
     result: list[str] = []
     for item in value:
-        if not isinstance(item, str) or _CAPABILITY.fullmatch(item) is None:
+        capability = _safe_capability(item)
+        if capability is None:
             return []
-        result.append(item)
+        result.append(capability)
     return result
+
+
+def _safe_planning_checkpoint(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    point = item.get("point")
+    if not isinstance(point, str) or _DIAGNOSTIC_TOKEN.fullmatch(point) is None:
+        return None
+    safe: dict[str, Any] = {"point": point}
+    capability = _safe_capability(item.get("capability"))
+    if capability is not None:
+        safe["capability"] = capability
+    source = item.get("source")
+    if isinstance(source, str) and _DIAGNOSTIC_TOKEN.fullmatch(source):
+        safe["source"] = source
+    for key in _DIAGNOSTIC_COUNT_KEYS:
+        count = item.get(key)
+        if type(count) is int and 0 <= count <= 32:
+            safe[key] = count
+    return safe
 
 
 def _safe_planning_diagnostics(value: Any) -> list[dict[str, Any]]:
@@ -39,23 +76,72 @@ def _safe_planning_diagnostics(value: Any) -> list[dict[str, Any]]:
         return []
     result: list[dict[str, Any]] = []
     for item in value:
-        if not isinstance(item, dict):
+        safe = _safe_planning_checkpoint(item)
+        if safe is None:
             return []
-        point = item.get("point")
-        if not isinstance(point, str) or _DIAGNOSTIC_TOKEN.fullmatch(point) is None:
-            return []
-        safe: dict[str, Any] = {"point": point}
-        capability = item.get("capability")
-        if isinstance(capability, str) and _CAPABILITY.fullmatch(capability):
-            safe["capability"] = capability
-        source = item.get("source")
-        if isinstance(source, str) and _DIAGNOSTIC_TOKEN.fullmatch(source):
-            safe["source"] = source
-        for key in _DIAGNOSTIC_COUNT_KEYS:
-            count = item.get(key)
-            if type(count) is int and 0 <= count <= 32:
-                safe[key] = count
         result.append(safe)
+    return result
+
+
+def _boundary_events(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or len(value) > 64:
+        return []
+    result: list[dict[str, Any]] = []
+    for snapshot in value:
+        if not isinstance(snapshot, dict):
+            return []
+        events = snapshot.get("events", [])
+        if not isinstance(events, list) or len(events) > 128:
+            return []
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            event_type = event.get("type")
+            if not isinstance(event_type, str) or _EVENT_TYPE.fullmatch(event_type) is None:
+                continue
+            payload = event.get("payload")
+            if event_type == "diagnostic.planning":
+                checkpoint = _safe_planning_checkpoint(payload)
+                if checkpoint is not None:
+                    result.append({"type": event_type, **checkpoint})
+            elif event_type.startswith("tool."):
+                capability = (
+                    _safe_capability(payload.get("capability"))
+                    if isinstance(payload, dict)
+                    else None
+                )
+                row: dict[str, Any] = {"type": event_type}
+                if capability is not None:
+                    row["capability"] = capability
+                result.append(row)
+            elif event_type in _LIFECYCLE_EVENTS:
+                result.append({"type": event_type})
+            if len(result) >= 128:
+                return result
+    return result
+
+
+def _derived_tool_sequence(boundary_events: list[dict[str, Any]]) -> list[str]:
+    return [
+        capability
+        for event in boundary_events
+        if event.get("type") == "tool.started"
+        and (capability := _safe_capability(event.get("capability"))) is not None
+    ]
+
+
+def _derived_planning_diagnostics(
+    boundary_events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    result = []
+    for event in boundary_events:
+        if event.get("type") != "diagnostic.planning":
+            continue
+        checkpoint = _safe_planning_checkpoint(
+            {key: value for key, value in event.items() if key != "type"}
+        )
+        if checkpoint is not None:
+            result.append(checkpoint)
     return result
 
 
@@ -87,6 +173,14 @@ def evaluate(value: dict[str, Any]) -> dict[str, Any]:
     if plan_state not in {"awaiting_confirmation", "completed"}:
         reasons.append("plan_state_invalid")
 
+    boundary_events = _boundary_events(value.get("status_snapshots"))
+    tool_sequence = _safe_tool_sequence(value.get("tool_sequence"))
+    if not tool_sequence:
+        tool_sequence = _derived_tool_sequence(boundary_events)
+    planning_diagnostics = _safe_planning_diagnostics(value.get("planning_diagnostics"))
+    if not planning_diagnostics:
+        planning_diagnostics = _derived_planning_diagnostics(boundary_events)
+
     return {
         "format_version": 1,
         "request_kind": request_kind,
@@ -96,10 +190,9 @@ def evaluate(value: dict[str, Any]) -> dict[str, Any]:
         "plan_state": plan_state,
         "plan_step_count": plan_step_count if type(plan_step_count) is int else None,
         "preview_observed": preview_observed is True,
-        "tool_sequence": _safe_tool_sequence(value.get("tool_sequence")),
-        "planning_diagnostics": _safe_planning_diagnostics(
-            value.get("planning_diagnostics")
-        ),
+        "tool_sequence": tool_sequence,
+        "planning_diagnostics": planning_diagnostics,
+        "boundary_events": boundary_events,
     }
 
 
