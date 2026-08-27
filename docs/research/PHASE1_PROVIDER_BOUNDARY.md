@@ -1,7 +1,7 @@
 # Phase 1 — provider boundary stabilization
 
 Date: 2026-08-27  
-Inspected main: `9cf9a8d3553cf8bc5a0b39ada63f2fba1c5f21ae`  
+Inspected main: `b86a64bcd0a76cee44a5efe090dc6f067459f585`  
 Status: `IN_PROGRESS`
 
 ## Goal
@@ -44,13 +44,7 @@ Changes:
 - a dependency-light AST regression proves the port signature matches the current
   `CodexDecisionEngine.next_decision` signature.
 
-The remaining protocol cases continue to cover initialize, thread isolation, output schema,
-agent-message events, unknown notifications, malformed critical events, identity mismatch,
-cancellation, terminal failures and overload/backpressure.
-
-## Deterministic validation
-
-Actually executed against the reconstructed changed files:
+Deterministic validation actually executed for P1.1:
 
 ```text
 python -m pytest -q tests/unit/test_codex_provider_conformance.py
@@ -62,9 +56,77 @@ python -m py_compile \
 PASS
 ```
 
-No Odoo, browser or live Codex validation was executed for P1.1. P1.1 changes contracts/tests and
-introduces a structural protocol only; it does not change provider lifecycle or production turn
-behavior.
+## P1.2 — current adapter conformance binding
+
+State: `COMPLETE`
+
+Objective:
+
+- bind the existing custom `CodexDecisionEngine` to the v2 conformance contract;
+- record what the current code actually satisfies without repairing behavior to make the matrix green;
+- use the result to choose the smallest next compatibility repair.
+
+Binding:
+
+- `tests/contracts/current_codex_decision_conformance.py` observes the committed custom decision
+  adapter plus shared Codex protocol implementation using dependency-light source checks;
+- observations contain only contract-level booleans/outcomes, never prompts, provider stdout/stderr,
+  business values, credentials or private reasoning;
+- `tests/unit/test_codex_provider_conformance.py` locks the observed matrix so later changes must
+  intentionally move cases from FAIL to PASS.
+
+Observed matrix on inspected `main`:
+
+```text
+PASS initialize
+PASS thread_isolation
+PASS turn_output_schema
+PASS agent_message_delta
+PASS completed_agent_message
+PASS reasoning_decision_mapping
+PASS plan_decision_mapping
+PASS final_answer_mapping
+FAIL unknown_notification
+PASS malformed_critical_event
+PASS identity_mismatch
+PASS cancellation
+FAIL terminal_failure
+FAIL overload_backpressure
+
+11 PASS / 3 FAIL
+```
+
+Interpretation:
+
+1. `unknown_notification` fails because `_validate_notification()` currently rejects an unrecognized
+   method with `codex_event_not_allowed`. This is the smallest forward-compatibility gap.
+2. `terminal_failure` fails because terminal provider errors are mostly reduced to
+   `codex_turn_failed`; only the known invalid-output-schema case currently receives a distinct code.
+3. `overload_backpressure` fails because terminal overload/rate-limit conditions do not have an
+   explicit sanitized retryable classification. Provider-owned `willRetry=true` events may continue,
+   but the host contract has no retryable terminal class yet.
+
+No runtime behavior was changed in P1.2.
+
+## P1.2 deterministic validation status
+
+Added/updated:
+
+```text
+tests/contracts/current_codex_decision_conformance.py
+tests/unit/test_codex_provider_conformance.py
+```
+
+Not executed in this run because the connected GitHub path exposes repository read/write but no
+repository-capable Python runner:
+
+```text
+python -m pytest -q tests/unit/test_codex_provider_conformance.py
+python -m py_compile tests/contracts/current_codex_decision_conformance.py
+```
+
+No GitHub Actions were used. The 11/14 matrix is a direct source-observation result, not a claim that
+the newly added pytest test ran.
 
 ## Invariants
 
@@ -79,19 +141,21 @@ behavior.
 
 ## Validation debt
 
-Phase 1 mandatory real-environment debt remains open for later behavior-changing slices:
+Phase 1 mandatory real-environment debt remains open:
 
 - `P1-REAL-SOAK-100` — HARD before Phase 1 completion;
 - `P1-REAL-TOOLCALL` — HARD before Phase 1 completion;
 - `P1-REAL-CANCEL` — HARD before Phase 1 completion;
 - `P1-REAL-VERSION` — HARD before Phase 1 completion.
 
-P1.1 itself creates no new real-environment debt because it does not change the active adapter
-behavior.
+P1.2 itself changes no active provider behavior, so these gates are not newly invalidated by this
+slice. Any behavior-changing Phase 1 repair must be validated on its exact implementation SHA before
+Phase 1 closes.
 
 ## Exact next action
 
-Bind the current custom `CodexDecisionEngine` to the v2 adapter-neutral conformance harness and
-record the actual pass/fail matrix. Do not change forward-compatibility behavior merely to make the
-suite green. The observed matrix must drive the smallest next repair slice, especially for unknown
-benign notifications, terminal structured errors, overload/backpressure and cancellation.
+Execute `P1.3-benign-unknown-notification-tolerance` as the smallest failing compatibility boundary.
+Accept genuinely unknown benign notification methods without changing critical event validation.
+Malformed known events and thread/turn identity mismatches must continue to fail closed. Add focused
+deterministic regressions. Do not combine terminal failure preservation or overload/backpressure
+classification into that repair slice.

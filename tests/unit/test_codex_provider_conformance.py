@@ -9,6 +9,15 @@ assert SPEC is not None and SPEC.loader is not None
 contract = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(contract)
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "codex_provider_conformance_cases.json"
+CURRENT_ADAPTER_MODULE = (
+    Path(__file__).resolve().parents[1] / "contracts" / "current_codex_decision_conformance.py"
+)
+CURRENT_ADAPTER_SPEC = importlib.util.spec_from_file_location(
+    "current_codex_decision_conformance", CURRENT_ADAPTER_MODULE
+)
+assert CURRENT_ADAPTER_SPEC is not None and CURRENT_ADAPTER_SPEC.loader is not None
+current_adapter = importlib.util.module_from_spec(CURRENT_ADAPTER_SPEC)
+CURRENT_ADAPTER_SPEC.loader.exec_module(current_adapter)
 
 
 def test_contract_contains_exact_required_phase1_cases() -> None:
@@ -100,3 +109,16 @@ def test_reasoning_provider_port_matches_current_codex_decision_engine_signature
     ]
     assert keyword_only_args(provider_source, "ReasoningProvider") == expected
     assert keyword_only_args(codex_source, "CodexDecisionEngine") == expected
+
+
+def test_current_codex_decision_engine_matrix_is_recorded_without_repairs() -> None:
+    repo = Path(__file__).resolve().parents[2]
+    cases = contract.load_contract(FIXTURE)
+    adapter = current_adapter.CurrentCodexDecisionConformanceAdapter(repo)
+    report = asyncio.run(contract.run_suite(adapter, cases))
+
+    assert report["case_count"] == 14
+    assert report["passed"] is False
+    failed = {row["case_id"] for row in report["results"] if not row["passed"]}
+    assert failed == {"unknown_notification", "terminal_failure", "overload_backpressure"}
+    assert sum(1 for row in report["results"] if row["passed"]) == 11

@@ -11,10 +11,10 @@ phase: 1
 phase_name: provider boundary stabilization
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/PHASE1_PROVIDER_BOUNDARY.md
-active_slice: P1.1-conformance-rebase
+active_slice: P1.2-current-adapter-conformance-binding
 active_slice_state: COMPLETE
 current_gate_type: NONE
-next_slice: P1.2-current-adapter-conformance-binding
+next_slice: P1.3-benign-unknown-notification-tolerance
 ```
 
 Phase 0 is complete. The exact implementation/test SHA
@@ -23,55 +23,73 @@ READ and strict ACTION gate; the docs-only close-out is `9cf9a8d3553cf8bc5a0b39a
 
 ## New evidence processed
 
-The latest committed evidence was processed before selecting Phase 1 work:
+No newer committed real-environment failure or handoff evidence exists after P1.1 at
+`b86a64bcd0a76cee44a5efe090dc6f067459f585`. The latest real product-path evidence remains the
+passing Phase 0 exact-SHA handoff, so Phase 1 may continue.
 
-- `docs/research/evidence/phase0/2026-08-27/E2E-REAL-ENV-result-9f832af.md`: PASS;
-- `docs/research/E2E_REAL_ENV_HANDOFF.md`: `REAL_ENV_VALIDATION_PASSED`;
-- aggregate Phase 0 result: `ready_for_phase1=true`.
+## P1.2 published content
 
-Earlier failed evidence remains historical and does not reopen Phase 0.
+P1.2 binds the current custom `CodexDecisionEngine` to the v2 conformance harness without changing
+runtime behavior. The binding is dependency-light and source-observational: it reads the committed
+custom adapter and shared Codex protocol implementation and emits only sanitized contract facts.
+It is not presented as a live App Server probe.
 
-## P1.1 published content
+Current adapter matrix:
 
-The first Phase 1 slice reconciles the pre-convergence conformance preparation with the validated
-E2E host-loop architecture.
+```text
+PASS initialize
+PASS thread_isolation
+PASS turn_output_schema
+PASS agent_message_delta
+PASS completed_agent_message
+PASS reasoning_decision_mapping
+PASS plan_decision_mapping
+PASS final_answer_mapping
+FAIL unknown_notification
+PASS malformed_critical_event
+PASS identity_mismatch
+PASS cancellation
+FAIL terminal_failure
+FAIL overload_backpressure
 
-The prepared v1 harness assumed provider-side dynamic tool calls. Current authoritative code instead
-uses `CodexDecisionEngine.next_decision()` with provider-side tools disabled; Odoo validates each
-`NextDecision` and owns capability execution. P1.1 therefore:
+11 PASS / 3 FAIL
+```
 
-- advances the conformance contract to v2;
-- replaces provider-side tool-execution cases with reasoning-decision, plan-proposal and final-answer
-  mapping cases;
-- adds the minimum structural `ReasoningProvider` port consumed conceptually by the current host:
-  `next_decision(...) -> NextDecision`;
-- keeps the current custom adapter unchanged;
-- adds a dependency-light signature regression between the new port and
-  `CodexDecisionEngine.next_decision`.
+Observed failing boundaries:
 
-No provider implementation choice is made in this slice.
+- `unknown_notification`: the shared notification validator ends unknown methods with
+  `codex_event_not_allowed` instead of safely ignoring a benign forward-compatible notification;
+- `terminal_failure`: `_decision_failure_code()` preserves only the known invalid-output-schema
+  special case and otherwise collapses provider terminal detail to `codex_turn_failed`;
+- `overload_backpressure`: the current adapter has no explicit sanitized retryable overload/rate-limit
+  classification. `willRetry=true` provider events are allowed to continue internally, but terminal
+  overload is not exposed as the v2 retryable class.
+
+The smallest compatibility repair is unknown-notification tolerance. It is independent of failure
+semantics redesign and must remain bounded so malformed/identity-bearing critical events continue
+to fail closed.
+
+## Tests added or updated
+
+- added `tests/contracts/current_codex_decision_conformance.py` as the current custom-adapter binding;
+- extended `tests/unit/test_codex_provider_conformance.py` with the exact expected 11/14 matrix and
+  the three observed failing case IDs.
 
 ## Tests actually executed
 
-```text
-python -m pytest -q tests/unit/test_codex_provider_conformance.py
-5 passed in 0.08s
-
-python -m py_compile \
-  tests/contracts/codex_provider_conformance.py \
-  addons/odoo_ai_assistant/runtime/agent/provider.py
-PASS
-```
-
-These checks were executed in the available reconstructed connector-backed mirror of the exact
-changed files and current adapter signature.
+No repository test runner is available through the connected GitHub execution path in this run.
+No GitHub Actions were used. The matrix above is a direct sanitized inspection result from current
+`main`, not a claim that the newly added pytest assertion was executed.
 
 ## Tests not executed
 
-- Odoo test suite: not required for this contract-only slice and unavailable through the GitHub
-  connector execution path.
-- Real Codex App Server conformance: intentionally deferred to P1.2.
-- Browser/product-path validation: not required because active runtime behavior is unchanged.
+```text
+python -m pytest -q tests/unit/test_codex_provider_conformance.py
+python -m py_compile tests/contracts/current_codex_decision_conformance.py
+```
+
+These remain deterministic validation to execute when a repository-capable Python runner is
+available. Real Codex App Server behavior remains governed by the Phase 1 live gates below.
 
 ## Remaining validation debt
 
@@ -86,17 +104,19 @@ P1-REAL-CANCEL   | HARD | provider turn identity/cancellation | Phase 2+
 P1-REAL-VERSION  | HARD | supported Codex protocol/version | Phase 2+
 ```
 
-These are not yet due for P1.1 because it changes no active adapter behavior. Any later
-behavior-changing provider repair must attach the relevant exact-SHA validation debt before Phase 1
-can complete.
+P1.2 changes no active provider behavior, so it does not itself invalidate the passing Phase 0
+product-path evidence or create a new exact-SHA real-environment gate.
 
 ## Exact next action
 
-Execute `P1.2-current-adapter-conformance-binding`:
+Execute `P1.3-benign-unknown-notification-tolerance`:
 
-1. bind the current custom `CodexDecisionEngine` to the v2 conformance harness;
-2. produce a sanitized actual pass/fail matrix without changing behavior to fit expectations;
-3. identify the smallest failing compatibility/safety boundary;
-4. only then select a repair such as benign unknown-notification tolerance, structured terminal
-   failure preservation, overload classification or cancellation correction;
-5. do not add an official SDK adapter or another provider yet.
+1. change only the current Codex notification compatibility boundary so genuinely unknown benign
+   notification methods are ignored safely;
+2. preserve fail-closed validation for malformed events and any known event carrying thread/turn or
+   other critical identity;
+3. add focused deterministic regressions for benign unknown notification tolerance and malformed /
+   identity mismatch rejection;
+4. do not combine terminal structured-error preservation or overload classification into this slice;
+5. after the behavior-changing repair, attach the relevant exact-SHA Phase 1 real-environment debt
+   before Phase 1 can complete.
