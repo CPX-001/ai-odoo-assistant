@@ -2,6 +2,7 @@ from . import test_capability_action_revalidation as test_capability_action_reva
 from . import test_capability_actions as test_capability_actions
 from . import test_capability_batch as test_capability_batch
 from . import test_capability_framework as test_capability_framework
+from . import test_codex_planning_contract as test_codex_planning_contract
 from . import test_chat_policy as test_chat_policy
 from . import test_chat_preferences as test_chat_preferences
 from . import test_chat_storage as test_chat_storage

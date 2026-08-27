@@ -8,16 +8,17 @@ from ..runtime.capabilities import CapabilityContext, discover_capabilities
 
 class TestCodexPlanningContract(TransactionCase):
     def test_explicit_supported_mutation_contract_is_not_optional(self):
-        self.assertIn("Planning is an output obligation", _BASE_INSTRUCTIONS)
+        instructions = " ".join(_BASE_INSTRUCTIONS.split())
+        self.assertIn("Planning is an output obligation", instructions)
         self.assertIn(
             "A read-only answer with plan=[] does not satisfy an explicit supported mutation request",
-            _BASE_INSTRUCTIONS,
+            instructions,
         )
-        self.assertIn("Never invent a plan capability", _BASE_INSTRUCTIONS)
-        self.assertIn("approval is exclusively host policy", _BASE_INSTRUCTIONS)
+        self.assertIn("Never invent a plan capability", instructions)
+        self.assertIn("approval is exclusively host policy", instructions)
 
     def test_patch_is_disclosed_as_bounded_plan_only_capability(self):
-        env = self.env(user=self.env.user, su=False)
+        env = self.env(user=self.env.ref("base.user_admin"), su=False)
         context = CapabilityContext(
             env=env,
             turn_id="codex-planning-contract",
