@@ -1,10 +1,25 @@
 # P0-REAL-ACTION — real-environment handoff
 
 Date: 2026-08-27  
-Inspected HEAD: `8c21be0671bfb8f7df158cf32e6f624c043f7de6`  
+Inspected HEAD: `38c7c9a121cc797b9a2737fb312283506aa152f6`<br>
 Validation ID: `P0-REAL-ACTION`  
 Gate: `HARD`  
-Status: `REAL_ENV_VALIDATION_REQUIRED`
+Status: `BLOCKED — PREVIEW_MISSING_ZERO_STEP_PLAN`
+
+## Current rerun result
+
+The procedure below was executed once at `38c7c9a` with a disposable partner and dedicated
+internal user using the strict / `always_confirm` profile. The real Assistant browser turn ended
+`completed` after three bounded tool start/completion pairs, but its final plan contained zero
+steps. The required `awaiting_confirmation` preview never appeared, so no approval was sent and no
+effect or verification ran.
+
+The record remained unchanged, no write barrier/recovery state appeared, Odoo kept the same service
+PID, and the temporary user/partner were archived. This is an immediate FAIL condition under this
+handoff; the separate preview/report procedure must not be used to disguise it.
+
+Sanitized result:
+`P0-REAL-ACTION-result-38c7c9a.md`.
 
 ## Why this remains a real gate
 

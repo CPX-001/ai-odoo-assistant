@@ -2,7 +2,7 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `f3ddd4ffe5be2a2168b7d9ca8f18e06a78c7f66b`  
+Latest repository checkpoint inspected: `38c7c9a121cc797b9a2737fb312283506aa152f6`<br>
 Latest product/tooling implementation checkpoint: `85086dad0f04c534d447b279e4e15c1afb879148`  
 Latest P0.1 validation checkpoint materially tested: `121108e55ef0ff91adb0377920f73128875536ac`  
 Latest P0.2 / real READ checkpoint materially tested: `a05e75006f53b056f31ab96c3864092d89199480`  
@@ -15,9 +15,9 @@ Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 ```text
 phase: 0
 phase_name: reproducible baseline
-phase_state: REAL_ENV_VALIDATION_REQUIRED
-active_slice: P0-REAL-ACTION-rerun
-active_slice_state: REAL_ENV_VALIDATION_REQUIRED
+phase_state: BLOCKED
+active_slice: P0-REAL-ACTION-diagnosis
+active_slice_state: BLOCKED
 current_gate_type: HARD
 next_phase: 1
 ```
@@ -47,7 +47,9 @@ The consumed look-ahead slice is `P1-PREP-CONFORMANCE`, adapter-neutral test pre
 - `provider_auth_missing`: PASS pair at `9008821`; `codex_not_connected -> codex_not_connected`.
 - failure-pair matrix: PASS with five distinct paths.
 - aggregate Phase 0 report: timing decomposition PASS, simple latency attribution PASS, five failure pairs PASS, minimum live matrix FAIL only because `action=false`; `ready_for_phase1=false`.
-- `P0-REAL-ACTION`: historical FAIL; no new ACTION evidence is present on current `main`.
+- `P0-REAL-ACTION`: FAIL at `38c7c9a`; the real browser turn completed with three bounded tool
+  pairs but produced a zero-step completed plan, so no approval preview appeared and no effect was
+  attempted. The fixture remained unchanged and Odoo retained the same service PID.
 
 ## Completed corrective slices
 
@@ -65,21 +67,26 @@ The consumed look-ahead slice is `P1-PREP-CONFORMANCE`, adapter-neutral test pre
 validation_id: P0-REAL-ACTION
 gate_type: HARD
 origin_slice: Phase 0 minimum live matrix
-commit_materially_tested: pending current ACTION rerun
+commit_materially_tested: 38c7c9a121cc797b9a2737fb312283506aa152f6
 downstream_scope_blocked:
   - completing Phase 0
   - Phase 1 production provider/runtime refactor
   - provider lifecycle optimization
-reason: the safe disposable ACTION baseline has not been rerun after P0.3/P0.4 bounded the prior provider/service instability
+reason: the safe disposable ACTION rerun completed without producing an awaiting-confirmation plan; the terminal response contained zero action steps despite a direct screen-scoped update request
 ```
 
 ## Current blocker
 
 ```text
-P0_REAL_ACTION_RERUN_REQUIRED
+P0_REAL_ACTION_PREVIEW_MISSING_ZERO_STEP_PLAN
 ```
 
-This repository-only run has GitHub access but no real Odoo 18 + authenticated Codex + browser execution path. No ACTION validation or deterministic product test was run here, and none is claimed as PASS.
+The current real Odoo 18 + authenticated Codex + browser run reached a terminal `completed` turn
+with three `tool.started`/`tool.completed` pairs, no error and no write barrier, but its product plan
+contained zero steps. The required `awaiting_confirmation` preview never appeared within 240
+seconds. No approval was sent, the disposable field stayed unchanged, and the fixture/user were
+archived after cleanup. See
+`docs/research/evidence/phase0/2026-08-27/P0-REAL-ACTION-result-38c7c9a.md`.
 
 ## Action gate evidence handoff
 
@@ -95,17 +102,18 @@ The machine write-preview capture is measurement evidence only. It does not repl
 
 ## Exact next action
 
-1. Update/restart the disposable Odoo 18 environment from current `main` and verify Codex is authenticated.
-2. Prepare one disposable partner, use a policy that requires confirmation, and record the original value of one harmless reversible field (for example `phone`).
-3. Through the real Assistant browser UI, request exactly one update to that field.
-4. Require an `awaiting_confirmation` preview that identifies the intended record and exact change; verify the record is still unchanged before approval.
-5. Approve once through the supported UI.
-6. Require exactly one execution and verification; confirm the Odoo record contains the intended value, no blind retry occurred, no ambiguous recovery state exists, and Odoo remained stable.
-7. Record sanitized `P0-REAL-ACTION` evidence: commit tested, Odoo/Codex versions, preview/approval observed, execution/verification outcome, service stability, and artifact refs. Do not commit prompts, credentials, raw tool/provider payloads, or sensitive business data.
-8. Restore the disposable field to its original value after authoritative evidence is captured.
-9. Produce one sanitized `write_preview` capture with `tests/e2e/phase0_live_capture.py`; require exit `0`, `expectation_met=true` and final `awaiting_confirmation`. If this is a separate turn, reject it without approving it.
-10. Rerun `tests/e2e/phase0_report.py` over the current sanitized live captures plus the new `write_preview` capture. Phase 1 may begin only if it exits `0` with `ready_for_phase1=true` **and** the authoritative browser `P0-REAL-ACTION` evidence above passed.
-11. If Odoo restarts/becomes unhealthy, preview is missing/ambiguous, the effect occurs more than once, verification fails, or the write outcome is uncertain, stop immediately and record `P0-REAL-ACTION: FAIL`; do not begin Phase 1.
+1. Diagnose the persisted zero-step outcome at `38c7c9a` using sanitized plan-composition/tool-event
+   evidence; determine why the explicit `res.partner.phone` request was not emitted as
+   `odoo.record.patch` after the bounded schema/read calls.
+2. Add a deterministic regression/eval that rejects a completed zero-step response for an explicit
+   supported write request before changing runtime behavior.
+3. Implement only the smallest correction supported by that diagnosis, preserving host-side
+   schema, policy, approval, effective-user and verification invariants.
+4. Rerun deterministic tests, then repeat the disposable browser ACTION once. Require an exact
+   `awaiting_confirmation` preview, unchanged data before approval, one approval, one effect and a
+   verified terminal result.
+5. Only after the authoritative ACTION passes, create and reject the separate `write_preview`
+   capture and rerun `phase0_report.py` to require `ready_for_phase1=true`.
 
 ## Publication policy
 

@@ -239,3 +239,17 @@ logging out or altering provider credentials.
 The aggregate `report-9008821.json` now has `five_failure_pairs=true`, timing decomposition and
 simple latency attribution true. It remains `ready_for_phase1=false` solely because the ACTION
 baseline is absent.
+
+## P0-REAL-ACTION rerun at 38c7c9a
+
+The current-main browser rerun failed closed. A dedicated temporary internal user with the strict
+policy requested one reversible partner-phone update through the real Assistant panel. The turn
+completed after three bounded tool pairs but produced a zero-step completed plan, so the required
+approval preview never appeared. No approval was sent, no write barrier was crossed, and the
+partner remained unchanged. Odoo retained the same PID before/after; the temporary fixture and user
+were archived.
+
+The relevant standalone regression suite passed 33/33. The separate `write_preview` capture and
+aggregate report were not run after the authoritative ACTION failed. See
+`P0-REAL-ACTION-result-38c7c9a.md`. Phase 0 is blocked on diagnosing the zero-step write outcome;
+Phase 1 remains locked.
