@@ -30,6 +30,8 @@ Every playbook must record the inspected commit and research date. Revalidate it
 | `SLICE_TEMPLATE.md` | Template for atomic roadmap slices with deterministic and real-environment gates. |
 | `PHASE0_BASELINE.md` | Completed reproducible-baseline record: scenario catalog, timing/error capture contract, measurement hooks and exact real-environment evidence. |
 | `PHASE1_PROVIDER_BOUNDARY.md` | Completed provider-boundary record, deterministic coverage and exact real Odoo+Codex completion evidence. |
+| `PHASE2_FAILURE_CONTRACT.md` | Active structured-failure-contract phase record covering the completed P2.1/P2.2 foundation and Phase 2 invariants. |
+| `P2.3_TURN_FAILURE_PERSISTENCE.md` | Current P2.3 implementation record and hard Odoo validation gate for durable terminal failure persistence/browser projection. |
 
 ## Recursive execution rule
 
@@ -49,7 +51,7 @@ inspect current main
 -> next run re-inspects from Git
 ```
 
-If the active state is `REAL_ENV_VALIDATION_REQUIRED` and no new live evidence exists, the run must stop rather than start speculative later-phase work.
+If the active state is `REAL_ENV_VALIDATION_REQUIRED` or `LOCAL_VALIDATION_REQUIRED` and no new evidence exists for a hard blocking gate, the run must stop rather than start dependent later-phase work.
 
 ## No GitHub Actions
 
