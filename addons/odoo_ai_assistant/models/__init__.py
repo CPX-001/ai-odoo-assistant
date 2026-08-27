@@ -10,4 +10,5 @@ from . import runtime_settings as runtime_settings
 from . import runtime_account_binding as runtime_account_binding
 from . import turn_event as turn_event
 from . import turn_queue as turn_queue
+from . import turn_working_transcript as turn_working_transcript
 from . import user_preferences as user_preferences

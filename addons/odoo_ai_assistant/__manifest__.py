@@ -2,7 +2,7 @@
 {
     "name": "Odoo AI Assistant",
     "summary": "Context-aware local AI assistant for Odoo",
-    "version": "18.0.10.4.6",
+    "version": "18.0.10.5.0",
     "category": "Administration",
     "license": "LGPL-3",
     "depends": ["account", "base", "sale", "web"],
@@ -24,9 +24,7 @@
             "odoo_ai_assistant/static/src/components/**/*.xml",
             "odoo_ai_assistant/static/src/components/**/*.scss",
         ],
-        "web.assets_unit_tests": [
-            "odoo_ai_assistant/static/tests/**/*.test.js",
-        ],
+        "web.assets_unit_tests": ["odoo_ai_assistant/static/tests/**/*.test.js"],
     },
     "post_init_hook": "post_init_hook",
     "installable": True,
