@@ -2,7 +2,7 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `075138d7d9b519d46c60990ad465f06832d0bae8`  
+Latest repository checkpoint inspected: `08564a9f93ebd890dc7238db91ab9f6d191b2502`<br>
 Latest product/tooling implementation checkpoint: `075138d7d9b519d46c60990ad465f06832d0bae8`  
 Latest P0 ACTION real checkpoint materially tested: `38c7c9a121cc797b9a2737fb312283506aa152f6`  
 Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
@@ -14,7 +14,7 @@ phase: 0
 phase_name: reproducible baseline
 phase_state: BLOCKED
 active_slice: P0-REAL-ACTION-plan-omission-correction
-active_slice_state: LOCAL_VALIDATION_REQUIRED
+active_slice_state: REAL_ENV_VALIDATION_REQUIRED
 current_gate_type: HARD
 next_phase: 1
 ```
@@ -83,6 +83,32 @@ Repository-level diff inspection of `075138d7` confirms that the production chan
 
 Executable Odoo tests were not runnable from the GitHub-only execution environment used for this checkpoint. They are therefore validation debt, not assumed PASS.
 
+## Completed ACTION correction local validation
+
+Validation checkpoint: `08564a9f93ebd890dc7238db91ab9f6d191b2502`.
+
+The first Odoo run exposed that the new planning-contract module was absent from
+`addons/odoo_ai_assistant/tests/__init__.py`, so Odoo had executed only the seven pre-existing
+action/revalidation tests. After registering the module, the two new tests ran and exposed two
+test defects: a whitespace-sensitive multiline instruction assertion and use of the superuser
+record while asserting `su=False`. Both tests were corrected to normalize instruction whitespace
+and use `base.user_admin` with `su=False`.
+
+Actually executed validation:
+
+```text
+standalone Phase 0/provider suite: 39 passed in 0.14s
+
+Odoo targeted planning/action/revalidation suite:
+0 failed, 0 errors of 9 tests
+
+Odoo embedded runtime/framework/batch suite:
+0 failed, 0 errors of 20 tests
+```
+
+All Odoo suites ran against fresh disposable databases, which were dropped after each run. The
+primary Odoo service and database were not used by those test runners.
+
 ## Validation debt
 
 ### VD-P0-LIVE-BASELINE
@@ -99,25 +125,13 @@ downstream_scope_blocked:
 reason: explicit supported partner mutation produced a completed zero-step plan with no approval preview
 ```
 
-### VD-P0-ACTION-CORRECTION-LOCAL
-
-```text
-validation_id: P0-ACTION-CORRECTION-LOCAL
-gate_type: HARD
-origin_slice: P0-REAL-ACTION-plan-omission-correction
-commit_materially_tested: pending
-downstream_scope_blocked:
-  - advancing the correction to real-environment validation
-reason: the new Codex planning-contract test and relevant embedded-agent/action regressions have not been executed in an Odoo-capable local environment
-```
-
 ### VD-P0-ACTION-CORRECTION-REAL
 
 ```text
 validation_id: P0-REAL-ACTION-CORRECTED
 gate_type: HARD
 origin_slice: P0-REAL-ACTION-plan-omission-correction
-commit_materially_tested: 075138d7d9b519d46c60990ad465f06832d0bae8
+commit_materially_tested: 08564a9f93ebd890dc7238db91ab9f6d191b2502
 downstream_scope_blocked:
   - closing P0-REAL-ACTION
   - completing Phase 0
@@ -127,18 +141,16 @@ reason: corrected planning contract has not yet been validated in real Odoo 18 +
 ## Current blocker
 
 ```text
-P0_ACTION_CORRECTION_VALIDATION_REQUIRED
+P0_REAL_ACTION_CORRECTED_RERUN_REQUIRED
 ```
 
 ## Exact next action
 
-1. In an Odoo-capable local environment on `075138d7d9b519d46c60990ad465f06832d0bae8`, execute the targeted test module `addons/odoo_ai_assistant/tests/test_codex_planning_contract.py` plus the existing embedded-agent/action regression tests that cover planning catalog, preview, approval and revalidation. Record exact commands and results; do not claim PASS if the environment cannot run them.
-2. If deterministic validation fails, repair only the correction slice and keep Phase 1 locked.
-3. If deterministic validation passes, rerun one disposable `P0-REAL-ACTION-CORRECTED` through the normal browser -> Odoo 18 -> embedded runtime -> authenticated Codex path.
-4. Require the explicit supported partner mutation to emit `odoo.record.patch` and reach the exact `awaiting_confirmation` preview while the record is still unchanged.
-5. Approve exactly once; require exactly one business effect, host verification PASS, terminal completed state and stable Odoo service identity.
-6. If that passes, create and reject the separate accepted `capture_kind=live_http` `write_preview` measurement capture, then rerun `phase0_report.py` and require `ready_for_phase1=true`.
-7. Only after both validation debts close may Phase 0 become COMPLETE and Phase 1 production work begin.
+1. Rerun one disposable `P0-REAL-ACTION-CORRECTED` through the normal browser -> Odoo 18 -> embedded runtime -> authenticated Codex path on the locally validated checkpoint.
+2. Require the explicit supported partner mutation to emit `odoo.record.patch` and reach the exact `awaiting_confirmation` preview while the record is still unchanged.
+3. Approve exactly once; require exactly one business effect, host verification PASS, terminal completed state and stable Odoo service identity.
+4. If that passes, create and reject the separate accepted `capture_kind=live_http` `write_preview` measurement capture, then rerun `phase0_report.py` and require `ready_for_phase1=true`.
+5. Only after both validation debts close may Phase 0 become COMPLETE and Phase 1 production work begin.
 
 ## Publication policy
 

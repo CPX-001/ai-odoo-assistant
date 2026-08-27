@@ -2,7 +2,7 @@
 
 Date: 2026-08-27  
 Inspected HEAD: `0d281785eb60f6c6210a8e247adac1f8aa287535`  
-Status: `DIAGNOSIS_EVAL_COMPLETE`
+Status: `CORRECTION_LOCAL_VALIDATION_COMPLETE`
 
 ## Processed real evidence
 
@@ -54,3 +54,19 @@ Covered regressions:
 The observed zero-step result now has a deterministic acceptance regression, but product runtime behavior is intentionally unchanged. `P0-REAL-ACTION` remains HARD/BLOCKED.
 
 The next corrective slice must identify the smallest provider/agent-contract correction that makes an explicit supported mutation reliably produce a bounded planning capability without reintroducing workflow routing or moving authority out of Odoo. That correction must then pass deterministic tests and a new disposable real ACTION attempt.
+
+## Subsequent correction validation
+
+The planning-obligation correction at `075138d7d9b519d46c60990ad465f06832d0bae8`
+was locally validated in an Odoo-capable environment. Validation first found that the new Odoo
+test was not imported and therefore was not being discovered; checkpoint
+`08564a9f93ebd890dc7238db91ab9f6d191b2502` registers it and fixes two test-only assumptions found
+once it actually executed.
+
+```text
+standalone Phase 0/provider suite: 39 passed
+Odoo planning/action/revalidation: 9 passed, 0 failed, 0 errors
+Odoo embedded runtime/framework/batch: 20 passed, 0 failed, 0 errors
+```
+
+The local validation debt is closed. The corrected real browser ACTION remains a hard gate.
