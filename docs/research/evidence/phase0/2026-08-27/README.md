@@ -221,3 +221,21 @@ signal-5 or `codex-code-mode-host` failure lines.
 See `P0.3-provider-crash-reproduction.md` and the two sanitized
 `p0.3-provider-crash-probe*-c114f15.json` artifacts. This closes P0.3, not the aggregate Phase 0
 gate: ACTION and at least four additional complete failure pairs remain pending.
+
+## Subsequent P0.4 and failure-matrix validation
+
+P0.4 was materially validated at `90088215f247716b57e5c19c2502cc2d33a78e51` using Odoo 18,
+addon `18.0.10.4.6` and headless Chrome `151.0.7922.174`:
+
+- `codex_process_eof -> service_unavailable`;
+- `codex_read_timeout -> service_unavailable`;
+- `codex_answer_invalid -> service_unavailable`.
+
+Every turn ended `failed`; Chrome observed the final Assistant failure surface; the executable
+override was restored after each case; and Odoo remained stable during every measured trial. The
+database gate supplied the fifth pair, `codex_not_connected -> codex_not_connected`, without
+logging out or altering provider credentials.
+
+The aggregate `report-9008821.json` now has `five_failure_pairs=true`, timing decomposition and
+simple latency attribution true. It remains `ready_for_phase1=false` solely because the ACTION
+baseline is absent.

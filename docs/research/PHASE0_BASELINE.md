@@ -417,13 +417,12 @@ Current status:
 - [x] A live turn has been decomposed into queue/provider/tool/finalization timing using the
   implemented checkpoints.
 - [x] The simple-turn latency has been attributed from measured live data rather than guessed.
-- [ ] At least five important failure paths have original code + final UI code recorded side by
+- [x] At least five important failure paths have original code + final UI code recorded side by
   side.
 
 The repository now has the scenario contract, client/provider instrumentation, redacted live
 capture runner, summarizer and aggregate gate evaluator needed for those measurements. The gate
-remains open because ACTION is still frozen by the provider/Odoo crash path and the required
-five-path failure-pair matrix is incomplete.
+remains open only because the safe disposable ACTION baseline has not yet been rerun.
 
 ## Next work inside Phase 0
 
@@ -431,13 +430,11 @@ Stay in Phase 0. Do **not** begin the provider-boundary refactor yet.
 
 Next:
 
-1. run the minimum live matrix with `phase0_live_capture.py`;
-2. inspect the first aggregate report for inconsistent or missing timestamps;
-3. capture five original-vs-UI error pairs with controlled fixtures;
-4. repeat `hello` and a simple read enough to establish a useful baseline distribution;
-5. add capture adapters for `plan_decision`, cancellation or recovery only if those scenarios are
-   needed to close an evidence gap;
-6. only then let `phase0_report.py` decide whether Phase 1 may start.
+1. prepare one disposable partner for a reversible update;
+2. rerun `P0-REAL-ACTION` through preview, explicit browser approval and verification;
+3. restore the disposable fixture after capturing the authoritative result;
+4. rerun `phase0_report.py`;
+5. only then let the aggregate report decide whether Phase 1 may start.
 
 ## Live validation run — 2026-08-27
 
@@ -497,3 +494,18 @@ Sanitized artifacts and the full evidence record are under
 `docs/research/evidence/phase0/2026-08-27/`. P0.2 and `VD-P0.2-REAL-READ` are closed. Phase 0 remains
 open: P0.3 must bound the provider/Odoo crash path before ACTION is retried, and the failure-pair
 matrix still requires additional distinct paths.
+
+## P0.3 and P0.4 corrective validation — 2026-08-27
+
+P0.3 passed at `c114f15`: three greetings and one capability-backed read completed without an
+Odoo restart, unhealthy service state or signal-5 observation.
+
+P0.4 passed at `9008821` in real Odoo and Chrome. EOF, bounded timeout and invalid final output
+ended `failed` with their manifest codes; the browser flattened all three to
+`service_unavailable`. The database-scoped auth gate was also observed as
+`codex_not_connected -> codex_not_connected`. Together with `provider_process_missing`, the
+aggregate report counts five distinct original/UI pairs.
+
+`phase0_report.py` now passes the timing, latency-attribution and five-failure-pair gates. It exits
+`2` only because `minimum_live_matrix.action=false`. The exact next gate is the safe disposable
+ACTION rerun; Phase 1 remains locked.

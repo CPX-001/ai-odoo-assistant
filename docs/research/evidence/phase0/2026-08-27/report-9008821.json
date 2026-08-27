@@ -1,0 +1,77 @@
+{
+  "exit_gate": {
+    "five_failure_pairs": true,
+    "minimum_live_matrix": false,
+    "simple_latency_attributed": true,
+    "timing_decomposition": true
+  },
+  "failure_pair_path_count": 5,
+  "failure_pair_scenarios": [
+    "invalid_final_output",
+    "provider_auth_missing",
+    "provider_disconnect",
+    "provider_process_missing",
+    "provider_timeout"
+  ],
+  "failure_pairs": [
+    {
+      "original_error_code": "codex_unavailable",
+      "scenario_id": "provider_process_missing",
+      "ui_error_code": "codex_unavailable"
+    },
+    {
+      "original_error_code": "codex_not_connected",
+      "scenario_id": "provider_auth_missing",
+      "ui_error_code": "codex_not_connected"
+    },
+    {
+      "original_error_code": "codex_process_eof",
+      "scenario_id": "provider_disconnect",
+      "ui_error_code": "service_unavailable"
+    },
+    {
+      "original_error_code": "codex_read_timeout",
+      "scenario_id": "provider_timeout",
+      "ui_error_code": "service_unavailable"
+    },
+    {
+      "original_error_code": "codex_answer_invalid",
+      "scenario_id": "invalid_final_output",
+      "ui_error_code": "service_unavailable"
+    }
+  ],
+  "format_version": 1,
+  "latency": {
+    "hello": {
+      "max_ms": 18171.923,
+      "min_ms": 6726.211,
+      "p50_ms": 8436.853,
+      "p95_ms": 16788.097,
+      "samples": 4
+    },
+    "simple_read": {
+      "max_ms": 16120.006,
+      "min_ms": 16120.006,
+      "p50_ms": 16120.006,
+      "p95_ms": 16120.006,
+      "samples": 1
+    }
+  },
+  "live_capture_count": 10,
+  "minimum_matrix": {
+    "action": false,
+    "failure": true,
+    "hello": true,
+    "read": true
+  },
+  "ready_for_phase1": false,
+  "scenario_count": 11,
+  "timing_decomposition": {
+    "complete_turn": true,
+    "provider": true,
+    "scenario_ids": [
+      "read_partner"
+    ],
+    "tool": true
+  }
+}

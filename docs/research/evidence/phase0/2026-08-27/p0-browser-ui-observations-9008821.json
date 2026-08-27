@@ -1,0 +1,44 @@
+{
+  "browser": "Google Chrome 151.0.7922.174 headless",
+  "cases": [
+    {
+      "browser_terminal_error_code": "codex_process_eof",
+      "browser_terminal_state": "failed",
+      "message_key": "assistant_failure_service_unavailable",
+      "message_sha256": "27ec69cc9a45110e7b39284a7e98ae4c1448669fc3efcaaf2dbfb98bb449e4be",
+      "scenario_id": "provider_disconnect",
+      "selector_visible": true,
+      "ui_error_code": "service_unavailable"
+    },
+    {
+      "browser_terminal_error_code": "codex_read_timeout",
+      "browser_terminal_state": "failed",
+      "message_key": "assistant_failure_service_unavailable",
+      "message_sha256": "27ec69cc9a45110e7b39284a7e98ae4c1448669fc3efcaaf2dbfb98bb449e4be",
+      "scenario_id": "provider_timeout",
+      "selector_visible": true,
+      "ui_error_code": "service_unavailable"
+    },
+    {
+      "browser_terminal_error_code": "codex_answer_invalid",
+      "browser_terminal_state": "failed",
+      "message_key": "assistant_failure_service_unavailable",
+      "message_sha256": "27ec69cc9a45110e7b39284a7e98ae4c1448669fc3efcaaf2dbfb98bb449e4be",
+      "scenario_id": "invalid_final_output",
+      "selector_visible": true,
+      "ui_error_code": "service_unavailable"
+    },
+    {
+      "browser_terminal_error_code": "codex_not_connected",
+      "browser_terminal_state": "request_error",
+      "message_key": "runtime_not_authenticated",
+      "message_sha256": "451a9d7b75e215fa1e5fa1e4aa2e016f3b2536d932e56bffbce6ae811a1c64f4",
+      "scenario_id": "provider_auth_missing",
+      "selector_visible": true,
+      "ui_error_code": "codex_not_connected"
+    }
+  ],
+  "commit_tested": "90088215f247716b57e5c19c2502cc2d33a78e51",
+  "format_version": 1,
+  "observation_kind": "headless_browser_ui"
+}
