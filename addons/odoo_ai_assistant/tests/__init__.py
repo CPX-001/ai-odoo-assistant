@@ -2,10 +2,12 @@ from . import test_capability_action_revalidation as test_capability_action_reva
 from . import test_capability_actions as test_capability_actions
 from . import test_capability_batch as test_capability_batch
 from . import test_capability_framework as test_capability_framework
+from . import test_canonical_plan_host_loop as test_canonical_plan_host_loop
 from . import test_codex_planning_contract as test_codex_planning_contract
 from . import test_chat_policy as test_chat_policy
 from . import test_chat_preferences as test_chat_preferences
 from . import test_chat_storage as test_chat_storage
+from . import test_e2e_convergence_battery as test_e2e_convergence_battery
 from . import test_embedded_agent_runtime as test_embedded_agent_runtime
 from . import test_runtime_account as test_runtime_account
 from . import test_runtime_account_gate as test_runtime_account_gate
