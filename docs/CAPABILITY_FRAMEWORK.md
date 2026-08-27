@@ -67,6 +67,8 @@ See `QUERY_CONTRACT.md`.
 
 `odoo_actions` owns controlled effect semantics around effective write schema, previews/preconditions and verification. The framework deliberately does not expose arbitrary `execute_kw`/method execution.
 
+Provider adapters must make the planning contract explicit: when the user's requested outcome is an Odoo state change that an available planning capability exactly supports, the reasoning provider is expected to ground the necessary model/record/schema/fields through read-only capabilities and emit the corresponding plan step. Returning a normal read-only answer with an empty plan does not satisfy that supported mutation request. This remains probabilistic model guidance, not host authority: the host does not infer write intent from prompt text, and every emitted step is still validated against the effective planning catalog, schema, policy, preview/approval and verification path.
+
 ## Batch provider
 
 `odoo_batch` extends controlled effects to bounded collections without bypassing the same authority/policy model. Batch behavior should favor deterministic summaries/receipts and avoid hundreds of unconstrained model-authored writes.
