@@ -4,22 +4,35 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import types
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "addons"))
+ADDON = ROOT / "addons" / "odoo_ai_assistant"
 
-from odoo_ai_assistant.runtime.agent.contracts import (  # noqa: E402
+# Load the dependency-light runtime below an isolated package namespace. Importing the real addon
+# package would execute its Odoo controllers/models ``__init__`` modules and make this standalone
+# contract test require an installed Odoo runtime merely during collection.
+for package_name, package_path in (
+    ("_host_loop_fixture", ADDON),
+    ("_host_loop_fixture.runtime", ADDON / "runtime"),
+    ("_host_loop_fixture.runtime.agent", ADDON / "runtime" / "agent"),
+):
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(package_path)]
+    sys.modules[package_name] = package
+
+from _host_loop_fixture.runtime.agent.contracts import (  # noqa: E402
     FinalAnswer,
     ReasoningCapabilityCall,
 )
-from odoo_ai_assistant.runtime.agent.service import AgentTurnError, AgentTurnService  # noqa: E402
-from odoo_ai_assistant.runtime.agent.working_transcript import (  # noqa: E402
+from _host_loop_fixture.runtime.agent.service import AgentTurnError, AgentTurnService  # noqa: E402
+from _host_loop_fixture.runtime.agent.working_transcript import (  # noqa: E402
     WorkingItem,
     append_working_item,
 )
-from odoo_ai_assistant.runtime.capabilities import (  # noqa: E402
+from _host_loop_fixture.runtime.capabilities import (  # noqa: E402
     CapabilityApproval,
     CapabilityContext,
     CapabilityDefinition,

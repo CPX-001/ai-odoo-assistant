@@ -65,6 +65,11 @@ class AssistantTurnFailurePersistence(models.Model):
             target_state in _TERMINAL_FAILURE_STATES
             and isinstance(target_error, str)
             and target_error
+            and (
+                values.get("state") in _TERMINAL_FAILURE_STATES
+                or "error_code" in values
+                or not self.failure_payload
+            )
         ):
             write_barrier = values.get(
                 "write_barrier",

@@ -48,6 +48,9 @@ test("history is the initial view without a recent same-tab conversation", () =>
     expect(panel.state.historyView).toBe(true);
     expect(panel.state.conversationId).toBe(null);
 
+    // The composed panel service intentionally blocks chat actions until the provider account
+    // has authenticated. This test exercises the history transition after that bootstrap gate.
+    panel.state.runtimeState = "authenticated";
     panel.newConversation();
     expect(panel.state.historyView).toBe(false);
     expect(panel.state.conversationId).toBe(null);
