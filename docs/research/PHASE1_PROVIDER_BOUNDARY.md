@@ -1,7 +1,7 @@
 # Phase 1 — provider boundary stabilization
 
 Date: 2026-08-27  
-Inspected main: `2bf5fdd7c96a0729a8eb03f6bbdf0d9e3dc246f5`  
+Inspected implementation/test checkpoint: `012e9c8888011e70d8029d18f028a155f1d5a868`
 Status: `IN_PROGRESS`
 
 ## Goal
@@ -148,6 +148,23 @@ source and exercises:
 - unverified `callId`: reject;
 - known critical validator failure: propagate unchanged.
 
+The first local execution exposed a separate false negative in the P1.2 source binding. The
+`final_answer_mapping` observer searched for the quoted literal `"final_answer"` only in
+`codex_decision.py`, although that adapter delegates decoding to `parse_next_decision()` and the
+authoritative kind branch and `FinalAnswer` construction live in `contracts.py`. Consequently the
+runtime mapping existed, but the static observer reported a third failed case:
+
+```text
+focused conformance before correction: 6 passed, 1 failed
+full unit suite before correction: 176 passed, 1 failed
+unexpected failed case: final_answer_mapping
+```
+
+Checkpoint `012e9c8888011e70d8029d18f028a155f1d5a868` repairs the harness without changing
+runtime behavior. The observer now verifies the adapter delegation and the shared parser branch for
+all three decision kinds. A focused regression proves final-answer conformance does not depend on a
+prompt literal.
+
 Static contract projection after P1.3:
 
 ```text
@@ -155,17 +172,42 @@ Static contract projection after P1.3:
 remaining: terminal_failure, overload_backpressure
 ```
 
-No repository test runner was available through the connector and no GitHub Actions were used, so
-that projection is not presented as an executed pytest result.
-
-Pending deterministic execution:
+Deterministic validation actually executed after the harness correction:
 
 ```text
-python -m pytest -q tests/unit/test_codex_provider_conformance.py
-python -m py_compile \
+.venv/bin/python -m pytest -q tests/unit/test_codex_provider_conformance.py
+8 passed in 0.11s
+
+.venv/bin/python -m pytest -q tests/unit
+178 passed in 2.26s
+
+.venv/bin/python -m pytest -q \
+  tests/e2e/test_e2e_convergence_battery.py \
+  tests/e2e/test_e2e_decision_sequences.py \
+  tests/e2e/test_next_decision_contract.py \
+  tests/e2e/test_working_transcript_contract.py \
+  tests/e2e/test_canonical_plan_proposal.py
+29 passed in 0.12s
+
+python3 -m py_compile \
+  tests/contracts/codex_provider_conformance.py \
   tests/contracts/current_codex_decision_conformance.py \
+  addons/odoo_ai_assistant/runtime/agent/provider.py \
   addons/odoo_ai_assistant/runtime/agent/codex_decision.py
+PASS
+
+git diff --check
+PASS
 ```
+
+The dependency-light P1.3 projection is therefore executable and green at the recorded checkpoint:
+12/14 conformant, with only the intentionally unresolved `terminal_failure` and
+`overload_backpressure` cases failing their conformance expectations.
+
+The Odoo suite and `P1-REAL-VERSION` / `P1-REAL-SOAK-100` were not executed against this checkpoint.
+The available Odoo service had started before the checkout was updated and the current execution
+user could not restart/update that service or authenticate to its test database. Codex CLI
+`0.149.1` was observed locally, but version presence alone is not the exact-SHA real gate.
 
 ## Invariants
 
