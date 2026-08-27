@@ -85,13 +85,13 @@ class TestNextDecisionContract(unittest.TestCase):
             {"final_answer", "reasoning_capability_call", "plan_step_proposal"},
         )
 
-    def test_codex_decision_route_is_tool_free_and_host_validation_is_separate(self):
+    def test_codex_decision_route_is_tool_free_and_host_revalidates(self):
         source = CODEX_DECISION.read_text(encoding="utf-8")
         host = SERVICE.read_text(encoding="utf-8")
         self.assertIn('"dynamicTools": []', source)
         self.assertIn('"outputSchema": next_decision_schema()', source)
         self.assertNotIn("executor.execute", source)
-        self.assertNotIn("validate_next_decision(", source)
+        self.assertIn("return validate_next_decision(", source)
         self.assertIn("decision = validate_next_decision(", host)
 
 
