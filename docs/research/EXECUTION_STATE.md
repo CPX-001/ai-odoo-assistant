@@ -11,26 +11,38 @@ phase: 2
 phase_name: structured failure contract
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/PHASE2_FAILURE_CONTRACT.md
-active_slice: P2.2-codex-error-normalization
-active_slice_state: COMPLETE
-current_gate_type: DETERMINISTIC
-blocking_validations: none
+active_slice: P2.3-turn-failure-persistence
+active_slice_record: docs/research/P2.3_TURN_FAILURE_PERSISTENCE.md
+active_slice_state: LOCAL_VALIDATION_REQUIRED
+current_gate_type: HARD_LOCAL_ODOO
+blocking_validations: P2.3-ODOO-UPDATE, P2.3-ODOO-FAILURE
 phase_completion_validations: P2-REAL-AUTH, P2-REAL-ACL, P2-REAL-TIMEOUT, P2-REAL-TOOLFAIL, P2-REAL-RECOVERY
-next_slice: P2.3-turn-failure-persistence
+next_slice: NONE_UNTIL_P2.3_ODOO_VALIDATION
 ```
 
-Phase 0 and Phase 1 are complete. Phase 2 has completed its schema and provider-normalization
-slices, but the envelope is not yet persisted on `odoo.ai.turn` or exposed to the browser.
+Phase 0 and Phase 1 are complete. Phase 2 has implemented its schema, provider normalization and
+terminal turn persistence slices. P2.3 is **not complete yet** because the new stored Odoo field and
+model override have not been exercised by an Odoo 18 module update/test run.
 
-## Current remote checkpoint inspected
+## P2.3 implementation checkpoint
 
-P2.2 reconstructed `main` at:
+P2.3 reconstructed remote `main` at:
 
 ```text
-70d424cb52c456009fbc704bd8d00112436636b0
+d12f73e50a896315a6f4b0051d6e0125de621554
 ```
 
-No newer commit or validation debt blocked the slice.
+The material implementation reached:
+
+```text
+00d963e0bdf1a14efe55fb974c2642de038313ee
+```
+
+The following docs-only handoff then recorded the validation gate:
+
+```text
+e90264ab3c1d72afbdbe92b79fdc5a2b6012c718
+```
 
 ## Phase 2 progress
 
@@ -38,7 +50,7 @@ No newer commit or validation debt blocked the slice.
 
 `COMPLETE`.
 
-The host-owned contract remains:
+The bounded host contract remains:
 
 ```text
 code
@@ -54,66 +66,102 @@ diagnostic_id
 provider_code
 ```
 
-The fixed shape, routing enums and bounded JSON/detail rules remain unchanged.
-
-### P2.2 — Codex/provider error normalization
+### P2.2 — Codex/provider normalization
 
 `COMPLETE`.
 
-The active composition is now conceptually:
+The active provider boundary preserves sanitized provider category, bounded HTTP status, bounded
+upstream code and advisory retryability inside a validated `FailureEnvelope`. Raw provider text,
+credentials, stdout/stderr, prompts and unrestricted payloads are not copied.
+
+### P2.3 — terminal turn persistence
+
+`LOCAL_VALIDATION_REQUIRED`.
+
+Implemented behavior:
 
 ```text
-CodexDecisionEngine
-  -> FailureNormalizingDecisionEngine
-      -> normalize_provider_failure(...)
-      -> ProviderFailureError
-          code = original sanitized product code
-          failure = validated FailureEnvelope
-  -> AgentTurnService
+ProviderFailureError.failure
+        |
+        v
+terminal_failure_envelope(...)
+        |
+        +-- write_barrier=false -> effect_state=none
+        |
+        +-- write_barrier=true  -> effect_state=unknown
+                                 retryability=never
+                                 user_action=review
+        |
+        v
+odoo.ai.turn.failure_payload
+        |
+        v
+browser_status().failure
+
+browser_status().error_code remains for compatibility
 ```
 
-The wrapper is located at the provider/host decision boundary. It uses `effect_state=none`
-explicitly because this wrapped call occurs before effectful plan execution and the durable write
-barrier. A resumed authorized plan bypasses the provider decision path.
+`models/turn_failure.py` preserves the original queue retry/failure state machine for ordinary
+errors. A specialized finalizer is used only when the exception already carries a validated provider
+envelope so P2.2 facts survive atomically. Generic terminal writes receive a bounded host fallback
+envelope through the model `write()` overlay. Requeues clear any stale failure payload.
 
-Known sanitized provider facts may now survive in the in-memory envelope:
+Addon version is now `18.0.10.8.0` because `odoo.ai.turn` gains the stored `failure_payload` field.
 
-```text
-provider category
-bounded HTTP status
-bounded upstream code
-advisory provider_retryable
-```
+## Deterministic validation actually executed for P2.3
 
-Raw provider messages, stderr/stdout, prompts, request bodies, credentials and unrestricted payloads
-are never read by the normalizer.
-
-`serverOverloaded` becomes `retryability=safe` only when the provider already marked the failure
-retryable and the host effect state is `none` or `not_started`. No retry is performed.
-
-## Deterministic validation actually executed for P2.2
-
-In an isolated dependency-light workspace containing the exact proposed target files:
+Available Python validation:
 
 ```text
-python -m py_compile \
-  addons/odoo_ai_assistant/runtime/agent/failure.py \
-  addons/odoo_ai_assistant/runtime/agent/provider_failure.py \
-  addons/odoo_ai_assistant/models/embedded_runtime_host_loop.py \
-  tests/unit/test_failure_envelope_contract.py \
-  tests/unit/test_provider_failure_normalization.py
+syntax compilation of exact proposed P2.3 Python files
 PASS
 
-python -m pytest -q \
-  tests/unit/test_failure_envelope_contract.py \
-  tests/unit/test_provider_failure_normalization.py
-12 passed, 17 subtests passed
+isolated dependency-light P2.3 contract harness
+5 passed in 0.05s
 ```
 
-A lightweight runtime-stub execution of the provider decorator also passed for an effect-safe
-`serverOverloaded` error.
+The harness used the exact P2.3 terminal/model/test sources plus a compatible P2.1
+`FailureEnvelope` stub. It is supporting deterministic evidence only; it is **not** a substitute for
+loading the actual Odoo model registry/database schema.
 
-No GitHub Actions were used. No full repository/Odoo/Codex battery is being claimed for this slice.
+Added but not executed here:
+
+```text
+addons/odoo_ai_assistant/tests/test_turn_failure.py
+addons/odoo_ai_assistant/tests/test_turn_queue.py
+```
+
+No GitHub Actions were used.
+
+## Hard validation debt
+
+```text
+P2.3-ODOO-UPDATE
+  gate_type: HARD
+  origin_slice: P2.3-turn-failure-persistence
+  commit_materially_tested: pending; must include 00d963e0bdf1a14efe55fb974c2642de038313ee
+  downstream_scope_blocked: later Phase 2 browser/presentation consumer work
+  reason: prove addon 18.0.10.8.0 creates/loads failure_payload cleanly on Odoo 18
+
+P2.3-ODOO-FAILURE
+  gate_type: HARD
+  origin_slice: P2.3-turn-failure-persistence
+  commit_materially_tested: pending; must include 00d963e0bdf1a14efe55fb974c2642de038313ee
+  downstream_scope_blocked: later Phase 2 browser/presentation consumer work
+  reason: run test_turn_failure.py + test_turn_queue.py with 0 failures/errors
+```
+
+Phase 2 real presentation gates remain pending:
+
+```text
+P2-REAL-AUTH
+P2-REAL-ACL
+P2-REAL-TIMEOUT
+P2-REAL-TOOLFAIL
+P2-REAL-RECOVERY
+```
+
+These are not cleared by the P2.3 dependency-light harness.
 
 ## Retained Phase 1 real-environment evidence
 
@@ -124,38 +172,32 @@ P1-REAL-TOOLCALL | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
 P1-REAL-CANCEL   | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
 ```
 
-## Validation debt
-
-```text
-Phase 1 mandatory validation debt: none
-P2.1 mandatory validation debt: none
-P2.2 mandatory validation debt: none
-Phase 2 real presentation gates: pending until envelope persistence/browser projection exists
-look-ahead slices consumed: 0
-stacked unvalidated contract layers: 0
-```
-
-Phase 3 remains blocked. P2.3 may start because it consumes the deterministically validated
-P2.1/P2.2 contract and is the required next layer of the same Phase 2 failure path.
-
-## Invariants carried through P2.2
+## Invariants carried through P2.3
 
 - Odoo remains operational and persistence authority.
 - Business capabilities execute with the effective user and `su=False`.
 - `CapabilityDefinition` remains the atomic executable contract.
-- The provider proposes; the host validates and owns all effects.
-- Preview, policy, approval, write barrier, execution and verification are unchanged.
-- Preserved provider facts remain bounded and advisory.
-- No provider/capability/write retry has been introduced.
-- `recovery_required` and the durable write barrier remain authoritative once effects are possible.
+- Provider facts are bounded and advisory; the host owns effect certainty.
+- Existing queue retry policy still uses the stable `error_code`; P2.3 does not add retries.
+- The durable write barrier and `recovery_required` remain authoritative once effects are possible.
+- A write-barrier terminal failure is never presented as effect-free or retry-safe.
 - Raw provider text, credentials, prompts and unrestricted tool payloads remain private.
+- Browser projection revalidates persisted envelopes and fails closed on corrupt/mismatched payloads.
 - No GitHub Actions are available for roadmap execution or validation.
 
 ## Exact next action
 
-Re-inspect the new `main`, then implement only `P2.3-turn-failure-persistence`.
+Do **not** start P2.4 or Phase 3 yet.
 
-Persist a validated `FailureEnvelope` for terminal turn failures and return it from
-`browser_status()` while preserving the existing `error_code` compatibility field. Derive
-`effect_state` from authoritative queue/write-barrier state when effects may have started. Do not
-yet rewrite frontend prose, add retry buttons/automatic retries, or begin Phase 3 public activity.
+Run the P2.3 Odoo 18 validation gate on the exact implementation checkpoint:
+
+```text
+1. install/update addon version 18.0.10.8.0 on a disposable Odoo 18 database;
+2. run addons/odoo_ai_assistant/tests/test_turn_failure.py;
+3. run addons/odoo_ai_assistant/tests/test_turn_queue.py;
+4. require 0 failures and 0 errors;
+5. record the exact tested SHA and environment evidence.
+```
+
+If both P2.3 gates pass, mark the slice `COMPLETE` and select the next Phase 2 failure-browser slice.
+If either fails, repair P2.3 first.
