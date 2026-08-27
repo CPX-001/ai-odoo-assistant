@@ -19,6 +19,11 @@ ADR-019 is the active orchestration path. `CodexDecisionEngine` returns exactly 
 `NextDecision` per provider call. `AgentTurnService` resolves every selected capability against the
 effective registry and validates its arguments host-side.
 
+Codex Structured Outputs uses an adapter-only object envelope: the three decision branches live in
+a nested union and open capability arguments cross as bounded JSON text. The adapter decodes that
+envelope before the unchanged strict `NextDecision` parser and host validation run. This avoids the
+App Server rejection of root `oneOf` schemas without changing the provider-neutral contract.
+
 For READ, only effective REASONING definitions execute and only through
 `CapabilityExecutor(..., ExecutionAuthority.REASONING)`. Results/errors become bounded private
 working items and are supplied to the next provider decision. Provider decisions, calls,

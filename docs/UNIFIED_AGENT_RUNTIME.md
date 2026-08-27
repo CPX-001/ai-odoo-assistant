@@ -26,6 +26,13 @@ browser -> Odoo durable turn -> cron lease under originating user (su=False)
 an Odoo Environment, cannot enable a disabled capability, and cannot turn an arbitrary method name,
 SQL, Python, shell or sudo request into authority.
 
+The provider-neutral `NextDecision` remains a strict three-branch union. At the Codex boundary the
+adapter wraps that union below an object field and carries open capability arguments as bounded
+JSON text because App Server Structured Outputs rejects root unions and open object properties.
+The adapter decodes that transport envelope and then runs the unchanged strict decision parser and
+host validation. Provider schema failures are reduced to the sanitized
+`codex_output_schema_invalid` diagnostic; raw upstream messages are not persisted or exposed.
+
 ## Reads
 
 REASONING capabilities execute only through `CapabilityExecutor` with

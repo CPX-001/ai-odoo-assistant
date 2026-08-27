@@ -26,7 +26,9 @@ from .decision_validation import validate_next_decision
 _MAX_EVENTS = 2048
 _MAX_DECISION_CONTEXT_BYTES = 128 * 1024
 _DECISION_INSTRUCTIONS = """You are the isolated reasoning component of Odoo AI Assistant.
-Return exactly one JSON object matching one branch of the supplied NextDecision schema.
+Return exactly one decision inside the root decision field, matching one branch of the supplied
+schema. For a capability call or plan proposal, encode the arguments object as JSON in the
+arguments_json string. Use {} when the selected capability takes no arguments.
 
 The effective capability catalog is supplied by the Odoo host and is authoritative only for what
 may be requested: REASONING capabilities may be selected as reasoning_capability_call and PLAN
@@ -102,7 +104,7 @@ class CodexDecisionEngine:
                 "turn/start",
                 {
                     "input": [{"type": "text", "text": turn_input}],
-                    "outputSchema": next_decision_schema(),
+                    "outputSchema": _codex_next_decision_schema(),
                     "threadId": thread_id,
                 },
                 timeout=_remaining(deadline),
@@ -133,6 +135,13 @@ class CodexDecisionEngine:
             params = event.get("params")
             if not isinstance(method, str):
                 raise CodexAgentError("codex_event_invalid")
+            if method == "error":
+                _validate_decision_error_event(
+                    params,
+                    thread_id=thread_id,
+                    turn_id=turn_id,
+                )
+                continue
             _validate_notification(method, params, thread_id=thread_id, turn_id=turn_id)
             if method == "item/completed":
                 item = _validate_completed_item(
@@ -154,12 +163,99 @@ class CodexDecisionEngine:
             if turn.get("status") == "interrupted":
                 raise CodexAgentError("agent_cancelled")
             if turn.get("status") != "completed" or turn.get("error") not in (None, {}):
-                raise CodexAgentError("codex_turn_failed")
+                raise CodexAgentError(_decision_failure_code(turn.get("error")))
             return _with_completed_agent_messages(
                 cast(dict[str, object], turn),
                 completed_agent_messages,
             )
         raise CodexAgentError("codex_event_budget_exceeded")
+
+
+def _codex_next_decision_schema() -> dict[str, object]:
+    """Translate the strict union into the Structured Outputs subset used by App Server.
+
+    OpenAI Structured Outputs requires an object at the schema root and does not permit the
+    provider-neutral ``oneOf`` union there. Capability arguments are also intentionally open host
+    schemas, so they cross this provider boundary as bounded JSON strings and are decoded before
+    the existing strict ``NextDecision`` parser runs.
+    """
+
+    schema = next_decision_schema()
+    alternatives = schema.get("oneOf")
+    if not isinstance(alternatives, list) or len(alternatives) != 3:
+        raise CodexAgentError("codex_decision_schema_invalid")
+    wire_alternatives: list[dict[str, object]] = []
+    for alternative in alternatives:
+        if not isinstance(alternative, dict):
+            raise CodexAgentError("codex_decision_schema_invalid")
+        raw_properties = alternative.get("properties")
+        raw_required = alternative.get("required")
+        if not isinstance(raw_properties, dict) or not isinstance(raw_required, list):
+            raise CodexAgentError("codex_decision_schema_invalid")
+        properties = {
+            key: dict(value) if isinstance(key, str) and isinstance(value, dict) else value
+            for key, value in raw_properties.items()
+        }
+        kind_schema = properties.get("kind")
+        kind = kind_schema.get("const") if isinstance(kind_schema, dict) else None
+        if not isinstance(kind, str):
+            raise CodexAgentError("codex_decision_schema_invalid")
+        properties["kind"] = {"type": "string", "enum": [kind]}
+        required = list(raw_required)
+        if "arguments" in properties:
+            properties.pop("arguments")
+            properties["arguments_json"] = {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 16 * 1024,
+            }
+            required = ["arguments_json" if item == "arguments" else item for item in required]
+        if any(not isinstance(item, str) for item in required):
+            raise CodexAgentError("codex_decision_schema_invalid")
+        wire_alternatives.append(
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": properties,
+                "required": required,
+            }
+        )
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"decision": {"anyOf": wire_alternatives}},
+        "required": ["decision"],
+    }
+
+
+def _validate_decision_error_event(params, *, thread_id: str, turn_id: str) -> None:
+    if (
+        not isinstance(params, dict)
+        or params.get("threadId") != thread_id
+        or params.get("turnId") != turn_id
+    ):
+        raise CodexAgentError("codex_error_event_invalid")
+    if params.get("willRetry") is True:
+        return
+    raise CodexAgentError(_decision_failure_code(params.get("error")))
+
+
+def _decision_failure_code(error: object) -> str:
+    """Reduce provider detail to an allowlisted product diagnostic code."""
+
+    if not isinstance(error, Mapping):
+        return "codex_turn_failed"
+    message = error.get("message")
+    if not isinstance(message, str) or len(message) > _MAX_DECISION_CONTEXT_BYTES:
+        return "codex_turn_failed"
+    try:
+        payload = json.loads(message)
+    except (TypeError, ValueError):
+        return "codex_turn_failed"
+    upstream_error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(upstream_error, dict) and upstream_error.get("code") == "invalid_json_schema":
+        return "codex_output_schema_invalid"
+    return "codex_turn_failed"
 
 
 def _decision_turn_input(
@@ -218,9 +314,30 @@ def _decision_result(turn: Mapping[str, object]) -> NextDecision:
     if not messages:
         raise CodexAgentError("codex_answer_missing")
     try:
-        return parse_next_decision(json.loads(messages[-1]))
+        return parse_next_decision(_provider_decision(json.loads(messages[-1])))
     except (TypeError, ValueError):
         raise CodexAgentError("codex_answer_invalid") from None
     except Exception as error:
         code = getattr(error, "code", "agent_next_decision_invalid")
         raise CodexAgentError(code) from error
+
+
+def _provider_decision(value: object) -> dict[str, object]:
+    if not isinstance(value, dict) or set(value) != {"decision"}:
+        raise CodexAgentError("codex_answer_invalid")
+    decision = value.get("decision")
+    if not isinstance(decision, dict):
+        raise CodexAgentError("codex_answer_invalid")
+    normalized = dict(decision)
+    if normalized.get("kind") in {"reasoning_capability_call", "plan_step_proposal"}:
+        arguments_json = normalized.pop("arguments_json", None)
+        if not isinstance(arguments_json, str):
+            raise CodexAgentError("codex_answer_invalid")
+        try:
+            arguments = json.loads(arguments_json)
+        except (TypeError, ValueError):
+            raise CodexAgentError("codex_answer_invalid") from None
+        if not isinstance(arguments, dict):
+            raise CodexAgentError("codex_answer_invalid")
+        normalized["arguments"] = arguments
+    return normalized
