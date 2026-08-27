@@ -9,124 +9,102 @@ Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md` and `E2E_AGENT_LOOP_CONVERGENCE
 ```text
 phase: 2
 phase_name: structured failure contract
-phase_state: READY
-active_phase_record: NONE_CREATE_BEFORE_IMPLEMENTATION
+phase_state: IN_PROGRESS
+active_phase_record: docs/research/PHASE2_FAILURE_CONTRACT.md
 active_slice: P2.1-failure-envelope-schema
-active_slice_state: READY
+active_slice_state: COMPLETE
 current_gate_type: DETERMINISTIC
 blocking_validations: none
 phase_completion_validations: P2-REAL-AUTH, P2-REAL-ACL, P2-REAL-TIMEOUT, P2-REAL-TOOLFAIL, P2-REAL-RECOVERY
-next_slice: P2.1-failure-envelope-schema
+next_slice: P2.2-codex-error-normalization
 ```
 
-Phase 0 and Phase 1 are complete. Phase 2 has not started; `READY` means the next run must first
-inspect current failure projections/browser contracts and create the atomic Phase 2 phase/slice
-record before changing behavior.
+Phase 0 and Phase 1 are complete. Phase 2 has started. P2.1 defines and deterministically validates the bounded host-owned `FailureEnvelope` contract but does not yet wire it into provider normalization, turn persistence or browser projection.
 
-## Phase 1 close-out checkpoint
+## Phase 2 entry checkpoint
 
-The run reconstructed `origin/main` at `77853109f75ee1b7e43511ad7a15e450f43026bb`.
-The full Odoo battery then exposed a stale test that bypassed the already-accepted database-scoped
-Codex connection gate. The test-only repair uses the supported settings connect/logout actions and
-was committed as:
+This run reconstructed remote `main` at:
 
 ```text
-db6e5c12c53e9a99ad3a55f7472eb13f93855a06
+33ca2bfaeebb85f0675594b27c6d52cbd7bc8dcf
 ```
 
-No product runtime behavior changed in that checkpoint. The addon install/update, complete Odoo
-battery and both final real-environment gates were executed against that exact checkout.
+No newer regression evidence or validation debt blocked Phase 2. The Phase 1 close-out already records all required provider-boundary real-environment gates as PASS.
 
-## Tests actually executed
-
-Dependency-light validation:
+The current failure path was inspected before implementation:
 
 ```text
-.venv/bin/python -m pytest -q tests/unit/test_codex_provider_conformance.py
-8 passed
-
-.venv/bin/python -m pytest -q tests/unit
-184 passed
-
-.venv/bin/python -m pytest -q \
-  tests/e2e/test_e2e_convergence_battery.py \
-  tests/e2e/test_e2e_decision_sequences.py \
-  tests/e2e/test_next_decision_contract.py \
-  tests/e2e/test_working_transcript_contract.py \
-  tests/e2e/test_canonical_plan_proposal.py
-29 passed
-
-provider/contract Python compilation
-PASS
+turn_queue.browser_status       -> error_code only
+turn_runtime._error             -> {ok:false,error:{code}}
+assistant_panel_service         -> known code carried as Error(message)
+assistant_panel_streaming       -> all thrown errors become service_unavailable
+assistant_failure_messages      -> code-to-prose mapping in JS
 ```
 
-Real Odoo 18 Community validation on a fresh disposable database:
+That evidence matches the Phase 2 playbook: the product needs one structured failure contract before presentation copy or retry UX changes.
+
+## P2.1 implementation
+
+Added `addons/odoo_ai_assistant/runtime/agent/failure.py` with a strict fixed-shape `FailureEnvelope` contract:
 
 ```text
-fresh addon install
-PASS
-
-explicit addon update
-PASS
-
-initial complete addon battery
-1 stale test failed; 0 errors
-
-focused repaired database-connection test
-PASS
-
-complete addon battery after repair
-odoo_ai_assistant test stats: 126 executions
-Odoo result: 0 failed, 0 errors of 92 tests
-process exit: 0
+code
+category
+stage
+component
+retryability
+effect_state
+user_action
+safe_summary
+safe_details
+diagnostic_id
+provider_code
 ```
 
-No GitHub Actions were used.
+The routing enums are bounded. `safe_details` accepts only bounded JSON data (4 KiB total, bounded depth/items/strings) and unknown top-level fields fail closed. This is a structural safety bound only; later host mapping code must still redact semantically sensitive values before constructing an envelope.
 
-## Phase 1 real-environment evidence
+P2.1 deliberately does not modify runtime behavior, turn persistence, controller payloads, frontend error normalization, error prose or retry behavior.
 
-Previously cleared and retained:
+## Deterministic validation actually executed
+
+In an isolated dependency-light Python workspace containing the exact proposed P2.1 target files and repository-relative paths:
+
+```text
+python -m py_compile \
+  addons/odoo_ai_assistant/runtime/agent/failure.py \
+  tests/unit/test_failure_envelope_contract.py
+PASS
+
+python -m pytest -q tests/unit/test_failure_envelope_contract.py
+5 passed, 17 subtests passed
+```
+
+No GitHub Actions were used. A full repository/Odoo suite was not executed here and is not being reported as PASS.
+
+## Phase 1 retained real-environment evidence
 
 ```text
 P1-REAL-VERSION  | PASS | 49bdac1f732acaaee3154ed60baffd675130991a | Codex 0.149.1
 P1-REAL-SOAK-100 | PASS | 49bdac1f732acaaee3154ed60baffd675130991a | 100/100 turns
+P1-REAL-TOOLCALL | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
+P1-REAL-CANCEL   | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
 ```
 
-Final completion gates on `db6e5c12c53e9a99ad3a55f7472eb13f93855a06`:
-
-```text
-P1-REAL-TOOLCALL | PASS
-final state: completed
-host capabilities: odoo.get_effective_schema, odoo.query_records
-effective user: dedicated internal non-admin, su=false
-fixture changed: false
-
-P1-REAL-CANCEL | PASS
-cancel response: cancel_requested
-final state: cancelled
-write barrier observed: false
-fixture changed: false
-provider subprocesses remaining: 0
-subsequent distinct turn: completed
-```
-
-The final gates used Odoo 18.0 Community and the installed Codex CLI/App Server 0.144.2 through the
-normal HTTP -> persisted turn -> cron -> embedded runtime path. Sanitized evidence is stored at
-`docs/research/evidence/phase1/2026-08-27/P1-REAL-TOOLCALL-CANCEL-db6e5c1.md`.
+The final Phase 1 live checkpoint used Odoo 18.0 Community through the normal HTTP -> persisted turn -> cron -> embedded runtime path. Sanitized evidence remains under `docs/research/evidence/phase1/2026-08-27/`.
 
 ## Validation debt
 
 ```text
 Phase 1 mandatory validation debt: none
-Phase 2 validation debt: none yet; phase has not started
+P2.1 mandatory validation debt: none
+Phase 2 real presentation gates: pending until later slices make them materially testable
 look-ahead slices consumed: 0
 stacked unvalidated contract layers: 0
 ```
 
-No mandatory Phase 1 test remains unexecuted. Broader sidecar-era/legacy suites and frontend UX
-work are outside the completed provider-boundary gate and were not used as substitutes for it.
+P2.2 consumes the deterministically validated P2.1 schema and therefore may start on the next independent run. Phase 3 remains blocked until the Phase 2 failure semantics it would consume are validated.
 
-## Invariants carried into Phase 2
+## Invariants carried through P2.1
 
 - Odoo remains operational and persistence authority.
 - Business capabilities execute with the effective user and `su=False`.
@@ -134,15 +112,10 @@ work are outside the completed provider-boundary gate and were not used as subst
 - The provider proposes; the host validates and owns all effects.
 - Preserved provider facts and retryability metadata remain bounded and advisory only.
 - Raw provider messages/details, credentials, prompts and unrestricted tool payloads remain private.
-- No provider/capability/write retry may be inferred from Phase 1 metadata alone.
+- No provider/capability/write retry is introduced by P2.1.
 - The durable write barrier and `recovery_required` semantics remain authoritative.
 - No GitHub Actions are available for roadmap execution or validation.
 
 ## Exact next action
 
-Create the Phase 2 phase/slice record from section 6 of
-`FOUNDATION_STABILIZATION_PLAYBOOK.md`. Inspect the current backend turn errors and browser failure
-projection, then implement only `P2.1-failure-envelope-schema`: one bounded structured
-`FailureEnvelope` contract with deterministic validation. Do not yet rewrite UI copy, implement
-public activity/answer streaming, or add automatic retries. Define the affected real validation IDs
-before the slice leaves `READY`.
+Re-inspect the exact new `main`, then implement only `P2.2-codex-error-normalization`. Map current sanitized `CodexDecisionError`/host terminal facts into `FailureEnvelope` with deterministic tests and explicit effect-state derivation. Do not yet persist/project the envelope to the browser, rewrite UI copy, add automatic retries, or begin Phase 3 public activity.
