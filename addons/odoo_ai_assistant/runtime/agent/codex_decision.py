@@ -27,6 +27,7 @@ from .decision_validation import validate_next_decision
 _MAX_EVENTS = 2048
 _MAX_DECISION_CONTEXT_BYTES = 128 * 1024
 _MAX_PROVIDER_FAILURE_TOKEN = 64
+_RETRYABLE_PROVIDER_CATEGORIES = frozenset({"serverOverloaded"})
 _DECISION_INSTRUCTIONS = """You are the isolated reasoning component of Odoo AI Assistant.
 Return exactly one decision inside the root decision field, matching one branch of the supplied
 schema. For a capability call or plan proposal, encode the arguments object as JSON in the
@@ -75,16 +76,18 @@ class CodexProviderFailure:
 
 
 class CodexDecisionError(CodexAgentError):
-    """Decision-adapter failure carrying only sanitized provider terminal facts."""
+    """Decision-adapter failure carrying sanitized provider facts and advisory retryability."""
 
     def __init__(
         self,
         code: str,
         *,
         provider_failure: CodexProviderFailure | None = None,
+        provider_retryable: bool = False,
     ) -> None:
         super().__init__(code)
         self.provider_failure = provider_failure
+        self.provider_retryable = provider_retryable is True
 
 
 class CodexDecisionEngine:
@@ -203,7 +206,10 @@ class CodexDecisionEngine:
             if turn.get("status") == "interrupted":
                 raise CodexAgentError("agent_cancelled")
             if turn.get("status") != "completed" or turn.get("error") not in (None, {}):
-                raise _decision_terminal_error(turn.get("error"))
+                raise _decision_terminal_error(
+                    turn.get("error"),
+                    host_effect_safe=True,
+                )
             return _with_completed_agent_messages(
                 cast(dict[str, object], turn),
                 completed_agent_messages,
@@ -298,7 +304,10 @@ def _validate_decision_error_event(params, *, thread_id: str, turn_id: str) -> N
         raise CodexAgentError("codex_error_event_invalid")
     if params.get("willRetry") is True:
         return
-    raise _decision_terminal_error(params.get("error"))
+    raise _decision_terminal_error(
+        params.get("error"),
+        host_effect_safe=True,
+    )
 
 
 def _safe_failure_token(value: object) -> str | None:
@@ -362,17 +371,36 @@ def _provider_failure_details(error: object) -> CodexProviderFailure | None:
     )
 
 
-def _decision_terminal_error(error: object) -> CodexDecisionError:
-    """Keep safe provider facts without defining the later product failure taxonomy."""
+def _provider_failure_is_backpressure(provider_failure: CodexProviderFailure | None) -> bool:
+    return bool(
+        provider_failure is not None
+        and provider_failure.category in _RETRYABLE_PROVIDER_CATEGORIES
+    )
+
+
+def _decision_terminal_error(
+    error: object,
+    *,
+    host_effect_safe: bool,
+) -> CodexDecisionError:
+    """Keep safe provider facts and classify only effect-safe overload as retryable."""
 
     provider_failure = _provider_failure_details(error)
+    provider_retryable = bool(
+        host_effect_safe is True
+        and _provider_failure_is_backpressure(provider_failure)
+    )
     code = (
         "codex_output_schema_invalid"
         if provider_failure is not None
         and provider_failure.upstream_code == "invalid_json_schema"
         else "codex_turn_failed"
     )
-    return CodexDecisionError(code, provider_failure=provider_failure)
+    return CodexDecisionError(
+        code,
+        provider_failure=provider_failure,
+        provider_retryable=provider_retryable,
+    )
 
 
 def _decision_turn_input(

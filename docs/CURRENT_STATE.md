@@ -1,8 +1,9 @@
 # Current implementation state
 
-Revalidated against the E2E-4 implementation checkpoint on 27 August 2026. Real Odoo 18 +
-authenticated Codex validation remains pending and is tracked in
-`docs/research/EXECUTION_STATE.md`.
+Revalidated through the Phase 1 provider-boundary slices on 27 August 2026. The Phase 0 product
+path and the P1.3 Codex version/100-turn soak have passed real Odoo 18 + authenticated Codex
+validation. Phase 1 completion still requires `P1-REAL-TOOLCALL` and `P1-REAL-CANCEL`; the exact
+cursor and validation debt are tracked in `docs/research/EXECUTION_STATE.md`.
 
 ## Product baseline
 
@@ -30,6 +31,13 @@ working items and are supplied to the next provider decision. Provider decisions
 per-definition calls, correctable failures, result bytes and total transcript bytes are bounded.
 Cancellation is checked before provider/capability work. Persisted pending call ids are not
 blindly reexecuted after restart.
+
+The Codex decision adapter tolerates only bounded inert unknown notifications while preserving
+strict identity/critical-event checks. Terminal provider failures retain only bounded machine facts
+(category, optional HTTP status and upstream code); raw provider messages/details are not retained.
+Explicit `serverOverloaded` terminal facts are marked with an advisory `provider_retryable` hint only
+at the effect-free one-decision boundary. The adapter does not retry provider calls itself, and this
+classification does not weaken the existing durable write-barrier/recovery rules.
 
 ## Canonical actions
 
@@ -68,6 +76,9 @@ product path uses the host-owned decision loop.
 
 ## Validation status
 
-Local dependency-light contract tests and Python compilation were executed for the convergence
-slices. Odoo TransactionCase/module-update tests and real Odoo+Codex/browser tests that cannot run
-in the current environment remain explicit validation debt. No real-environment PASS is claimed.
+Dependency-light contract tests and Python compilation cover the current provider-boundary
+slices. Real Odoo 18 Community + Codex 0.149.1 evidence has passed `P1-REAL-VERSION` and
+`P1-REAL-SOAK-100` at the recorded P1.3 checkpoint, including 100/100 normal product-path turns.
+The final Phase 1 provider checkpoint must still pass the independent `P1-REAL-TOOLCALL` and
+`P1-REAL-CANCEL` gates before Phase 2 begins. Unexecuted Odoo/module-update tests remain explicit
+validation debt rather than assumed passes.

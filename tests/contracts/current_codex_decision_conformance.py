@@ -173,25 +173,28 @@ class CurrentCodexDecisionConformanceAdapter:
                 '"codexErrorInfo"',
                 '"httpStatusCode"',
                 "upstream_code",
-                "return CodexDecisionError(code, provider_failure=provider_failure)",
+                "return CodexDecisionError(",
+                "provider_failure=provider_failure",
             )
         ) and self._decision.count("raise _decision_terminal_error(") >= 2
         return ("rejected", {"structured_error_preserved": structured})
 
     def _observe_overload_backpressure(self):
-        retryable = any(
+        classification = all(
             token in self._decision
             for token in (
-                "codex_overloaded",
-                "codex_rate_limited",
-                "provider_retryable",
+                '_RETRYABLE_PROVIDER_CATEGORIES = frozenset({"serverOverloaded"})',
+                "def _provider_failure_is_backpressure(",
+                "provider_retryable=provider_retryable",
             )
         )
+        effect_gate = self._decision.count("host_effect_safe=True") >= 2
         host_effect_absent = "executor.execute" not in self._decision
+        retryable = classification and effect_gate and host_effect_absent
         return (
             "retryable" if retryable else "rejected",
             {
                 "retryable_classified": retryable,
-                "unsafe_host_effect_not_retried": host_effect_absent,
+                "unsafe_host_effect_not_retried": host_effect_absent and effect_gate,
             },
         )

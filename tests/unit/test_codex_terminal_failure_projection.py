@@ -19,18 +19,24 @@ def _load_terminal_failure_contract():
         "_safe_failure_token",
         "_upstream_error_payload",
         "_provider_failure_details",
+        "_provider_failure_is_backpressure",
         "_decision_terminal_error",
     }
-    body = [
-        node
-        for node in tree.body
+    body = []
+    for node in tree.body:
         if (
             isinstance(node, ast.ClassDef)
             and node.name in selected_names
             or isinstance(node, ast.FunctionDef)
             and node.name in selected_names
-        )
-    ]
+        ):
+            body.append(node)
+            continue
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "_RETRYABLE_PROVIDER_CATEGORIES"
+            for target in node.targets
+        ):
+            body.append(node)
     module = ast.fix_missing_locations(ast.Module(body=body, type_ignores=[]))
 
     class FakeCodexAgentError(RuntimeError):
@@ -71,7 +77,8 @@ def test_terminal_failure_preserves_bounded_provider_facts_without_raw_message()
             "message": upstream_message,
             "codexErrorInfo": "other",
             "additionalDetails": {"private": "must-not-survive"},
-        }
+        },
+        host_effect_safe=True,
     )
 
     assert error.code == "codex_output_schema_invalid"
@@ -80,10 +87,11 @@ def test_terminal_failure_preserves_bounded_provider_facts_without_raw_message()
         http_status_code=400,
         upstream_code="invalid_json_schema",
     )
+    assert error.provider_retryable is False
     assert str(error) == "codex_output_schema_invalid"
     assert "sensitive schema detail" not in repr(error.provider_failure)
     assert "must-not-survive" not in repr(error.provider_failure)
-    assert source.count("raise _decision_terminal_error(") >= 2
+    assert source.count("host_effect_safe=True") >= 2
 
 
 def test_structured_transport_category_and_status_survive_without_message_text() -> None:
@@ -100,7 +108,8 @@ def test_structured_transport_category_and_status_survive_without_message_text()
                 }
             },
             "additionalDetails": {"requestBody": "private"},
-        }
+        },
+        host_effect_safe=True,
     )
 
     assert error.code == "codex_turn_failed"
@@ -109,6 +118,7 @@ def test_structured_transport_category_and_status_survive_without_message_text()
         http_status_code=503,
         upstream_code=None,
     )
+    assert error.provider_retryable is False
     assert str(error) == "codex_turn_failed"
     assert "transport detail" not in repr(error.provider_failure)
     assert "requestBody" not in repr(error.provider_failure)
@@ -131,37 +141,78 @@ def test_invalid_unbounded_provider_fields_are_discarded() -> None:
                     "httpStatusCode": 999,
                 }
             },
-        }
+        },
+        host_effect_safe=True,
     )
 
     assert error.code == "codex_turn_failed"
     assert error.provider_failure is None
+    assert error.provider_retryable is False
 
 
-def test_overload_fact_is_preserved_but_not_yet_classified_retryable() -> None:
-    source, namespace = _load_terminal_failure_contract()
+def test_overload_is_retryable_only_at_effect_safe_provider_boundary() -> None:
+    _, namespace = _load_terminal_failure_contract()
     terminal_error = namespace["_decision_terminal_error"]
     failure_type = namespace["CodexProviderFailure"]
 
-    error = terminal_error(
+    safe = terminal_error(
         {
             "message": "overload detail",
             "codexErrorInfo": "serverOverloaded",
-        }
+        },
+        host_effect_safe=True,
+    )
+    unsafe = terminal_error(
+        {
+            "message": "overload detail",
+            "codexErrorInfo": "serverOverloaded",
+        },
+        host_effect_safe=False,
     )
 
-    assert error.code == "codex_turn_failed"
-    assert error.provider_failure == failure_type(
+    expected = failure_type(
         category="serverOverloaded",
         http_status_code=None,
         upstream_code=None,
     )
-    assert "provider_retryable" not in source
-    assert "codex_overloaded" not in source
-    assert "codex_rate_limited" not in source
+    assert safe.code == "codex_turn_failed"
+    assert safe.provider_failure == expected
+    assert safe.provider_retryable is True
+    assert unsafe.provider_failure == expected
+    assert unsafe.provider_retryable is False
 
 
-def test_current_conformance_binding_marks_terminal_failure_structured() -> None:
+def test_generic_503_usage_limit_and_schema_error_are_not_backpressure() -> None:
+    _, namespace = _load_terminal_failure_contract()
+    terminal_error = namespace["_decision_terminal_error"]
+
+    generic_503 = terminal_error(
+        {
+            "codexErrorInfo": {"httpConnectionFailed": {"httpStatusCode": 503}},
+        },
+        host_effect_safe=True,
+    )
+    usage_limit = terminal_error(
+        {"codexErrorInfo": "usageLimitExceeded"},
+        host_effect_safe=True,
+    )
+    schema = terminal_error(
+        {
+            "message": json.dumps(
+                {"error": {"code": "invalid_json_schema"}, "status": 400}
+            ),
+            "codexErrorInfo": "other",
+        },
+        host_effect_safe=True,
+    )
+
+    assert generic_503.provider_retryable is False
+    assert usage_limit.provider_retryable is False
+    assert schema.provider_retryable is False
+    assert schema.code == "codex_output_schema_invalid"
+
+
+def test_current_conformance_binding_marks_terminal_and_backpressure_structured() -> None:
     import asyncio
     import importlib.util
 
@@ -176,13 +227,19 @@ def test_current_conformance_binding_marks_terminal_failure_structured() -> None
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    adapter = module.CurrentCodexDecisionConformanceAdapter(repo)
 
-    observation = asyncio.run(
-        module.CurrentCodexDecisionConformanceAdapter(repo).observe(
-            {"id": "terminal_failure"}
-        )
-    )
-    assert observation == {
+    terminal = asyncio.run(adapter.observe({"id": "terminal_failure"}))
+    overload = asyncio.run(adapter.observe({"id": "overload_backpressure"}))
+
+    assert terminal == {
         "outcome": "rejected",
         "assertions": {"structured_error_preserved": True},
+    }
+    assert overload == {
+        "outcome": "retryable",
+        "assertions": {
+            "retryable_classified": True,
+            "unsafe_host_effect_not_retried": True,
+        },
     }

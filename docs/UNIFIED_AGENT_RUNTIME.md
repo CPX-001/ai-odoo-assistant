@@ -30,8 +30,13 @@ The provider-neutral `NextDecision` remains a strict three-branch union. At the 
 adapter wraps that union below an object field and carries open capability arguments as bounded
 JSON text because App Server Structured Outputs rejects root unions and open object properties.
 The adapter decodes that transport envelope and then runs the unchanged strict decision parser and
-host validation. Provider schema failures are reduced to the sanitized
-`codex_output_schema_invalid` diagnostic; raw upstream messages are not persisted or exposed.
+host validation. Terminal provider failures retain only bounded machine facts (provider category,
+optional HTTP status and optional upstream code); raw upstream messages and additional details are
+not retained. Provider schema failures keep the sanitized `codex_output_schema_invalid` diagnostic.
+An explicit `serverOverloaded` terminal category may additionally carry an advisory
+`provider_retryable=True` flag, but only at this effect-free one-decision boundary. The adapter does
+not retry provider requests itself and the hint grants no authority to repeat capabilities or
+writes.
 
 ## Reads
 
@@ -83,12 +88,14 @@ stdout/stderr or private reasoning.
 ## Compatibility
 
 The previous `CodexReasoningEngine.run_agent_turn()` remains installed only as the ADR-019 rollback
-seam while real Odoo/Codex validation is pending. It is not the active embedded product
-composition. The Assistant UI, Odoo RPC boundary, account lifecycle from ADR-018 and the existing
-approval UX remain unchanged.
+seam while the remaining Phase 1 completion gates are validated. It is not the active embedded
+product composition. The Assistant UI, Odoo RPC boundary, account lifecycle from ADR-018 and the
+existing approval UX remain unchanged.
 
 ## Current validation status
 
-E2E-0 through E2E-4 are implemented with deterministic/local contract coverage available in the
-implementation environment. Real Odoo 18 + authenticated Codex/browser validation is still
-required and must not be inferred from local tests. See `docs/research/EXECUTION_STATE.md`.
+E2E-0 through E2E-4 are implemented. Real Odoo 18 Community + authenticated Codex validation has
+passed the Phase 0 product gates and the P1.3 `P1-REAL-VERSION` / `P1-REAL-SOAK-100` gates on their
+recorded exact checkpoints. The final Phase 1 provider checkpoint still requires the independent
+`P1-REAL-TOOLCALL` and `P1-REAL-CANCEL` gates; unrun checks must not be inferred from earlier live
+passes. See `docs/research/EXECUTION_STATE.md`.

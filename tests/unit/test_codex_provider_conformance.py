@@ -189,14 +189,14 @@ def test_final_answer_mapping_uses_shared_contract_not_prompt_literal(tmp_path: 
     }
 
 
-def test_current_codex_decision_engine_matrix_after_terminal_failure_repair() -> None:
+def test_current_codex_decision_engine_matrix_after_backpressure_repair() -> None:
     repo = Path(__file__).resolve().parents[2]
     cases = contract.load_contract(FIXTURE)
     adapter = current_adapter.CurrentCodexDecisionConformanceAdapter(repo)
     report = asyncio.run(contract.run_suite(adapter, cases))
 
     assert report["case_count"] == 14
-    assert report["passed"] is False
+    assert report["passed"] is True
     failed = {row["case_id"] for row in report["results"] if not row["passed"]}
-    assert failed == {"overload_backpressure"}
-    assert sum(1 for row in report["results"] if row["passed"]) == 13
+    assert failed == set()
+    assert sum(1 for row in report["results"] if row["passed"]) == 14
