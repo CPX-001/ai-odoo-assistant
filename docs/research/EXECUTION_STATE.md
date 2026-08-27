@@ -2,12 +2,12 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `90088215f247716b57e5c19c2502cc2d33a78e51`
+Latest repository checkpoint inspected: `3ad524bc3da84d41b58934fa98d79a1344129d10`  
 Latest product/tooling implementation checkpoint: `85086dad0f04c534d447b279e4e15c1afb879148`  
 Latest P0.1 validation checkpoint materially tested: `121108e55ef0ff91adb0377920f73128875536ac`  
 Latest P0.2 / real READ checkpoint materially tested: `a05e75006f53b056f31ab96c3864092d89199480`  
 Latest P0.3 real crash-probe checkpoint materially tested: `c114f15a1fe82d102df3c129661fca87ceaeb235`  
-Latest P0.4 real fault-pair checkpoint materially tested: `90088215f247716b57e5c19c2502cc2d33a78e51`
+Latest P0.4 real fault-pair checkpoint materially tested: `90088215f247716b57e5c19c2502cc2d33a78e51`  
 Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 
 ## Current cursor
@@ -17,7 +17,7 @@ phase: 0
 phase_name: reproducible baseline
 phase_state: REAL_ENV_VALIDATION_REQUIRED
 active_slice: P0-REAL-ACTION-rerun
-active_slice_state: READY
+active_slice_state: REAL_ENV_VALIDATION_REQUIRED
 current_gate_type: HARD
 next_phase: 1
 ```
@@ -34,7 +34,7 @@ currently_consumed_implementation_slices: 1
 currently_stacked_unvalidated_contract_layers: 0
 ```
 
-The consumed look-ahead slice remains `P1-PREP-CONFORMANCE`, adapter-neutral test preparation only. P0.4 is normal Phase 0 work and creates no production contract layer.
+The consumed look-ahead slice is `P1-PREP-CONFORMANCE`, adapter-neutral test preparation only. It is COMPLETE. No additional look-ahead slice is explicitly authorized for the current ACTION gate. The pending validation touches writes/approval/exactly-once behavior, so downstream provider/runtime implementation is not eligible under the protocol's look-ahead test.
 
 ## Processed real evidence
 
@@ -45,9 +45,9 @@ The consumed look-ahead slice remains `P1-PREP-CONFORMANCE`, adapter-neutral tes
 - `P0.4-REAL-PROVIDER-TIMEOUT-PAIR`: PASS at `9008821`; `codex_read_timeout -> service_unavailable`.
 - `P0.4-REAL-INVALID-OUTPUT-PAIR`: PASS at `9008821`; `codex_answer_invalid -> service_unavailable`.
 - `provider_auth_missing`: PASS pair at `9008821`; `codex_not_connected -> codex_not_connected`.
-- `P0-REAL-ACTION`: historical FAIL; not rerun in this slice.
 - failure-pair matrix: PASS with five distinct paths.
-- aggregate Phase 0 report remains not ready for Phase 1.
+- aggregate Phase 0 report: timing decomposition PASS, simple latency attribution PASS, five failure pairs PASS, minimum live matrix FAIL only because `action=false`; `ready_for_phase1=false`.
+- `P0-REAL-ACTION`: historical FAIL; no new ACTION evidence is present on current `main`.
 
 ## Completed corrective slices
 
@@ -55,77 +55,22 @@ The consumed look-ahead slice remains `P1-PREP-CONFORMANCE`, adapter-neutral tes
 - P0.2 read failure diagnosis/acceptance — COMPLETE.
 - P0.3 provider crash reproduction — COMPLETE.
 - P0.4 bounded provider fault fixtures — COMPLETE.
-
-## Closed corrective slice — P0.4
-
-Evidence:
-`docs/research/evidence/phase0/2026-08-27/P0.4-fault-injection-fixtures.md`
-
-Implemented test-only bounded App Server fixtures for:
-
-- provider EOF -> expected `codex_process_eof`;
-- provider timeout -> expected `codex_read_timeout`;
-- invalid final output -> expected `codex_answer_invalid`.
-
-The timeout fixture stalls only the reasoning client's initialize request, leaving the account gate healthy and using the host-owned 5-second startup timeout. No dynamic tools or business writes are emitted by any fixture.
-
-Deterministic validation actually run against the exact published fixture contents:
-
-```text
-python -m py_compile \
-  tests/fixtures/phase0_codex_fault_app_server.py \
-  tests/unit/test_phase0_codex_fault_fixture.py
-PASS
-
-python -m pytest -q tests/unit/test_phase0_codex_fault_fixture.py
-6 passed in 12.49s
-```
-
-Revalidated on the pulled checkpoint:
-
-```text
-python -m pytest -q tests/unit/test_phase0_codex_fault_fixture.py
-6 passed in 0.06s
-
-python -m pytest -q tests/unit/test_phase0_*.py tests/unit/test_codex_provider_conformance.py
-33 passed in 0.12s
-```
-
-Real Odoo/browser validation:
-
-```text
-provider_disconnect:  failed / codex_process_eof / UI service_unavailable
-provider_timeout:     failed / codex_read_timeout / UI service_unavailable
-invalid_final_output: failed / codex_answer_invalid / UI service_unavailable
-```
-
-Every fixture override was restored, real provider status returned to `authenticated`, and Odoo
-remained stable during each measured trial. Full details and sanitized artifacts are in the P0.4
-evidence record.
-
-The aggregate report was executed with eleven sanitized captures and returned exit `2` as
-expected for the one remaining gate:
-
-```text
-timing_decomposition: true
-simple_latency_attributed: true
-five_failure_pairs: true
-minimum_live_matrix: false (action=false)
-ready_for_phase1: false
-```
+- P1-PREP-CONFORMANCE — COMPLETE as test-only look-ahead; it does not authorize Phase 1 production work.
 
 ## Validation debt
 
 ### VD-P0-LIVE-BASELINE
 
 ```text
-validation_ids:
-  - P0-REAL-ACTION
+validation_id: P0-REAL-ACTION
 gate_type: HARD
+origin_slice: Phase 0 minimum live matrix
+commit_materially_tested: pending current ACTION rerun
 downstream_scope_blocked:
+  - completing Phase 0
   - Phase 1 production provider/runtime refactor
   - provider lifecycle optimization
-reason: the safe disposable ACTION baseline has not been rerun
+reason: the safe disposable ACTION baseline has not been rerun after P0.3/P0.4 bounded the prior provider/service instability
 ```
 
 ## Current blocker
@@ -134,13 +79,20 @@ reason: the safe disposable ACTION baseline has not been rerun
 P0_REAL_ACTION_RERUN_REQUIRED
 ```
 
+This repository-only run has GitHub access but no real Odoo 18 + authenticated Codex + browser execution path. No ACTION validation or deterministic product test was run here, and none is claimed as PASS.
+
 ## Exact next action
 
-1. Prepare one disposable partner and record its reversible field value.
-2. Run `P0-REAL-ACTION` through the real browser: require preview and explicit approval.
-3. Verify the effect occurred exactly once, record the sanitized receipt/evidence, then restore the fixture.
-4. Stop on any Odoo instability, missing preview, blind retry or ambiguous write outcome.
-5. Rerun `phase0_report.py`; begin Phase 1 only if the aggregate report says `ready_for_phase1=true`.
+1. Update/restart the disposable Odoo 18 environment from current `main` and verify Codex is authenticated.
+2. Prepare one disposable partner and record the original value of one harmless reversible field (for example `phone`).
+3. Through the real Assistant browser UI, request exactly one update to that field.
+4. Require an `awaiting_confirmation` preview that identifies the intended record/change; do not proceed if preview is absent or ambiguous.
+5. Approve once through the supported UI.
+6. Require exactly one execution and verification; confirm the Odoo record contains the intended value and there was no blind retry or ambiguous recovery state.
+7. Record sanitized `P0-REAL-ACTION` evidence: commit tested, Odoo/Codex versions, preview/approval observed, execution/verification outcome, service stability, and artifact refs. Do not commit prompts, credentials, raw tool/provider payloads, or sensitive business data.
+8. Restore the disposable field to its original value after evidence is captured.
+9. Rerun `tests/e2e/phase0_report.py` over the current sanitized Phase 0 captures. Phase 1 may begin only if it exits `0` with `ready_for_phase1=true`.
+10. If Odoo restarts/becomes unhealthy, preview is missing, effect occurs more than once, or the write outcome is uncertain, stop immediately and record `P0-REAL-ACTION: FAIL`; do not begin Phase 1.
 
 ## Publication policy
 
