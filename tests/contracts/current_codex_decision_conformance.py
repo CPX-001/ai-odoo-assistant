@@ -145,8 +145,8 @@ class CurrentCodexDecisionConformanceAdapter:
         closed = all(
             token in self._decision
             for token in (
-                "params.get(\"threadId\") != thread_id",
-                "turn.get(\"id\") != turn_id",
+                'params.get("threadId") != thread_id',
+                'turn.get("id") != turn_id',
                 'raise CodexAgentError("codex_turn_completion_mismatch")',
             )
         )
@@ -163,9 +163,19 @@ class CurrentCodexDecisionConformanceAdapter:
         return ("cancelled" if correct else "rejected", {"correct_turn_interrupted": correct})
 
     def _observe_terminal_failure(self):
-        structured = False
-        if "_decision_failure_code" not in self._decision:
-            structured = False
+        structured = all(
+            token in self._decision
+            for token in (
+                "class CodexProviderFailure:",
+                "class CodexDecisionError(CodexAgentError):",
+                "self.provider_failure = provider_failure",
+                "def _provider_failure_details(",
+                '"codexErrorInfo"',
+                '"httpStatusCode"',
+                "upstream_code",
+                "return CodexDecisionError(code, provider_failure=provider_failure)",
+            )
+        ) and self._decision.count("raise _decision_terminal_error(") >= 2
         return ("rejected", {"structured_error_preserved": structured})
 
     def _observe_overload_backpressure(self):

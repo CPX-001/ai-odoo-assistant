@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import cast
 
 from ..capabilities import CapabilityContext, CapabilityDefinition
@@ -25,6 +26,7 @@ from .decision_validation import validate_next_decision
 
 _MAX_EVENTS = 2048
 _MAX_DECISION_CONTEXT_BYTES = 128 * 1024
+_MAX_PROVIDER_FAILURE_TOKEN = 64
 _DECISION_INSTRUCTIONS = """You are the isolated reasoning component of Odoo AI Assistant.
 Return exactly one decision inside the root decision field, matching one branch of the supplied
 schema. For a capability call or plan proposal, encode the arguments object as JSON in the
@@ -45,6 +47,44 @@ reported as successful.
 
 Never use shell, filesystem, network, MCP, subagents, arbitrary ORM methods, SQL, Python or sudo.
 Do not reveal private reasoning, provider protocol data, secrets or unsanitized host internals."""
+
+
+@dataclass(frozen=True, slots=True)
+class CodexProviderFailure:
+    """Bounded provider terminal facts retained for the future host failure layer."""
+
+    category: str | None = None
+    http_status_code: int | None = None
+    upstream_code: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.category is not None and _safe_failure_token(self.category) != self.category:
+            raise ValueError("codex_provider_failure_invalid")
+        if self.upstream_code is not None and _safe_failure_token(self.upstream_code) != self.upstream_code:
+            raise ValueError("codex_provider_failure_invalid")
+        if self.http_status_code is not None and (
+            type(self.http_status_code) is not int or not 100 <= self.http_status_code <= 599
+        ):
+            raise ValueError("codex_provider_failure_invalid")
+        if (
+            self.category is None
+            and self.http_status_code is None
+            and self.upstream_code is None
+        ):
+            raise ValueError("codex_provider_failure_invalid")
+
+
+class CodexDecisionError(CodexAgentError):
+    """Decision-adapter failure carrying only sanitized provider terminal facts."""
+
+    def __init__(
+        self,
+        code: str,
+        *,
+        provider_failure: CodexProviderFailure | None = None,
+    ) -> None:
+        super().__init__(code)
+        self.provider_failure = provider_failure
 
 
 class CodexDecisionEngine:
@@ -163,7 +203,7 @@ class CodexDecisionEngine:
             if turn.get("status") == "interrupted":
                 raise CodexAgentError("agent_cancelled")
             if turn.get("status") != "completed" or turn.get("error") not in (None, {}):
-                raise CodexAgentError(_decision_failure_code(turn.get("error")))
+                raise _decision_terminal_error(turn.get("error"))
             return _with_completed_agent_messages(
                 cast(dict[str, object], turn),
                 completed_agent_messages,
@@ -258,25 +298,81 @@ def _validate_decision_error_event(params, *, thread_id: str, turn_id: str) -> N
         raise CodexAgentError("codex_error_event_invalid")
     if params.get("willRetry") is True:
         return
-    raise CodexAgentError(_decision_failure_code(params.get("error")))
+    raise _decision_terminal_error(params.get("error"))
 
 
-def _decision_failure_code(error: object) -> str:
-    """Reduce provider detail to an allowlisted product diagnostic code."""
+def _safe_failure_token(value: object) -> str | None:
+    if (
+        not isinstance(value, str)
+        or not 1 <= len(value) <= _MAX_PROVIDER_FAILURE_TOKEN
+        or not value.isascii()
+        or any(not (character.isalnum() or character in "._:-") for character in value)
+    ):
+        return None
+    return value
 
-    if not isinstance(error, Mapping):
-        return "codex_turn_failed"
-    message = error.get("message")
+
+def _upstream_error_payload(message: object) -> Mapping[str, object] | None:
     if not isinstance(message, str) or len(message) > _MAX_DECISION_CONTEXT_BYTES:
-        return "codex_turn_failed"
+        return None
     try:
         payload = json.loads(message)
     except (TypeError, ValueError):
-        return "codex_turn_failed"
-    upstream_error = payload.get("error") if isinstance(payload, dict) else None
-    if isinstance(upstream_error, dict) and upstream_error.get("code") == "invalid_json_schema":
-        return "codex_output_schema_invalid"
-    return "codex_turn_failed"
+        return None
+    return payload if isinstance(payload, Mapping) else None
+
+
+def _provider_failure_details(error: object) -> CodexProviderFailure | None:
+    """Project a provider terminal error to bounded non-message facts only."""
+
+    if not isinstance(error, Mapping):
+        return None
+
+    category = None
+    http_status_code = None
+    upstream_code = None
+
+    info = error.get("codexErrorInfo")
+    if isinstance(info, str):
+        category = _safe_failure_token(info)
+    elif isinstance(info, Mapping) and len(info) == 1:
+        raw_category, raw_details = next(iter(info.items()))
+        category = _safe_failure_token(raw_category)
+        if category is not None and isinstance(raw_details, Mapping):
+            raw_status = raw_details.get("httpStatusCode")
+            if type(raw_status) is int and 100 <= raw_status <= 599:
+                http_status_code = raw_status
+
+    payload = _upstream_error_payload(error.get("message"))
+    if payload is not None:
+        if http_status_code is None:
+            raw_status = payload.get("status")
+            if type(raw_status) is int and 100 <= raw_status <= 599:
+                http_status_code = raw_status
+        upstream_error = payload.get("error")
+        if isinstance(upstream_error, Mapping):
+            upstream_code = _safe_failure_token(upstream_error.get("code"))
+
+    if category is None and http_status_code is None and upstream_code is None:
+        return None
+    return CodexProviderFailure(
+        category=category,
+        http_status_code=http_status_code,
+        upstream_code=upstream_code,
+    )
+
+
+def _decision_terminal_error(error: object) -> CodexDecisionError:
+    """Keep safe provider facts without defining the later product failure taxonomy."""
+
+    provider_failure = _provider_failure_details(error)
+    code = (
+        "codex_output_schema_invalid"
+        if provider_failure is not None
+        and provider_failure.upstream_code == "invalid_json_schema"
+        else "codex_turn_failed"
+    )
+    return CodexDecisionError(code, provider_failure=provider_failure)
 
 
 def _decision_turn_input(

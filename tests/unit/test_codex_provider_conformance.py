@@ -189,7 +189,7 @@ def test_final_answer_mapping_uses_shared_contract_not_prompt_literal(tmp_path: 
     }
 
 
-def test_current_codex_decision_engine_matrix_after_unknown_notification_repair() -> None:
+def test_current_codex_decision_engine_matrix_after_terminal_failure_repair() -> None:
     repo = Path(__file__).resolve().parents[2]
     cases = contract.load_contract(FIXTURE)
     adapter = current_adapter.CurrentCodexDecisionConformanceAdapter(repo)
@@ -198,5 +198,5 @@ def test_current_codex_decision_engine_matrix_after_unknown_notification_repair(
     assert report["case_count"] == 14
     assert report["passed"] is False
     failed = {row["case_id"] for row in report["results"] if not row["passed"]}
-    assert failed == {"terminal_failure", "overload_backpressure"}
-    assert sum(1 for row in report["results"] if row["passed"]) == 12
+    assert failed == {"overload_backpressure"}
+    assert sum(1 for row in report["results"] if row["passed"]) == 13

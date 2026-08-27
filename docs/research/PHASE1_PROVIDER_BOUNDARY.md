@@ -1,7 +1,7 @@
 # Phase 1 — provider boundary stabilization
 
-Date: 2026-08-27  
-Inspected implementation/test checkpoint: `012e9c8888011e70d8029d18f028a155f1d5a868`
+Date: 2026-08-27
+Inspected implementation/test base: `035cc801fc9b0de6c401837274d4b6054c34c3d6`
 Status: `IN_PROGRESS`
 
 ## Goal
@@ -96,7 +96,7 @@ FAIL overload_backpressure
 11 PASS / 3 FAIL
 ```
 
-No runtime behavior was changed in P1.2.
+No runtime implementation was changed in P1.2.
 
 ## P1.3 — benign unknown-notification tolerance
 
@@ -111,7 +111,7 @@ Objective:
 
 Implementation:
 
-- `CodexDecisionEngine` now routes notification validation through
+- `CodexDecisionEngine` routes notification validation through
   `_validate_decision_notification()`;
 - the helper first delegates to the existing shared `_validate_notification()` so all known Codex
   methods preserve their existing strict validation;
@@ -136,7 +136,7 @@ tests/contracts/current_codex_decision_conformance.py
 tests/unit/test_codex_provider_conformance.py
 ```
 
-The conformance binding now marks `unknown_notification` accepted only when the bounded helper and
+The conformance binding marks `unknown_notification` accepted only when the bounded helper and
 its identity guards exist. The focused unit regression extracts the exact helper from committed
 source and exercises:
 
@@ -161,7 +161,7 @@ unexpected failed case: final_answer_mapping
 ```
 
 Checkpoint `012e9c8888011e70d8029d18f028a155f1d5a868` repairs the harness without changing
-runtime behavior. The observer now verifies the adapter delegation and the shared parser branch for
+runtime behavior. The observer verifies the adapter delegation and the shared parser branch for
 all three decision kinds. A focused regression proves final-answer conformance does not depend on a
 prompt literal.
 
@@ -200,7 +200,7 @@ git diff --check
 PASS
 ```
 
-The dependency-light P1.3 projection is therefore executable and green at the recorded checkpoint:
+The dependency-light P1.3 projection is executable and green at the recorded checkpoint:
 12/14 conformant, with only the intentionally unresolved `terminal_failure` and
 `overload_backpressure` cases failing their conformance expectations.
 
@@ -230,6 +230,92 @@ and 100 conversations were removed after aggregation; Odoo was restarted and ret
 The sanitized evidence is
 `docs/research/evidence/phase1/2026-08-27/P1-REAL-VERSION-SOAK-49bdac1.md`.
 
+## P1.4 — bounded terminal-failure preservation
+
+State: `COMPLETE`
+
+Objective:
+
+- close only the `terminal_failure` conformance gap;
+- preserve machine-readable provider terminal facts across the Codex decision adapter boundary;
+- never preserve raw provider messages or `additionalDetails`;
+- retain current host/product error codes and leave retry/backpressure semantics for a separate slice.
+
+Implementation:
+
+- terminal decision failures now raise `CodexDecisionError`, a `CodexAgentError` subtype carrying an
+  optional immutable `CodexProviderFailure`;
+- `CodexProviderFailure` is deliberately small: `category`, `http_status_code` and `upstream_code`;
+- provider categories and upstream codes must be bounded ASCII machine tokens;
+- HTTP status is retained only when it is an integer in the 100-599 range;
+- string and structured-object `codexErrorInfo` shapes are supported;
+- a bounded JSON provider `message` may be parsed only to extract a machine error code and HTTP
+  status; the original message text is not attached to the exception;
+- `additionalDetails`, request bodies and any other provider payload are ignored;
+- invalid/unbounded fields are discarded instead of copied;
+- both terminal top-level `error` events and failed `turn/completed` events use the same projection;
+- existing `invalid_json_schema -> codex_output_schema_invalid` behavior remains intact;
+- all other terminal failures retain `codex_turn_failed` as the current sanitized product code.
+
+`serverOverloaded` is now preservable as a provider category, but it remains `codex_turn_failed`
+and is not marked retryable in P1.4. There is still no automatic provider/capability/write retry.
+
+This slice does not define the Phase 2 failure taxonomy, browser presentation, retry buttons or
+effect-state semantics. Its only purpose is to stop destroying bounded provider facts before that
+later host-owned mapping exists.
+
+## P1.4 deterministic/eval coverage
+
+Added or updated:
+
+```text
+addons/odoo_ai_assistant/runtime/agent/codex_decision.py
+tests/contracts/current_codex_decision_conformance.py
+tests/unit/test_codex_provider_conformance.py
+tests/unit/test_codex_terminal_failure_projection.py
+```
+
+The new dependency-light regression extracts the exact P1.4 classes/helpers from the modified source
+and verifies:
+
+- a captured-style `invalid_json_schema` terminal error keeps category `other`, HTTP 400 and the
+  upstream machine code while the raw schema detail is absent;
+- structured `httpConnectionFailed` keeps only category + HTTP status;
+- invalid/unbounded provider fields are discarded;
+- `serverOverloaded` is retained only as a fact and is deliberately not classified retryable yet;
+- both terminal routes call the same bounded terminal-error projection;
+- the current conformance binding reports `structured_error_preserved = true`.
+
+Actually executed in the available ChatGPT execution sandbox against the exact modified source
+snapshot prepared for publication:
+
+```text
+python -m pytest -q tests/unit/test_codex_terminal_failure_projection.py
+5 passed in 0.06s
+
+python -m py_compile \
+  addons/odoo_ai_assistant/runtime/agent/codex_decision.py \
+  tests/contracts/current_codex_decision_conformance.py \
+  tests/unit/test_codex_provider_conformance.py \
+  tests/unit/test_codex_terminal_failure_projection.py
+PASS
+```
+
+The full repository/Odoo suites were not available through the connected GitHub interface and are
+not claimed as executed.
+
+Static contract projection after P1.4:
+
+```text
+13 PASS / 1 FAIL
+remaining: overload_backpressure
+```
+
+P1.4 adds no new mandatory real-environment validation ID because it does not change tool
+execution, writes, retry policy, cancellation or browser failure presentation. The real Phase 1
+completion gates below remain required, and Phase 2 will add real validation for the eventual
+user-visible failure families.
+
 ## Invariants
 
 - Odoo remains operational and persistence authority.
@@ -238,6 +324,9 @@ The sanitized evidence is
 - Provider output is untrusted and host-validated.
 - PLAN remains proposal-only before the existing action lifecycle.
 - Unknown server requests remain rejected; notification tolerance grants no host authority.
+- Preserved provider failure facts are diagnostic data only and grant no host authority.
+- Raw provider messages/details are not retained by the P1.4 projection.
+- No automatic retry or effect inference is introduced by terminal-failure preservation.
 - No SQL/Python/shell/sudo/unrestricted ORM escape hatch is introduced.
 - Codex credentials remain provider-owned.
 - No provider, bundle or skill abstraction is introduced.
@@ -250,6 +339,8 @@ The immediate P1.3 HARD gates are cleared at
 - `P1-REAL-VERSION`: **PASS**;
 - `P1-REAL-SOAK-100`: **PASS**.
 
+P1.4 creates no new real-environment debt.
+
 Phase 1 completion debt that remains open independently:
 
 - `P1-REAL-TOOLCALL` — HARD before Phase 1 completion;
@@ -257,8 +348,9 @@ Phase 1 completion debt that remains open independently:
 
 ## Exact next action
 
-Select P1.4 as the smallest repair for the next observed conformance gap: preserve bounded
-structured provider terminal-failure information instead of collapsing it to `codex_turn_failed`.
-Keep overload/backpressure classification separate, preserve all Odoo/host authority invariants and
-add deterministic regressions before creating any new real-environment debt. Phase 1 remains
-`IN_PROGRESS` until its remaining conformance work plus `P1-REAL-TOOLCALL` and `P1-REAL-CANCEL` pass.
+Select P1.5 as the remaining conformance repair: classify Codex overload/backpressure as retryable
+only when host effect state is safe. Reuse the bounded provider category retained by P1.4; do not
+retry capability calls or writes merely because the provider reports overload. Add focused
+deterministic regressions, reassess real-environment debt for the retryability contract, and keep
+Phase 1 `IN_PROGRESS` until the conformance matrix is green plus `P1-REAL-TOOLCALL` and
+`P1-REAL-CANCEL` pass.
