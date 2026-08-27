@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "cases": [
+    {
+      "scenario_id": "provider_disconnect",
+      "fixture": "tests/fixtures/codex_phase0_eof",
+      "expected_original_error_code": "codex_process_eof",
+      "expected_final_state": "failed",
+      "safety": "no_dynamic_tools"
+    },
+    {
+      "scenario_id": "provider_timeout",
+      "fixture": "tests/fixtures/codex_phase0_timeout",
+      "expected_original_error_code": "codex_read_timeout",
+      "expected_final_state": "failed",
+      "safety": "reasoning_initialize_only"
+    },
+    {
+      "scenario_id": "invalid_final_output",
+      "fixture": "tests/fixtures/codex_phase0_invalid_output",
+      "expected_original_error_code": "codex_answer_invalid",
+      "expected_final_state": "failed",
+      "safety": "no_dynamic_tools"
+    }
+  ]
+}

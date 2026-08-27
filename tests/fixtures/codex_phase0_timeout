@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+from phase0_codex_fault_app_server import main
+raise SystemExit(main("timeout"))
