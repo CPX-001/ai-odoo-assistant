@@ -12,10 +12,11 @@ phase_name: provider boundary stabilization
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/PHASE1_PROVIDER_BOUNDARY.md
 active_slice: P1.3-benign-unknown-notification-tolerance
-active_slice_state: REAL_ENV_VALIDATION_REQUIRED
-current_gate_type: HARD
-blocking_validations: P1-REAL-SOAK-100, P1-REAL-VERSION
-next_slice: BLOCKED_PENDING_P1.3_REAL_ENV
+active_slice_state: COMPLETE
+current_gate_type: NONE
+blocking_validations: NONE_FOR_NEXT_SLICE
+phase_completion_validations: P1-REAL-TOOLCALL, P1-REAL-CANCEL
+next_slice: P1.4-terminal-failure-preservation
 ```
 
 Phase 0 is complete. The exact implementation/test SHA
@@ -24,9 +25,17 @@ READ and strict ACTION gate; the docs-only close-out is `9cf9a8d3553cf8bc5a0b39a
 
 ## New evidence processed
 
-No commit newer than the P1.2 checkpoint `2bf5fdd7c96a0729a8eb03f6bbdf0d9e3dc246f5` existed when this
-run reconstructed `main`. No newer real-environment failure or passing handoff was therefore
-available to process before selecting P1.3.
+The installed Odoo instance was explicitly updated from exact checkpoint
+`49bdac1f732acaaee3154ed60baffd675130991a`. The selected Odoo regression battery passed 46 test
+methods with zero failures/errors. `P1-REAL-VERSION` passed on Odoo 18.0 Community with Codex
+0.149.1 and an authenticated provider-owned account under Odoo's `data_dir`.
+
+`P1-REAL-SOAK-100` then passed 100/100 normal product-path turns: 80 greetings and 20 simple reads,
+with zero protocol-shape failures, provider-process failures, runtime-unavailable retries,
+host-authority bypasses, wrong-turn/call bindings or read tool-boundary failures. Median latency was
+7818.479 ms and p95 was 34563.910 ms. Six bounded `field_not_in_schema` corrections completed
+normally and were not classified as provider failures. Sanitized evidence is recorded in
+`docs/research/evidence/phase1/2026-08-27/P1-REAL-VERSION-SOAK-49bdac1.md`.
 
 ## P1.3 implementation
 
@@ -106,6 +115,23 @@ PASS
 
 git diff --check
 PASS
+
+installed Odoo addon update at 49bdac1f732acaaee3154ed60baffd675130991a
+PASS
+
+selected Odoo queue/runtime/host-loop/convergence/PLAN/adapter/capability/action suites
+46 tests, 0 failed, 0 errors
+
+P1-REAL-VERSION
+PASS — Odoo 18.0 Community, Codex 0.149.1, runtime account authenticated
+
+P1-REAL-SOAK-100
+PASS — 100/100 completed; 80 greetings, 20 reads; median 7818.479 ms, p95 34563.910 ms
+protocol/provider-process/authority/binding/read-tool-boundary failures: 0
+runtime_unavailable retries: 0
+
+fixture cleanup and installed-service health
+PASS — fixture counts returned to zero; Odoo active; HTTP 200
 ```
 
 The executed conformance projection is 12/14. Only the intentionally unresolved
@@ -114,66 +140,32 @@ The executed conformance projection is 12/14. Only the intentionally unresolved
 ## Tests not executed
 
 ```text
-Odoo addon test suite at 012e9c8888011e70d8029d18f028a155f1d5a868
-P1-REAL-VERSION
-P1-REAL-SOAK-100
+P1-REAL-TOOLCALL
+P1-REAL-CANCEL
 ```
 
-The available Odoo service was started before the checkout update and did not have this exact
-checkpoint loaded. The current execution user could not restart/update that service or authenticate
-to its test database. Codex CLI `0.149.1` was observed locally, but its presence alone is not
-`P1-REAL-VERSION`; the exact-SHA Odoo+Codex gate remains required.
+These are independent Phase 1 completion gates and were not silently inherited from the P1.3 soak.
 
 ## Validation debt
 
-P1.3 materially changes provider protocol behavior. Its publication commit must therefore be tested
-as the exact installed addon revision before another dependent provider-behavior slice proceeds.
-The exact publication SHA is the `main` commit containing this state record and must be copied into
-the real-environment evidence.
+P1.3 debt cleared:
 
 ```text
-P1-REAL-SOAK-100
-  gate_type: HARD
-  origin_slice: P1.3-benign-unknown-notification-tolerance
-  commit_materially_tested: pending exact P1.3 publication HEAD
-  downstream_scope_blocked: further dependent provider-behavior work and Phase 2+
-  reason: prove additive provider notifications no longer cause protocol-shape turn failures
-
-P1-REAL-VERSION
-  gate_type: HARD
-  origin_slice: P1.3-benign-unknown-notification-tolerance
-  commit_materially_tested: pending exact P1.3 publication HEAD
-  downstream_scope_blocked: further dependent provider-behavior work and Phase 2+
-  reason: bind the compatibility result to the supported Codex App Server version/protocol
+P1-REAL-SOAK-100 | HARD | PASS | 49bdac1f732acaaee3154ed60baffd675130991a
+P1-REAL-VERSION  | HARD | PASS | 49bdac1f732acaaee3154ed60baffd675130991a
 ```
 
-Other Phase 1 completion debt remains open but was not created by P1.3:
+Independent Phase 1 completion debt remains open:
 
 ```text
 P1-REAL-TOOLCALL | HARD | host/provider capability mapping | Phase 2+
 P1-REAL-CANCEL   | HARD | provider turn identity/cancellation | Phase 2+
 ```
 
-## Required real-environment procedure
-
-Validate the exact P1.3 publication SHA under the assumptions in
-`REAL_ENV_VALIDATION_PROTOCOL.md`.
-
-1. `P1-REAL-VERSION`: install/update the addon from the exact publication SHA, record Odoo 18 and
-   Codex versions, and verify startup/initialize/thread/turn behavior on that exact supported Codex
-   runtime.
-2. `P1-REAL-SOAK-100`: run at least 100 turns composed of trivial greetings and simple reads.
-3. Capture completion count, protocol-shape failures, provider process failures, median/p95 latency,
-   unexpected retries and any unknown-notification diagnostics.
-4. PASS requires `protocol-shape failures = 0`, `host-authority bypasses = 0` and
-   `wrong-turn/call binding = 0`.
-5. Commit sanitized evidence containing both validation IDs, exact commit tested, Odoo/Codex
-   versions and PASS/FAIL outcome. Do not commit credentials, prompts, provider stdout/stderr or
-   unrestricted business payloads.
-
 ## Exact next action
 
-Do not implement the remaining `terminal_failure` or `overload_backpressure` repairs yet. First
-process committed PASS/FAIL evidence for `P1-REAL-VERSION` and `P1-REAL-SOAK-100` against the exact
-P1.3 publication SHA. On PASS, clear only those debt items and reconstruct the next Phase 1 repair
-from current `main`; on FAIL, select the smallest corrective slice for the observed boundary.
+Select P1.4 to preserve bounded structured provider terminal-failure information, the first
+remaining failed conformance case. Keep overload/backpressure classification as a separate later
+slice. Preserve the validated one-decision host loop, add deterministic regression coverage and
+define any new real-environment debt before implementation. Do not mark Phase 1 complete until
+`P1-REAL-TOOLCALL` and `P1-REAL-CANCEL` also pass.

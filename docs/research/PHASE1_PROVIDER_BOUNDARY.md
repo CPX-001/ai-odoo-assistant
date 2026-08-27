@@ -100,7 +100,7 @@ No runtime behavior was changed in P1.2.
 
 ## P1.3 — benign unknown-notification tolerance
 
-State: `REAL_ENV_VALIDATION_REQUIRED`
+State: `COMPLETE`
 
 Objective:
 
@@ -204,10 +204,31 @@ The dependency-light P1.3 projection is therefore executable and green at the re
 12/14 conformant, with only the intentionally unresolved `terminal_failure` and
 `overload_backpressure` cases failing their conformance expectations.
 
-The Odoo suite and `P1-REAL-VERSION` / `P1-REAL-SOAK-100` were not executed against this checkpoint.
-The available Odoo service had started before the checkout was updated and the current execution
-user could not restart/update that service or authenticate to its test database. Codex CLI
-`0.149.1` was observed locally, but version presence alone is not the exact-SHA real gate.
+Real validation was subsequently executed on the installed Odoo instance after explicitly updating
+the addon from `49bdac1f732acaaee3154ed60baffd675130991a`:
+
+```text
+Odoo 18.0 Community / Codex 0.149.1
+runtime account: authenticated
+selected Odoo regression battery: 46 tests, 0 failed, 0 errors
+P1-REAL-VERSION: PASS
+P1-REAL-SOAK-100: PASS
+soak composition: 80 greetings, 20 simple reads
+completion: 100/100
+protocol-shape failures: 0
+provider process failures: 0
+runtime_unavailable retries: 0
+host-authority bypasses: 0
+wrong-turn/call bindings: 0
+read tool-boundary failures: 0
+latency median/p95: 7818.479 / 34563.910 ms
+```
+
+Six reads required the existing bounded `field_not_in_schema` correction and then completed. This
+was recorded separately from provider failures and retries. The dedicated user, partner, 100 turns
+and 100 conversations were removed after aggregation; Odoo was restarted and returned HTTP 200.
+The sanitized evidence is
+`docs/research/evidence/phase1/2026-08-27/P1-REAL-VERSION-SOAK-49bdac1.md`.
 
 ## Invariants
 
@@ -223,47 +244,21 @@ user could not restart/update that service or authenticate to its test database.
 
 ## Validation debt
 
-P1.3 changes active provider protocol behavior, so it is not complete until exact-SHA real evidence
-exists for the compatibility boundary. The exact commit to validate is the `main` publication commit
-containing this record.
+The immediate P1.3 HARD gates are cleared at
+`49bdac1f732acaaee3154ed60baffd675130991a`:
 
-Immediate HARD gate before another dependent provider-behavior slice:
-
-- `P1-REAL-VERSION` — record the supported Codex version and verify startup/initialize/thread/turn
-  behavior on the exact P1.3 publication SHA;
-- `P1-REAL-SOAK-100` — run at least 100 greeting/simple-read turns on that exact revision and require
-  zero protocol-shape failures, zero authority bypasses and zero wrong-turn/call bindings.
+- `P1-REAL-VERSION`: **PASS**;
+- `P1-REAL-SOAK-100`: **PASS**.
 
 Phase 1 completion debt that remains open independently:
 
 - `P1-REAL-TOOLCALL` — HARD before Phase 1 completion;
 - `P1-REAL-CANCEL` — HARD before Phase 1 completion.
 
-## Exact validation procedure
-
-Use `docs/research/REAL_ENV_VALIDATION_PROTOCOL.md` with the addon installed/updated from the exact
-P1.3 publication commit.
-
-For `P1-REAL-VERSION`, record Odoo 18 version, exact Codex version and successful
-startup/initialize/thread/turn protocol behavior.
-
-For `P1-REAL-SOAK-100`, run at least 100 turns composed of trivial greetings and simple reads and
-capture completion count, protocol-shape failures, provider process failures, median/p95 latency,
-unexpected retries and unknown-notification diagnostics. PASS requires:
-
-```text
-protocol-shape failures = 0
-host-authority bypasses = 0
-wrong-turn/call binding = 0
-```
-
-Commit only sanitized evidence with validation IDs and exact SHA. Do not commit credentials, raw
-prompts, provider stdout/stderr, unrestricted tool payloads or private reasoning.
-
 ## Exact next action
 
-Wait for committed `P1-REAL-VERSION` and `P1-REAL-SOAK-100` evidence against the exact P1.3
-publication SHA. If both PASS, clear only those debt items and reconstruct the next provider repair
-from current `main`. If either fails, freeze later provider work and implement the smallest repair
-for the observed boundary. Do not begin terminal-error preservation or overload/backpressure work
-before this HARD gate is processed.
+Select P1.4 as the smallest repair for the next observed conformance gap: preserve bounded
+structured provider terminal-failure information instead of collapsing it to `codex_turn_failed`.
+Keep overload/backpressure classification separate, preserve all Odoo/host authority invariants and
+add deterministic regressions before creating any new real-environment debt. Phase 1 remains
+`IN_PROGRESS` until its remaining conformance work plus `P1-REAL-TOOLCALL` and `P1-REAL-CANCEL` pass.
