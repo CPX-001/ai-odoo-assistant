@@ -1,0 +1,14 @@
+{
+  "accepted": false,
+  "format_version": 1,
+  "plan_state": "completed",
+  "plan_step_count": 0,
+  "preview_observed": false,
+  "reasons": [
+    "action_plan_missing",
+    "approval_preview_missing",
+    "approval_not_required"
+  ],
+  "request_kind": "explicit_supported_write",
+  "turn_state": "completed"
+}

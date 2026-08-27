@@ -2,9 +2,9 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `08564a9f93ebd890dc7238db91ab9f6d191b2502`<br>
+Latest repository checkpoint inspected: `97617fefe40c22803a140b03023fd0df67594be1`<br>
 Latest product/tooling implementation checkpoint: `075138d7d9b519d46c60990ad465f06832d0bae8`  
-Latest P0 ACTION real checkpoint materially tested: `38c7c9a121cc797b9a2737fb312283506aa152f6`  
+Latest P0 ACTION real checkpoint materially tested: `97617fefe40c22803a140b03023fd0df67594be1`<br>
 Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 
 ## Current cursor
@@ -13,8 +13,8 @@ Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 phase: 0
 phase_name: reproducible baseline
 phase_state: BLOCKED
-active_slice: P0-REAL-ACTION-plan-omission-correction
-active_slice_state: REAL_ENV_VALIDATION_REQUIRED
+active_slice: P0-REAL-ACTION-plan-omission-correction-v2
+active_slice_state: BLOCKED
 current_gate_type: HARD
 next_phase: 1
 ```
@@ -39,6 +39,9 @@ currently_stacked_unvalidated_contract_layers: 1
 - failure-pair matrix: PASS with five distinct paths.
 - aggregate Phase 0 report remains `ready_for_phase1=false` because ACTION is absent.
 - `P0-REAL-ACTION`: FAIL at `38c7c9a`; one real browser turn completed after three bounded tool pairs with no error, `write_barrier=false`, `plan_step_count=0`, no approval preview and no effect. The disposable record remained unchanged and Odoo service identity stayed stable.
+- `P0-REAL-ACTION-CORRECTED`: FAIL at `97617fe`; after the planning-obligation correction,
+  the real browser turn reproduced the same three bounded tool pairs and completed zero-step plan.
+  No approval or effect occurred, the record remained unchanged and Odoo retained PID `75689`.
 
 ## Completed ACTION diagnosis slice
 
@@ -117,12 +120,12 @@ primary Odoo service and database were not used by those test runners.
 validation_id: P0-REAL-ACTION
 gate_type: HARD
 origin_slice: Phase 0 minimum live matrix
-commit_materially_tested: 38c7c9a121cc797b9a2737fb312283506aa152f6
+commit_materially_tested: 97617fefe40c22803a140b03023fd0df67594be1
 downstream_scope_blocked:
   - completing Phase 0
   - Phase 1 production provider/runtime refactor
   - provider lifecycle optimization
-reason: explicit supported partner mutation produced a completed zero-step plan with no approval preview
+reason: explicit supported partner mutation still produced a completed zero-step plan with no approval preview after the planning-obligation correction
 ```
 
 ### VD-P0-ACTION-CORRECTION-REAL
@@ -131,26 +134,32 @@ reason: explicit supported partner mutation produced a completed zero-step plan 
 validation_id: P0-REAL-ACTION-CORRECTED
 gate_type: HARD
 origin_slice: P0-REAL-ACTION-plan-omission-correction
-commit_materially_tested: 08564a9f93ebd890dc7238db91ab9f6d191b2502
+commit_materially_tested: 97617fefe40c22803a140b03023fd0df67594be1
 downstream_scope_blocked:
   - closing P0-REAL-ACTION
   - completing Phase 0
-reason: corrected planning contract has not yet been validated in real Odoo 18 + authenticated Codex + browser
+reason: corrected planning contract was validated in real Odoo 18 + authenticated Codex + browser and did not change the zero-step outcome
 ```
 
 ## Current blocker
 
 ```text
-P0_REAL_ACTION_CORRECTED_RERUN_REQUIRED
+P0_REAL_ACTION_CORRECTION_INSUFFICIENT_ZERO_STEP_PERSISTS
 ```
 
 ## Exact next action
 
-1. Rerun one disposable `P0-REAL-ACTION-CORRECTED` through the normal browser -> Odoo 18 -> embedded runtime -> authenticated Codex path on the locally validated checkpoint.
-2. Require the explicit supported partner mutation to emit `odoo.record.patch` and reach the exact `awaiting_confirmation` preview while the record is still unchanged.
-3. Approve exactly once; require exactly one business effect, host verification PASS, terminal completed state and stable Odoo service identity.
-4. If that passes, create and reject the separate accepted `capture_kind=live_http` `write_preview` measurement capture, then rerun `phase0_report.py` and require `ready_for_phase1=true`.
-5. Only after both validation debts close may Phase 0 become COMPLETE and Phase 1 production work begin.
+1. Diagnose why the real Codex result still emits `plan=[]` after three successful bounded reads
+   despite receiving the explicit planning-obligation contract. Use only sanitized provider/plan
+   evidence; do not infer hidden reasoning.
+2. Add a deterministic regression for the newly identified boundary before implementing a second
+   correction. Do not add an unrestricted intent router or move write authority out of Odoo.
+3. Implement the smallest bounded correction that preserves capability discovery, schema, policy,
+   preview, approval, effective-user execution and verification invariants.
+4. Rerun the local Odoo suites and then one disposable browser ACTION. Do not repeat the current
+   browser request without a materially new correction.
+5. Only after the ACTION passes, create/reject the separate `write_preview` capture and rerun
+   `phase0_report.py` to require `ready_for_phase1=true`.
 
 ## Publication policy
 

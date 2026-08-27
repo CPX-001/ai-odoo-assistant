@@ -1,10 +1,10 @@
 # P0-REAL-ACTION — real-environment handoff
 
 Date: 2026-08-27  
-Inspected HEAD: `38c7c9a121cc797b9a2737fb312283506aa152f6`<br>
+Inspected HEAD: `97617fefe40c22803a140b03023fd0df67594be1`<br>
 Validation ID: `P0-REAL-ACTION`  
 Gate: `HARD`  
-Status: `BLOCKED — PREVIEW_MISSING_ZERO_STEP_PLAN`
+Status: `BLOCKED — CORRECTION_INSUFFICIENT_ZERO_STEP_PERSISTS`
 
 ## Current rerun result
 
@@ -20,6 +20,13 @@ handoff; the separate preview/report procedure must not be used to disguise it.
 
 Sanitized result:
 `P0-REAL-ACTION-result-38c7c9a.md`.
+
+The planning-obligation correction from `075138d7` was then locally validated and rerun through
+the same real product path at `97617fe`. The corrected turn reproduced the same completed zero-step
+plan after three bounded tool pairs. No preview or approval appeared, the record remained
+unchanged, and the Odoo PID stayed stable. See
+`P0-REAL-ACTION-corrected-result-97617fe.md` and its two sanitized JSON artifacts. This handoff is
+now a diagnosis gate; repeating the same request without a materially new correction is invalid.
 
 ## Why this remains a real gate
 

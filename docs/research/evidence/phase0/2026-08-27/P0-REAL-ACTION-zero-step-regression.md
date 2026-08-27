@@ -69,4 +69,8 @@ Odoo planning/action/revalidation: 9 passed, 0 failed, 0 errors
 Odoo embedded runtime/framework/batch: 20 passed, 0 failed, 0 errors
 ```
 
-The local validation debt is closed. The corrected real browser ACTION remains a hard gate.
+The local validation debt is closed. The corrected real browser ACTION remained a hard gate and
+was executed at `97617fefe40c22803a140b03023fd0df67594be1`. It reproduced the original completed
+zero-step plan after three bounded tool pairs; no preview, approval or effect occurred. The
+planning-instruction correction is therefore insufficient. See
+`P0-REAL-ACTION-corrected-result-97617fe.md`.

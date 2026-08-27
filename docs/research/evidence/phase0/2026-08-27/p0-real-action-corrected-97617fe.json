@@ -1,0 +1,10 @@
+{
+  "approval_required": false,
+  "error_code": null,
+  "plan_state": "completed",
+  "plan_step_count": 0,
+  "preview_observed": false,
+  "record_unchanged_before_approval": true,
+  "request_kind": "explicit_supported_write",
+  "turn_state": "completed"
+}

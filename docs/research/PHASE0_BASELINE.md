@@ -2,9 +2,9 @@
 
 Research/playbook source: `FOUNDATION_STABILIZATION_PLAYBOOK.md`  
 Phase started from main: `3f175cdc9b38aa3fc5aac4f231c0aee5d86b46ef`  
-Latest real ACTION checkpoint materially tested: `38c7c9a121cc797b9a2737fb312283506aa152f6`<br>
+Latest real ACTION checkpoint materially tested: `97617fefe40c22803a140b03023fd0df67594be1`<br>
 Target: Odoo 18 Community / embedded runtime / Codex primary  
-Status: **blocked — real ACTION produced a completed zero-step plan with no approval preview**
+Status: **blocked — corrected real ACTION still produced a completed zero-step plan with no approval preview**
 
 ## Purpose
 

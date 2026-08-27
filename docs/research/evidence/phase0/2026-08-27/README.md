@@ -253,3 +253,18 @@ The relevant standalone regression suite passed 33/33. The separate `write_previ
 aggregate report were not run after the authoritative ACTION failed. See
 `P0-REAL-ACTION-result-38c7c9a.md`. Phase 0 is blocked on diagnosing the zero-step write outcome;
 Phase 1 remains locked.
+
+## Corrected ACTION rerun at 97617fe
+
+The planning-obligation correction at `075138d7` first passed executable local validation after
+its Odoo test was registered: 39 standalone tests, 9 planning/action/revalidation tests and 20
+embedded-runtime/framework/batch tests all passed.
+
+The subsequent real browser ACTION nevertheless reproduced the original failure: three bounded
+tool pairs, terminal `completed`, `plan_step_count=0`, no preview, no approval and no effect. The
+disposable record remained unchanged and Odoo retained PID `75689`. The sanitized acceptance
+evaluator rejected the evidence with `action_plan_missing`, `approval_preview_missing` and
+`approval_not_required`.
+
+See `P0-REAL-ACTION-corrected-result-97617fe.md`. Phase 0 remains blocked; repeating the same ACTION
+without a materially new correction is not authorized, and Phase 1 remains locked.
