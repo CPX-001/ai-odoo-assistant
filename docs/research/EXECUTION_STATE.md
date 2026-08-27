@@ -2,8 +2,8 @@
 
 State format: 2  
 Updated: 2026-08-27  
-Latest repository checkpoint inspected: `fb6d0a04dbb1f822a2fe0129f3bcf585adea36f8`<br>
-Latest product/tooling implementation checkpoint: `075138d7d9b519d46c60990ad465f06832d0bae8`  
+Latest repository checkpoint inspected: `e8431c7709d09e869faec9df6398a86461a272e2`  
+Latest product/tooling implementation checkpoint: `e8431c7709d09e869faec9df6398a86461a272e2`  
 Latest P0 ACTION real checkpoint materially tested: `97617fefe40c22803a140b03023fd0df67594be1`  
 Roadmap: `FOUNDATION_STABILIZATION_PLAYBOOK.md`
 
@@ -14,7 +14,7 @@ phase: 0
 phase_name: reproducible baseline
 phase_state: BLOCKED
 active_slice: P0-REAL-ACTION-plan-omission-correction-v2
-active_slice_state: READY
+active_slice_state: LOCAL_VALIDATION_REQUIRED
 current_gate_type: HARD
 next_phase: 1
 ```
@@ -31,7 +31,7 @@ currently_consumed_implementation_slices: 1
 currently_stacked_unvalidated_contract_layers: 1
 ```
 
-`P1-PREP-CONFORMANCE` is already COMPLETE. No additional Phase 1 look-ahead is authorized while the ACTION correction changes the provider planning contract for write/approval behavior.
+`P1-PREP-CONFORMANCE` is already COMPLETE. No additional Phase 1 look-ahead is authorized while the ACTION planning/output correction is unvalidated.
 
 ## Processed real evidence
 
@@ -39,52 +39,16 @@ currently_stacked_unvalidated_contract_layers: 1
 - failure-pair matrix: PASS with five distinct paths.
 - aggregate Phase 0 report remains `ready_for_phase1=false` because ACTION is absent.
 - `P0-REAL-ACTION`: FAIL at `38c7c9a`; one real browser turn completed after three bounded tool pairs with no error, `write_barrier=false`, `plan_step_count=0`, no approval preview and no effect. The disposable record remained unchanged and Odoo service identity stayed stable.
-- `P0-REAL-ACTION-CORRECTED`: FAIL at `97617fe`; after the planning-obligation correction, the real browser turn reproduced the same three bounded tool pairs and completed zero-step plan. No approval or effect occurred, the record remained unchanged and Odoo retained PID `75689`.
+- `P0-REAL-ACTION-CORRECTED`: FAIL at `97617fe`; after the first planning-obligation correction, the real browser turn reproduced the same three bounded tool pairs and completed zero-step plan. No approval or effect occurred, the record remained unchanged and Odoo retained PID `75689`.
 
-## Completed ACTION diagnosis slice
+## Completed ACTION diagnosis
 
 Evidence:
 `docs/research/evidence/phase0/2026-08-27/P0-REAL-ACTION-zero-step-regression.md`
 
-Static diagnosis established an acceptance gap:
+Static diagnosis first established that an empty provider plan was structurally valid and that no host-side natural-language write-intent fact existed. The first prompt-level correction at `075138d7d9b519d46c60990ad465f06832d0bae8` made supported mutation planning an explicit provider instruction without adding a router or moving authority out of Odoo.
 
-- empty `AgentReasoningResult.plan` is structurally valid;
-- provider-neutral plan validation accepts zero steps;
-- Codex output schema requires `plan` but does not require at least one item;
-- there is no independent host semantic fact proving a natural-language request requires a write.
-
-The sanitized Phase 0 evaluator rejects a completed zero-step result when evidence is explicitly classified as `explicit_supported_write`.
-
-Previously executed deterministic validation for that evaluator:
-
-```text
-python -m py_compile tests/e2e/phase0_action_acceptance.py
-PASS
-
-python -m pytest -q tests/unit/test_phase0_action_acceptance.py
-3 passed in 0.06s
-```
-
-## Implemented ACTION correction checkpoint
-
-Implementation checkpoint:
-`075138d7d9b519d46c60990ad465f06832d0bae8`
-
-The smallest provider/agent-contract correction was applied without adding a router or host-side prompt classifier:
-
-- Codex base instructions now state that planning is an output obligation when the requested outcome is an Odoo state change exactly supported by an available planning capability;
-- the provider must ground model/record/schema/fields/values through read-only capabilities before emitting the plan;
-- `plan=[]` is explicitly documented as insufficient for an explicit supported mutation;
-- inability/ambiguity still resolves to clarification or limitation, not an invented write;
-- host authority is unchanged: effective planning catalog, schema, policy, preview/approval and verification remain authoritative;
-- `test_codex_planning_contract.py` locks the instruction contract and verifies that `odoo.record.patch` is disclosed as a bounded PLAN/write/policy capability with the expected required arguments under `su=False`;
-- `CAPABILITY_FRAMEWORK.md` records the provider planning obligation and explicitly states that it is probabilistic model guidance, not host write-intent authority.
-
-## Completed ACTION correction local validation
-
-Validation checkpoint: `08564a9f93ebd890dc7238db91ab9f6d191b2502`.
-
-Actually executed validation:
+That correction passed executable local validation:
 
 ```text
 standalone Phase 0/provider suite: 39 passed in 0.14s
@@ -92,23 +56,71 @@ Odoo targeted planning/action/revalidation suite: 0 failed, 0 errors of 9 tests
 Odoo embedded runtime/framework/batch suite: 0 failed, 0 errors of 20 tests
 ```
 
-All Odoo suites ran against fresh disposable databases, which were dropped after each run. The primary Odoo service and database were not used by those test runners.
+The real browser rerun nevertheless remained zero-step.
 
 ## Completed v2 capability trace diagnosis
 
-Evidence record:
-`docs/research/evidence/phase0/2026-08-27/P0-REAL-ACTION-v2-sanitized-trace-gap.md`
+Evidence:
+`docs/research/evidence/phase0/2026-08-27/P0-REAL-ACTION-v2-capability-sequence.md`
 
-The persisted corrected ACTION turn was still available. Reading only validated capability names
-closed the trace gap without exposing arguments, results, prompts, business values or reasoning:
+The persisted failed turn proved this exact sequence completed successfully:
 
-- `odoo.get_effective_schema`: started -> completed;
-- `odoo.get_effective_write_schema`: started -> completed;
-- `odoo.query_records`: started -> completed.
+```text
+odoo.get_effective_schema
+odoo.get_effective_write_schema
+odoo.query_records
+```
 
-Write preparation therefore ran successfully. The failure is classified as
-`prepared supported mutation -> zero-step final plan`. Evidence:
-`P0-REAL-ACTION-v2-capability-sequence.md`.
+Therefore bounded write preparation did run. The failure was narrowed to:
+
+```text
+prepared supported mutation -> final provider result plan=[]
+```
+
+The v2 correction must target that provider planning/output boundary rather than discovery, write schema, policy, preview or execution.
+
+## Implemented ACTION v2 correction
+
+Implementation checkpoint:
+`e8431c7709d09e869faec9df6398a86461a272e2`
+
+The Codex adapter now derives **stage-only dynamic tools** from the same effective PLAN catalog already owned by `CapabilityRegistry`.
+
+Properties of the correction:
+
+- PLAN definitions remain `CapabilityDefinition` instances from the effective host catalog; no second tool registry was introduced;
+- a stage-only call validates the candidate arguments against the PLAN capability input schema and records a `PlannedCapability` candidate;
+- staging never invokes the capability handler, never previews, never approves and never mutates Odoo;
+- normal read-only reasoning tools still execute only under `ExecutionAuthority.REASONING`;
+- after provider completion, one unambiguous staged candidate can recover an accidentally empty structured `plan=[]`;
+- a staged/structured mismatch fails closed with `codex_plan_output_mismatch`;
+- multiple staged steps with an empty structured plan fail closed as ambiguous rather than guessing ordering/intent;
+- once a final plan exists, the unchanged authoritative path is still `CapabilityPlanService.prepare -> preview -> current policy/approval -> execute under effective user -> verify`;
+- no natural-language host intent classifier, arbitrary ORM method, SQL/Python/shell/sudo path or approval bypass was added.
+
+The provider also emits bounded `diagnostic.planning` metadata such as catalog counts, staged capability identifier/count and final reconciliation source/counts. It never emits plan arguments, results, prompts, business values or private reasoning in those diagnostics.
+
+Deterministic tests were added/extended to cover:
+
+- PLAN capability projection as a stage-only dynamic tool derived from the effective catalog;
+- stage-only tool validation and the invariant that it does not execute the underlying capability;
+- `single staged plan + final plan=[] -> staged fallback`;
+- conflicting staged and structured plans -> fail closed;
+- sanitized ACTION reports may carry validated capability identifiers and bounded planning diagnostics while dropping arbitrary content.
+
+These new tests have **not yet been executed in an Odoo-capable environment**. They are validation debt, not assumed PASS.
+
+## Improved ACTION diagnostic evidence
+
+Current guidance:
+`docs/research/ACTION_DIAGNOSTIC_EVIDENCE.md`
+
+Use `tests/e2e/phase0_live_diagnostic_capture.py` for the next ACTION validation. It reuses the current Phase 0 HTTP capture but preserves additional content-free evidence:
+
+- logical capability identifier on `tool.*` events;
+- `diagnostic.planning` point/capability/count/source fields only.
+
+A failed ACTION must record the last successful boundary and first missing/rejected boundary. Reports that contain only aggregate tool counts are no longer sufficient for this gate.
 
 ## Validation debt
 
@@ -123,7 +135,7 @@ downstream_scope_blocked:
   - completing Phase 0
   - Phase 1 production provider/runtime refactor
   - provider lifecycle optimization
-reason: explicit supported partner mutation still produced a completed zero-step plan with no approval preview after the planning-obligation correction
+reason: explicit supported partner mutation still produced a completed zero-step plan with no approval preview at the last real checkpoint
 ```
 
 ### VD-P0-ACTION-CORRECTION-REAL
@@ -136,22 +148,38 @@ commit_materially_tested: 97617fefe40c22803a140b03023fd0df67594be1
 downstream_scope_blocked:
   - closing P0-REAL-ACTION
   - completing Phase 0
-reason: corrected planning contract was validated in real Odoo 18 + authenticated Codex + browser and did not change the zero-step outcome
+reason: first corrected planning contract was validated in real Odoo 18 + authenticated Codex + browser and did not change the zero-step outcome
+```
+
+### VD-P0-ACTION-V2-LOCAL
+
+```text
+validation_id: P0-ACTION-V2-LOCAL
+gate_type: HARD
+origin_slice: P0-REAL-ACTION-plan-omission-correction-v2
+commit_materially_tested: e8431c7709d09e869faec9df6398a86461a272e2
+downstream_scope_blocked:
+  - P0-REAL-ACTION-V2
+  - closing P0-REAL-ACTION
+  - completing Phase 0
+reason: materially new stage-only planning boundary and diagnostics have not yet run in the local/Odoo test environment
 ```
 
 ## Current blocker
 
 ```text
-P0_ACTION_V2_PLAN_EMISSION_CORRECTION_REQUIRED
+P0_ACTION_V2_LOCAL_VALIDATION_REQUIRED
 ```
 
 ## Exact next action
 
-1. Add a deterministic regression for `successful odoo.get_effective_write_schema -> zero-step final plan`.
-2. Correct the bounded provider planning-output boundary; do not add another generic prompt hint or move write authority out of Odoo.
-3. Rerun local Odoo suites and one disposable browser ACTION only after that materially new correction.
-4. Require exact preview, unchanged pre-approval state, one approval, one effect, verification PASS and stable Odoo.
-5. Only after ACTION passes, create/reject `write_preview`, rerun `phase0_report.py`, and require `ready_for_phase1=true`.
+1. Pull the current main containing `e8431c7709d09e869faec9df6398a86461a272e2` and run the standalone Phase 0/action acceptance suite, including the new diagnostic sanitizer tests.
+2. Run the targeted Odoo planning/action/revalidation suite and the embedded runtime/framework/batch suite on fresh disposable databases.
+3. If any deterministic test fails, fix that failure before touching the real ACTION gate and record the exact failure.
+4. Only after local PASS, restart/update the real Odoo 18 addon on that exact tested code and run **one** disposable browser ACTION through the normal product path using `phase0_live_diagnostic_capture.py`.
+5. Require: intended PLAN capability staged, final plan count >= 1, exact preview, record unchanged before approval, approval required, exactly one approval, exactly one effect, verification PASS, terminal success and stable Odoo service identity.
+6. If the real ACTION fails, record the safe tool sequence and `diagnostic.planning` checkpoints plus last-successful/first-missing boundary before making another correction. Do not repeat a vague zero-step report.
+7. Only after ACTION PASS, create/reject the separate `write_preview` capture and rerun `phase0_report.py`; Phase 1 remains locked until `ready_for_phase1=true`.
 
 ## Publication policy
 

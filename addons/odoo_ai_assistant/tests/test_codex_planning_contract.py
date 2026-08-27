@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 from odoo.tests.common import TransactionCase
@@ -7,11 +8,25 @@ from ..runtime.agent.codex import (
     CodexAgentError,
     _BASE_INSTRUCTIONS,
     _dynamic_tools,
+    _handle_tool_call,
     _planning_transport_name,
     _reconcile_staged_plan,
     _turn_input,
 )
 from ..runtime.capabilities import CapabilityContext, discover_capabilities
+
+
+class _CaptureClient:
+    def __init__(self):
+        self.responses = []
+
+    async def respond(self, request_id, result):
+        self.responses.append((request_id, result))
+
+
+class _PlanMustNotExecute:
+    async def execute(self, *args, **kwargs):
+        raise AssertionError("plan staging must not execute a capability")
 
 
 class TestCodexPlanningContract(TransactionCase):
@@ -74,6 +89,67 @@ class TestCodexPlanningContract(TransactionCase):
         self.assertTrue(staged["description"].startswith("STAGE PLAN ONLY."))
         self.assertEqual(staged["inputSchema"], patch["inputSchema"])
         self.assertFalse(context.env.su)
+
+    def test_plan_staging_validates_and_records_candidate_without_execution(self):
+        events = []
+        context = self._context(
+            event_sink=lambda event_type, title, payload: events.append(
+                (event_type, title, dict(payload))
+            )
+        )
+        registry = discover_capabilities()
+        planning_definitions = registry.for_planning(context)
+        reasoning_definitions = registry.for_reasoning(context)
+        planning = {definition.name: definition for definition in planning_definitions}
+        _tools, bindings = _dynamic_tools(reasoning_definitions, planning_definitions)
+        transport = _planning_transport_name("odoo.record.patch")
+        staged_plan = []
+        client = _CaptureClient()
+        event = {
+            "method": "item/tool/call",
+            "params": {
+                "arguments": {
+                    "model": "res.partner",
+                    "record_id": 42,
+                    "values": {"phone": "+34 600 000 000"},
+                },
+                "callId": "call-1",
+                "namespace": None,
+                "threadId": "thread-1",
+                "tool": transport,
+                "turnId": "turn-1",
+            },
+        }
+
+        call_id = asyncio.run(
+            _handle_tool_call(
+                client,
+                event,
+                request_id=7,
+                thread_id="thread-1",
+                turn_id="turn-1",
+                bindings=bindings,
+                planning=planning,
+                staged_plan=staged_plan,
+                executor=_PlanMustNotExecute(),
+                context=context,
+            )
+        )
+
+        self.assertEqual(call_id, "call-1")
+        self.assertEqual(len(staged_plan), 1)
+        self.assertEqual(staged_plan[0].capability, "odoo.record.patch")
+        self.assertEqual(staged_plan[0].arguments["record_id"], 42)
+        self.assertEqual(client.responses[0][0], 7)
+        self.assertTrue(client.responses[0][1]["success"])
+        self.assertIn(
+            ("diagnostic.planning", "Provider planning checkpoint", {
+                "point": "plan_step_staged",
+                "capability": "odoo.record.patch",
+                "staged_plan_count": 1,
+            }),
+            events,
+        )
 
     def test_single_staged_patch_recovers_zero_step_structured_result(self):
         events = []
