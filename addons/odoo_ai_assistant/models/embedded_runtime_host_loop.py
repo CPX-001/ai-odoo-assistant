@@ -1,8 +1,4 @@
-"""Current host-loop composition for persisted embedded Assistant turns.
-
-This overlay keeps the legacy monolithic implementation in ``embedded_runtime.py`` as a
-rollback seam while making the ADR-019 one-decision host loop the active product path.
-"""
+"""Current ADR-019 host-loop composition for persisted embedded Assistant turns."""
 
 from __future__ import annotations
 
@@ -11,18 +7,23 @@ import asyncio
 from odoo import SUPERUSER_ID, api, models
 from odoo.exceptions import AccessError, ValidationError
 
-from ..runtime.agent import AgentTurnService, CapabilityPlanService
+from ..runtime.agent import AgentTurnService, CapabilityPlanError, CapabilityPlanService
 from ..runtime.agent.codex_decision import CodexDecisionEngine
-from ..runtime.agent.working_transcript import WorkingTranscriptError
+from ..runtime.agent.working_transcript import (
+    WorkingTranscriptError,
+    append_working_item,
+    transcript_payload,
+)
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
+    CapabilityError,
     CapabilityExecutor,
     CapabilityPolicy,
     discover_capabilities,
 )
 from .chat_policy import resolve_capability_policy
-from .embedded_runtime import EmbeddedRuntimeError, _plan_envelope
+from .embedded_runtime import EmbeddedRuntimeError, _commit_plan_barrier, _plan_envelope
 from .turn_working_transcript import persist_working_transcript
 
 
@@ -31,7 +32,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
 
     @api.model
     def run_turn(self, *, turn_id, lease_token):
-        """Run the current ADR-019 host loop under the originating user Environment."""
+        """Run ADR-019 under the originating effective Odoo user."""
 
         if self.env.su:
             raise AccessError("Assistant embedded runtime cannot run in superuser mode")
@@ -115,8 +116,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                     items,
                 )
             except RuntimeError as error:
-                code = str(error)
-                raise EmbeddedRuntimeError(code) from error
+                raise EmbeddedRuntimeError(str(error)) from error
 
         decision_engine = CodexDecisionEngine(
             settings,
@@ -130,7 +130,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             working_items=working_items,
             persist_working_items=persist,
             cancellation_requested=cancellation_requested,
-            allow_plan_proposals=False,
+            allow_plan_proposals=True,
         )
         event_sink(
             "reasoning.started",
@@ -148,7 +148,133 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             "Respuesta preparada",
             {"confidence": result.confidence},
         )
-        if result.plan:
-            # E2E-3 intentionally keeps PLAN disabled until the next validated slice.
-            raise EmbeddedRuntimeError("agent_plan_proposal_not_enabled")
-        return self._read_only_response(turn, result, policy_snapshot)
+        if not result.plan:
+            return self._read_only_response(turn, result, policy_snapshot)
+
+        if len(result.plan) != 1:
+            raise EmbeddedRuntimeError("agent_plan_limit_exceeded")
+        prepared = asyncio.run(plans.prepare(result.plan))
+        prepared_items = _append_plan_prepared(service.working_items, prepared)
+        envelope = {
+            "format_version": 1,
+            "answer": result.answer,
+            "confidence": result.confidence,
+            "human_approved": False,
+            "plan": prepared,
+        }
+        if prepared["requires_confirmation"]:
+            # Persist plan and its private boundary in the same current Odoo transaction.
+            turn.with_user(SUPERUSER_ID).write(
+                {"working_items_payload": transcript_payload(prepared_items)}
+            )
+            response = self._plan_response(turn, envelope, policy_snapshot)
+            self._persist_awaiting_plan(turn, envelope, response)
+            return response
+        return asyncio.run(
+            self._execute_plan(
+                turn,
+                lease_token=lease_token,
+                envelope=envelope,
+                plans=plans,
+                policy=policy_snapshot,
+                working_items=prepared_items,
+            )
+        )
+
+    async def _execute_plan(
+        self,
+        turn,
+        *,
+        lease_token,
+        envelope,
+        plans,
+        policy,
+        working_items=None,
+    ):
+        """Execute the unchanged action lifecycle and persist a verified private receipt."""
+
+        dbname = self.env.cr.dbname
+        if working_items is None:
+            try:
+                working_items = turn._working_items_from_turn(turn)
+            except WorkingTranscriptError as error:
+                raise EmbeddedRuntimeError(error.code) from error
+
+        def before_effect():
+            # Existing separately committed barrier remains the no-blind-retry authority.
+            _commit_plan_barrier(
+                dbname,
+                turn.id,
+                lease_token,
+                envelope,
+            )
+            # The plan boundary is durable before the first effect. If this second commit
+            # is interrupted the already-durable barrier still forces recovery.
+            persist_working_transcript(
+                dbname,
+                turn.id,
+                lease_token,
+                working_items,
+            )
+
+        try:
+            executed = await plans.execute(
+                envelope["plan"],
+                human_approved=bool(envelope["human_approved"]),
+                before_effect=before_effect,
+            )
+        except (CapabilityPlanError, CapabilityError) as error:
+            raise EmbeddedRuntimeError(error.code) from error
+
+        completed = dict(envelope)
+        completed["plan"] = executed.payload
+        receipt_items = append_working_item(
+            working_items,
+            "verified_effect_receipt",
+            {
+                "verified": True,
+                "plan_state": executed.payload["state"],
+                "step_count": len(executed.payload["steps"]),
+                "capabilities": [
+                    step["capability"] for step in executed.payload["steps"]
+                ],
+            },
+        )
+        # Business effects, verification, plan result and receipt share this cursor.
+        # The caller commits them together; failure after the durable barrier is recovery-only.
+        turn.with_user(SUPERUSER_ID).write(
+            {
+                "capability_plan_payload": completed,
+                "working_items_payload": transcript_payload(receipt_items),
+            }
+        )
+        return self._plan_response(turn, completed, policy, completed=True)
+
+
+def _append_plan_prepared(working_items, prepared):
+    steps = prepared.get("steps") if isinstance(prepared, dict) else None
+    if not isinstance(steps, list) or len(steps) != 1 or not isinstance(steps[0], dict):
+        raise EmbeddedRuntimeError("capability_plan_corrupt")
+    proposed = next(
+        (item for item in reversed(working_items) if item.kind == "plan_step_proposed"),
+        None,
+    )
+    if proposed is None:
+        raise EmbeddedRuntimeError("agent_working_transcript_invalid")
+    call_id = proposed.data.get("call_id")
+    capability = proposed.data.get("capability")
+    if not isinstance(call_id, str) or not isinstance(capability, str):
+        raise EmbeddedRuntimeError("agent_working_transcript_invalid")
+    if steps[0].get("capability") != capability:
+        raise EmbeddedRuntimeError("capability_plan_binding_mismatch")
+    return append_working_item(
+        working_items,
+        "plan_prepared",
+        {
+            "call_id": call_id,
+            "capability": capability,
+            "state": prepared.get("state"),
+            "requires_confirmation": prepared.get("requires_confirmation") is True,
+            "step_count": 1,
+        },
+    )

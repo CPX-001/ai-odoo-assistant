@@ -1,7 +1,7 @@
 # Stabilization execution state
 
-State format: 3  
-Updated: 2026-08-27  
+State format: 3
+Updated: 2026-08-27
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md` and `E2E_AGENT_LOOP_CONVERGENCE.md`
 
 ## Current cursor
@@ -10,78 +10,88 @@ Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md` and `E2E_AGENT_LOOP_CONVERGENCE
 phase: 0
 phase_name: reproducible baseline
 phase_state: BLOCKED
-active_slice: E2E-4-canonical-plan-proposal
+active_slice: E2E-final-automated-battery-and-real-env-handoff
 active_slice_state: READY
 current_gate_type: HARD
 next_phase: 1
 ```
 
-General Phase 1 work remains locked; only the E2E convergence required by the ACTION hard gate is
-being implemented.
+General Phase 1 work remains locked. E2E-0 through E2E-4 have now been implemented locally; the
+next work is the aggregate automated regression battery and a validation-only real-environment
+handoff.
 
-## Published E2E checkpoints
+## Published convergence checkpoints
 
-- E2E-0: decision-sequence fixtures/budgets complete; `4 tests, PASS` in available environment.
-- E2E-1: strict `NextDecision`, host validation and tool-free one-decision Codex adapter implemented;
-  dependency-light `4 tests, PASS`, standalone host-validator `3 tests, PASS`, compile PASS. Real
-  Codex protocol validation remains pending.
-- E2E-2: ADR-019 accepted. Added the bounded private typed working transcript and a durable
-  `odoo.ai.turn.working_items_payload` field plus lease-bound persistence helper. Dependency-light
-  transcript contract `4 tests, PASS`; module update/restart persistence remains real-env debt.
-- E2E-3: `AgentTurnService` now owns a bounded iterative READ loop when composed with a
-  `NextDecisionEngine`. The active embedded runtime uses `CodexDecisionEngine`; every provider
-  decision is host-validated against the effective catalog, REASONING calls execute only with
-  `ExecutionAuthority.REASONING`, read calls use the current Odoo cursor savepoint, private
-  decisions/calls/results/errors are persisted at host boundaries, cancellation and global/per-
-  capability budgets are enforced, and an interrupted persisted call id is closed as an explicit
-  error instead of executing that same call id again. A terminal ACL/authority error may be
-  followed only by a final explanation. PLAN proposals are deliberately not enabled in this
-  checkpoint and remain E2E-4.
+- E2E-0: decision-sequence fixtures and explicit provider/capability/byte budgets.
+- E2E-1: strict provider-neutral `NextDecision`, host validation and tool-free one-decision Codex
+  adapter.
+- E2E-2: ADR-019 plus bounded private durable `working_items_payload`.
+- E2E-3: active Odoo-owned iterative READ loop with REASONING-only execution, bounded correction,
+  cancellation and restart/idempotency handling.
+- E2E-4: one validated `PlanStepProposal` is canonical and stage-only. It feeds the existing
+  `CapabilityPlanService.prepare` path directly. `plan_prepared` is persisted before effect;
+  preview/approval/revalidation/write barrier/execute/verify/recovery remain authoritative.
+  `verified_effect_receipt` is committed in the same Odoo transaction as effect/result/verification.
+  The active path no longer depends on the old staged dynamic PLAN tool plus duplicated final plan
+  serialization; that code remains only in the non-default rollback adapter.
 
-Executed for E2E-3 in the available environment on 2026-08-27:
+## Tests actually executed in the available environment
+
+Earlier slice evidence remains:
 
 ```text
-python /tmp/e2e3_harness/test_host_loop_contract.py
-7 tests, PASS
+E2E-0 dependency-light catalog: 4 tests PASS
+E2E-1 dependency-light NextDecision: 4 tests PASS
+E2E-1 standalone host-validator: 3 tests PASS
+E2E-2 working-transcript contract: 4 tests PASS
+E2E-3 mirrored host-loop contract: 7 tests PASS
+Python compilation for each changed slice: PASS
+```
+
+For E2E-4 on 2026-08-27:
+
+```text
+python /tmp/e2e3_harness/test_canonical_plan_proposal.py
+5 tests PASS
 
 python -m py_compile \
-  runtime/agent/service.py \
-  runtime/agent/decision_validation.py \
-  runtime/agent/working_transcript.py \
-  models/embedded_runtime_host_loop.py \
-  tests/test_host_loop_agent_runtime.py
+  addons/odoo_ai_assistant/models/embedded_runtime_host_loop.py \
+  addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py
 PASS
 ```
 
-The Odoo `TransactionCase` host-loop test was added but cannot execute in this environment because
-there is no Odoo checkout/runtime or PostgreSQL service here.
+The Odoo TransactionCase canonical-plan tests were added but cannot execute in this environment
+because an Odoo 18 checkout/runtime and PostgreSQL service are not available here. They remain
+unrun, not passing.
 
 ## Required invariants preserved
 
-`CapabilityDefinition`, effective-catalog filtering, effective user `su=False`, ACL/record rules,
-company scope, prepare/preview/approval/write barrier/execute/verify and post-barrier recovery are
-unchanged. No provider/API/RAG/router/arbitrary SQL/Python/shell/sudo/generic ORM method surface was
-added. The legacy monolithic Codex reasoning implementation remains only as the ADR-019 rollback
-seam and is not the active embedded composition.
+Odoo remains operational authority. Business capabilities use the originating effective user with
+`su=False`; ACLs, record rules, field access and company scope remain effective. `CapabilityDefinition`
+and the effective catalog remain authoritative. The existing prepare, preview, approval,
+revalidation, durable write barrier, PLAN execute, verification and recovery path is retained.
+No new provider/API/RAG/router/tool selector, arbitrary SQL/Python/shell/sudo or generic ORM method
+surface was introduced.
 
 ## Existing real evidence
 
-The latest pre-convergence ACTION evidence remains FAIL at `5995717`; first missing boundary was
-`plan_step_staged(odoo.record.patch)`. It is not overwritten by local implementation evidence.
+The last pre-convergence real ACTION at `5995717` remains FAIL evidence. It is not converted into a
+PASS by local implementation work. Its first missing boundary was the action proposal/staging
+boundary.
 
 ## Validation debt
 
 - `E2E-1-CODEX-DECISION-REAL`: real one-decision App Server round trip pending.
-- `E2E-2-ODOO-PERSISTENCE`: module update/restart persistence test pending.
-- `E2E-3-REAL-HELLO-READ`: real hello, READ and multi-read host-loop validation pending.
-- `P0-REAL-ACTION-V2`: superseded implementation path remains failed evidence, not a PASS.
+- `E2E-2-ODOO-PERSISTENCE`: module update and restart persistence pending.
+- `E2E-3-REAL-HELLO-READ`: real hello, READ and multi-read pending.
+- `E2E-4-REAL-ACTION`: disposable patch/create/action preview, one approval, exactly-one effect,
+  verification and fixture cleanup pending.
 - `ODOO-CODEX-ACCOUNT-TEST-ISOLATION`: broad-suite debt remains open.
 
 ## Exact next action
 
-Implement E2E-4: allow one validated `PlanStepProposal` to become the canonical stage-only
-`PlannedCapability`, feed it directly into the unchanged `CapabilityPlanService.prepare` lifecycle,
-persist the `plan_prepared` boundary, keep approval/revalidation/write-barrier/execute/verify/recovery
-unchanged, and record a verified-effect receipt only in the same Odoo transaction that commits the
-effect/result. Remove the old staged-tool/final-plan obligation from the active product path; keep it
-only in the non-default rollback adapter until real validation closes the handoff.
+Add/run the complete automated convergence battery covering hello, READ, multi-read, patch, create,
+repairable errors, access denied, unsupported action, restart/idempotency, approval, exactly-once
+and verification. Then create `docs/research/E2E_REAL_ENV_HANDOFF.md` containing only real
+validation work for the exact final implementation SHA and leave this state at
+`REAL_ENV_VALIDATION_REQUIRED`. Do not claim any real Odoo/Codex/browser test has passed.
