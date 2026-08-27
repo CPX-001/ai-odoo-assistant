@@ -9,6 +9,7 @@ from odoo.exceptions import AccessError, ValidationError
 
 from ..runtime.agent import AgentTurnService, CapabilityPlanError, CapabilityPlanService
 from ..runtime.agent.codex_decision import CodexDecisionEngine
+from ..runtime.agent.provider_failure import FailureNormalizingDecisionEngine
 from ..runtime.agent.working_transcript import (
     WorkingTranscriptError,
     append_working_item,
@@ -117,9 +118,15 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             except RuntimeError as error:
                 raise EmbeddedRuntimeError(str(error)) from error
 
-        decision_engine = CodexDecisionEngine(
-            settings,
-            cancellation_requested=cancellation_requested,
+        decision_engine = FailureNormalizingDecisionEngine(
+            CodexDecisionEngine(
+                settings,
+                cancellation_requested=cancellation_requested,
+            ),
+            component="codex",
+            # The provider decision boundary can only read or stage a plan. The write barrier and
+            # effectful plan execution happen later, outside this wrapped provider call.
+            effect_state="none",
         )
         service = AgentTurnService(
             registry=registry,

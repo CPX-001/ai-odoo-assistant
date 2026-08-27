@@ -11,41 +11,34 @@ phase: 2
 phase_name: structured failure contract
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/PHASE2_FAILURE_CONTRACT.md
-active_slice: P2.1-failure-envelope-schema
+active_slice: P2.2-codex-error-normalization
 active_slice_state: COMPLETE
 current_gate_type: DETERMINISTIC
 blocking_validations: none
 phase_completion_validations: P2-REAL-AUTH, P2-REAL-ACL, P2-REAL-TIMEOUT, P2-REAL-TOOLFAIL, P2-REAL-RECOVERY
-next_slice: P2.2-codex-error-normalization
+next_slice: P2.3-turn-failure-persistence
 ```
 
-Phase 0 and Phase 1 are complete. Phase 2 has started. P2.1 defines and deterministically validates the bounded host-owned `FailureEnvelope` contract but does not yet wire it into provider normalization, turn persistence or browser projection.
+Phase 0 and Phase 1 are complete. Phase 2 has completed its schema and provider-normalization
+slices, but the envelope is not yet persisted on `odoo.ai.turn` or exposed to the browser.
 
-## Phase 2 entry checkpoint
+## Current remote checkpoint inspected
 
-This run reconstructed remote `main` at:
+P2.2 reconstructed `main` at:
 
 ```text
-33ca2bfaeebb85f0675594b27c6d52cbd7bc8dcf
+70d424cb52c456009fbc704bd8d00112436636b0
 ```
 
-No newer regression evidence or validation debt blocked Phase 2. The Phase 1 close-out already records all required provider-boundary real-environment gates as PASS.
+No newer commit or validation debt blocked the slice.
 
-The current failure path was inspected before implementation:
+## Phase 2 progress
 
-```text
-turn_queue.browser_status       -> error_code only
-turn_runtime._error             -> {ok:false,error:{code}}
-assistant_panel_service         -> known code carried as Error(message)
-assistant_panel_streaming       -> all thrown errors become service_unavailable
-assistant_failure_messages      -> code-to-prose mapping in JS
-```
+### P2.1 — FailureEnvelope schema
 
-That evidence matches the Phase 2 playbook: the product needs one structured failure contract before presentation copy or retry UX changes.
+`COMPLETE`.
 
-## P2.1 implementation
-
-Added `addons/odoo_ai_assistant/runtime/agent/failure.py` with a strict fixed-shape `FailureEnvelope` contract:
+The host-owned contract remains:
 
 ```text
 code
@@ -61,27 +54,68 @@ diagnostic_id
 provider_code
 ```
 
-The routing enums are bounded. `safe_details` accepts only bounded JSON data (4 KiB total, bounded depth/items/strings) and unknown top-level fields fail closed. This is a structural safety bound only; later host mapping code must still redact semantically sensitive values before constructing an envelope.
+The fixed shape, routing enums and bounded JSON/detail rules remain unchanged.
 
-P2.1 deliberately does not modify runtime behavior, turn persistence, controller payloads, frontend error normalization, error prose or retry behavior.
+### P2.2 — Codex/provider error normalization
 
-## Deterministic validation actually executed
+`COMPLETE`.
 
-In an isolated dependency-light Python workspace containing the exact proposed P2.1 target files and repository-relative paths:
+The active composition is now conceptually:
+
+```text
+CodexDecisionEngine
+  -> FailureNormalizingDecisionEngine
+      -> normalize_provider_failure(...)
+      -> ProviderFailureError
+          code = original sanitized product code
+          failure = validated FailureEnvelope
+  -> AgentTurnService
+```
+
+The wrapper is located at the provider/host decision boundary. It uses `effect_state=none`
+explicitly because this wrapped call occurs before effectful plan execution and the durable write
+barrier. A resumed authorized plan bypasses the provider decision path.
+
+Known sanitized provider facts may now survive in the in-memory envelope:
+
+```text
+provider category
+bounded HTTP status
+bounded upstream code
+advisory provider_retryable
+```
+
+Raw provider messages, stderr/stdout, prompts, request bodies, credentials and unrestricted payloads
+are never read by the normalizer.
+
+`serverOverloaded` becomes `retryability=safe` only when the provider already marked the failure
+retryable and the host effect state is `none` or `not_started`. No retry is performed.
+
+## Deterministic validation actually executed for P2.2
+
+In an isolated dependency-light workspace containing the exact proposed target files:
 
 ```text
 python -m py_compile \
   addons/odoo_ai_assistant/runtime/agent/failure.py \
-  tests/unit/test_failure_envelope_contract.py
+  addons/odoo_ai_assistant/runtime/agent/provider_failure.py \
+  addons/odoo_ai_assistant/models/embedded_runtime_host_loop.py \
+  tests/unit/test_failure_envelope_contract.py \
+  tests/unit/test_provider_failure_normalization.py
 PASS
 
-python -m pytest -q tests/unit/test_failure_envelope_contract.py
-5 passed, 17 subtests passed
+python -m pytest -q \
+  tests/unit/test_failure_envelope_contract.py \
+  tests/unit/test_provider_failure_normalization.py
+12 passed, 17 subtests passed
 ```
 
-No GitHub Actions were used. A full repository/Odoo suite was not executed here and is not being reported as PASS.
+A lightweight runtime-stub execution of the provider decorator also passed for an effect-safe
+`serverOverloaded` error.
 
-## Phase 1 retained real-environment evidence
+No GitHub Actions were used. No full repository/Odoo/Codex battery is being claimed for this slice.
+
+## Retained Phase 1 real-environment evidence
 
 ```text
 P1-REAL-VERSION  | PASS | 49bdac1f732acaaee3154ed60baffd675130991a | Codex 0.149.1
@@ -90,32 +124,38 @@ P1-REAL-TOOLCALL | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
 P1-REAL-CANCEL   | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
 ```
 
-The final Phase 1 live checkpoint used Odoo 18.0 Community through the normal HTTP -> persisted turn -> cron -> embedded runtime path. Sanitized evidence remains under `docs/research/evidence/phase1/2026-08-27/`.
-
 ## Validation debt
 
 ```text
 Phase 1 mandatory validation debt: none
 P2.1 mandatory validation debt: none
-Phase 2 real presentation gates: pending until later slices make them materially testable
+P2.2 mandatory validation debt: none
+Phase 2 real presentation gates: pending until envelope persistence/browser projection exists
 look-ahead slices consumed: 0
 stacked unvalidated contract layers: 0
 ```
 
-P2.2 consumes the deterministically validated P2.1 schema and therefore may start on the next independent run. Phase 3 remains blocked until the Phase 2 failure semantics it would consume are validated.
+Phase 3 remains blocked. P2.3 may start because it consumes the deterministically validated
+P2.1/P2.2 contract and is the required next layer of the same Phase 2 failure path.
 
-## Invariants carried through P2.1
+## Invariants carried through P2.2
 
 - Odoo remains operational and persistence authority.
 - Business capabilities execute with the effective user and `su=False`.
 - `CapabilityDefinition` remains the atomic executable contract.
 - The provider proposes; the host validates and owns all effects.
-- Preserved provider facts and retryability metadata remain bounded and advisory only.
-- Raw provider messages/details, credentials, prompts and unrestricted tool payloads remain private.
-- No provider/capability/write retry is introduced by P2.1.
-- The durable write barrier and `recovery_required` semantics remain authoritative.
+- Preview, policy, approval, write barrier, execution and verification are unchanged.
+- Preserved provider facts remain bounded and advisory.
+- No provider/capability/write retry has been introduced.
+- `recovery_required` and the durable write barrier remain authoritative once effects are possible.
+- Raw provider text, credentials, prompts and unrestricted tool payloads remain private.
 - No GitHub Actions are available for roadmap execution or validation.
 
 ## Exact next action
 
-Re-inspect the exact new `main`, then implement only `P2.2-codex-error-normalization`. Map current sanitized `CodexDecisionError`/host terminal facts into `FailureEnvelope` with deterministic tests and explicit effect-state derivation. Do not yet persist/project the envelope to the browser, rewrite UI copy, add automatic retries, or begin Phase 3 public activity.
+Re-inspect the new `main`, then implement only `P2.3-turn-failure-persistence`.
+
+Persist a validated `FailureEnvelope` for terminal turn failures and return it from
+`browser_status()` while preserving the existing `error_code` compatibility field. Derive
+`effect_state` from authoritative queue/write-barrier state when effects may have started. Do not
+yet rewrite frontend prose, add retry buttons/automatic retries, or begin Phase 3 public activity.

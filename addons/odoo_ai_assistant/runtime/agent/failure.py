@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import secrets
 from dataclasses import dataclass
 from typing import TypeAlias
 
@@ -227,6 +228,268 @@ def failure_envelope_schema() -> JsonObject:
             "provider_code",
         ],
     }
+
+
+@dataclass(frozen=True, slots=True)
+class _FailureRoute:
+    category: str
+    stage: str
+    retryability: str
+    user_action: str
+    safe_summary: str
+
+
+_PROVIDER_CATEGORY_ROUTES = {
+    "unauthorized": _FailureRoute(
+        "authentication",
+        "provider",
+        "after_change",
+        "reconnect",
+        "El proveedor de razonamiento rechazó la autenticación.",
+    ),
+    "usageLimitExceeded": _FailureRoute(
+        "provider_capacity",
+        "provider",
+        "after_change",
+        "retry",
+        "El proveedor de razonamiento alcanzó un límite de uso.",
+    ),
+    "serverOverloaded": _FailureRoute(
+        "provider_capacity",
+        "provider",
+        "unknown",
+        "retry",
+        "El proveedor de razonamiento está temporalmente saturado.",
+    ),
+    "httpConnectionFailed": _FailureRoute(
+        "provider_connection",
+        "provider",
+        "unknown",
+        "retry",
+        "La conexión con el proveedor de razonamiento falló.",
+    ),
+    "responseStreamConnectionFailed": _FailureRoute(
+        "provider_connection",
+        "provider",
+        "unknown",
+        "retry",
+        "La conexión de respuesta con el proveedor de razonamiento falló.",
+    ),
+    "responseStreamDisconnected": _FailureRoute(
+        "provider_connection",
+        "provider",
+        "unknown",
+        "retry",
+        "La respuesta del proveedor de razonamiento se interrumpió.",
+    ),
+    "contextWindowExceeded": _FailureRoute(
+        "context",
+        "provider",
+        "after_change",
+        "clarify",
+        "El contexto superó el límite que el proveedor puede procesar.",
+    ),
+    "badRequest": _FailureRoute(
+        "provider_protocol",
+        "provider",
+        "never",
+        "review",
+        "El proveedor rechazó la petición por un problema de protocolo.",
+    ),
+    "sandboxError": _FailureRoute(
+        "provider_protocol",
+        "provider",
+        "never",
+        "review",
+        "El runtime del proveedor no pudo completar su aislamiento de ejecución.",
+    ),
+    "internalError": _FailureRoute(
+        "internal",
+        "provider",
+        "unknown",
+        "retry",
+        "El proveedor de razonamiento devolvió un error interno.",
+    ),
+}
+_PROVIDER_CONNECTION_CODES = frozenset(
+    {
+        "codex_process_eof",
+        "codex_process_not_running",
+        "codex_read_timeout",
+        "codex_runtime_start_failed",
+        "codex_stdout_unavailable",
+        "codex_write_timeout",
+    }
+)
+_PROVIDER_PROTOCOL_CODES = frozenset(
+    {
+        "codex_error_event_invalid",
+        "codex_initialize_response_invalid",
+        "codex_provider_error",
+        "codex_server_request_not_allowed",
+        "codex_turn_completion_mismatch",
+    }
+)
+_PROVIDER_OUTPUT_CODES = frozenset(
+    {
+        "agent_next_decision_invalid",
+        "agent_next_decision_kind_invalid",
+        "codex_answer_invalid",
+        "codex_answer_missing",
+        "codex_output_schema_invalid",
+        "codex_turn_items_invalid",
+    }
+)
+
+
+def normalize_provider_failure(
+    error: object,
+    *,
+    component: str,
+    effect_state: str,
+    diagnostic_id: str | None = None,
+) -> FailureEnvelope:
+    """Project one provider exception to the bounded host-owned failure contract."""
+
+    if component not in FAILURE_COMPONENTS or effect_state not in FAILURE_EFFECT_STATES:
+        raise FailureEnvelopeError()
+
+    raw_code = getattr(error, "code", None)
+    code = (
+        raw_code
+        if isinstance(raw_code, str) and _CODE_RE.fullmatch(raw_code)
+        else "agent_reasoning_failed"
+    )
+
+    provider_failure = getattr(error, "provider_failure", None)
+    provider_category = _safe_provider_code(getattr(provider_failure, "category", None))
+    upstream_code = _safe_provider_code(getattr(provider_failure, "upstream_code", None))
+    http_status = getattr(provider_failure, "http_status_code", None)
+    if type(http_status) is not int or not 100 <= http_status <= 599:
+        http_status = None
+
+    route = _provider_failure_route(
+        code=code,
+        provider_category=provider_category,
+        upstream_code=upstream_code,
+    )
+    provider_retryable = getattr(error, "provider_retryable", False) is True
+    retryability = route.retryability
+    if (
+        provider_category == "serverOverloaded"
+        and provider_retryable
+        and effect_state in {"none", "not_started"}
+    ):
+        retryability = "safe"
+
+    safe_details: JsonObject = {}
+    if http_status is not None:
+        safe_details["http_status"] = http_status
+    if upstream_code is not None and upstream_code != provider_category:
+        safe_details["upstream_code"] = upstream_code
+    if provider_retryable:
+        safe_details["provider_retryable"] = True
+
+    provider_code = (
+        upstream_code
+        if code == "codex_output_schema_invalid" and upstream_code is not None
+        else provider_category or upstream_code
+    )
+    return FailureEnvelope(
+        code=code,
+        category=route.category,
+        stage=route.stage,
+        component=component,
+        retryability=retryability,
+        effect_state=effect_state,
+        user_action=route.user_action,
+        safe_summary=route.safe_summary,
+        safe_details=safe_details,
+        diagnostic_id=diagnostic_id or _new_diagnostic_id(),
+        provider_code=provider_code,
+    )
+
+
+def _provider_failure_route(
+    *,
+    code: str,
+    provider_category: str | None,
+    upstream_code: str | None,
+) -> _FailureRoute:
+    if code == "agent_cancelled":
+        return _FailureRoute(
+            "cancellation",
+            "cancellation",
+            "never",
+            "none",
+            "La petición fue cancelada antes de completar el razonamiento.",
+        )
+    if upstream_code == "invalid_json_schema" or code == "codex_output_schema_invalid":
+        return _FailureRoute(
+            "provider_output",
+            "provider",
+            "never",
+            "review",
+            "La salida del proveedor no pudo validarse con el contrato esperado.",
+        )
+    if provider_category in _PROVIDER_CATEGORY_ROUTES:
+        return _PROVIDER_CATEGORY_ROUTES[provider_category]
+    if code.startswith("codex_context_"):
+        return _FailureRoute(
+            "context",
+            "provider",
+            "after_change",
+            "clarify",
+            "El contexto enviado al proveedor no pudo procesarse de forma segura.",
+        )
+    if code in _PROVIDER_CONNECTION_CODES:
+        return _FailureRoute(
+            "provider_connection",
+            "provider",
+            "unknown",
+            "retry",
+            "La conexión con el proveedor de razonamiento no pudo completarse.",
+        )
+    if (
+        code in _PROVIDER_PROTOCOL_CODES
+        or code.startswith("codex_event_")
+        or code.startswith("codex_response_")
+        or code.startswith("codex_server_request_")
+    ):
+        return _FailureRoute(
+            "provider_protocol",
+            "provider",
+            "never",
+            "review",
+            "La respuesta del proveedor no cumplió el protocolo esperado.",
+        )
+    if code in _PROVIDER_OUTPUT_CODES or code.startswith("codex_answer_"):
+        return _FailureRoute(
+            "provider_output",
+            "provider",
+            "never",
+            "review",
+            "La salida del proveedor no pudo validarse con el contrato esperado.",
+        )
+    return _FailureRoute(
+        "internal",
+        "provider",
+        "unknown",
+        "review",
+        "El proveedor de razonamiento no pudo completar la petición.",
+    )
+
+
+def _safe_provider_code(value: object) -> str | None:
+    return (
+        value
+        if isinstance(value, str) and _PROVIDER_CODE_RE.fullmatch(value) is not None
+        else None
+    )
+
+
+def _new_diagnostic_id() -> str:
+    return f"diag-{secrets.token_hex(12)}"
 
 
 def _safe_details(value: JsonObject) -> JsonObject:

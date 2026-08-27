@@ -191,3 +191,184 @@ No ADR is required for P2.1 because the contract does not alter deployment, auth
 ## Next action
 
 Implement only `P2.2-codex-error-normalization`: map existing sanitized provider/host terminal facts into `FailureEnvelope` at the host failure boundary with deterministic tests. Preserve the existing write barrier and do not yet change browser copy, add retries or implement Phase 3 public activity.
+
+---
+
+# P2.2 — Codex/provider error normalization
+
+```text
+phase: 2
+state: COMPLETE
+inspected_head: 70d424cb52c456009fbc704bd8d00112436636b0
+gate_type: HARD
+lookahead_eligible: no
+```
+
+## Objective
+
+Normalize failures raised by the active decision provider into the P2.1 `FailureEnvelope` before
+`AgentTurnService` or the queue flatten them to a code, while preserving the existing product error
+code and all host authority/recovery semantics.
+
+## Why this slice exists
+
+Phase 1 retained safe `CodexDecisionError` facts (`category`, bounded HTTP status, bounded upstream
+code and advisory `provider_retryable`) but the active host loop did not consume them. Plain Codex
+transport/protocol errors also crossed the boundary only as a string code.
+
+P2.2 introduces a provider-boundary decorator. It does not persist or expose the envelope yet.
+
+## Dependency on unvalidated contracts
+
+```text
+depends_on_unvalidated_contracts:
+  - none
+creates_new_production_contract: yes
+stacked_unvalidated_contract_layers_after_slice: 0
+```
+
+The slice consumes the deterministically validated P2.1 schema. The outward turn/browser contract is
+unchanged, so Phase 2 real presentation gates are not materially testable yet.
+
+## Implementation
+
+Added `runtime/agent/provider_failure.py`:
+
+```text
+CodexDecisionEngine
+  -> FailureNormalizingDecisionEngine
+      -> provider exception
+      -> normalize_provider_failure(...)
+      -> ProviderFailureError(AgentTurnError)
+          .code     preserved
+          .failure  validated FailureEnvelope
+```
+
+`failure.py` now contains the bounded provider projection. It uses only already-sanitized attributes
+from the exception and never reads provider message text, stderr, prompts, request bodies or
+`additionalDetails`.
+
+Current routing includes distinct product behavior for authentication, provider capacity,
+connection/stream failures, context limits, protocol failures, provider output failures,
+cancellation and unknown/internal provider failures. Unknown future provider codes fall back to
+`internal + retryability=unknown` instead of inventing specificity.
+
+### Effect-state derivation
+
+The active host loop wraps only `CodexDecisionEngine.next_decision()` and sets:
+
+```text
+effect_state = none
+```
+
+This is not inferred from provider metadata. At this exact boundary the provider can only return a
+decision; the host may execute REASONING capabilities or stage one PLAN proposal, while the durable
+write barrier and effectful plan execution occur later and outside the wrapper. Authorized-plan
+resume bypasses the provider boundary entirely.
+
+`serverOverloaded` becomes `retryability=safe` only when both conditions hold:
+
+```text
+provider_retryable == true
+effect_state in {none, not_started}
+```
+
+The slice still does not perform an automatic retry.
+
+## Files changed
+
+```text
+addons/odoo_ai_assistant/runtime/agent/failure.py
+addons/odoo_ai_assistant/runtime/agent/provider_failure.py
+addons/odoo_ai_assistant/models/embedded_runtime_host_loop.py
+tests/unit/test_provider_failure_normalization.py
+docs/research/PHASE2_FAILURE_CONTRACT.md
+docs/research/EXECUTION_STATE.md
+```
+
+## Deterministic validation actually executed
+
+An isolated dependency-light workspace contained the exact proposed target files and
+repository-relative paths:
+
+```text
+python -m py_compile \
+  addons/odoo_ai_assistant/runtime/agent/failure.py \
+  addons/odoo_ai_assistant/runtime/agent/provider_failure.py \
+  addons/odoo_ai_assistant/models/embedded_runtime_host_loop.py \
+  tests/unit/test_failure_envelope_contract.py \
+  tests/unit/test_provider_failure_normalization.py
+PASS
+
+python -m pytest -q \
+  tests/unit/test_failure_envelope_contract.py \
+  tests/unit/test_provider_failure_normalization.py
+12 passed, 17 subtests passed
+```
+
+A lightweight runtime-stub execution also proved the wrapper converts an effect-safe
+`serverOverloaded` provider error into:
+
+```text
+code=codex_turn_failed
+category=provider_capacity
+retryability=safe
+effect_state=none
+```
+
+No GitHub Actions or real Odoo/Codex environment were used. Full repository/Odoo batteries are not
+being reported as PASS.
+
+## Real-environment validation
+
+```text
+required_validation_ids:
+  - none directly for P2.2
+```
+
+The Phase 2 completion gates remain:
+
+```text
+P2-REAL-AUTH
+P2-REAL-ACL
+P2-REAL-TIMEOUT
+P2-REAL-TOOLFAIL
+P2-REAL-RECOVERY
+```
+
+They require a later slice to persist/project the envelope through the turn/browser boundary.
+
+## Invariants retained
+
+- Odoo remains operational/persistence authority.
+- Effective-user capability execution and `su=False` are unchanged.
+- The provider cannot execute business effects.
+- Preview/approval/write barrier/verification semantics are unchanged.
+- The original product `code` remains the queue/retry discriminator for now.
+- `provider_retryable` remains advisory; only explicit effect state can make overload retry-safe.
+- No automatic provider, capability or write retry is added.
+- No raw provider text or secret-bearing payload is copied into `FailureEnvelope`.
+
+## Exit criteria
+
+- [x] Current sanitized Codex terminal facts map to `FailureEnvelope`.
+- [x] Plain provider transport/protocol/output codes receive bounded product categories.
+- [x] The active host-loop provider boundary carries the envelope without changing outward turn status.
+- [x] Effect state is explicit and is not inferred from a generic provider failure.
+- [x] Safe overload classification requires both provider retryability and safe effect state.
+- [x] Focused dependency-light tests and compilation pass.
+- [x] No persistence/browser/error-copy/retry behavior is added.
+
+## Result / discoveries
+
+The cleanest boundary was not inside the Codex adapter and not inside `AgentTurnService`. A thin
+provider-neutral decorator keeps Phase 1 provider code isolated while letting the host own product
+failure semantics. It also means a future provider can use the same failure contract without
+duplicating queue or browser logic.
+
+## Next action
+
+Implement `P2.3-turn-failure-persistence`: persist the validated envelope on terminal turn failure
+and project it through `browser_status()` without yet rewriting browser copy or adding retry
+buttons. The queue write barrier must remain the authority for `effect_state` when the failure
+occurs after effect execution has become possible.
