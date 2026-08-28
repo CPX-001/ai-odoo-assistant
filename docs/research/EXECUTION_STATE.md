@@ -1,12 +1,13 @@
 # Stabilization execution state
 
-State format: 10
+State format: 11
 Updated: 2026-08-29
 Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
 Accepted P5.1 implementation lineage through: `f7f924ce944db86e896745fef83ea2fb6fd6583a`
 P5.1 validation harness lineage through: `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`
 P5.2 implementation/harness lineage through: `b1e49d97fce5506a2c9bb19b3a9ce1303f7add9c`
 Accepted P5.2 validation/harness lineage through: `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`
+P5.3 implementation/harness lineage through: `1803826a6516e2703497f0d14d74850082ad7665`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
@@ -17,21 +18,21 @@ phase_name: natural non-blocking multi-chat product
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P5.3-stable-settings-snapshot
-active_slice_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice_state: READY
-current_gate_type: PRE_IMPLEMENTATION
-blocking_validations: NONE
+active_slice_record: docs/research/P5.3_STABLE_SETTINGS_SNAPSHOT.md
+active_slice_state: LOCAL_VALIDATION_REQUIRED
+current_gate_type: HARD_DETERMINISTIC
+blocking_validations: P5.3-ODOO-SETTINGS-SNAPSHOT
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3
 acceptance_evidence: docs/research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md
-next_slice: P5.3-stable-settings-snapshot
+next_slice: NONE_UNTIL_P5.3_FOCUSED_ODOO
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
 Phases 0 through 4 are complete. The ordered P2 -> P3 -> P4 real Odoo/browser/provider acceptance
 chain passed on one linear code lineage. P5.1 production code and its deterministic, Odoo and real
 browser/provider acceptance are complete. P5.2 scheduler capacity, causal ordering, fairness,
-release wake-up, diagnostics and real two-cron behavior are accepted. P5.3 is READY but has not
-been implemented.
+release wake-up, diagnostics and real two-cron behavior are accepted. P5.3 is implemented in small
+contract/test/version slices but is intentionally stopped at its first mandatory focused Odoo gate.
 
 ---
 
@@ -273,9 +274,42 @@ P5-REAL-BACKPRESSURE           | PASS | no over-admission at capacity 1; wake 1,
 
 Evidence: `evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
 
-## P5.3 Stable settings snapshot — READY
+## P5.3 Stable settings snapshot — LOCAL_VALIDATION_REQUIRED
 
-P5.3 is the next eligible slice. It was not implemented or claimed in the P5.2 validation run.
+Implementation/validation records:
+
+```text
+docs/research/P5.3_STABLE_SETTINGS_SNAPSHOT.md
+docs/research/P5.3_VALIDATION_RUNBOOK.md
+```
+
+Implemented in deliberately small checkpoints:
+
+```text
+P5.3a versioned immutable settings snapshot | b46b72e
+P5.3b focused Odoo test harness              | 186eed0
+P5.3c addon version checkpoint               | 1803826
+```
+
+New normal turns derive a host-owned `execution_settings_payload` from the already resolved
+`reasoning_model` and `policy_payload`. The v1 snapshot records model, autonomy profile and policy;
+after capture those three persisted settings surfaces cannot be rewritten on that turn. Dynamic
+Odoo authorization, company membership, capability guards and provider availability remain live
+checks and are not frozen by the snapshot.
+
+The P5.1 real browser evidence already demonstrated that A retained persisted model/policy while B
+captured changed preferences. That older evidence is supporting context only; it does not accept the
+new P5.3 contract or SHA.
+
+Mandatory next validation:
+
+```text
+P5.3-ODOO-SETTINGS-SNAPSHOT | HARD | NOT RUN
+```
+
+No P5.3 test is currently claimed PASS. P5.4 must not start until the focused gate above passes.
+After focused PASS, P5.3 validation should continue as a separate bounded regression/real-gate slice
+rather than one large test batch.
 
 ---
 
@@ -284,7 +318,7 @@ P5.3 is the next eligible slice. It was not implemented or claimed in the P5.2 v
 These limitations define the remaining Phase 5 and later work:
 
 - background scopes are currently web-client memory; durable reconnect/continuity is expanded later in P5;
-- P5.3 stable settings snapshot remains the next unimplemented Phase 5 slice;
+- P5.3 stable settings snapshot is implemented but awaiting its first mandatory focused Odoo gate; P5.4 is blocked;
 - post-effect verified actions still need provider continuation/natural synthesis (P5.5);
 - conversation provider context is smaller than the target durable `ConversationContextManager` model (P5.6);
 - one canonical effect proposal/step is supported; multi-step effects are P6;
@@ -306,13 +340,15 @@ These limitations define the remaining Phase 5 and later work:
 - No parallel tool authority registry is introduced.
 - P5 target concurrency is per-turn/per-conversation, not a global UI lock.
 - Model/autonomy/profile changes after a turn is queued do not mutate that running turn's captured authority/settings.
+- P5.3 freezes execution selectors, not revocable Odoo authorization or dynamic capability guards.
 - No GitHub Actions are used for roadmap validation under current instructions.
 
 ---
 
 # Exact next action
 
-Select and prepare **P5.3 stable settings snapshot** from
-`AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`. Reconstruct its smallest coherent implementation and
-validation record before changing behavior. P5.3 is READY; no P5.3 implementation was started by
-the P5.2 acceptance run.
+Run **P5.3-ODOO-SETTINGS-SNAPSHOT** from `P5.3_VALIDATION_RUNBOOK.md` against the exact current
+P5.3 code lineage, executing `TestAssistantTurnSettingsSnapshot` after updating the addon on a real
+Odoo 18 Community test database. If it fails, repair only the smallest P5.3 layer and rerun that
+focused gate. Do not start P5.4 and do not batch the full P5.3 regression/real gates until this first
+mandatory deterministic contract passes.
