@@ -1,1 +1,168 @@
-{"format_version":1,"gates":[{"id":"P2-REAL-AUTH","phase":2,"preconditions":["Disposable Odoo 18 database","addon updated to tested SHA"],"user":"internal test user","data":"disposable terminal turn","injection":"test-only validated authentication FailureEnvelope","action":"read terminal status and render P2.4","backend_expected":"failed; authentication; reconnect","browser_expected":"authentication-specific deterministic presentation; no blind retry","redaction":"no credentials, prompt, stderr or safe_details rendered","cleanup":"remove disposable turn/database","backend_selector":"odoo_ai_assistant:TestPhase2BrowserFailureProjection.test_auth_projection","browser_filter":"auth, ACL, timeout, tool failure and recovery produce distinct deterministic presentation"},{"id":"P2-REAL-ACL","phase":2,"preconditions":["Disposable Odoo 18 database","limited user"],"user":"limited internal user","data":"inaccessible disposable record plus turn","injection":"test-only access_denied envelope","action":"read as originating user and render","backend_expected":"odoo_access; request_access","browser_expected":"permissions-specific presentation","redaction":"inaccessible values absent","cleanup":"remove disposable data/database","backend_selector":"odoo_ai_assistant:TestPhase2BrowserFailureProjection.test_acl_projection","browser_filter":"auth, ACL, timeout, tool failure and recovery produce distinct deterministic presentation"},{"id":"P2-REAL-TIMEOUT","phase":2,"preconditions":["Disposable Odoo 18 database"],"user":"internal test user","data":"terminal turn","injection":"bounded engine_timeout before effects","action":"read and render","backend_expected":"effect_state=none; retryability=safe; retry","browser_expected":"retry offered only for explicit safe timeout","redaction":"no raw provider text","cleanup":"remove disposable turn/database","backend_selector":"odoo_ai_assistant:TestPhase2BrowserFailureProjection.test_timeout_without_effect_is_retry_safe","browser_filter":"safe retry requires explicit retryability, safe effect state and retry action"},{"id":"P2-REAL-TOOLFAIL","phase":2,"preconditions":["Disposable Odoo 18 database"],"user":"internal test user","data":"terminal turn","injection":"capability_execution fixture","action":"read and render","backend_expected":"capability_execution; component=capability","browser_expected":"tool-specific presentation","redaction":"no tool args/results","cleanup":"remove disposable turn/database","backend_selector":"odoo_ai_assistant:TestPhase2BrowserFailureProjection.test_tool_failure_is_distinct","browser_filter":"auth, ACL, timeout, tool failure and recovery produce distinct deterministic presentation"},{"id":"P2-REAL-RECOVERY","phase":2,"preconditions":["Disposable Odoo 18 database","write_barrier=true"],"user":"internal test user","data":"recovery_required turn","injection":"worker_lost_after_write_barrier envelope","action":"read and render","backend_expected":"unknown effect; never retry; review","browser_expected":"explicit uncertainty; blind retry unavailable","redaction":"bounded code/diagnostic only","cleanup":"remove disposable turn/database","backend_selector":"odoo_ai_assistant:TestPhase2BrowserFailureProjection.test_recovery_after_write_barrier_is_never_blind_retry","browser_filter":"safe retry requires explicit retryability, safe effect state and retry action"},{"id":"P3-REAL-ACTIVITY-READ","phase":3,"preconditions":["Phase 2 COMPLETE","Phase 3 public API implemented"],"user":"internal test user","data":"disposable turn/read fixture","injection":"trusted public descriptor","action":"append/read/reconnect by cursor","backend_expected":"ordered bounded event and empty replay","browser_expected":"activity distinct from answer and reconnectable","redaction":"no reasoning/prompt/tool payload","cleanup":"remove disposable data/database","backend_selector":"phase3_real:TestPhase3PublicActivityRealGates.test_activity_read_is_bounded_and_reconnectable","browser_filter":"public activity"},{"id":"P3-REAL-ACTIVITY-ACTION","phase":3,"preconditions":["Phase 2 COMPLETE","Phase 3 production wiring implemented"],"user":"internal test user","data":"safe disposable action","injection":"trusted preview descriptors","action":"observe preview/execution/verification","backend_expected":"typed ordered lifecycle","browser_expected":"stages visibly distinct","redaction":"no raw args/results/private transcript","cleanup":"remove action data/database","backend_selector":"phase3_real:TestPhase3PublicActivityRealGates.test_activity_action_has_real_lifecycle_without_arguments_or_results","browser_filter":"public activity"},{"id":"P3-REAL-LIVE-VISIBILITY","phase":3,"preconditions":["Phase 2 COMPLETE","independent public persistence implemented","two DB connections"],"user":"internal test user","data":"committed running turn","injection":"trusted capability.started event","action":"append on uncommitted worker cursor; read second connection","backend_expected":"second connection sees event before worker commit","browser_expected":"real persisted liveness, no timer simulation","redaction":"closed event fields only","cleanup":"close cursors/remove database","backend_selector":"phase3_real:TestPhase3PublicActivityRealGates.test_live_visibility_uses_second_connection_before_turn_commit","browser_filter":"public activity"},{"id":"P3-REAL-REDACTION","phase":3,"preconditions":["Phase 2 COMPLETE","Phase 3 production wiring implemented"],"user":"internal test user","data":"disposable public events","injection":"attempt agent.thinking then safe event","action":"reject private kind and inspect projection","backend_expected":"agent.thinking rejected","browser_expected":"no chain-of-thought/secrets","redaction":"secret/password/token/stderr/stdout/prompt/thinking absent","cleanup":"remove disposable data/database","backend_selector":"phase3_real:TestPhase3PublicActivityRealGates.test_redaction_rejects_private_reasoning_and_secret_bearing_fields","browser_filter":"public activity"}]}
+{
+  "format_version": 1,
+  "gates": [
+    {
+      "id": "P2-REAL-AUTH",
+      "phase": 2,
+      "preconditions": [
+        "Disposable Odoo 18 database named odoo_ai_*",
+        "odoo_ai_assistant updated to the exact tested SHA",
+        "odoo_ai_phase2_faults installed from tests/fixtures/odoo18",
+        "Odoo process started with ODOO_AI_PHASE2_FAULT_FIXTURE=1",
+        "Database runtime account is authenticated so the request reaches the persisted turn runtime",
+        "Cron processing enabled"
+      ],
+      "user": "internal Phase 2 test user",
+      "data": "disposable persisted turn created by the real browser submit path",
+      "injection": "exact __P2_REAL_AUTH__ message activates a test-only ProviderFailureError(authentication/unauthorized) after enqueue and before business effects",
+      "action": "submit __P2_REAL_AUTH__ in the real Assistant panel, wait for cron terminalization, then read /odoo_ai/v1/turn/status from the same browser session",
+      "backend_expected": "state=failed; code=codex_turn_failed; category=authentication; effect_state=none; retryability=after_change; user_action=reconnect",
+      "browser_expected": "authentication-specific deterministic presentation, explicit no-effect statement, reconnect guidance, no retry control",
+      "redaction": "safe_summary, safe_details.fixture_detail, provider_code, credentials, prompts and stdout/stderr are absent from rendered failure content",
+      "cleanup": "delete disposable database/filestore/logs after evidence capture; fixture is never installed on a non-disposable database",
+      "backend_selector": "odoo_ai_assistant:TestPhase2BrowserFailureProjection.test_auth_projection",
+      "browser_filter": "auth, ACL, timeout, tool failure and recovery produce distinct deterministic presentation"
+    },
+    {
+      "id": "P2-REAL-ACL",
+      "phase": 2,
+      "preconditions": [
+        "Disposable Odoo 18 database named odoo_ai_*",
+        "odoo_ai_phase2_faults installed and enabled",
+        "limited internal user created by phase2_real_fixture.py without base.group_system",
+        "Database runtime account authenticated",
+        "Cron processing enabled"
+      ],
+      "user": "limited internal Phase 2 test user",
+      "data": "odoo.ai.phase2.secret fixture record readable only by base.group_system plus a disposable turn",
+      "injection": "exact __P2_REAL_ACL__ message makes the embedded runtime perform a real ORM read under the originating su=False user; the fixture fails if access unexpectedly succeeds",
+      "action": "submit __P2_REAL_ACL__ as the limited user through the real Assistant panel and inspect the resulting status/browser failure",
+      "backend_expected": "state=failed; code=access_denied; category=odoo_access; effect_state=none; retryability=after_change; user_action=request_access",
+      "browser_expected": "Odoo-permissions-specific presentation without implying provider failure and without a retry control",
+      "redaction": "restricted fixture record value is never rendered; no raw exception/provider/private payload is exposed",
+      "cleanup": "drop disposable database and filestore; no restricted fixture data is retained",
+      "backend_selector": "odoo_ai_assistant:TestPhase2BrowserFailureProjection.test_acl_projection",
+      "browser_filter": "auth, ACL, timeout, tool failure and recovery produce distinct deterministic presentation"
+    },
+    {
+      "id": "P2-REAL-TIMEOUT",
+      "phase": 2,
+      "preconditions": [
+        "Disposable Odoo 18 database named odoo_ai_*",
+        "odoo_ai_phase2_faults installed and enabled",
+        "Database runtime account authenticated",
+        "Cron processing enabled"
+      ],
+      "user": "internal Phase 2 test user",
+      "data": "disposable persisted turn",
+      "injection": "exact __P2_REAL_TIMEOUT__ message raises a test-only carried engine_timeout FailureEnvelope before any business effect and forces that claim terminal",
+      "action": "submit __P2_REAL_TIMEOUT__ through the real Assistant panel and inspect status plus the rendered retry control",
+      "backend_expected": "state=failed; code=engine_timeout; category=provider_connection; effect_state=none; retryability=safe; user_action=retry",
+      "browser_expected": "provider-connection/timeout guidance and Reintentar petición only because the host contract is explicitly safe and effect-free",
+      "redaction": "fixture detail and raw provider text are absent; only bounded code and diagnostic id may be technical detail",
+      "cleanup": "drop disposable database/filestore and temporary logs",
+      "backend_selector": "odoo_ai_assistant:TestPhase2BrowserFailureProjection.test_timeout_without_effect_is_retry_safe",
+      "browser_filter": "safe retry requires explicit retryability, safe effect state and retry action"
+    },
+    {
+      "id": "P2-REAL-TOOLFAIL",
+      "phase": 2,
+      "preconditions": [
+        "Disposable Odoo 18 database named odoo_ai_*",
+        "odoo_ai_phase2_faults installed and enabled",
+        "Database runtime account authenticated",
+        "Cron processing enabled"
+      ],
+      "user": "internal Phase 2 test user",
+      "data": "disposable persisted turn",
+      "injection": "exact __P2_REAL_TOOLFAIL__ message raises a bounded capability_execution_failed host error inside the embedded runtime; current claim is made terminal deterministically",
+      "action": "submit __P2_REAL_TOOLFAIL__ through the real Assistant panel and inspect the terminal turn plus deterministic browser presentation",
+      "backend_expected": "state=failed; code=capability_execution_failed; category=capability_execution; component=capability; effect_state=none; retryability=unknown; user_action=review",
+      "browser_expected": "tool/execution-specific presentation remains distinct from provider connectivity and no retry control is shown",
+      "redaction": "no tool arguments/results, private working transcript, prompts or provider process output are rendered",
+      "cleanup": "drop disposable database/filestore and temporary logs",
+      "backend_selector": "odoo_ai_assistant:TestPhase2BrowserFailureProjection.test_tool_failure_is_distinct",
+      "browser_filter": "auth, ACL, timeout, tool failure and recovery produce distinct deterministic presentation"
+    },
+    {
+      "id": "P2-REAL-RECOVERY",
+      "phase": 2,
+      "preconditions": [
+        "Disposable Odoo 18 database named odoo_ai_*",
+        "odoo_ai_phase2_faults installed and enabled",
+        "Database runtime account authenticated",
+        "Cron processing enabled"
+      ],
+      "user": "internal Phase 2 test user",
+      "data": "disposable persisted turn; no business record mutation is performed by the fixture",
+      "injection": "exact __P2_REAL_RECOVERY__ message persists only the turn write_barrier through a short independent Odoo cursor, then raises worker_lost_after_write_barrier",
+      "action": "submit __P2_REAL_RECOVERY__ through the real Assistant panel, observe recovery_required, and verify that no blind-retry control is available",
+      "backend_expected": "state=recovery_required; code=worker_lost_after_write_barrier; category=queue_worker; effect_state=unknown; retryability=never; user_action=review",
+      "browser_expected": "explicit effect uncertainty/review guidance and no Reintentar petición control",
+      "redaction": "only bounded code/diagnostic data is renderable; no raw runtime/provider/private payload is exposed",
+      "cleanup": "drop disposable database/filestore and temporary logs; fixture commits no business effect",
+      "backend_selector": "odoo_ai_assistant:TestPhase2BrowserFailureProjection.test_recovery_after_write_barrier_is_never_blind_retry",
+      "browser_filter": "safe retry requires explicit retryability, safe effect state and retry action"
+    },
+    {
+      "id": "P3-REAL-ACTIVITY-READ",
+      "phase": 3,
+      "preconditions": ["Phase 2 COMPLETE", "Phase 3 public API implemented"],
+      "user": "internal test user",
+      "data": "disposable turn/read fixture",
+      "injection": "trusted public descriptor",
+      "action": "append/read/reconnect by cursor",
+      "backend_expected": "ordered bounded event and empty replay",
+      "browser_expected": "activity distinct from answer and reconnectable",
+      "redaction": "no reasoning/prompt/tool payload",
+      "cleanup": "remove disposable data/database",
+      "backend_selector": "phase3_real:TestPhase3PublicActivityRealGates.test_activity_read_is_bounded_and_reconnectable",
+      "browser_filter": "public activity"
+    },
+    {
+      "id": "P3-REAL-ACTIVITY-ACTION",
+      "phase": 3,
+      "preconditions": ["Phase 2 COMPLETE", "Phase 3 production wiring implemented"],
+      "user": "internal test user",
+      "data": "safe disposable action",
+      "injection": "trusted preview descriptors",
+      "action": "observe preview/execution/verification",
+      "backend_expected": "typed ordered lifecycle",
+      "browser_expected": "stages visibly distinct",
+      "redaction": "no raw args/results/private transcript",
+      "cleanup": "remove action data/database",
+      "backend_selector": "phase3_real:TestPhase3PublicActivityRealGates.test_activity_action_has_real_lifecycle_without_arguments_or_results",
+      "browser_filter": "public activity"
+    },
+    {
+      "id": "P3-REAL-LIVE-VISIBILITY",
+      "phase": 3,
+      "preconditions": ["Phase 2 COMPLETE", "independent public persistence implemented", "two DB connections"],
+      "user": "internal test user",
+      "data": "committed running turn",
+      "injection": "trusted capability.started event",
+      "action": "append on uncommitted worker cursor; read second connection",
+      "backend_expected": "second connection sees event before worker commit",
+      "browser_expected": "real persisted liveness, no timer simulation",
+      "redaction": "closed event fields only",
+      "cleanup": "close cursors/remove database",
+      "backend_selector": "phase3_real:TestPhase3PublicActivityRealGates.test_live_visibility_uses_second_connection_before_turn_commit",
+      "browser_filter": "public activity"
+    },
+    {
+      "id": "P3-REAL-REDACTION",
+      "phase": 3,
+      "preconditions": ["Phase 2 COMPLETE", "Phase 3 production wiring implemented"],
+      "user": "internal test user",
+      "data": "disposable public events",
+      "injection": "attempt agent.thinking then safe event",
+      "action": "reject private kind and inspect projection",
+      "backend_expected": "agent.thinking rejected",
+      "browser_expected": "no chain-of-thought/secrets",
+      "redaction": "secret/password/token/stderr/stdout/prompt/thinking absent",
+      "cleanup": "remove disposable data/database",
+      "backend_selector": "phase3_real:TestPhase3PublicActivityRealGates.test_redaction_rejects_private_reasoning_and_secret_bearing_fields",
+      "browser_filter": "public activity"
+    }
+  ]
+}
