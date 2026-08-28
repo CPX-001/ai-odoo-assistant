@@ -54,20 +54,29 @@ Current turn processing uses:
 - bounded attempts;
 - cancellation;
 - stale-turn recovery;
-- `FOR UPDATE SKIP LOCKED` claim;
-- two native cron runner slots at the current implementation baseline.
+- two native cron runner slots;
+- an administrator-configurable logical execution ceiling currently bounded to those two physical slots;
+- a short host-internal PostgreSQL advisory lock for race-safe admission/claim;
+- one active causal turn per conversation;
+- cross-user anti-starvation ordering;
+- post-release scheduler wake-up;
+- bounded aggregate scheduler diagnostics.
 
-Two slots are an implementation default, not the final concurrency contract.
+The scheduler claim transaction uses `READ COMMITTED` locally before acquiring the advisory lock so a worker that waited for another claim observes the previous committed claim. Provider/business execution never holds the scheduler coordination lock.
 
-The target scheduler exposes measured/configurable capacity and provider backpressure while preserving the same durable claim/recovery semantics.
+Excess work remains durable `queued`; scheduler saturation is not treated as a turn failure. `running` and `cancel_requested` consume execution capacity. `awaiting_confirmation` releases worker capacity while continuing to block later turns in the same conversation. `recovery_required` remains non-replayable but is terminal for scheduler eligibility.
+
+The current physical pool still has two cron slots. P5.2 makes capacity/backpressure explicit for that pool; future measurement/provider support may justify a larger runner pool without changing turn authority or recovery semantics.
+
+P5.2 code is implemented but remains under its batched real acceptance gate. See `research/P5.2_SCHEDULER_IMPLEMENTATION.md` and `research/P5.2_VALIDATION_RUNBOOK.md`.
 
 ## 4. Concurrency boundary
 
 A running turn is background server work, not a browser lock.
 
-Current backend primitives can claim separate queued turns concurrently through independent cron slots and `SKIP LOCKED`. Current frontend state is less mature: panel-global `state.loading` still disables the composer, conversation selector and model/autonomy controls while the visible turn runs.
+P5.1 established per-conversation frontend execution scopes. Chat A may continue in the background while the user opens or submits Chat B; late A activity/stream/failure updates remain owned by A, and model/autonomy selectors affect future turns rather than mutating A's captured snapshot.
 
-Target Phase 5 behavior:
+P5.2 extends the same product rule into backend scheduling:
 
 ```text
 Chat A turn running
@@ -76,9 +85,13 @@ Chat A turn running
    +-- Odoo remains usable
    +-- selectors/settings remain usable
    +-- Chat B may submit/run when capacity exists
+   +-- later Chat A turn waits for A's unresolved predecessor
+   +-- excess global work remains queued under backpressure
 ```
 
-Initial ordering rule: one active causal turn per conversation, multiple conversations in parallel. This prevents racing two messages against the same unresolved conversation context while still allowing real multitasking.
+The ordering rule is one active causal turn per conversation, multiple conversations in parallel up to effective capacity. This prevents racing two messages against the same unresolved conversation context while still allowing real multitasking.
+
+Scheduler fairness prefers users consuming fewer active slots, then the least recently served waiting user, then FIFO within that service order. One user may still use spare capacity when nobody else is waiting.
 
 A turn captures the execution settings/policy/model/profile it requires. UI changes made while it runs affect future turns rather than changing the running turn retroactively.
 
@@ -181,7 +194,7 @@ Do not reduce every provider to a lowest common denominator. The Assistant manif
 
 ## 10. Live public activity and answer projection
 
-Current `main` includes production implementation for the P3/P4 paths, pending formal real acceptance.
+Current `main` includes accepted P3/P4 production implementation for public activity and answer streaming.
 
 ### Public activity
 
@@ -224,6 +237,7 @@ Operational state is Odoo-native:
 
 - conversations/messages/turns;
 - queue/lease/recovery state;
+- scheduler service watermark (`scheduler_claimed_at`);
 - failure payloads;
 - effect plans/receipts;
 - public/live event state;
