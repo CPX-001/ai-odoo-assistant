@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
+        <xpath expr="//div[@t-if='state.errorCode']" position="inside">
+            <div t-if="state.failure and failureEffectNotice" class="small text-muted mt-2" t-esc="failureEffectNotice"/>
+            <div t-if="state.failure and failureNextStep" class="small mt-2" t-esc="failureNextStep"/>
+            <div t-if="state.failure and failureTechnical" class="small text-muted mt-2 font-monospace" t-esc="failureTechnical"/>
+            <button t-if="state.failure and failureCanRetry" type="button" class="btn btn-sm btn-outline-primary mt-2" t-att-disabled="state.loading" t-on-click="retryFailure">Reintentar petición</button>
+        </xpath>
+    </t>
+</templates>
