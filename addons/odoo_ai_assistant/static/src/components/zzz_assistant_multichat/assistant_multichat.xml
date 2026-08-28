@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="odoo_ai_assistant.AssistantHistoryMultiChat"
+        t-inherit="odoo_ai_assistant.AssistantHistory" t-inherit-mode="extension">
+        <xpath expr="//button[contains(@class, 'o_ai_assistant_history_item_new')]" position="attributes">
+            <attribute name="t-att-disabled">isNavigationBusy</attribute>
+        </xpath>
+        <xpath expr="//button[contains(@class, 'o_ai_assistant_history_item_open')]" position="attributes">
+            <attribute name="t-att-disabled">isNavigationBusy</attribute>
+        </xpath>
+        <xpath expr="//span[contains(@class, 'text-muted')][t[@t-esc='formatUpdatedAt(conversation.updated_at)']]" position="after">
+            <span t-if="conversationRuntimeLabel(conversation.conversation_id)"
+                class="badge rounded-pill text-bg-light border mt-1"
+                t-esc="conversationRuntimeLabel(conversation.conversation_id)"/>
+        </xpath>
+    </t>
+
+    <t t-name="odoo_ai_assistant.AssistantPanelMultiChatNavigation"
+        t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
+        <xpath expr="//button[@title='Nuevo chat']" position="attributes">
+            <attribute name="t-att-disabled">state.historyLoading</attribute>
+        </xpath>
+        <xpath expr="//button[@aria-label='Volver al historial']" position="attributes">
+            <attribute name="t-att-disabled">state.historyLoading</attribute>
+        </xpath>
+    </t>
+</templates>
