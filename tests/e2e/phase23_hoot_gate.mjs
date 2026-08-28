@@ -1,1 +1,87 @@
-import assert from "node:assert/strict"; import { chromium } from "playwright"; function required(name){const value=process.env[name]?.trim();assert.ok(value,`${name} is required`);return value;} const base=required("ODOO_AI_HOOT_BASE_URL").replace(/\/$/,""); const db=required("ODOO_AI_HOOT_DB"); const filter=required("ODOO_AI_HOOT_FILTER"); const url=process.env.ODOO_AI_HOOT_URL?.trim()||`${base}/web/tests?db=${encodeURIComponent(db)}&mod=odoo_ai_assistant&filter=${encodeURIComponent(filter)}`; const browser=await chromium.launch({headless:true}); try{const page=await browser.newPage();const errors=[];page.on("pageerror",e=>errors.push(e.message));await page.goto(url,{waitUntil:"domcontentloaded",timeout:120000});await page.waitForFunction(wanted=>{const text=document.body?.innerText||"";return text.includes(wanted)&&/(passed|failed|tests? complete|test results)/i.test(text);},filter,{timeout:180000});const text=await page.locator("body").innerText();assert.ok(text.includes(filter));assert.ok(!/\b[1-9]\d*\s+failed\b/i.test(text),text.slice(-4000));assert.deepEqual(errors,[]);console.log(`HOOT filtered gate completed without observed failures: ${filter}`);}finally{await browser.close();}
+import assert from "node:assert/strict";
+
+import { chromium } from "playwright";
+
+function required(name) {
+    const value = process.env[name]?.trim();
+    assert.ok(value, `${name} is required`);
+    return value;
+}
+
+const base = required("ODOO_AI_HOOT_BASE_URL").replace(/\/$/, "");
+const database = required("ODOO_AI_HOOT_DB");
+const filter = required("ODOO_AI_HOOT_FILTER");
+const login = required("ODOO_AI_HOOT_LOGIN");
+const password = required("ODOO_AI_HOOT_PASSWORD");
+const timeout = Number(process.env.ODOO_AI_HOOT_TIMEOUT_MS || 180_000);
+assert.ok(Number.isInteger(timeout) && timeout >= 1_000 && timeout <= 300_000);
+const url =
+    process.env.ODOO_AI_HOOT_URL?.trim() ||
+    `${base}/web/tests?db=${encodeURIComponent(database)}&mod=odoo_ai_assistant&headless&loglevel=2&preset=desktop&timeout=15000&filter=${encodeURIComponent(filter)}`;
+
+const browser = await chromium.launch({ headless: true });
+try {
+    const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+    const errors = [];
+    const consoleMessages = [];
+    let complete;
+    let fail;
+    const completion = new Promise((resolve, reject) => {
+        complete = resolve;
+        fail = reject;
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+        const value = message.text();
+        consoleMessages.push(value);
+        if (value.includes("Test suite succeeded")) {
+            complete();
+        } else if (/Some tests failed|Failed [1-9]\d* tests/.test(value)) {
+            fail(new Error(value));
+        }
+    });
+
+    await page.goto(`${base}/web/login?db=${encodeURIComponent(database)}`, {
+        waitUntil: "domcontentloaded",
+        timeout: 120_000,
+    });
+    await page.locator('input[name="login"]').fill(login);
+    await page.locator('input[name="password"]').fill(password);
+    await Promise.all([
+        page.waitForURL((current) => !current.pathname.endsWith("/web/login"), {
+            timeout: 60_000,
+        }),
+        page.locator('button[type="submit"]').click(),
+    ]);
+
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 120_000 });
+    let timeoutId;
+    try {
+        await Promise.race([
+            completion,
+            new Promise((_, reject) =>
+                (timeoutId = setTimeout(
+                    () => reject(new Error(`HOOT timed out after ${timeout}ms`)),
+                    timeout
+                ))
+            ),
+        ]);
+    } catch (error) {
+        const diagnostics = consoleMessages
+            .filter((value) => /fail|assert|expect|error/i.test(value))
+            .slice(-50);
+        throw new Error(
+            `${error.message}; page_errors=${JSON.stringify(errors)}; diagnostics=${JSON.stringify(diagnostics)}`
+        );
+    } finally {
+        clearTimeout(timeoutId);
+    }
+    const summary = consoleMessages.find((value) => /Passed \d+ tests/.test(value));
+    assert.ok(summary, `HOOT emitted no pass total: ${JSON.stringify(consoleMessages.slice(-20))}`);
+    const passed = Number(summary.match(/Passed (\d+) tests/)?.[1]);
+    assert.ok(passed > 0, `HOOT filter matched no tests: ${filter}`);
+    assert.deepEqual(errors, []);
+    console.log(`HOOT filtered gate completed: ${filter}; ${summary}`);
+} finally {
+    await browser.close();
+}

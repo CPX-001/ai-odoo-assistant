@@ -243,11 +243,20 @@ async function changeModelThroughUi(page, modelPreferences) {
             response.request().method() === "POST",
         { timeout: 30_000 }
     );
-    if (targetModel === null) {
-        await page.getByText("Predeterminado", { exact: true }).last().click();
-    } else {
-        await page.getByText(targetModel, { exact: true }).last().click();
+    const optionText = targetModel === null ? "Predeterminado" : targetModel;
+    const pickerOptions = page.locator(".o_ai_assistant_picker_option").filter({
+        hasText: optionText,
+    });
+    if (!(await pickerOptions.count())) {
+        const picker = await page.locator(".o_ai_assistant_model_picker").innerHTML();
+        const menus = await page.locator(".o_ai_assistant_picker_menu").allInnerTexts();
+        assert.fail(
+            `expected a model option for ${optionText}; picker=${picker.slice(0, 1000)}; menus=${JSON.stringify(menus)}`
+        );
     }
+    const pickerOption = pickerOptions.last();
+    await pickerOption.waitFor({ state: "visible", timeout: 30_000 });
+    await pickerOption.click();
     const envelope = await (await responsePromise).json();
     assert.ok(!envelope.error, JSON.stringify(envelope.error));
     assert.equal(envelope.result?.ok, true);
@@ -267,7 +276,13 @@ async function changeAutonomyThroughUi(page, currentProfile) {
             response.request().method() === "POST",
         { timeout: 30_000 }
     );
-    await page.getByText(PROFILE_LABEL[targetProfile], { exact: true }).last().click();
+    const pickerOptions = page.locator(".o_ai_assistant_picker_option").filter({
+        hasText: PROFILE_LABEL[targetProfile],
+    });
+    assert.ok(await pickerOptions.count(), `expected an autonomy option for ${targetProfile}`);
+    const pickerOption = pickerOptions.last();
+    await pickerOption.waitFor({ state: "visible", timeout: 30_000 });
+    await pickerOption.click();
     const envelope = await (await responsePromise).json();
     assert.ok(!envelope.error, JSON.stringify(envelope.error));
     assert.equal(envelope.result?.ok, true);
