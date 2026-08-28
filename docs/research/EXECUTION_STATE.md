@@ -1,8 +1,9 @@
 # Stabilization execution state
 
-State format: 3
-Updated: 2026-08-28
-Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md` and `E2E_AGENT_LOOP_CONVERGENCE.md`
+State format: 4  
+Updated: 2026-08-28  
+Runtime implementation baseline audited for this reconciliation: `24b9460ad09998ec50d853e0a715b543e5991bbb`  
+Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
 
@@ -18,45 +19,45 @@ current_gate_type: HARD_REAL_ENV
 blocking_validations: P2-REAL-AUTH, P2-REAL-ACL, P2-REAL-TIMEOUT, P2-REAL-TOOLFAIL, P2-REAL-RECOVERY
 phase_completion_validations: P2-REAL-AUTH, P2-REAL-ACL, P2-REAL-TIMEOUT, P2-REAL-TOOLFAIL, P2-REAL-RECOVERY
 next_slice: NONE_UNTIL_PHASE2_REAL_GATES_PASS
+lookahead_budget: EXHAUSTED_BY_LANDED_P3_P4_CONTRACTS
+next_product_phase_after_p4_acceptance: 5
+next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
-Phase 0 and Phase 1 are complete. Phase 2 has implemented its schema, provider normalization, terminal turn persistence and browser consumer/presentation slices. P2.3 is `COMPLETE` after real Odoo 18 validation and repair of a failure-envelope overwrite discovered by the focused integration gate. P2.4 code and deterministic contracts are implemented, but its five real presentation gates were not executable in the publishing environment and are now the hard blocker. Phase 3 production and Phase 4 are not eligible.
+Phase 0 and Phase 1 are complete. Phase 2 implementation is complete through the browser failure consumer but its five real presentation gates remain mandatory.
 
-The `Next action` prose at the end of the historical P2.3 section in `PHASE2_FAILURE_CONTRACT.md` is superseded by this cursor and `P2.4_BROWSER_FAILURE_PRESENTATION.md`.
+Unlike the previous state document, current `main` **does contain production implementation for Phase 3 public activity and Phase 4 provisional answer streaming**. Those layers were landed as bounded look-ahead so one real Odoo/browser/provider session can validate the ordered chain. Their existence does not make them formally complete.
 
-## P2.3 implementation checkpoint
+No additional P5+ contract implementation is eligible until the P2 -> P3 -> P4 real acceptance chain is processed.
 
-P2.3 reconstructed remote `main` at:
+---
+
+# Phase 0 — COMPLETE
+
+Reproducible baseline and timing/failure evidence are complete according to `PHASE0_BASELINE.md`.
+
+# Phase 1 — COMPLETE
+
+Provider boundary / host-owned iterative decision loop is complete.
+
+Retained real evidence:
 
 ```text
-d12f73e50a896315a6f4b0051d6e0125de621554
+P1-REAL-VERSION  | PASS | 49bdac1f732acaaee3154ed60baffd675130991a | Codex 0.149.1
+P1-REAL-SOAK-100 | PASS | 49bdac1f732acaaee3154ed60baffd675130991a | 100/100 turns
+P1-REAL-TOOLCALL | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
+P1-REAL-CANCEL   | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
 ```
 
-The material implementation reached:
+ADR-019/current code own the active host loop.
 
-```text
-00d963e0bdf1a14efe55fb974c2642de038313ee
-```
+---
 
-The following docs-only handoff then recorded the validation gate:
+# Phase 2 — IN_PROGRESS / hard real gates pending
 
-```text
-e90264ab3c1d72afbdbe92b79fdc5a2b6012c718
-```
+## P2.1 FailureEnvelope — COMPLETE
 
-The exact repaired checkpoint materially validated on Odoo 18 is:
-
-```text
-8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc
-```
-
-## Phase 2 progress
-
-### P2.1 — FailureEnvelope schema
-
-`COMPLETE`.
-
-The bounded host contract remains:
+Bounded host contract:
 
 ```text
 code
@@ -72,216 +73,179 @@ diagnostic_id
 provider_code
 ```
 
-### P2.2 — Codex/provider normalization
+## P2.2 Provider normalization — COMPLETE
 
-`COMPLETE`.
+Sanitized provider category/status/upstream facts survive without raw provider output becoming product state.
 
-The active provider boundary preserves sanitized provider category, bounded HTTP status, bounded upstream code and advisory retryability inside a validated `FailureEnvelope`. Raw provider text, credentials, stdout/stderr, prompts and unrestricted payloads are not copied.
+## P2.3 Terminal persistence — COMPLETE and real validated
 
-### P2.3 — terminal turn persistence
-
-`COMPLETE`.
-
-Implemented behavior:
+Material repaired checkpoint:
 
 ```text
-ProviderFailureError.failure
-        |
-        v
-terminal_failure_envelope(...)
-        |
-        +-- write_barrier=false -> effect_state=none
-        |
-        +-- write_barrier=true  -> effect_state=unknown
-                                 retryability=never
-                                 user_action=review
-        |
-        v
-odoo.ai.turn.failure_payload
-        |
-        v
-browser_status().failure
-
-browser_status().error_code remains for compatibility
+8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc
 ```
 
-`models/turn_failure.py` preserves the original queue retry/failure state machine for ordinary errors. A specialized finalizer is used only when the exception already carries a validated provider envelope so P2.2 facts survive atomically. Generic terminal writes receive a bounded host fallback envelope through the model `write()` overlay. Requeues clear any stale failure payload.
-
-P2.3 addon version was `18.0.10.8.0` because `odoo.ai.turn` gained the stored `failure_payload` field.
-
-### P2.4 — browser failure presentation
-
-`REAL_ENV_VALIDATION_REQUIRED`.
-
-Material behavior was implemented at `1a643cd948b2a68c941863e6d6f411b968afd61f`; later descendants only repaired validation tooling/documentation/style unless separately recorded.
+Recorded validation:
 
 ```text
-browser_status().failure
-  -> exact bounded browser parser
-  -> structured AssistantFailureError
-  -> streaming/polling state.failure
-  -> deterministic failure presentation
-  -> retry only if safe + effect-free/not-started + action=retry
+addon install/update                PASS
+focused failure persistence          3 tests / 0 failed
+turn queue suite                      9 tests / 0 failed
+full addon battery                    95 tests / 0 failed/errors
+HOOT @odoo_ai_assistant               78 passed
+unit tests                            201 passed
+repository tests                      344 passed + 36 explicit skips
 ```
 
-The browser parser rejects malformed/mismatched envelopes, unknown top-level keys, oversized detail data and secret-bearing detail keys. Presentation uses the machine category/effect/action but does not display `safe_summary`, `safe_details`, provider text, prompts, credentials, stdout/stderr or private reasoning. Stable `error_code` remains a compatibility fallback.
-
-A bounded unknown error code such as a controlled stream disconnect is preserved rather than universally replaced by `service_unavailable`. Free-form/unbounded exception messages still fail closed to a generic bounded code.
-
-`partial`, `unknown` and `recovery_required` never expose blind replay. The existing write barrier remains effect-state authority.
-
-Addon version is now `18.0.10.9.0`.
-
-## Validation actually executed for P2.3
-
-Deterministic Python validation on the repaired checkpoint:
-
-```text
-tests/unit
-201 passed
-
-full tests collection
-344 passed, 36 explicit legacy/opt-in skips
-
-focused dependency-light E2E contracts
-29 passed
-
-syntax compilation and git diff checks
-PASS
-```
-
-Real Odoo 18 validation on a disposable database:
-
-```text
-addon install/update
-PASS
-
-TestAssistantTurnFailurePersistence
-3 tests, 5 executions, 0 failed, 0 errors
-
-TestAssistantTurnQueue
-9 tests, 11 executions, 0 failed, 0 errors
-
-full addon battery
-95 tests, 131 executions, 0 failed, 0 errors
-
-HOOT desktop @odoo_ai_assistant
-78 passed, 0 failed
-```
-
-The first focused failure run exposed an overwrite bug: a later event-sequence update replaced a carried provider envelope with a generic fallback. The repaired model only synthesizes fallback payloads on terminal/error transitions or when no payload exists. The complete gates above were then rerun against the repaired code.
-
-Sanitized evidence:
+Evidence:
 
 ```text
 docs/research/evidence/phase2/2026-08-28/P2.3-ODOO-VALIDATION-8683ef6.md
 ```
 
-No GitHub Actions were used.
+## P2.4 Browser failure presentation — REAL_ENV_VALIDATION_REQUIRED
 
-## P2.4 deterministic preparation actually executed
-
-In the isolated publishing environment, before the GitHub checkpoint was assembled, the prepared P2.4/Phase 3-independent sources executed:
+Implementation exists and deterministic preparation was recorded. Formal Phase 2 completion still requires:
 
 ```text
-node --check on prepared P2.4/Phase3 JS sources/tests
-PASS
-
-XML parse of assistant_failure_presentation.xml
-PASS
-
-node tests/js/failure_contract_test.mjs
-failure contract: 7 assertions passed
-
-node tests/js/public_activity_contract_test.mjs
-public activity contract: 5 assertions passed
-
-python tests/e2e/phase23_real_gate_check.py
-phase23 real-gate manifest: 9 definitions valid
-
-focused dependency-light pytest
-6 passed
-
-Python py_compile of prepared contracts/runners/Odoo test sources
-PASS
+P2-REAL-AUTH      | HARD | NOT RUN/PENDING
+P2-REAL-ACL       | HARD | NOT RUN/PENDING
+P2-REAL-TIMEOUT   | HARD | NOT RUN/PENDING
+P2-REAL-TOOLFAIL  | HARD | NOT RUN/PENDING
+P2-REAL-RECOVERY  | HARD | NOT RUN/PENDING
 ```
 
-These were not Odoo/HOOT/product-path tests. The later published Git descendants were reviewed and the remote fast-forward was verified, but no local checkout of the final Git tree was available for a literal final-tree rerun. Therefore this evidence is deterministic preparation, not a substitute for the mandatory real gate.
+Backend fixture success alone is insufficient; browser presentation/effect semantics must be observed on the real supported path.
 
-## Closed P2.3 hard validation debt
+---
+
+# Phase 3 — IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE
+
+Previous documents described Phase 3 as preparation-only. That is stale.
+
+Current runtime now contains:
+
+- production closed `PublicTurnEvent` projection;
+- trusted capability lifecycle -> public activity mapping;
+- independent `odoo.ai.turn.live.event` persistence;
+- separate short cursor/transaction that does not commit the worker business transaction;
+- live row design that avoids an FK lock against the mutable worker turn;
+- authenticated `/odoo_ai/v1/turn/live` route;
+- browser live cursor consumer;
+- public activity panel/history;
+- focused Odoo/deterministic/browser gate tooling.
+
+Important invariant: public live persistence never authorizes a capability or commits business effects merely to make UX progress visible.
+
+Formal acceptance is blocked until all P2 real gates pass.
+
+Then execute:
 
 ```text
-P2.3-ODOO-UPDATE  | PASS | 8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc
-P2.3-ODOO-FAILURE | PASS | 8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc
+P3-REAL-ACTIVITY-READ    | HARD | BLOCKED_BY_P2
+P3-REAL-ACTIVITY-ACTION  | HARD | BLOCKED_BY_P2
+P3-REAL-LIVE-VISIBILITY  | HARD | BLOCKED_BY_P2
+P3-REAL-REDACTION        | HARD | BLOCKED_BY_P2
 ```
 
-## Open Phase 2 hard validation debt
+A failure repairs Phase 3 before Phase 4 acceptance may count.
+
+---
+
+# Phase 4 — IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE
+
+Current runtime contains:
+
+- `StructuredFinalAnswerDeltaExtractor`;
+- `StreamingCodexDecisionEngine` installed at the existing provider seam;
+- Codex `item/agentMessage/delta` handling;
+- provisional `answer.delta` live persistence;
+- separate browser `activity` and `answer` channels;
+- final authoritative response reconciliation;
+- P4 browser gate tooling/runbook.
+
+Provisional answer text is non-authoritative. The final validated `NextDecision` remains authority and streaming cannot authorize an effect.
+
+Formal acceptance is blocked until P2 and all P3 gates pass.
+
+Then execute:
 
 ```text
-P2-REAL-AUTH      | HARD | P2.4 | REAL_ENV_VALIDATION_REQUIRED
-P2-REAL-ACL       | HARD | P2.4 | REAL_ENV_VALIDATION_REQUIRED
-P2-REAL-TIMEOUT   | HARD | P2.4 | REAL_ENV_VALIDATION_REQUIRED
-P2-REAL-TOOLFAIL  | HARD | P2.4 | REAL_ENV_VALIDATION_REQUIRED
-P2-REAL-RECOVERY  | HARD | P2.4 | REAL_ENV_VALIDATION_REQUIRED
+P4-REAL-FIRST-DELTA      | HARD | BLOCKED_BY_P2_P3
+P4-REAL-FINAL-PARITY     | HARD | BLOCKED_BY_P2_P3
+P4-REAL-CANCEL-STREAM    | HARD | BLOCKED_BY_P2_P3
+P4-REAL-UTF8-FRAGMENT    | HARD | BLOCKED_BY_P2_P3
 ```
 
-Fixtures, expected backend/browser behavior, cleanup and commands are recorded in:
+Use `PHASE34_REAL_VALIDATION_RUNBOOK.md`.
+
+---
+
+# P5+ product roadmap — NOT ELIGIBLE
+
+The new product direction is documented in:
 
 ```text
-tests/e2e/phase23_real_gates.json
-docs/research/PHASE23_REAL_VALIDATION_RUNBOOK.md
+docs/PRODUCT_VISION.md
+docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
-Backend fixture success alone does not close a real presentation gate. Each gate needs the real Odoo 18/browser observation and sanitized evidence for the exact tested SHA.
-
-## Phase 3 bounded look-ahead
-
-Production Phase 3 is **not selected**. The hard dependency from failure semantics to public activity prevents implementation of a second unvalidated product contract layer.
-
-Independent preparation only is recorded in `PHASE3_PUBLIC_ACTIVITY_PREPARATION.md`:
-
-- closed dependency-light Python and browser `PublicTurnEvent` contracts;
-- closed kind/phase/status catalogs and bounded resources;
-- strict cursor ordering/reconnect batch validation;
-- explicit `agent.thinking` rejection and no arbitrary payload field;
-- trusted-code public activity descriptor value prepared but not wired into `CapabilityDefinition`;
-- opt-in `phase3_real` READ/ACTION/LIVE-VISIBILITY/REDACTION acceptance tests.
-
-The LIVE-VISIBILITY harness uses a second database connection and requires a public event to be visible before the worker business cursor commits. It does not use browser timers as liveness evidence.
+It adds gated phases for:
 
 ```text
-P3-REAL-ACTIVITY-READ    | NOT RUN | BLOCKED_BY_PHASE2
-P3-REAL-ACTIVITY-ACTION  | NOT RUN | BLOCKED_BY_PHASE2
-P3-REAL-LIVE-VISIBILITY  | NOT RUN | BLOCKED_BY_PHASE2
-P3-REAL-REDACTION        | NOT RUN | BLOCKED_BY_PHASE2
+P5  natural non-blocking multi-chat + post-effect synthesis + continuity
+P6  TaskPlan / multi-step EffectPlan / budgets / EffectJournal
+P7  mini-framework / self-awareness / progressive capability discovery
+P8  Evidence / source / runtime / logs
+P9  company Knowledge / RAG
+P10 Developer/Operator host operations
+P11 advanced imports/artifacts
+P12 controlled source writes
+P13 multimodal + web evidence
+P14 additional surfaces/automation/MCP
+P15 additional providers
 ```
 
-## Retained Phase 1 real-environment evidence
+These are product plans, not current implementation claims.
 
-```text
-P1-REAL-VERSION  | PASS | 49bdac1f732acaaee3154ed60baffd675130991a | Codex 0.149.1
-P1-REAL-SOAK-100 | PASS | 49bdac1f732acaaee3154ed60baffd675130991a | 100/100 turns
-P1-REAL-TOOLCALL | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
-P1-REAL-CANCEL   | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
-```
+---
 
-## Invariants carried through P2.4
+# Current known product limitations recorded for future phases
 
-- Odoo remains operational and persistence authority.
-- Business capabilities execute with the effective user and `su=False`.
-- `CapabilityDefinition` remains the atomic executable contract.
-- Provider facts are bounded and advisory; the host owns effect certainty.
-- Existing queue/write recovery remains host-controlled; P2.4 does not authorize business retries.
-- The durable write barrier and `recovery_required` remain authoritative once effects are possible.
-- A write-barrier terminal failure is never presented as effect-free or retry-safe.
-- Raw provider text, credentials, prompts, stdout/stderr, unrestricted tool payloads and private reasoning remain non-public.
-- Browser failure projection fails closed on corrupt/mismatched payloads.
-- No sidecar, parallel tool registry, arbitrary SQL/Python/shell/sudo or unrestricted ORM method surface was introduced.
-- No GitHub Actions are used for roadmap execution or validation.
+These are not reasons to bypass the active P2-P4 hard gate, but are now explicitly captured so later work does not discover them accidentally:
 
-## Exact next action
+- frontend uses panel-global `state.loading` and currently disables composer/conversation/model/autonomy controls while a visible turn runs;
+- backend currently has two cron slots rather than a measured/configurable concurrency policy;
+- one canonical effect proposal/step is supported;
+- verified action execution currently ends with deterministic host completion prose rather than provider post-effect synthesis;
+- conversation provider context is smaller than the target durable continuity model;
+- no external `CapabilityProvider`/Skill/ContextProvider/EvidenceProvider contract exists yet;
+- no general Evidence/RAG/source/log provider exists in the active embedded capability package;
+- no Developer/Operator privileged host-operation boundary exists;
+- no staged large-import workflow exists.
 
-Run the five P2 real gates on disposable Odoo 18 using `PHASE23_REAL_VALIDATION_RUNBOOK.md`:
+---
+
+# Invariants carried forward
+
+- Odoo remains persistence/operational authority.
+- Business capabilities execute under effective user with `su=False`.
+- `CapabilityDefinition` remains atomic executable authority.
+- Provider facts are advisory/bounded; host owns effect certainty.
+- Durable write barrier and recovery semantics remain authoritative.
+- Raw provider output/private reasoning is not public activity.
+- No parallel tool authority registry is introduced.
+- P5 target concurrency is per-turn/per-conversation, not a global UI lock.
+- Model/autonomy/profile changes after a turn is queued do not mutate that running turn's captured authority/settings.
+- No GitHub Actions are used for roadmap validation under current instructions.
+
+---
+
+# Exact next action
+
+On a disposable real Odoo 18 environment, test the **current final `main` SHA** using the existing runbooks.
+
+First run all Phase 2 gates:
 
 ```text
 P2-REAL-AUTH
@@ -291,4 +255,10 @@ P2-REAL-TOOLFAIL
 P2-REAL-RECOVERY
 ```
 
-If any gate fails, repair P2.4, add regression coverage and rerun that exact gate. Only after all five pass may P2.4 and Phase 2 become `COMPLETE`, Phase 3 production be selected, and its four real gates become eligible. Phase 4 remains `NOT_READY`.
+If any fails: record evidence, create the smallest P2 repair slice, add deterministic regression coverage and rerun that gate. Do not count P3/P4 acceptance.
+
+If all P2 gates pass: formally close Phase 2, then execute all four P3 gates on the same accepted code lineage.
+
+If all P3 gates pass: formally close Phase 3, then execute all four P4 gates.
+
+If all P4 gates pass: update this cursor to Phase 5 `READY` and select **P5.1 turn-scoped frontend/background state** from `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`.
