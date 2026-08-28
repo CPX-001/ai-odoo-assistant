@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "gates": [
+    {
+      "id": "P4-REAL-FIRST-DELTA",
+      "phase": 4,
+      "preconditions": ["Phase 2 and Phase 3 gates passed on the same SHA", "Odoo 18 disposable odoo_ai_* database", "Codex authenticated", "Chromium/Playwright installed", "cron enabled"],
+      "user": "internal test user",
+      "data": "read-only long-form prompt; no Odoo mutation",
+      "injection": "none; real Codex item/agentMessage/delta path",
+      "action": "submit through real Assistant panel and poll persisted /odoo_ai/v1/turn/live from same browser session",
+      "backend_expected": "at least one channel=answer row before terminal status and agent.answer.started activity",
+      "browser_expected": "assistant answer text begins before final response and activity remains outside answer text",
+      "redaction": "no structured-output JSON, prompts, arguments, stdout/stderr or private reasoning in answer/activity surfaces",
+      "cleanup": "drop disposable database/filestore and temporary Playwright artifacts",
+      "command": "node tests/e2e/phase4_real_answer_browser.mjs --gate P4-REAL-FIRST-DELTA"
+    },
+    {
+      "id": "P4-REAL-FINAL-PARITY",
+      "phase": 4,
+      "preconditions": ["same as P4-REAL-FIRST-DELTA"],
+      "user": "internal test user",
+      "data": "read-only long-form prompt",
+      "injection": "none; real Codex structured-output delta path",
+      "action": "capture persisted answer chunks and final /turn/status response",
+      "backend_expected": "concatenated provisional answer equals final authoritative answer",
+      "browser_expected": "final bubble equals authoritative answer exactly with no duplicate prefix/suffix",
+      "redaction": "raw decision JSON never appears in streamed text",
+      "cleanup": "drop disposable database/filestore and temporary Playwright artifacts",
+      "command": "node tests/e2e/phase4_real_answer_browser.mjs --gate P4-REAL-FINAL-PARITY"
+    },
+    {
+      "id": "P4-REAL-CANCEL-STREAM",
+      "phase": 4,
+      "preconditions": ["same as P4-REAL-FIRST-DELTA"],
+      "user": "internal test user",
+      "data": "read-only deliberately long prompt",
+      "injection": "supported /turn/cancel after first persisted answer delta",
+      "action": "cancel the real running turn after first answer fragment",
+      "backend_expected": "turn terminates cancelled/failed without stale final response",
+      "browser_expected": "stream stops and no stale final answer is appended",
+      "redaction": "no provider internals on cancellation",
+      "cleanup": "drop disposable database/filestore and temporary Playwright artifacts",
+      "command": "node tests/e2e/phase4_real_answer_browser.mjs --gate P4-REAL-CANCEL-STREAM"
+    },
+    {
+      "id": "P4-REAL-UTF8-FRAGMENT",
+      "phase": 4,
+      "preconditions": ["same as P4-REAL-FIRST-DELTA"],
+      "user": "internal test user",
+      "data": "read-only Spanish prompt requiring España, pingüino, acción, ñ and 😀",
+      "injection": "provider/network fragmentation only; deterministic parser unit tests cover arbitrary split points",
+      "action": "stream and reconcile the real UTF-8 answer",
+      "backend_expected": "persisted chunks decode without malformed surrogate/Unicode boundaries",
+      "browser_expected": "required Unicode markers survive and final parity holds",
+      "redaction": "no raw JSON or hidden provider payload",
+      "cleanup": "drop disposable database/filestore and temporary Playwright artifacts",
+      "command": "node tests/e2e/phase4_real_answer_browser.mjs --gate P4-REAL-UTF8-FRAGMENT"
+    }
+  ]
+}
