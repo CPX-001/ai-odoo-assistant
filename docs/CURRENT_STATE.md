@@ -1,13 +1,13 @@
 # Current implementation state
 
-Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2a scheduler capacity/causal-claim code is landed through `5b952e4d47f0d59ed266df8b7803a88909bcfce0` with follow-up test/refactor commits on top, but its focused Odoo validation is still pending.
+Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2 scheduler concurrency/backpressure is now implemented through the current main lineage, with the acceptance harness landed through `b1e49d97fce5506a2c9bb19b3a9ce1303f7add9c`; its batched Odoo/regression/browser acceptance is still pending.
 
 This document distinguishes **implemented code** from **formal roadmap acceptance** and from the target in `PRODUCT_VISION.md`.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.10.0` at the current manifest.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.11.0` at the current manifest.
 - Embedded runtime; browser talks to Odoo, not a sidecar.
 - Odoo PostgreSQL owns conversations/messages/turns/effect state/live public events.
 - Native `ir.cron` runs durable turns.
@@ -99,19 +99,25 @@ Screen context is only a bounded untrusted hint. Server code reconstructs identi
 
 Backend turns are genuinely asynchronous/durable.
 
-Current queue behavior includes:
+P5.2 implementation now includes:
 
 - two physical `ir.cron` runner slots;
-- lease token/expiry;
-- bounded attempts;
-- cancellation/stale recovery;
-- existing `FOR UPDATE SKIP LOCKED` row claiming;
-- P5.2a installation-wide logical concurrency ceiling, currently supported at 1..2;
-- transaction-scoped PostgreSQL advisory coordination around admission/claim only;
-- same-conversation causal eligibility based on predecessor turn identity;
-- `awaiting_confirmation` blocks later turns in that conversation without consuming worker capacity.
+- administrator-configurable logical concurrency ceiling, currently safely bounded to 1..2;
+- short PostgreSQL advisory-lock coordination around admission/claim only;
+- a `READ COMMITTED` scheduler claim transaction so lock waiters see prior committed claims instead of stale `REPEATABLE READ` snapshots;
+- lease token/expiry and bounded attempts;
+- cancellation/stale recovery and write-barrier recovery;
+- one active causal turn per conversation based on durable predecessor identity rather than mutable queue timestamps;
+- `awaiting_confirmation` as a same-conversation causal blocker that does not consume worker capacity;
+- per-claim service watermark and cross-user anti-starvation ordering;
+- retry/requeue fairness that does not regain priority solely from an older `queued_at`;
+- scheduler wake-up after worker capacity is released/re-evaluated;
+- post-commit wake-up when queued cancellation or approval/rejection releases a causal predecessor;
+- bounded administrator-only diagnostics for capacity, active/queued/eligible/blocked counts and oldest queue wait.
 
-The P5.2a scheduler overlay is implemented but **not yet formally accepted**. Its focused independent-cursor/thread Odoo tests and queue/failure regressions still need to execute. P5.2b will add fairness/anti-starvation and canonical wake-up when capacity is released after P5.2a validation.
+Excess work remains durable `queued`; scheduler saturation is not a turn failure. `recovery_required` remains non-replayable and terminal for scheduler eligibility, so it does not permanently freeze a conversation.
+
+This P5.2 behavior is **implemented but not formally accepted**. Its deterministic Odoo tests, full addon regression and the three real browser/provider gates are intentionally validated as one final P5.2 batch. See `research/P5.2_SCHEDULER_IMPLEMENTATION.md` and `research/P5.2_VALIDATION_RUNBOOK.md`.
 
 ### P5.1 frontend state implemented and accepted
 
@@ -185,7 +191,7 @@ Current `main` includes:
 - capability lifecycle -> trusted public activity mapping;
 - independent `odoo.ai.turn.live.event` persistence;
 - separate short cursor/transaction that does not commit worker business effects;
-- live table/binding designed to avoid blocking pre-final visibility on the mutable turn;
+- live row design that avoids an FK lock against the mutable turn;
 - authenticated `/odoo_ai/v1/turn/live` endpoint;
 - frontend live cursor consumption;
 - current activity + expandable history UI;
@@ -275,7 +281,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS — P5.1 COMPLETE; P5.2a LOCAL_VALIDATION_REQUIRED
+P5 IN_PROGRESS — P5.1 COMPLETE; P5.2 REAL_ENV_VALIDATION_REQUIRED
 P6+ NOT ELIGIBLE
 ```
 
@@ -285,10 +291,11 @@ Current accepted foundation order:
 P2 five PASS
  -> P3 four PASS
    -> P4 four PASS
+   -> P5.1 accepted
 ```
 
-The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` and the active slice record is `research/P5.2A_SCHEDULER_CAPACITY_CAUSALITY.md`.
+The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` and the active slice record is `research/P5.2_SCHEDULER_IMPLEMENTATION.md`.
 
 ## 14. Next action
 
-Validate P5.2a with its focused Odoo scheduler tests plus existing turn queue/failure regressions. If those deterministic checks pass, implement P5.2b fairness, anti-starvation and capacity-release wake-up; do not start P5.3 or later Phase 5 work yet.
+Run the complete P5.2 acceptance batch in `research/P5.2_VALIDATION_RUNBOOK.md`: focused scheduler/fairness Odoo tests, queue/failure/full-addon regressions and `P5-REAL-MULTICHAT`, `P5-REAL-CONVERSATION-ORDERING`, `P5-REAL-BACKPRESSURE`. Repair the smallest owning P5.2 layer on failure. Only after that batch passes may P5.2 become COMPLETE and P5.3 become READY.
