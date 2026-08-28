@@ -5,7 +5,7 @@
         <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//button[@type='submit']" position="before">
             <div class="o_ai_assistant_model_picker">
                 <Dropdown position="'top-end'" menuClass="'o_ai_assistant_picker_menu'"
-                    disabled="state.modelLoading or state.modelSaving or state.loading or !state.modelOptions.length">
+                    disabled="state.modelLoading or state.modelSaving or !state.modelOptions.length">
                     <button type="button" class="o_ai_assistant_picker_button"
                         aria-label="Modelo de Codex"
                         t-att-title="'Modelo: ' + reasoningModelLabel">
