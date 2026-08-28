@@ -12,6 +12,7 @@ from odoo.modules.registry import Registry
 from ..runtime.agent.failure import FailureEnvelope
 from .turn_failure import _fail_claimed_turn_with_failure
 from .turn_queue import (
+    _LEASE_SECONDS,
     _append_event,
     _execute_claimed_turn,
     _fail_claimed_turn,
@@ -27,13 +28,6 @@ _SUPPORTED_RUNNER_CAPACITY = 2
 # Stable project-local PostgreSQL advisory-lock namespace. It serializes only the
 # short admission/claim decision; provider/business execution never holds it.
 _SCHEDULER_CLAIM_LOCK_KEY = 6_895_220_052
-_LEASE_SECONDS = 300
-_ACTIVE_CAPACITY_STATES = ("running", "cancel_requested")
-_CAUSAL_BLOCKING_STATES = (
-    "running",
-    "cancel_requested",
-    "awaiting_confirmation",
-)
 
 
 class AssistantTurnScheduler(models.Model):
@@ -66,7 +60,6 @@ class AssistantTurnScheduler(models.Model):
                 _fail_claimed_turn(dbname, turn_id, lease_token, code)
 
 
-
 def _effective_turn_capacity(env):
     """Resolve the safe host ceiling for future claims.
 
@@ -84,7 +77,6 @@ def _effective_turn_capacity(env):
         except (TypeError, ValueError):
             configured = _DEFAULT_TURN_CAPACITY
     return max(1, min(configured, _SUPPORTED_RUNNER_CAPACITY))
-
 
 
 def _claim_next_turn(dbname):
