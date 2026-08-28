@@ -28,6 +28,18 @@ def test_browser_contract_is_closed_and_effect_aware():
     assert "SENSITIVE_DETAIL_KEY_RE" in source
 
 
+def test_recovery_required_tightens_browser_retry_authority():
+    source = FAILURE.read_text(encoding="utf-8")
+    assert "enforceRecoveryAuthority" in source
+    assert 'status?.state === "recovery_required"' in source
+    recovery = source.split("function enforceRecoveryAuthority", 1)[1].split(
+        "export function failureErrorFromStatus", 1
+    )[0]
+    assert 'retryability: "never"' in recovery
+    assert 'user_action: "review"' in recovery
+    assert 'effect_state: ["partial", "unknown"].includes(failure.effect_state)' in recovery
+
+
 def test_stream_terminal_path_uses_structured_status_failure():
     source = STREAM.read_text(encoding="utf-8")
     assert "failureErrorFromStatus(status)" in source
