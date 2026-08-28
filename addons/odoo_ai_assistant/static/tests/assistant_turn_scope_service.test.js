@@ -1,0 +1,118 @@
+import { expect, test } from "@odoo/hoot";
+import {
+    bindConversationTurnScope,
+    conversationRuntimeLabel,
+    conversationRuntimeState,
+    conversationScopeKey,
+    createConversationTurnScope,
+    projectConversationTurnScope,
+} from "@odoo_ai_assistant/services/zzz_assistant_turn_scope_service";
+
+function scopedState() {
+    return {
+        turnScopes: {},
+        activeTurnScopeKey: "new:1",
+        conversationId: null,
+        loading: false,
+        decisionLoading: false,
+        result: null,
+        actionReceipt: null,
+        errorCode: null,
+        failure: null,
+        streamingText: "",
+        activityEvents: [],
+        currentActivity: null,
+        lastSubmittedMessage: "",
+        messages: [],
+    };
+}
+
+test("active conversation projects only its own busy state", () => {
+    const state = scopedState();
+    const running = createConversationTurnScope({
+        key: conversationScopeKey("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        conversationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    running.loading = true;
+    running.turnState = "running";
+    running.streamingText = "Respuesta parcial de A";
+    const idle = createConversationTurnScope({
+        key: conversationScopeKey("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+        conversationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    });
+    state.turnScopes[running.key] = running;
+    state.turnScopes[idle.key] = idle;
+
+    state.activeTurnScopeKey = idle.key;
+    projectConversationTurnScope(state, idle);
+
+    expect(state.loading).toBe(false);
+    expect(state.streamingText).toBe("");
+    expect(running.loading).toBe(true);
+    expect(running.streamingText).toBe("Respuesta parcial de A");
+});
+
+test("returning to a running chat restores its live UI projection", () => {
+    const state = scopedState();
+    const scope = createConversationTurnScope({
+        key: conversationScopeKey("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        conversationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    scope.loading = true;
+    scope.turnState = "running";
+    scope.streamingText = "Parcial";
+    scope.activityEvents = [{ sequence: 1, label: "Consultando Odoo" }];
+    scope.currentActivity = scope.activityEvents[0];
+    state.turnScopes[scope.key] = scope;
+    state.activeTurnScopeKey = scope.key;
+
+    projectConversationTurnScope(state, scope);
+
+    expect(state.loading).toBe(true);
+    expect(state.streamingText).toBe("Parcial");
+    expect(state.currentActivity.label).toBe("Consultando Odoo");
+});
+
+test("temporary new-chat scope binds to the durable conversation and turn", () => {
+    const state = scopedState();
+    const scope = createConversationTurnScope({ key: "new:1" });
+    state.turnScopes[scope.key] = scope;
+
+    bindConversationTurnScope(state, scope, {
+        conversationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        turnId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        turnState: "queued",
+    });
+
+    const key = conversationScopeKey("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(state.activeTurnScopeKey).toBe(key);
+    expect(state.conversationId).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(state.turnScopes["new:1"]).toBe(undefined);
+    expect(state.turnScopes[key].turnId).toBe("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+});
+
+test("conversation runtime state stays compact and product-facing", () => {
+    const scope = createConversationTurnScope({ key: "new:1" });
+    scope.loading = true;
+    scope.turnState = "queued";
+    expect(conversationRuntimeState(scope)).toBe("queued");
+    expect(conversationRuntimeLabel(scope)).toBe("En cola");
+
+    scope.turnState = "running";
+    expect(conversationRuntimeState(scope)).toBe("running");
+
+    scope.loading = false;
+    scope.turnState = "awaiting_confirmation";
+    expect(conversationRuntimeState(scope)).toBe("awaiting_approval");
+
+    scope.turnState = "recovery_required";
+    expect(conversationRuntimeState(scope)).toBe("recovery");
+
+    scope.turnState = "failed";
+    scope.errorCode = "engine_timeout";
+    expect(conversationRuntimeState(scope)).toBe("failed");
+
+    scope.errorCode = null;
+    scope.turnState = "completed";
+    expect(conversationRuntimeState(scope)).toBe("completed");
+});
