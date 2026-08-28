@@ -1,98 +1,282 @@
 # Chat product flow
 
-This document describes the current embedded chat path. It supersedes the former browser/Odoo/Assistant-Service HTTP flow.
+This document describes the current embedded chat path and the next product-level chat invariants. It supersedes the retired browser/Odoo/Assistant-Service flow.
 
-## Current flow
+## 1. Current end-to-end path
 
 ```text
 OWL Assistant panel
     |
-    | Odoo RPC
+    | Odoo authenticated JSON/RPC
     v
 Odoo controllers/services
     |
     +--> conversation/message persistence
-    +--> screen context validation
-    +--> account/policy checks
+    +--> screen-context validation
+    +--> account/model/policy snapshot
     |
     v
 odoo.ai.turn (queued)
     |
     v
-ir.cron claims turn with lease
+native ir.cron + lease claim
     |
     v
 AgentTurnService
     |
-    +--> effective CapabilityRegistry views
-    +--> ReasoningEngine -> Codex App Server subprocess
+    +--> effective CapabilityRegistry
+    +--> ReasoningProvider / Codex
+    +--> host capability execution
     |
     v
-host validation / policy / approval / execution / verification
+prepare / approval / execute / verify / failure/recovery
+    |
+    +--> authoritative turn result
+    +--> independent live activity/answer events
     |
     v
-turn result + sanitized events persisted in Odoo
-    |
-    v
-OWL polls Odoo and renders progress/result
+OWL polls Odoo status + live cursor
 ```
 
-The browser never calls a separate Assistant Service. There is no current `/assistant/chat/turns` sidecar API, shared browser-side machine secret, or Assistant PostgreSQL transcript store.
+The browser never calls a separate Assistant Service and never owns provider credentials or capability authority.
 
-## Opening the Assistant
-
-The frontend first resolves the database-scoped Codex account state. Chat/history bootstrap is gated until the runtime account is usable. Account polling only runs while the Assistant is open and the page is visible.
-
-Once usable, the panel loads Odoo-owned conversation state and may submit new messages with current screen context. Screen context is a navigation/context hint; the server reconstructs identity, companies and permissions independently.
-
-## Submit
+## 2. Submit is short and durable
 
 Submitting a message should remain a short Odoo request:
 
-1. validate caller and input;
-2. persist user message/conversation state;
-3. create a durable `odoo.ai.turn` with the relevant context/policy snapshot;
-4. schedule/wake native cron processing;
-5. return the turn identifier/state to the browser.
+1. validate caller/message/screen hint;
+2. locate/create owned conversation;
+3. persist user message;
+4. snapshot turn-relevant model/policy/company/context settings;
+5. create durable queued `odoo.ai.turn`;
+6. trigger available native runner slots;
+7. return turn/conversation id and state.
 
-Long reasoning or provider execution does not need to remain inside the browser HTTP request.
+Reasoning/provider work continues outside the submit request.
 
-## Processing
+This means browser navigation, closing the panel or a temporary polling failure must not cancel the server turn.
 
-A cron worker claims the turn with a bounded lease. `AgentTurnService` rebuilds the effective Odoo user/company context and effective capability catalog, invokes the reasoning engine and handles capability calls through host-owned validation/execution.
+## 3. Current processing concurrency
 
-The model can request only capabilities visible in the effective reasoning/planning view. Naming a capability does not create access. Reads and writes continue to obey Odoo permissions and capability bounds.
+The current backend queue claims work with `FOR UPDATE SKIP LOCKED`, leases and stale recovery. Two cron records currently provide two bounded runner slots.
 
-## Effects and approval
+This permits separate turns to be claimed concurrently at the backend, subject to actual Odoo cron/process capacity.
 
-Effectful requests do not become authorized because the user/model mentioned an action in chat. The current host path uses capability effect/risk metadata plus configured policy and approval semantics.
+However, the current browser still has a panel-global `state.loading` concept. While the visible turn runs, it currently disables important controls including the composer, conversation selector and model/autonomy pickers.
 
-The intended product UX is:
+Therefore current backend concurrency capability and current frontend multitasking capability are **not equivalent**.
+
+## 4. Target non-blocking chat behavior
+
+Phase 5 changes execution ownership from `panel is loading` to `turn/conversation has running work`.
+
+While Chat A runs:
 
 ```text
-prepare/preview -> policy -> approval if required -> execute -> verify -> receipt/result
+Chat A: running ----------------------------------> terminal
+         |
+         +-- user switches to Chat B
+         +-- creates Chat C
+         +-- changes next-turn model/autonomy/profile
+         +-- continues navigating/forms in Odoo
+         +-- returns later to Chat A
 ```
 
-An approval must bind to the prepared action/preconditions. If the host cannot confirm whether an effect happened, the turn should surface recovery/uncertain state rather than invite a blind retry.
+The current turn continues independently.
 
-## Polling and progress
+The history/conversation list should expose background state so the user can see which chats are queued/running/awaiting approval/failed/recovery/completed.
 
-The browser polls Odoo-owned turn/event state. Persisted events are sanitized public progress projections, not provider chain-of-thought. They may describe categories of work or approval/verification state but must not expose raw prompts, sensitive arguments, credentials or private reasoning.
+## 5. Initial concurrency semantics
 
-At the current audited baseline, completed and approval-waiting turn status includes the persisted authoritative result payload as the browser `response`.
+### Across conversations
 
-For Foundation Stabilization Phase 0 measurement, `streamAssistantChat()` also accepts optional diagnostic-only `onTiming` and `nowCall` hooks. The normal product caller does not need to provide them. The client records monotonic checkpoints for `submit_received`, `turn_persisted`, `browser_first_activity` and `browser_final`.
+Multiple conversations may have active turns concurrently up to host/provider capacity.
 
-The Codex adapter also emits content-free `diagnostic.timing` events for runtime/provider lifecycle checkpoints (`runtime_started`, process start, initialize, thread/turn start, first provider event and first provider answer delta). Their payload is limited to checkpoint name plus process-local elapsed milliseconds. The answer delta text itself is neither persisted nor forwarded by this instrumentation. These measurement hooks do not change the polling transport and do **not** imply real assistant answer streaming; `browser_first_answer_delta` remains unavailable until the later streaming phase is implemented.
+### Inside one conversation
 
-## Conversation persistence
+Initial target: one active **causal** turn at a time.
 
-Conversation, message, turn and public event persistence is Odoo-native. Codex threads/process state are not the product memory authority.
+A second ordinary message in the same conversation must not race against an unresolved first turn and build context from a different future. It may be queued behind it or the UI may require explicit steering semantics later.
 
-## Error behavior
+Future `steer current turn` or conversation branching is separate product work and requires explicit contracts/tests.
 
-Useful distinctions should survive to the product layer when known: account/provider unavailable, capability denied, ACL denial, invalid provider output, timeout, cancellation, failed verified effect, uncertain/partial effect and stale-turn recovery. A generic assistant error is only the fallback when no safer specific state exists.
+## 6. Capacity and backpressure
 
-## Future surfaces
+Concurrency must become configurable/observable rather than assuming two slots forever.
 
-Context launchers, automations, AI fields or MCP can reuse this host/runtime later, but should not create parallel authorization or tool registries. The chat is one invocation surface over the same Odoo authority model.
+Capacity policy should eventually include:
+
+```text
+installation turn ceiling
+provider concurrency/rate limits
+Odoo worker/cron capacity
+CPU/RAM/process constraints
+per-user fairness
+interactive-vs-background priority
+```
+
+When capacity is full:
+
+- submit remains successful if the work can be queued safely;
+- turn state remains `queued`;
+- the rest of the UI remains usable;
+- the product may show queue position/wait state when reliable;
+- no busy overlay/global disabled state is used as backpressure.
+
+OCA `queue_job` is a useful reference for channels/capacity/background recovery, but current native queue semantics are retained unless an ADR/evaluation justifies a dependency/replacement.
+
+## 7. Settings while a turn is running
+
+Turn-sensitive settings are snapshots, not live mutable references.
+
+For example current enqueue already stores the selected reasoning model and policy payload. The target applies the same rule to future technical profile/strategy/config versions.
+
+Therefore:
+
+```text
+Turn A queued with model X + Balanced
+user changes UI to model Y + Autonomous
+Turn A continues with X + Balanced
+future Turn B uses Y + Autonomous
+```
+
+The user is free to open/change those selectors while A runs.
+
+Approval/rejection is not a normal setting edit; it is an explicit transition bound to A's prepared effect and may resume A.
+
+## 8. Public activity
+
+Current `main` includes an independent public activity store/projection pending formal P3 acceptance.
+
+Public activity is trusted host projection such as:
+
+```text
+Consultando res.partner
+Leyendo esquema de sale.order
+Preparando cambio
+Esperando aprobación
+Ejecutando
+Verificando
+```
+
+It is not private provider reasoning and must not expose prompts, raw arguments/results, credentials, stdout/stderr or chain-of-thought.
+
+The independent live-event cursor is intentionally separate from the worker business transaction so progress can become visible before final commit without committing business effects early.
+
+## 9. Answer streaming
+
+Current `main` includes the P4 answer projection pending formal acceptance.
+
+Codex `item/agentMessage/delta` is parsed to expose only the structured `final_answer.answer` text. Provisional output is not authority.
+
+Browser channels are conceptually:
+
+```text
+activity.event
+answer.delta
+turn.final
+turn.failure
+```
+
+The final validated turn result remains authoritative and reconciles provisional answer text.
+
+## 10. Background turn observation
+
+The browser may detach from a turn and later resume from Odoo state.
+
+Target frontend state is keyed by turn/conversation rather than one global stream buffer.
+
+The visible chat should consume live updates at normal cadence. Background chats may use lighter periodic refresh/badges to avoid multiplying polling cost indefinitely.
+
+A later Odoo bus/SSE transport may reduce polling overhead, but transport is not the durability contract.
+
+## 11. Effects and approval
+
+A user's natural-language request is intent, not authorization.
+
+Current action path:
+
+```text
+model proposal
+ -> host prepare/preview/preconditions
+ -> current policy
+ -> approval if required
+ -> revalidate
+ -> write barrier
+ -> execute
+ -> verify
+ -> receipt / recovery
+```
+
+Current implementation supports one canonical effect step. The future product supports bounded multi-step `EffectPlan` while retaining the same host controls.
+
+## 12. Post-effect conversation
+
+Current implementation still finishes successful action execution with a host-produced completion answer.
+
+Target behavior is:
+
+```text
+verify effect
+ -> add verified receipt to private working context
+ -> provider continues reasoning
+ -> provider produces natural final answer
+```
+
+Example target response:
+
+> He actualizado 239 de los 247 contactos. He dejado 8 sin tocar porque no había información suficiente para determinar el país. También he detectado 3 emails duplicados que convendría revisar.
+
+Verification is authoritative context, not automatically the end of the reasoning turn.
+
+## 13. Conversation context
+
+Messages are fully Odoo-persisted, but current reasoning context is intentionally bounded and currently relies heavily on recent message composition.
+
+Target `ConversationContextManager` maintains:
+
+```text
+recent raw messages
+rolling structured summary
+active records/entities/references
+previous evidence refs
+verified effect refs
+conversation-scoped settings
+```
+
+This supports natural follow-ups without making Codex threads the persistence authority.
+
+## 14. Error/recovery behavior
+
+Structured distinctions must survive to the UI:
+
+- provider/account unavailable;
+- ACL/policy denied;
+- invalid provider/capability output;
+- timeout/cancellation;
+- safe effect-free retry;
+- failed verified effect;
+- uncertain/partial post-barrier effect;
+- stale/recovery state.
+
+A possible effect is never described as absent merely because provider/browser communication failed.
+
+## 15. Future context, RAG and files
+
+The chat should eventually be able to invoke the same host contracts for:
+
+- JIT installation context;
+- Evidence/RAG search;
+- logs/source diagnosis;
+- file ingestion into Knowledge;
+- imports/artifact workflows;
+- controlled host operations for Developer profiles;
+- web evidence.
+
+The chat does not get a separate tool implementation for those features.
+
+## 16. Additional surfaces
+
+MCP, automations, AI fields and context launchers may reuse the same runtime later. Each surface can have a different effective catalog/policy but cannot maintain an independent authority stack.
+
+See `PRODUCT_VISION.md`, `CAPABILITY_FRAMEWORK.md` and `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`.
