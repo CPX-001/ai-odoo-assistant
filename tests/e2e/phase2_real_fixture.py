@@ -12,8 +12,9 @@ import os
 from typing import Any
 
 from odoo import Command
-from odoo.addons.odoo_ai_assistant.services.runtime_account import runtime_status_payload
-
+from odoo.addons.odoo_ai_assistant.services.runtime_account import (
+    runtime_status_payload,
+)
 
 env: Any = globals()["env"]
 
@@ -84,6 +85,10 @@ limited_user = ensure_internal_user(
     password=limited_password,
     name="Phase 2 Limited Failure User",
 )
+
+# ``odoo-bin shell`` rolls its cursor back on exit. Persist only this disposable
+# database activation and its two test users before reporting the fixture ready.
+env.cr.commit()
 
 print(
     json.dumps(
