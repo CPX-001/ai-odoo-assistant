@@ -27,6 +27,8 @@ Research documents do not override:
 | `P5.2A_SCHEDULER_CAPACITY_CAUSALITY.md` | P5.2a implementation record for bounded capacity and causal claim eligibility. |
 | `P5.2_SCHEDULER_IMPLEMENTATION.md` | Current full P5.2 implementation record: capacity, ordering, fairness, wake-up, diagnostics and real-gate harness. |
 | `P5.2_VALIDATION_RUNBOOK.md` | Batched deterministic/regression/real-environment acceptance procedure for the complete P5.2 implementation. |
+| `P5.3_STABLE_SETTINGS_SNAPSHOT.md` | Current P5.3 implementation record for the versioned immutable per-turn settings snapshot. |
+| `P5.3_VALIDATION_RUNBOOK.md` | Split P5.3 validation sequence; current stop is the focused Odoo snapshot gate. |
 | `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed status record for P3 public activity. |
 | `PHASE4_ANSWER_STREAMING.md` | Formal completed status record for P4 answer streaming. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
@@ -46,7 +48,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS; P5.1 and P5.2 complete, P5.3 READY
+P5 IN_PROGRESS; P5.1 and P5.2 complete, P5.3 LOCAL_VALIDATION_REQUIRED
 P6+ not eligible
 ```
 
@@ -61,7 +63,12 @@ sanitized record is `evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`
 P5.2 scheduler concurrency/backpressure is implemented and accepted across its intended internal
 a/b/c scope, including bounded capacity, causal ordering, anti-starvation fairness, capacity-release
 wake-up, aggregate diagnostics and the real browser gates. The accepted batch is recorded in
-`evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`. P5.3 is READY.
+`evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
+
+P5.3 now has a versioned host-owned turn settings snapshot, focused Odoo coverage and addon version
+checkpoint. No P5.3 validation is claimed PASS yet. The next mandatory gate is
+`P5.3-ODOO-SETTINGS-SNAPSHOT`, after which regression and real settings-snapshot validation can be
+run as a separate slice. P5.4 remains blocked until the focused P5.3 contract passes.
 
 ## Recursive execution rule
 
