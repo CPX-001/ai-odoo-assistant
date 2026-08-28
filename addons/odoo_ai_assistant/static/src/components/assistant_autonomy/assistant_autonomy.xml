@@ -5,7 +5,7 @@
         <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//button[@type='submit']" position="before">
             <div class="o_ai_assistant_autonomy_picker">
                 <Dropdown position="'top-end'" menuClass="'o_ai_assistant_picker_menu'"
-                    disabled="state.autonomyLoading or state.autonomySaving or state.loading">
+                    disabled="state.autonomyLoading or state.autonomySaving">
                     <button type="button" class="o_ai_assistant_picker_button"
                         aria-label="Nivel de autonomía del Assistant"
                         t-att-title="'Autonomía: ' + autonomyProfileLabel">
