@@ -53,11 +53,7 @@ patch(assistantPanelService, {
         };
 
         const setAutonomyProfile = async (profile) => {
-            if (
-                panel.state.autonomySaving ||
-                panel.state.loading ||
-                !AUTONOMY_PROFILES.includes(profile)
-            ) {
+            if (panel.state.autonomySaving || !AUTONOMY_PROFILES.includes(profile)) {
                 return false;
             }
             panel.state.autonomySaving = true;
