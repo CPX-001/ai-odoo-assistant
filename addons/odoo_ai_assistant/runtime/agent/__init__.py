@@ -10,6 +10,9 @@ from .service import (
     PlannedCapability,
     ReasoningEngine,
 )
+from .codex_streaming import install_codex_streaming
+
+install_codex_streaming()
 
 __all__ = [
     "AgentReasoningResult",
