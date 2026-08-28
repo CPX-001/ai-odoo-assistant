@@ -68,4 +68,5 @@ def test_fixture_setup_requires_disposable_database_and_separate_users():
     assert "if login == limited_login:" in source
     assert 'extra_group_xmlids=("base.group_partner_manager",)' in source
     assert "Command.set(group_ids)" in source
+    assert 'set_current_agent_profile(\n    "strict"\n)' in source
     assert "env.cr.commit()" in source

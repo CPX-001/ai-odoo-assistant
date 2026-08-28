@@ -94,9 +94,12 @@ limited_user = ensure_internal_user(
     password=limited_password,
     name="Phase 2 Limited Failure User",
 )
+env["odoo.ai.user.preference"].with_user(default_user).set_current_agent_profile(
+    "strict"
+)
 
 # ``odoo-bin shell`` rolls its cursor back on exit. Persist only this disposable
-# database activation and its two test users before reporting the fixture ready.
+# database activation, users and strict action-gate profile before reporting ready.
 env.cr.commit()
 
 print(
