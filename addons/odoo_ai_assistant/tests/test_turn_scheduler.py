@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from datetime import timedelta
 from threading import Barrier, Thread
+from unittest.mock import patch
 from uuid import uuid4
 
 from odoo import SUPERUSER_ID, api, fields
 from odoo.modules.registry import Registry
 from odoo.tests.common import TransactionCase
 
+from ..models import turn_scheduler as scheduler_module
 from ..models.turn_scheduler import (
     _TURN_CAPACITY_PARAMETER,
     _claim_next_turn,
@@ -139,11 +141,9 @@ class TestAssistantTurnScheduler(TransactionCase):
                 ).exists().unlink()
             cr.commit()
 
-    def test_capacity_one_allows_only_one_of_two_concurrent_claims(self):
-        self._set_capacity(1)
-        groups = self._create_turns([1, 1])
-        barrier = Barrier(3)
-        results = [None, None]
+    def _concurrent_claims(self, count=2):
+        barrier = Barrier(count + 1)
+        results = [None] * count
         errors = []
 
         def claim(index):
@@ -153,19 +153,48 @@ class TestAssistantTurnScheduler(TransactionCase):
             except Exception as error:  # noqa: BLE001 - thread result is asserted below
                 errors.append(error)
 
-        threads = [Thread(target=claim, args=(index,)) for index in range(2)]
+        threads = [Thread(target=claim, args=(index,)) for index in range(count)]
         for thread in threads:
             thread.start()
         barrier.wait(timeout=5)
         for thread in threads:
             thread.join(timeout=10)
-
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertFalse(errors)
+        return results
+
+    def test_registered_cron_method_uses_p5_scheduler_overlay(self):
+        with (
+            patch.object(scheduler_module, "_recover_stale_turns") as recover,
+            patch.object(scheduler_module, "_claim_next_turn", return_value=None) as claim,
+        ):
+            self.env["odoo.ai.turn"]._cron_run_turn_slot()
+
+        recover.assert_called_once_with(self.dbname)
+        claim.assert_called_once_with(self.dbname)
+
+    def test_capacity_one_allows_only_one_of_two_concurrent_claims(self):
+        self._set_capacity(1)
+        groups = self._create_turns([1, 1])
+
+        results = self._concurrent_claims()
+
         claimed = [result for result in results if result is not None]
         self.assertEqual(len(claimed), 1)
         states = self._states(groups[0] + groups[1])
         self.assertEqual(list(states.values()).count("running"), 1)
         self.assertEqual(list(states.values()).count("queued"), 1)
+
+    def test_one_queued_turn_is_never_double_claimed_by_two_workers(self):
+        self._set_capacity(2)
+        only_turn = self._create_turns([1])[0][0]
+
+        results = self._concurrent_claims()
+
+        claimed = [result for result in results if result is not None]
+        self.assertEqual(len(claimed), 1)
+        self.assertEqual(claimed[0][0], only_turn)
+        self.assertEqual(self._states([only_turn])[only_turn], "running")
 
     def test_capacity_two_allows_independent_conversations(self):
         self._set_capacity(2)
