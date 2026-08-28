@@ -1,22 +1,25 @@
 # Current implementation state
 
-Runtime state revalidated on 28 August 2026 against implementation baseline `24b9460ad09998ec50d853e0a715b543e5991bbb`. Later documentation-only commits do not change the runtime claims below.
+Runtime state revalidated on 28 August 2026 against implementation baseline `24b9460ad09998ec50d853e0a715b543e5991bbb`. Documentation commits after that baseline do not themselves create runtime features.
 
-This document distinguishes **implemented code** from **formally accepted roadmap phases**. Phase 3 public activity and Phase 4 provisional answer streaming are implemented on `main`, but their real product-path gates have not been recorded PASS. Formal acceptance still follows the hard order P2 -> P3 -> P4.
+This document distinguishes **implemented code** from **formal roadmap acceptance** and from the target in `PRODUCT_VISION.md`.
 
-## Product baseline
+## 1. Product/deployment baseline
 
-- Target: Odoo 18 Community, self-hosted Linux.
-- Installable product: `addons/odoo_ai_assistant`, version `18.0.10.10.0`.
-- Runtime: embedded in Odoo; browser talks to Odoo only.
-- Durable work: `odoo.ai.turn`, native `ir.cron`, private working transcript, structured failures and public/live events.
-- Business authority: originating effective Odoo user with `su=False`.
-- Primary reasoning provider: local Codex App Server subprocess with provider-owned credentials.
-- Product direction: one global general Assistant. See `PRODUCT_VISION.md` for target behavior; that document is not an implementation claim.
+- Odoo 18 Community, self-hosted Linux.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.10.0` at the audited runtime baseline.
+- Embedded runtime; browser talks to Odoo, not a sidecar.
+- Odoo PostgreSQL owns conversations/messages/turns/effect state/live public events.
+- Native `ir.cron` runs durable turns.
+- Business authority is the originating effective user with `su=False`.
+- Primary provider is local Codex App Server with provider-owned authentication.
+- Product target is one global general Assistant; see `PRODUCT_VISION.md`.
 
-## Active host loop
+## 2. Host-owned agent loop
 
-ADR-019 remains the active orchestration path. Odoo owns the iterative loop. `CodexDecisionEngine` returns exactly one strict `NextDecision` per provider call:
+ADR-019/current code owns the active orchestration path.
+
+The provider returns one strict `NextDecision` per provider call:
 
 ```text
 final_answer
@@ -24,40 +27,39 @@ reasoning_capability_call
 plan_step_proposal
 ```
 
-`AgentTurnService` resolves selected capabilities against the effective host registry, validates schemas and executes REASONING calls only through `CapabilityExecutor` under the effective user. Provider thread/process state is not business durability.
+Odoo resolves each selected capability against the effective registry, validates arguments and executes REASONING calls only through `CapabilityExecutor` under current authority.
 
-Every provider decision/call/result/error needed for continuation is represented in the bounded private working transcript. Cancellation, call identity, provider/capability budgets and restart behavior are host-owned. A pending call is not blindly reexecuted after restart.
+Read results/errors and provider decisions are stored as bounded private working items for iterative continuation. Call identity, cancellation, budgets and restart handling are host-owned. Persisted pending work is not blindly replayed after restart.
 
-Codex protocol handling tolerates bounded inert unknown notifications while preserving strict turn/call identity and critical-event validation. Terminal provider facts are sanitized before persistence; raw provider output, credentials, prompts and stdout/stderr are not retained as product diagnostics.
+Provider protocol handling permits bounded inert additive notifications while preserving strict identity/critical-event validation. Persisted terminal provider facts are sanitized rather than raw provider output.
 
-## Current action lifecycle and current limitation
+## 3. Current effect lifecycle
 
-The host-controlled effect lifecycle remains:
+Current effect path:
 
 ```text
-canonical proposal
+one canonical PlanStepProposal
  -> prepare / preview / preconditions
- -> current policy / approval
+ -> policy / approval
  -> revalidate
  -> durable write barrier
  -> execute under effective user
  -> verify
- -> verified effect receipt / recovery state
+ -> verified receipt or recovery state
 ```
 
-The write barrier is committed immediately before the first effect. Business effect, completed plan state, verification and verified receipt share the business transaction. If that transaction is lost after the barrier, recovery is required; the host does not blindly retry.
+The write barrier commits immediately before the first possible effect. Business effect + completed plan data + verification/receipt share the business transaction. If that transaction is lost after the barrier, recovery semantics apply and the operation is not blindly retried.
 
-**Current limitation:** the active host loop accepts one canonical `PlanStepProposal` and rejects a returned plan containing more than one step. Multi-step `EffectPlan` is target work, not current behavior.
+### Current limitations
 
-**Current limitation:** after a completed action, the current browser response uses a host-generated completion sentence rather than feeding the verified receipt back to the reasoning provider for a natural post-effect synthesis. `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` makes post-effect reasoning an early gated phase.
+- Only one canonical plan/effect step is accepted; multi-step `EffectPlan` is future P6 work.
+- After verified action execution, current product response still uses deterministic host completion prose rather than feeding the verified receipt back to the provider for natural post-effect synthesis. This is future P5 work.
 
-## Capability authority
+## 4. Capability framework today
 
-`CapabilityDefinition` remains the atomic executable authority contract. The current decorator/registry already carries model-facing and host-facing metadata including descriptions, schemas, risk/effect, exposure, approval, groups/guards/dependencies, settings, budgets and optional preview/verification handlers.
+`CapabilityDefinition` is the atomic executable contract. Current decorator/registry metadata includes model-facing description/schema plus host-facing risk/effect/exposure/approval/configuration/groups/guards/budgets and optional preview/verification.
 
-Settings can already inspect the discovered catalog, display configuration state and enable/disable individual capabilities without editing the provider source.
-
-Current core providers are:
+Current core providers:
 
 ```text
 odoo_query
@@ -66,27 +68,84 @@ odoo_batch
 odoo_runtime
 ```
 
-Current generic business query/action helpers intentionally exclude sensitive technical models and unrestricted ORM/method/SQL/Python/shell authority.
+Settings can inspect the discovered catalog and enable/disable/configure current definitions.
 
-ADR-017 nevertheless allows an explicitly designed capability to encapsulate filesystem/process/API/low-level host services. Therefore the current narrow technical surface is an implementation/safety state, not a permanent architectural claim that the Assistant may never operate the host. Future technical operations require explicit capabilities, technical access policy and, where privilege elevation is needed, a separately designed host boundary/ADR.
+Generic providers intentionally do not expose unrestricted ORM methods, SQL, Python, filesystem or shell.
 
-External-addon `CapabilityProvider`, Skill/Bundle, ContextProvider, EvidenceProvider and `EffectiveAssistantManifest` are target work, not current implementation.
+This is a **current surface limitation, not a permanent product rule**. ADR-017/framework design allows explicit capabilities to wrap low-level services where authority is separately designed. Future Developer/Operator module/config/service/host operations require specialized definitions, technical profile and a privilege-boundary ADR.
 
-## Conversation/context state
+Not implemented yet:
 
-Conversations and complete messages are persisted in Odoo. The current provider context is still comparatively small: the active composition builds a bounded recent conversation summary from the newest messages plus the turn/screen/capability context.
+```text
+external CapabilityProvider API
+Skill/Bundle composition
+ContextProvider
+EvidenceProvider
+EffectiveAssistantManifest
+technical access profile
+```
 
-There is no current `ConversationContextManager` with rolling structured summaries, durable entity/evidence references or conversation-scoped behavioral settings beyond the existing policy/preferences infrastructure. Those are future product work.
+## 5. Conversation/context today
 
-Screen context remains a bounded untrusted navigation hint. User/company identity and permissions are reconstructed server-side.
+Complete messages/conversations are Odoo-persisted.
 
-## Structured failure contract — Phase 2
+Provider input remains more limited than the target durable continuity model: current composition uses bounded recent conversation text plus screen/current-turn/capability context.
 
-P2.1-P2.3 are implemented, and P2.3 passed its real Odoo 18 integration gates on the recorded checkpoint `8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc`.
+There is no current `ConversationContextManager` maintaining rolling structured summary, active entity/evidence references or explicit conversation-scoped preference state as a first-class context subsystem.
 
-P2.4 browser failure presentation is implemented. The browser validates a host-owned `FailureEnvelope`, preserves useful machine categories/effect/retry facts and only offers retry when the effect state is safely retryable. `partial`, `unknown` and `recovery_required` do not expose blind replay.
+Screen context is only a bounded untrusted hint. Server code reconstructs identity/companies/permissions.
 
-Phase 2 is **not formally complete** because these five hard real presentation gates remain unrecorded on the current accepted lineage:
+## 6. Queue and concurrency today
+
+Backend turns are genuinely asynchronous/durable.
+
+Current queue behavior includes:
+
+- two `ir.cron` runner slots;
+- lease token/expiry;
+- bounded attempts;
+- cancellation/stale recovery;
+- `FOR UPDATE SKIP LOCKED` claim.
+
+Therefore separate queued turns can be claimed by different slots without one SQL row lock serializing the whole queue.
+
+However, **the current browser is still globally blocking at panel-state level**:
+
+- `state.loading` prevents another submit;
+- conversation selector is disabled while loading;
+- model picker is disabled while loading;
+- autonomy picker is disabled while loading;
+- composer is disabled while loading.
+
+So current backend concurrency does not yet provide a true multi-chat product experience.
+
+Target P5 changes this to turn/conversation-scoped busy state, multiple conversations in parallel subject to configured capacity, and one active causal turn per conversation initially. Model/autonomy/profile changes while Turn A runs affect future turns only; A retains its captured execution snapshot.
+
+Two cron slots are not the final capacity policy. Future concurrency is measured/configurable with provider/server capacity, fairness and backpressure.
+
+## 7. Structured failures — Phase 2
+
+P2 schema/provider/persistence/browser implementation exists.
+
+P2.3 real Odoo validation passed at repaired checkpoint:
+
+```text
+8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc
+```
+
+Recorded results include:
+
+```text
+addon update PASS
+focused failure persistence 3 tests PASS
+queue suite 9 tests PASS
+full addon battery 95 tests / 0 failures/errors
+HOOT 78 passed
+unit tests 201 passed
+repository tests 344 passed + 36 explicit skips
+```
+
+P2.4 browser failure presentation is implemented but Phase 2 is not formally complete until these hard real gates pass:
 
 ```text
 P2-REAL-AUTH
@@ -96,25 +155,23 @@ P2-REAL-TOOLFAIL
 P2-REAL-RECOVERY
 ```
 
-## Public activity — Phase 3 implementation exists, acceptance pending
+## 8. Public activity — Phase 3 code landed, acceptance pending
 
-Production Phase 3 code is now on `main`.
+Previous docs that say Phase 3 production has not started are stale.
 
-Implemented behavior includes:
+Current `main` includes:
 
-- a closed `PublicTurnEvent` projection with bounded kind/phase/status/resource data and explicit rejection of private `agent.thinking` style events;
-- capability lifecycle projection from trusted capability metadata + schema-validated resource identifiers;
-- independent `odoo.ai.turn.live.event` persistence using a short separate cursor/transaction;
-- no foreign key to the mutable worker turn row, avoiding the lock that would otherwise block pre-final visibility;
-- the live store copies only the committed turn binding and never commits the worker business transaction or grants capability authority;
-- authenticated `/odoo_ai/v1/turn/live` browser projection with ordered cursor pagination;
-- frontend live client that consumes public activity separately from answer text;
-- Assistant activity UI with latest activity + expandable ordered history;
-- deterministic Odoo tests and real Chromium gate harnesses for the Phase 3 contract.
+- closed bounded `PublicTurnEvent` projection;
+- capability lifecycle -> trusted public activity mapping;
+- independent `odoo.ai.turn.live.event` persistence;
+- separate short cursor/transaction that does not commit worker business effects;
+- live table/binding designed to avoid blocking pre-final visibility on the mutable turn;
+- authenticated `/odoo_ai/v1/turn/live` endpoint;
+- frontend live cursor consumption;
+- current activity + expandable history UI;
+- deterministic/Odoo/browser gate tooling.
 
-This implementation was deliberately landed as bounded look-ahead so P2/P3/P4 can be validated in a reproducible real-environment session. It is **not formal PASS evidence**.
-
-Phase 3 acceptance gates, blocked until P2 passes:
+Formal acceptance remains blocked by P2, then requires:
 
 ```text
 P3-REAL-ACTIVITY-READ
@@ -123,22 +180,22 @@ P3-REAL-LIVE-VISIBILITY
 P3-REAL-REDACTION
 ```
 
-## Real answer streaming — Phase 4 implementation exists, acceptance pending
+## 9. Answer streaming — Phase 4 code landed, acceptance pending
 
-Production Phase 4 code is also on `main`.
+Current `main` includes `StreamingCodexDecisionEngine` and `StructuredFinalAnswerDeltaExtractor`.
 
-`StreamingCodexDecisionEngine` is installed at the existing provider seam. It consumes Codex `item/agentMessage/delta` notifications and uses `StructuredFinalAnswerDeltaExtractor` to project only the user-facing `final_answer.answer` value. Provisional text is emitted as `answer.delta` into the independent live channel.
+It consumes Codex `item/agentMessage/delta`, extracts only the structured user-facing final-answer field and emits provisional answer text through the independent live channel.
 
-Important authority behavior:
+Properties:
 
-- provisional answer streaming cannot authorize an effect;
-- malformed provisional structured text disables provisional projection instead of weakening final validation;
-- the final strict `NextDecision` remains authoritative;
-- public activity and answer text remain distinct channels;
-- browser live polling drains activity/answer items and reconciles with authoritative terminal status;
-- current implementation uses Odoo JSON/RPC polling for the live cursor; SSE remains an optimization choice, not an architectural requirement.
+- provisional stream is non-authoritative;
+- malformed provisional structure can disable streaming without weakening final validation;
+- final strict `NextDecision` remains authority;
+- activity and answer are distinct browser channels;
+- browser uses Odoo-authenticated live polling/status reconciliation;
+- polling vs SSE/bus is still a transport optimization choice.
 
-Real Phase 4 gates, blocked until P2 and P3 pass:
+Formal P4 acceptance requires P2 + P3 PASS, then:
 
 ```text
 P4-REAL-FIRST-DELTA
@@ -147,56 +204,76 @@ P4-REAL-CANCEL-STREAM
 P4-REAL-UTF8-FRAGMENT
 ```
 
-See `docs/research/PHASE34_REAL_VALIDATION_RUNBOOK.md`.
+## 10. Retrieval/RAG today
 
-## Retrieval / RAG / source intelligence
+No general current embedded RAG/Evidence provider exists yet.
 
-There is currently **no general embedded RAG/Evidence implementation** in the active capability package. The retired sidecar's Knowledge/Source code is historical implementation, not runtime authority.
+The old sidecar Knowledge/Source implementation is historical only.
 
-`KNOWLEDGE_INDEX.md` now defines the target as a broader Evidence architecture:
+The current target in `KNOWLEDGE_INDEX.md` is broader than vector search:
 
 ```text
-live Odoo/runtime/configuration
-source/XML structural evidence
+live Odoo/runtime/schema/configuration
+source/XML intelligence
 logs/diagnostics
-company Knowledge/documents
+company Knowledge/files
 lexical FTS
-semantic/vector where evals justify it
+semantic/vector only where evals justify it
 web/external evidence later
 ```
 
-Frequently changing Odoo business records remain live authority and should normally be queried live rather than treated as a stale indexed RAG corpus.
+Live business records remain live Odoo authority rather than stale indexed snapshots.
 
-## Technical/host operations
+## 11. Technical operations today
 
-The current product does not expose module install/update, `odoo.conf` editing, service/process operations, generic command execution, PostgreSQL administration or source-code writes to the reasoning model.
-
-The target product does include controlled Developer/Operator capabilities for those areas. They require explicit specialized capabilities and a technical access profile independent from the existing autonomy selector. Privileged host operations will require a new ADR defining the OS privilege boundary before implementation.
-
-## Validation state and exact order
-
-Retained completed real evidence includes:
+Not currently exposed to reasoning:
 
 ```text
-P1-REAL-VERSION
-P1-REAL-SOAK-100
-P1-REAL-TOOLCALL
-P1-REAL-CANCEL
-P2.3 focused/full Odoo validation at 8683ef6...
+module install/update
+odoo.conf modification
+service/process restart
+PostgreSQL administration
+source-code modification
+generic command execution
+web search
 ```
 
-The current mandatory acceptance chain is:
+These are target product capabilities in later gated phases, not rejected product goals.
+
+Privileged host operations require a separate OS privilege-boundary ADR; high autonomy alone cannot grant them.
+
+## 12. Imports/artifacts today
+
+The current batch capability is bounded and suitable for small controlled collections, not a robust thousands-row intelligent import pipeline.
+
+A future `DataImportSession` is planned for inspect/map/validate/correct/preview/chunk/receipt/resume semantics.
+
+## 13. Formal roadmap state
 
 ```text
-P2 five real gates
-   ↓
-P3 four real gates
-   ↓
-P4 four real gates
-   ↓
-Phase 5 of AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
+P0 COMPLETE
+P1 COMPLETE
+P2 REAL_ENV_VALIDATION_REQUIRED
+P3 IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE
+P4 IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE
+P5+ NOT ELIGIBLE
 ```
 
-No Phase 5 functional expansion is formally eligible until this chain is processed. A failed gate creates a repair slice at the owning layer before continuing.
+Current hard order:
 
-No GitHub Actions are used for this roadmap under current repository policy.
+```text
+P2 five PASS
+ -> P3 four PASS
+   -> P4 four PASS
+     -> P5 READY
+```
+
+The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`.
+
+The P3/P4 landed code consumes the allowed look-ahead budget. Do not start another dependent product contract layer until the ordered acceptance chain is processed.
+
+## 14. Next action
+
+Run the current final `main` through the P2 gates using the real validation runbooks. If P2 passes, run P3; if P3 passes, run P4. Repair the smallest owning layer immediately on any hard-gate failure.
+
+Only after P4 acceptance should implementation begin at P5.1 turn-scoped frontend/background state.
