@@ -205,9 +205,26 @@ export class AssistantFailureError extends Error {
     }
 }
 
+function enforceRecoveryAuthority(failure) {
+    if (!failure) {
+        return null;
+    }
+    return Object.freeze({
+        ...failure,
+        effect_state: ["partial", "unknown"].includes(failure.effect_state)
+            ? failure.effect_state
+            : "unknown",
+        retryability: "never",
+        user_action: "review",
+    });
+}
+
 export function failureErrorFromStatus(status, fallback = "runtime_unavailable") {
     const legacyCode = boundedFailureCode(status?.error_code, fallback);
-    const failure = normalizeFailureEnvelope(status?.failure, legacyCode);
+    let failure = normalizeFailureEnvelope(status?.failure, legacyCode);
+    if (status?.state === "recovery_required") {
+        failure = enforceRecoveryAuthority(failure);
+    }
     return new AssistantFailureError(failure?.code || legacyCode, failure);
 }
 
