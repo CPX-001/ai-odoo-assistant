@@ -1,11 +1,11 @@
 # Stabilization execution state
 
-State format: 8
+State format: 9
 Updated: 2026-08-28  
 Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
 Accepted P5.1 implementation lineage through: `f7f924ce944db86e896745fef83ea2fb6fd6583a`
 P5.1 validation harness lineage through: `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`
-P5.2a implementation lineage through: `5b952e4d47f0d59ed266df8b7803a88909bcfce0`
+P5.2 implementation/harness lineage through: `b1e49d97fce5506a2c9bb19b3a9ce1303f7add9c`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
@@ -15,21 +15,22 @@ phase: 5
 phase_name: natural non-blocking multi-chat product
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P5.2a-capacity-causal-eligibility
-active_slice_record: docs/research/P5.2A_SCHEDULER_CAPACITY_CAUSALITY.md
-active_slice_state: LOCAL_VALIDATION_REQUIRED
-current_gate_type: CONTRACT_AND_DETERMINISTIC
-blocking_validations: P5.2A-ODOO-SCHEDULER, P5.2A-TURN-QUEUE-REGRESSION
+active_slice: P5.2-scheduler-concurrency-backpressure
+active_slice_record: docs/research/P5.2_SCHEDULER_IMPLEMENTATION.md
+active_slice_state: REAL_ENV_VALIDATION_REQUIRED
+current_gate_type: HARD_REAL_ENV_AND_REGRESSION
+blocking_validations: P5.2-ODOO-SCHEDULER, P5.2-ODOO-FAIRNESS-WAKEUP, P5.2-FULL-ADDON-REGRESSION, P5-REAL-MULTICHAT, P5-REAL-CONVERSATION-ORDERING, P5-REAL-BACKPRESSURE
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a
 acceptance_evidence: docs/research/evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md
-next_slice: NONE_UNTIL_P5.2A_DETERMINISTIC_VALIDATION
+next_slice: NONE_UNTIL_P5.2_ACCEPTANCE
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
 Phases 0 through 4 are complete. The ordered P2 -> P3 -> P4 real Odoo/browser/provider acceptance
 chain passed on one linear code lineage. P5.1 production code and its deterministic, Odoo and real
-browser/provider acceptance are complete. P5.2a scheduler capacity/causal-claim code is now landed,
-but it is not accepted until its focused Odoo concurrency and queue-regression tests execute.
+browser/provider acceptance are complete. P5.2 scheduler capacity, causal ordering, fairness,
+release wake-up, diagnostics and real-gate harness are implemented, but P5.2 remains unaccepted
+until the batched deterministic/regression/real validation completes.
 
 ---
 
@@ -231,26 +232,42 @@ P5.1-BROWSER-REOPEN             | PASS
 
 Evidence: `evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`.
 
-## P5.2a Capacity + causal eligibility — LOCAL_VALIDATION_REQUIRED
+## P5.2 Scheduler concurrency/backpressure — REAL_ENV_VALIDATION_REQUIRED
 
-Implementation record:
+Implementation records:
 
 ```text
 docs/research/P5.2A_SCHEDULER_CAPACITY_CAUSALITY.md
+docs/research/P5.2_SCHEDULER_IMPLEMENTATION.md
+docs/research/P5.2_VALIDATION_RUNBOOK.md
 ```
 
-Landed implementation through `5b952e4d47f0d59ed266df8b7803a88909bcfce0` adds:
+Implemented P5.2 behavior now includes:
 
-- a host-owned installation concurrency ceiling, currently bounded to the two physical cron slots;
-- a short transaction-scoped PostgreSQL advisory lock around admission/claim only;
-- race-safe global capacity counting before `queued -> running`;
-- same-conversation causal predecessor eligibility based on turn creation identity rather than mutable `queued_at`;
-- `awaiting_confirmation` as a causal blocker that does not consume worker capacity;
-- administrator setting `Concurrent Assistant turns` with supported values 1..2;
-- focused independent-cursor/thread tests for capacity and causal ordering.
+- installation-wide capacity bounded to the current two physical cron slots;
+- race-safe claim admission with a short PostgreSQL advisory lock;
+- scheduler claim cursor using `READ COMMITTED` so lock waiters observe previously committed claims;
+- same-conversation causal serialization based on durable turn identity;
+- `awaiting_confirmation` as a causal blocker without consuming worker capacity;
+- per-claim `scheduler_claimed_at` service watermark;
+- fairness order: fewer active turns -> least recently served user -> FIFO;
+- retry/requeue cannot regain priority solely from an older queue timestamp;
+- wake-up after a claimed worker releases/re-evaluates capacity;
+- post-commit wake-up for queued cancellation and approval/rejection causal release;
+- bounded administrator-only scheduler diagnostics;
+- focused fairness/wake-up Odoo tests and P5.2 real browser gate tooling.
 
-No P5.2a test is recorded PASS from this connector-only implementation run. P5.2b must not consume
-this scheduler claim contract until the focused Odoo tests and queue/failure regressions pass.
+No P5.2 deterministic or real gate is recorded PASS from the connector implementation environment.
+The required validation is intentionally batched for the completed P5.2 slice rather than stopping
+between P5.2a/P5.2b/P5.2c.
+
+Required real gates:
+
+```text
+P5-REAL-MULTICHAT
+P5-REAL-CONVERSATION-ORDERING
+P5-REAL-BACKPRESSURE
+```
 
 ---
 
@@ -259,7 +276,7 @@ this scheduler claim contract until the focused Odoo tests and queue/failure reg
 These limitations define the remaining Phase 5 and later work:
 
 - background scopes are currently web-client memory; durable reconnect/continuity is expanded later in P5;
-- P5.2a capacity/causal scheduler code is landed but unvalidated; fairness, anti-starvation and canonical capacity-release wake-up remain P5.2b;
+- P5.2 scheduler implementation is present but still requires the batched Odoo/regression/browser acceptance before P5.3;
 - post-effect verified actions still need provider continuation/natural synthesis (P5.5);
 - conversation provider context is smaller than the target durable `ConversationContextManager` model (P5.6);
 - one canonical effect proposal/step is supported; multi-step effects are P6;
@@ -287,14 +304,16 @@ These limitations define the remaining Phase 5 and later work:
 
 # Exact next action
 
-Validate **P5.2a capacity + causal eligibility** before starting P5.2b:
+Validate **all of P5.2 as one batch** using `P5.2_VALIDATION_RUNBOOK.md`:
 
 ```text
-1. run focused TestAssistantTurnScheduler Odoo tests;
-2. rerun existing turn queue and structured-failure suites;
-3. run the full addon Odoo battery if focused tests pass;
-4. repair the smallest owning P5.2a layer on any failure.
+1. run focused scheduler + fairness/wake-up Odoo tests;
+2. rerun turn queue/failure and full addon regressions;
+3. run P5-REAL-MULTICHAT;
+4. run P5-REAL-CONVERSATION-ORDERING;
+5. run P5-REAL-BACKPRESSURE;
+6. record sanitized evidence on one coherent tested lineage.
 ```
 
-Only after deterministic/Odoo validation may execution implement P5.2b fairness, anti-starvation and
-capacity-release wake-up. P5.2 real browser/provider acceptance remains P5.2c.
+Repair the smallest owning P5.2 layer on any failure. Only after the complete P5.2 acceptance batch
+passes may P5.2 become COMPLETE and P5.3 become READY.
