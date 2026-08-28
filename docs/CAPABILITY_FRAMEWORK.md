@@ -1,122 +1,280 @@
 # Capability Framework
 
-The Capability Framework is the host-owned contract between probabilistic reasoning and deterministic Odoo execution.
+The Capability Framework is the host-owned contract between probabilistic reasoning and deterministic Odoo/host execution.
 
-## Core principle
+`PRODUCT_VISION.md` defines the target product. This document defines the capability boundary that current and future implementations must preserve.
 
-Declare an executable operation once as a `CapabilityDefinition`, then derive the views needed by reasoning, planning, diagnostics and future transports from that same definition.
+## 1. Core principle
 
-Do not create separate registries for chat tools, actions, MCP tools or automations when they represent the same operation.
+Declare an executable operation once as a `CapabilityDefinition`, then derive reasoning, planning, diagnostics, Settings and future transport views from the same trusted definition.
 
-## Atomic definition
+Do not create separate registries for chat tools, actions, MCP, automations or future invocation surfaces when they represent the same operation.
 
-A capability definition carries both model-facing and host-facing metadata. The exact dataclass/code is authoritative, but conceptually it includes:
+The model may be cognitively broad. **Authority remains explicit.** Naming a capability, Python function, ORM method, shell command or SQL statement does not make it executable.
+
+## 2. Atomic definition
+
+The exact current dataclass/code is authoritative. Conceptually a capability includes:
 
 ```text
-stable id/name
-summary/description
+stable id/name + version
+title / model-facing description / user-facing description
 input JSON Schema
 output JSON Schema
-risk
-side-effect/effect classification
+risk + effect classification
+exposure: reasoning | plan | host
 approval semantics
-groups/guards/dependencies
-budgets/limits
-handler
+groups / guards / dependencies / configuration
+budgets / record-byte-time limits
+trusted handler
+optional preview/preconditions
+optional verification
+optional public activity descriptor
 ```
 
-The handler is never inferred from a model-generated name or arbitrary Odoo method. Registration is explicit/deterministic through trusted installed code.
+The handler is always registered by trusted installed code or by a separately designed declarative/UI mechanism. It is never inferred from model-generated text.
 
-## Decorator and discovery
+## 3. Current provider package
 
-Core providers define capabilities with the framework decorator and are discovered by `CapabilityRegistry`. Current provider modules are:
+Current core providers are:
 
-- `odoo_query`;
-- `odoo_actions`;
-- `odoo_batch`;
-- `odoo_runtime`.
+```text
+odoo_query
+odoo_actions
+odoo_batch
+odoo_runtime
+```
 
-Discovery today is intentionally scoped to the installed core provider package. That keeps the current surface deterministic but is not yet the desired third-party extension model.
+The current discovery path is intentionally scoped. Third-party `CapabilityProvider` discovery is target work in the gated roadmap, not an implementation claim.
 
-## Registry
+## 4. Registry and effective catalog
 
-The registry is the source of truth for effective availability. It resolves definitions and filters by host-known conditions such as groups, guards, dependencies/configuration and run context.
+`CapabilityRegistry` is the authority for effective availability. It resolves definitions and filters by host-known state such as:
 
-Consumers use purpose-specific projections, not handler objects:
+```text
+installed provider/module
+configuration health
+enablement
+user/groups/companies
+technical profile
+capability guards/dependencies
+invocation surface
+run context
+provider feature support where relevant
+```
 
-- reasoning view: enough description/schema for tool selection;
-- planning view: enough effect/risk/dependency metadata for plan validation;
-- diagnostics view: sanitized availability/issue metadata;
-- future transport adapters: generated from the same effective definition.
+Consumers receive projections, not handlers.
 
-The model cannot make an unavailable definition available by naming it.
+Target projections include:
 
-## Executor
+```text
+reasoning catalog
+planning catalog
+diagnostics/settings catalog
+public Assistant manifest
+future MCP/automation surface catalog
+```
 
-`CapabilityExecutor` receives a resolved definition and validated input/context. It enforces schema/availability/budget/policy checks around the trusted handler and normalizes capability errors/results.
+A capability hidden/disabled/unauthorized by the host remains unavailable even if the user explicitly asks the model to call it.
 
-Handlers must remain bounded and use the effective Odoo user for business access. A handler must not use `sudo()` or a technical service account as a shortcut around normal permissions unless an explicitly host-internal operation is separately designed and justified.
+## 5. Executor
 
-## Query provider
+`CapabilityExecutor` executes only a resolved, effective definition with validated arguments/context. It owns schema, availability, budgets and policy integration around the trusted handler.
 
-`odoo_query` implements schema-first, bounded business reads. Model/field/operator availability is derived from the live installation/user. Query limits are host constants, not prompt suggestions.
+Business handlers use the effective Odoo user and `su=False` unless a capability is explicitly classified as host-internal/privileged and is implemented through a separate authority boundary. `sudo()` is not a shortcut for model-visible business authority.
 
-See `QUERY_CONTRACT.md`.
+## 6. Reads vs effects
 
-## Action provider
+READ/analysis operations may be broad and iterative but remain bounded by exploration/cost/latency budgets and Odoo ACLs.
 
-`odoo_actions` owns controlled effect semantics around effective write schema, previews/preconditions and verification. The framework deliberately does not expose arbitrary `execute_kw`/method execution.
+Effects remain host-controlled:
 
-Provider adapters must make the planning contract explicit: when the user's requested outcome is an Odoo state change that an available planning capability exactly supports, the reasoning provider is expected to ground the necessary model/record/schema/fields through read-only capabilities and emit the corresponding plan step. Returning a normal read-only answer with an empty plan does not satisfy that supported mutation request. This remains probabilistic model guidance, not host authority: the host does not infer write intent from prompt text, and every emitted step is still validated against the effective planning catalog, schema, policy, preview/approval and verification path.
+```text
+model proposes
+ -> host resolves definition
+ -> validate arguments
+ -> preview/preconditions
+ -> policy/approval
+ -> durable write barrier
+ -> execute
+ -> verify
+ -> receipt/recovery state
+```
 
-For Codex, PLAN definitions may also be projected as **stage-only dynamic tools** derived directly from the same effective planning catalog. Calling one of these tools never invokes the capability handler, never previews, never approves and never mutates Odoo; it only submits one schema-validated `PlannedCapability` candidate to the provider adapter. This avoids making reliable action planning depend solely on hand-authored final JSON while preserving the same host authority boundary. A single unambiguous staged step may recover an accidentally empty structured plan; conflicting or ambiguous staged/structured plans fail closed. The normal `CapabilityPlanService` still performs preview, policy/approval, execution and verification afterwards.
+The future multi-step `EffectPlan` is a composition of typed capability steps; it is not arbitrary generated code.
 
-Provider planning diagnostics must remain content-free. Capability identifiers and bounded counts/state labels may be persisted for diagnosis, but plan arguments, tool results, prompts, business values and private reasoning are not diagnostic payloads.
+## 7. Current generic Odoo providers
 
-## Batch provider
+### Query
 
-`odoo_batch` extends controlled effects to bounded collections without bypassing the same authority/policy model. Batch behavior should favor deterministic summaries/receipts and avoid hundreds of unconstrained model-authored writes.
+`odoo_query` performs schema-first bounded live business reads/aggregates under current Odoo permissions. Frequently changing business truth should stay live rather than becoming an indexed RAG snapshot.
 
-## Runtime provider
+### Actions
 
-`odoo_runtime` exposes only narrow runtime information needed by reasoning. Runtime metadata is not a back door to filesystem/shell/secrets.
+`odoo_actions` performs explicit supported effects. Generic arbitrary method execution is intentionally absent.
 
-## Extension direction
+### Batch
 
-The project research uses the following conceptual model:
+`odoo_batch` applies bounded collection operations under the same authority/policy path. Large imports are a future staged workflow rather than thousands of unconstrained model-authored calls.
+
+### Runtime
+
+`odoo_runtime` exposes narrow current runtime information. Today it is not a filesystem/shell/secrets back door.
+
+## 8. Technical and host capabilities
+
+The framework is **not** permanently limited to CRUD/business operations.
+
+An explicitly designed capability may encapsulate filesystem, process, service, configuration, network/API or other host operations if its authority boundary, input/output schema, technical profile, privilege model, preview/verification and recovery are defined.
+
+Future examples:
+
+```text
+odoo.module.inspect/install/update
+odoo.config.inspect/patch
+source.find_symbol/read_excerpt
+odoo.logs.search/read_context
+host.service.status/restart
+postgres.health/activity
+web.search/fetch
+```
+
+Prefer high-level semantic capabilities over generic shell because they are easier to validate/test/policy/verify.
+
+A future generic command capability, if needed, is a Developer-only high-risk fallback. It requires its own sandbox/allowlist/path/env/output/timeout/audit/approval design and must not grant broad root authority to the Odoo process.
+
+Direct source-code writes are later gated work: stage patch -> diff -> test -> deploy/verify, not unrestricted production editing.
+
+## 9. Extension architecture
+
+Target composition:
 
 ```text
 CapabilityProvider
-    -> CapabilityBundle / Skill
-        -> CapabilityDefinition
+  +-- Skill / Bundle
+  +-- CapabilityDefinition(s)
+  +-- ContextProvider(s)
+  +-- EvidenceProvider(s)
+  +-- configuration metadata
 ```
 
-This is **direction**, not current implementation.
+### CapabilityProvider
 
-- `CapabilityDefinition` remains the atomic executable/authority contract.
-- A future `CapabilityProvider` should let trusted installed addons contribute definitions/bundles without editing the core package.
-- A future `CapabilityBundle/Skill` should group instructions, capability selectors and activation metadata; it must not duplicate handlers or authorization.
-- If the catalog becomes large, availability/disclosure can evolve toward `discovered -> available -> revealed -> active` and lazy loading.
+A trusted installed addon contributes contracts without editing core. Provider identity/version and conflicts are deterministic. One broken optional provider must not corrupt the core catalog.
 
-Pydantic AI Capabilities/Toolsets and FastMCP Providers are useful references for composition/progressive disclosure, but importing either as a second agent runtime is not required.
+### Skill / Bundle
 
-## Security rules for new capabilities
+A Skill gives semantic grouping and progressive discovery. It may contain descriptions/examples, instructions, capability selectors, context/evidence selectors and activation/configuration metadata.
 
-Every new definition must answer:
+A Skill **does not execute anything** and does not own permissions. There is still one global user-facing Assistant.
 
-1. What exact host operation is allowed?
-2. What input/output schema bounds it?
-3. What user/company/field permissions apply?
-4. Is returned content trusted or untrusted data?
-5. What risk/effect classification applies?
-6. Is preview/approval required?
+### ContextProvider
+
+Provides bounded just-in-time context for reasoning, such as module/view/domain context. Context is data, never authorization.
+
+### EvidenceProvider
+
+Searches/fetches normalized Evidence from sources such as source/XML, logs, documents or web. Retrieved content cannot register capabilities or modify policy.
+
+## 10. Self-awareness and `EffectiveAssistantManifest`
+
+The future Assistant self-description must be derived from effective host state, not a static prompt.
+
+Conceptually:
+
+```text
+provider + feature support
+technical access profile
+effective skills
+available/revealed capabilities
+context/evidence/knowledge sources
+configuration health
+safe reason for known unavailable features
+```
+
+This allows natural responses such as:
+
+> Puedo analizar Ventas y CRM y consultar código/logs con tu perfil actual. La modificación de configuración del servidor está instalada pero deshabilitada para este usuario.
+
+The manifest is a projection of authority/configuration; it does not create authority itself.
+
+## 11. Progressive disclosure
+
+Large catalogs must not force hundreds of detailed schemas into every provider turn.
+
+Target lifecycle:
+
+```text
+discovered -> available -> revealed -> active
+```
+
+The model can retain high-level awareness of Skills/namespaces while loading detailed definitions only when needed. Keep common discovery/query capabilities eager where evals show that improves quality.
+
+Progressive disclosure is accepted only if task success/tool-selection quality remains equal or better under the permanent eval suite. Token reduction alone is insufficient.
+
+OpenAI Agents namespaces/tool search and Pydantic-style capability bundles are useful reference patterns; neither is required as a second runtime dependency.
+
+## 12. UI/declarative capabilities
+
+The framework should eventually allow safe simpler configuration from Odoo UI in addition to trusted Python code.
+
+Good candidates are declarative tools backed by already-authorized mechanisms such as:
+
+```text
+Odoo Server Action
+bounded HTTP/API operation
+field/model mapping
+schema + description + policy metadata
+```
+
+OCA's `ai_tool`/AI Server Action work is a useful pattern for user-configurable tools.
+
+Arbitrary Python stored in database is a materially higher-risk feature. If supported, it belongs behind Developer/admin-only policy and explicit security tests; it is not the normal extension mechanism.
+
+## 13. Invocation surfaces
+
+Chat is one surface over the same catalog. Future MCP, automation, AI fields or context launchers reuse:
+
+```text
+CapabilityDefinition
+CapabilityRegistry
+CapabilityExecutor
+policy/ACL/technical profile
+Evidence/Context contracts
+```
+
+Each surface may receive a different **effective** catalog based on context, but there is no second divergent list of tools.
+
+OCA `ai_tool` and Apexive's chat/MCP tool reuse demonstrate the practical value of this pattern.
+
+## 14. Security checklist for every new capability
+
+Every new executable definition must answer:
+
+1. What exact operation is allowed?
+2. What schemas and byte/record/time limits bound it?
+3. What effective user/company/technical-profile permissions apply?
+4. Is returned content trusted host fact or untrusted evidence/data?
+5. What risk/effect class applies?
+6. What preview/approval is needed?
 7. How is success verified?
-8. What happens on timeout/retry/restart?
-9. What budgets/record/byte limits prevent blast-radius growth?
-10. What deterministic tests and agentic eval cover it?
+8. What happens on timeout/cancel/restart?
+9. Can the operation be safely retried, reconstructed or only reviewed?
+10. What public activity is safe to expose?
+11. What deterministic/agentic/real tests block promotion?
 
-Never add arbitrary SQL/Python/shell/sudo/unrestricted method execution merely to increase apparent agent flexibility.
+## 15. Testing requirements
 
-## Compatibility/transport rule
+New framework layers are not complete until tests prove:
 
-If MCP, automation or another client is added later, implement an adapter over the effective catalog. Do not maintain a second list of tools with divergent permissions.
+- discovery/enable/disable/uninstall;
+- duplicate provider/capability conflict handling;
+- effective ACL/technical-profile filtering;
+- schema failures fail closed;
+- disabled/hidden tool cannot be invoked by name;
+- surface adapters do not change authority;
+- progressive disclosure does not materially regress selection;
+- one optional provider failure does not break core capabilities;
+- provider/tool descriptions cannot alter host policy.
+
+Named hard real gates are defined in `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` and `research/REAL_ENV_VALIDATION_PROTOCOL.md`.
