@@ -5,13 +5,15 @@ import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
 import { failureCanRetry, failureRequiresReview } from "@odoo_ai_assistant/services/assistant_failure_contract";
 const LEGACY_MESSAGES = {
-    access_denied: () => _t("Odoo no ha permitido acceder a los datos necesarios. Revisa los permisos del usuario antes de continuar."),
-    authentication_failed: () => _t("La conexión con ChatGPT necesita volver a autenticarse antes de continuar."),
+    access_denied: () => _t("No he podido continuar porque Odoo no me ha permitido acceder a algo que necesitaba. No doy ningún cambio por realizado. Si ese acceso debería estar permitido, habrá que revisar los permisos de tu usuario."),
+    authentication_failed: () => _t("No he podido terminar esta petición porque una parte necesaria del Assistant no estaba disponible correctamente. No tengo suficiente información para darte una causa fiable y no doy ningún cambio por confirmado."),
     codex_not_connected: () => _t("Conecta una cuenta de ChatGPT para usar el Assistant."),
     codex_unavailable: () => _t("Codex no está disponible para el proceso Odoo."),
-    engine_timeout: () => _t("La petición agotó el tiempo disponible. Comprueba el estado actual antes de repetir una operación que pudiera modificar datos."),
-    invalid_context: () => _t("No he podido identificar con suficiente seguridad el contexto necesario. Puedes precisar el registro o criterio que quieres usar."),
-    invalid_response: () => _t("El Assistant recibió una respuesta que no pudo validar con seguridad."),
+    engine_timeout: () => _t("La petición se ha quedado sin tiempo antes de terminar. No doy ningún resultado ni cambio por confirmado. Si era una consulta puedes reintentarlo; si pedías modificar datos, comprueba primero su estado actual antes de repetir la operación."),
+    service_unavailable: () => _t("Se ha interrumpido la comunicación antes de que pudiera confirmar el resultado. Si pedías cambiar datos, no puedo asegurar si el cambio llegó a aplicarse: comprueba su estado actual antes de repetir la operación."),
+    invalid_context: () => _t("No he podido identificar con suficiente seguridad a qué datos o registro se refería la petición. No necesitas abrir una pantalla concreta para darme acceso; puedes indicarme el concepto o registro con un poco más de precisión."),
+    record_context_required: () => _t("No he podido identificar con suficiente seguridad el registro necesario. No necesitas abrir una pantalla concreta para darme acceso; puedes indicarme el registro o el criterio que quieres usar."),
+    invalid_response: () => _t("He recibido una respuesta que no he podido validar con seguridad. Si pedías modificar datos, no puedo asegurar el resultado: comprueba su estado actual antes de repetir la operación."),
     worker_lost_after_write_barrier: () => _t("La ejecución quedó sin un resultado concluyente después de iniciar una operación. Revisa el estado actual y no repitas la acción a ciegas."),
 };
 const CATEGORY_BODY = {
@@ -36,7 +38,7 @@ function nextStep(failure) {
     const actions = { retry: failureCanRetry(failure) ? _t("Puedes reintentar esta petición de forma segura.") : _t("No se ofrece un reintento automático para este fallo."), reconnect: _t("Vuelve a conectar ChatGPT y envía de nuevo la petición cuando la conexión esté disponible."), clarify: _t("Aclara el registro, criterio o dato necesario y vuelve a intentarlo."), request_access: _t("Solicita o revisa los permisos necesarios en Odoo antes de volver a intentarlo."), review: _t("Revisa el estado actual antes de decidir el siguiente paso."), none: "" }; return actions[failure.user_action] || "";
 }
 export function failurePresentation(failure, compatibilityCode = null) {
-    if (!failure) return { body: (LEGACY_MESSAGES[compatibilityCode] || (() => _t("No he podido completar la petición de forma fiable. El código técnico se conserva para diagnóstico sin inventar una causa.")))(), effect: "", next: "", technical: compatibilityCode ? _t("Código: %s", compatibilityCode) : "", canRetry: false };
+    if (!failure) return { body: (LEGACY_MESSAGES[compatibilityCode] || (() => _t("No he podido completar la petición de forma fiable. No tengo suficiente información para afirmar la causa y no voy a inventarla. No doy ningún cambio por confirmado.")))(), effect: "", next: "", technical: compatibilityCode ? _t("Código: %s", compatibilityCode) : "", canRetry: false };
     return { body: (CATEGORY_BODY[failure.category] || CATEGORY_BODY.internal)(), effect: effectNotice(failure), next: nextStep(failure), technical: _t("Código: %s · Diagnóstico: %s", failure.code, failure.diagnostic_id), canRetry: failureCanRetry(failure) };
 }
 export function failureMessage(code, failure = null) { const view = failurePresentation(failure, code); return [view.body, view.effect, view.next].filter(Boolean).join(" "); }
