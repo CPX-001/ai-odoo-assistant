@@ -1,8 +1,9 @@
 # Stabilization execution state
 
-State format: 5
+State format: 6
 Updated: 2026-08-28  
-Accepted runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`
+Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
+P5.1 implementation lineage through: `7dec542a897f453fbe244ae738a2ad2401577260`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
@@ -10,21 +11,22 @@ Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md
 ```text
 phase: 5
 phase_name: natural non-blocking multi-chat product
-phase_state: READY
+phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P5.1-turn-scoped-frontend-state
-active_slice_state: READY
+active_slice_record: docs/research/P5.1_TURN_SCOPED_FRONTEND_STATE.md
+active_slice_state: LOCAL_VALIDATION_REQUIRED
 current_gate_type: CONTRACT_AND_DETERMINISTIC
-blocking_validations: NONE
+blocking_validations: P5.1-HOOT-TURN-SCOPES, P5.1-P2-P4-REGRESSION, P5.1-BROWSER-MULTICHAT, P5.1-BROWSER-SETTINGS-SNAPSHOT, P5.1-BROWSER-REOPEN
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9
 acceptance_evidence: docs/research/evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md
-next_slice: P5.1-turn-scoped-frontend-state
+next_slice: NONE_UNTIL_P5.1_DETERMINISTIC_VALIDATION
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
 Phases 0 through 4 are complete. The ordered P2 -> P3 -> P4 real Odoo/browser/provider acceptance
-chain passed on one linear code lineage. Phase 5 is now eligible but no P5 production change is
-claimed by this cursor update.
+chain passed on one linear code lineage. P5.1 production code is now landed, but it is **not accepted**
+until its deterministic/regression browser validation is executed successfully.
 
 ---
 
@@ -166,9 +168,9 @@ The cancellation gate was rerun with all P4 gates after its bounded-fixture repa
 
 ---
 
-# Phase 5 — READY
+# Phase 5 — IN_PROGRESS
 
-The new product direction is documented in:
+The product direction is documented in:
 
 ```text
 docs/PRODUCT_VISION.md
@@ -191,20 +193,47 @@ P14 additional surfaces/automation/MCP
 P15 additional providers
 ```
 
-These are product plans, not current implementation claims. P5.1 is selected next; P6+ remains
-ineligible until the preceding phase gates allow it.
+## P5.1 Turn-scoped frontend/background state — LOCAL_VALIDATION_REQUIRED
+
+Implementation record:
+
+```text
+docs/research/P5.1_TURN_SCOPED_FRONTEND_STATE.md
+```
+
+Current implementation introduces per-conversation in-memory execution scopes while retaining the
+existing P2-P4 panel fields as the projection of the currently visible scope. This allows background
+Chat A state to continue without owning Chat B's loading/activity/answer/failure fields.
+
+Landed behavior includes:
+
+- temporary `new:N` scope -> durable `conversation:<uuid>` binding after enqueue;
+- per-conversation `turnId`, turn state, loading, approval/recovery, failure, activity and answer state;
+- late background callbacks update only their owning scope;
+- history/new-chat navigation no longer depends on another chat's running state;
+- model/autonomy controls remain selectable while another turn runs;
+- compact conversation runtime labels;
+- close/reopen keeps the web-client scope and does not intentionally cancel/restart server work;
+- focused HOOT contract tests are present.
+
+Syntax/XML preparation checks passed while authoring, but the supported Odoo/HOOT/browser runtime
+was not available in this ChatGPT connector execution. Therefore no deterministic or real P5 gate is
+recorded PASS yet.
+
+P5.2 is not eligible until the P5.1 deterministic/regression gates are processed.
 
 ---
 
 # Current known product limitations recorded for future phases
 
-These limitations define the starting point for Phase 5 and later work:
+These limitations define the remaining Phase 5 and later work:
 
-- frontend uses panel-global `state.loading` and currently disables composer/conversation/model/autonomy controls while a visible turn runs;
-- backend currently has two cron slots rather than a measured/configurable concurrency policy;
-- one canonical effect proposal/step is supported;
-- verified action execution currently ends with deterministic host completion prose rather than provider post-effect synthesis;
-- conversation provider context is smaller than the target durable continuity model;
+- P5.1 turn-scoped frontend state is landed but still needs deterministic/real product-path acceptance;
+- background scopes are currently web-client memory; durable reconnect/continuity is expanded later in P5;
+- backend currently has two cron slots rather than a measured/configurable concurrency/backpressure policy (P5.2);
+- post-effect verified actions still need provider continuation/natural synthesis (P5.5);
+- conversation provider context is smaller than the target durable `ConversationContextManager` model (P5.6);
+- one canonical effect proposal/step is supported; multi-step effects are P6;
 - no external `CapabilityProvider`/Skill/ContextProvider/EvidenceProvider contract exists yet;
 - no general Evidence/RAG/source/log provider exists in the active embedded capability package;
 - no Developer/Operator privileged host-operation boundary exists;
@@ -229,7 +258,15 @@ These limitations define the starting point for Phase 5 and later work:
 
 # Exact next action
 
-Begin **P5.1 turn-scoped frontend/background state** from
-`AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`: reconstruct the current panel-global loading/cancellation
-ownership, define the smallest turn/conversation-scoped state contract and its deterministic gates,
-then implement only that slice. Preserve the accepted P2-P4 authority and recovery invariants.
+Validate **P5.1 turn-scoped frontend/background state** before selecting another implementation slice:
+
+```text
+1. run HOOT including assistant_turn_scope_service.test.js;
+2. rerun affected P2 failure, P3 public-activity and P4 answer-stream regressions;
+3. exercise A running -> switch/new B -> submit B -> return A;
+4. exercise model/autonomy change while A runs and verify A's captured snapshot is unchanged;
+5. exercise close/reopen while A runs and verify no cancel/restart/cross-chat event leak.
+```
+
+Repair the smallest owning P5.1 layer on any failure. Only after the P5.1 deterministic/real acceptance
+state is updated may execution consider P5.2 scheduler concurrency/backpressure.
