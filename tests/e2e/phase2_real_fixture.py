@@ -12,6 +12,7 @@ import os
 from typing import Any
 
 from odoo import Command
+from odoo.addons.odoo_ai_assistant.services.runtime_account import runtime_status_payload
 
 
 env: Any = globals()["env"]
@@ -54,12 +55,25 @@ module = env["ir.module.module"].search([("name", "=", _REQUIRED_MODULE)], limit
 if not module or module.state != "installed":
     raise RuntimeError("odoo_ai_phase2_faults must be installed before fixture setup")
 
+# The deterministic terminal faults are injected after enqueue. Keep the normal
+# database/account gate enabled and prove the installation-scoped Codex session is
+# authenticated before creating browser users.
+env["ir.config_parameter"].set_param(
+    "odoo_ai_assistant.codex_connection_enabled", "true"
+)
+runtime_status = runtime_status_payload(env)
+if runtime_status.get("state") != "authenticated":
+    raise RuntimeError(
+        "Phase 2 real gates require an authenticated Codex session before fault injection"
+    )
+
 login = required("ODOO_AI_P2_LOGIN")
 password = required("ODOO_AI_P2_PASSWORD")
 limited_login = required("ODOO_AI_P2_LIMITED_LOGIN")
 limited_password = required("ODOO_AI_P2_LIMITED_PASSWORD")
 if login == limited_login:
     raise RuntimeError("default and limited Phase 2 test logins must differ")
+
 default_user = ensure_internal_user(
     login=login,
     password=password,
@@ -76,6 +90,7 @@ print(
         {
             "database": env.cr.dbname,
             "fixture_module": _REQUIRED_MODULE,
+            "runtime_state": runtime_status["state"],
             "default_login": default_user.login,
             "limited_login": limited_user.login,
             "result": "READY_NOT_GATE_PASS",
