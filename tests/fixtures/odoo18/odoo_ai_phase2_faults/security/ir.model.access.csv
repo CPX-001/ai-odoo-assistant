@@ -1,0 +1,2 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_odoo_ai_phase2_secret_system,odoo.ai.phase2.secret system read,model_odoo_ai_phase2_secret,base.group_system,1,0,0,0
