@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -15,6 +16,14 @@ from ..models.turn_scheduler import (
     _claim_next_turn,
     _scheduler_snapshot,
 )
+
+
+class _CallbackCollector:
+    def __init__(self):
+        self.callbacks = []
+
+    def add(self, callback):
+        self.callbacks.append(callback)
 
 
 class TestAssistantTurnSchedulerFairness(TransactionCase):
@@ -215,16 +224,25 @@ class TestAssistantTurnSchedulerFairness(TransactionCase):
 
         trigger.assert_called_once_with(self.dbname)
 
-    def test_queued_cancellation_wakes_after_commit_not_before(self):
+    def test_queued_cancellation_registers_postcommit_wake(self):
         turn_id = self._new_turn(self.user_a_id, age_seconds=10)
-        with patch.object(scheduler_module, "_trigger_turn_crons") as trigger:
+        with patch.object(scheduler_module, "_schedule_postcommit_wake") as schedule:
             with Registry(self.dbname).cursor() as cr:
                 env = api.Environment(cr, self.user_a_id, {}, su=False)
                 turn = env["odoo.ai.turn"].browse(turn_id)
                 result = env["odoo.ai.turn"].cancel_for_current_user(turn.turn_uuid)
                 self.assertEqual(result["state"], "cancelled")
-                trigger.assert_not_called()
+                schedule.assert_called_once_with(cr)
                 cr.commit()
+
+    def test_postcommit_wake_callback_defers_trigger_until_callback_runs(self):
+        collector = _CallbackCollector()
+        fake_cursor = SimpleNamespace(dbname=self.dbname, postcommit=collector)
+        with patch.object(scheduler_module, "_trigger_turn_crons") as trigger:
+            scheduler_module._schedule_postcommit_wake(fake_cursor)
+            trigger.assert_not_called()
+            self.assertEqual(len(collector.callbacks), 1)
+            collector.callbacks[0]()
             trigger.assert_called_once_with(self.dbname)
 
     def test_scheduler_snapshot_is_bounded_and_reports_causal_backlog(self):
