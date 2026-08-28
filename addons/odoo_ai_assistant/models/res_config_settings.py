@@ -1,7 +1,7 @@
-"""Odoo-native policy settings for the embedded Assistant runtime."""
+"""Odoo-native policy and scheduler settings for the embedded Assistant runtime."""
 
 from odoo import _, api, fields, models
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, ValidationError
 
 SYSTEM_ADMIN_GROUP = "base.group_system"
 
@@ -33,6 +33,24 @@ class ResConfigSettings(models.TransientModel):
         config_parameter="odoo_ai_assistant.agent_allow_synthetic_data",
         groups=SYSTEM_ADMIN_GROUP,
     )
+    assistant_concurrent_turns = fields.Integer(
+        string="Concurrent Assistant turns",
+        default=2,
+        config_parameter="odoo_ai_assistant.concurrent_turns",
+        groups=SYSTEM_ADMIN_GROUP,
+        help=(
+            "Installation-wide Assistant execution ceiling. The current two-slot cron "
+            "runner supports values from 1 to 2; excess work remains queued."
+        ),
+    )
+
+    @api.constrains("assistant_concurrent_turns")
+    def _check_assistant_concurrent_turns(self):
+        for record in self:
+            if not 1 <= record.assistant_concurrent_turns <= 2:
+                raise ValidationError(
+                    _("Concurrent Assistant turns must be between 1 and 2.")
+                )
 
     @api.model
     def get_values(self):

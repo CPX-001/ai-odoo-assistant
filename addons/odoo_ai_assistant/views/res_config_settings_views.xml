@@ -26,6 +26,14 @@
                             <field name="assistant_agent_allow_synthetic_data"/>
                         </setting>
                     </block>
+                    <block name="assistant_scheduler" title="Assistant scheduler">
+                        <setting
+                            string="Concurrent Assistant turns"
+                            help="Maximum Assistant turns executing at once. With the current two cron runner slots this value can be 1 or 2; additional turns remain queued."
+                        >
+                            <field name="assistant_concurrent_turns"/>
+                        </setting>
+                    </block>
                 </app>
             </xpath>
         </field>

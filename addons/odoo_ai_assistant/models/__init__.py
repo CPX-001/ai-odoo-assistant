@@ -11,6 +11,7 @@ from . import runtime_account_binding as runtime_account_binding
 from . import turn_event as turn_event
 from . import turn_queue as turn_queue
 from . import turn_failure as turn_failure
+from . import turn_scheduler as turn_scheduler
 from . import turn_live_event as turn_live_event
 from . import turn_working_transcript as turn_working_transcript
 from . import embedded_runtime_host_loop as embedded_runtime_host_loop
