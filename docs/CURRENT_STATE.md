@@ -1,13 +1,13 @@
 # Current implementation state
 
-Runtime state revalidated on 28 August 2026 against implementation baseline `24b9460ad09998ec50d853e0a715b543e5991bbb`. Documentation commits after that baseline do not themselves create runtime features.
+Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend code is now present through `7dec542a897f453fbe244ae738a2ad2401577260`, but its Odoo/HOOT/browser acceptance is still pending.
 
 This document distinguishes **implemented code** from **formal roadmap acceptance** and from the target in `PRODUCT_VISION.md`.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.10.0` at the audited runtime baseline.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.10.0` at the current manifest.
 - Embedded runtime; browser talks to Odoo, not a sidecar.
 - Odoo PostgreSQL owns conversations/messages/turns/effect state/live public events.
 - Native `ir.cron` runs durable turns.
@@ -109,19 +109,35 @@ Current queue behavior includes:
 
 Therefore separate queued turns can be claimed by different slots without one SQL row lock serializing the whole queue.
 
-However, **the current browser is still globally blocking at panel-state level**:
+### P5.1 frontend state now implemented, acceptance pending
 
-- `state.loading` prevents another submit;
-- conversation selector is disabled while loading;
-- model picker is disabled while loading;
-- autonomy picker is disabled while loading;
-- composer is disabled while loading.
+The browser no longer relies solely on one panel-global execution owner. `zzz_assistant_turn_scope_service.js` introduces a per-conversation in-memory scope for:
 
-So current backend concurrency does not yet provide a true multi-chat product experience.
+```text
+turn id/state
+loading / decision loading
+result / approval-recovery receipt
+failure / error
+streaming text
+public activity
+messages
+```
 
-Target P5 changes this to turn/conversation-scoped busy state, multiple conversations in parallel subject to configured capacity, and one active causal turn per conversation initially. Model/autonomy/profile changes while Turn A runs affect future turns only; A retains its captured execution snapshot.
+The existing panel fields remain the projection of the currently visible scope so P2-P4 UI/contracts are reused rather than replaced.
 
-Two cron slots are not the final capacity policy. Future concurrency is measured/configurable with provider/server capacity, fairness and backpressure.
+Intended current behavior is now:
+
+- Chat A can keep running while the user opens history or another/new conversation;
+- Chat B can have its own loading/stream/activity/failure state;
+- late A events do not intentionally overwrite visible B state;
+- returning to A restores the in-memory scope;
+- close/reopen does not intentionally cancel/restart the running server turn;
+- model/autonomy controls are no longer disabled merely because the visible chat is running;
+- conversation history can show compact runtime labels.
+
+This is **implemented but not yet formally accepted**. The new HOOT/regression/browser gates recorded in `research/P5.1_TURN_SCOPED_FRONTEND_STATE.md` still need to run in the supported environment.
+
+Two cron slots are not the final capacity policy. P5.2 will measure/configure provider/server capacity, fairness and backpressure after P5.1 acceptance.
 
 ## 7. Structured failures — Phase 2 complete
 
@@ -255,26 +271,20 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 READY
+P5 IN_PROGRESS — P5.1 LOCAL_VALIDATION_REQUIRED
 P6+ NOT ELIGIBLE
 ```
 
-Current hard order:
+Current accepted foundation order:
 
 ```text
 P2 five PASS
  -> P3 four PASS
    -> P4 four PASS
-     -> P5 READY
 ```
 
-The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`.
-
-The ordered acceptance chain has been processed. P5.1 is the next eligible slice; no Phase 5
-production implementation is claimed yet.
+The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` and the active slice record is `research/P5.1_TURN_SCOPED_FRONTEND_STATE.md`.
 
 ## 14. Next action
 
-Begin P5.1 turn-scoped frontend/background state. Preserve the completed P2 structured-failure,
-P3 public-activity and P4 answer-streaming contracts while replacing panel-global execution
-ownership with the smallest turn/conversation-scoped state contract.
+Validate P5.1 before starting P5.2: run the new HOOT turn-scope tests, rerun affected P2-P4 regressions, and exercise the real browser paths for A-running -> switch/new B -> submit B -> return A, settings changes during A, and close/reopen without cancellation/restart or cross-chat leakage. Repair the smallest P5.1 owner on any failure.
