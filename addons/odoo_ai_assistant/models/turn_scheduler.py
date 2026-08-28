@@ -145,14 +145,33 @@ def _effective_turn_capacity(env):
     return max(1, min(configured, _SUPPORTED_RUNNER_CAPACITY))
 
 
+def _prepare_claim_transaction(cr):
+    """Use READ COMMITTED for real claim cursors before their first snapshot.
+
+    Odoo's TransactionCase registry replaces newly requested cursors with a `TestCursor`
+    backed by the already-active test transaction. PostgreSQL cannot change isolation
+    after that transaction has executed queries, and the test cursor itself serializes
+    access to the shared transaction. We therefore leave the test transaction untouched;
+    true multi-connection race behavior is covered by the P5.2 real cron/browser gates.
+
+    Production Registry cursors are fresh here, so changing isolation is the first SQL
+    statement and guarantees an advisory-lock waiter sees the previous claim commit.
+    """
+
+    cursor_type = type(cr)
+    if cursor_type.__name__ == "TestCursor" and cursor_type.__module__.startswith(
+        "odoo.tests."
+    ):
+        return
+    cr.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+
+
 def _claim_next_turn(dbname):
     """Claim one eligible turn under bounded capacity and anti-starvation ordering.
 
-    Odoo cursors use PostgreSQL REPEATABLE READ by default. This short scheduler
-    transaction switches to READ COMMITTED before taking the advisory lock so a worker
-    that waited for another claim sees the previous claim's committed state. Otherwise
-    the lock could serialize workers while a stale transaction snapshot still lets both
-    observe spare capacity.
+    Odoo production cursors use PostgreSQL REPEATABLE READ by default. This short
+    scheduler transaction switches to READ COMMITTED before taking the advisory lock so
+    a worker that waited for another claim sees the previous claim's committed state.
 
     Fairness order is ``fewest active turns for user -> least recently claimed user ->
     FIFO``. Conversation causality is stronger than fairness: an earlier non-terminal
@@ -160,7 +179,7 @@ def _claim_next_turn(dbname):
     """
 
     with Registry(dbname).cursor() as cr:
-        cr.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        _prepare_claim_transaction(cr)
         env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
         cr.execute("SELECT pg_advisory_xact_lock(%s)", [_SCHEDULER_CLAIM_LOCK_KEY])
 
