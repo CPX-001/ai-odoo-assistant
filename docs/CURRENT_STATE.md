@@ -1,13 +1,13 @@
 # Current implementation state
 
-Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2 scheduler concurrency/backpressure is accepted through `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`; P5.3 stable settings snapshot is READY.
+Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2 scheduler concurrency/backpressure is accepted through `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`. P5.3 stable settings snapshot is implemented through `1803826a6516e2703497f0d14d74850082ad7665` and is stopped at its first mandatory focused Odoo validation gate.
 
 This document distinguishes **implemented code** from **formal roadmap acceptance** and from the target in `PRODUCT_VISION.md`.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.11.0` at the current manifest.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.12.0` at the current manifest.
 - Embedded runtime; browser talks to Odoo, not a sidecar.
 - Odoo PostgreSQL owns conversations/messages/turns/effect state/live public events.
 - Native `ir.cron` runs durable turns.
@@ -95,7 +95,7 @@ There is no current `ConversationContextManager` maintaining rolling structured 
 
 Screen context is only a bounded untrusted hint. Server code reconstructs identity/companies/permissions.
 
-## 6. Queue and concurrency today
+## 6. Queue, concurrency and per-turn settings today
 
 Backend turns are genuinely asynchronous/durable.
 
@@ -121,6 +121,23 @@ This P5.2 behavior is implemented and accepted. Its deterministic Odoo tests, fu
 HOOT/P5.1 regressions and three real browser/provider gates passed on the content lineage through
 `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`. See `research/P5.2_SCHEDULER_IMPLEMENTATION.md` and
 `research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
+
+### P5.3 stable settings snapshot implemented, validation pending
+
+Normal newly enqueued turns now derive a versioned `execution_settings_payload` from the already host-resolved persisted settings. Snapshot v1 contains:
+
+```text
+format_version
+reasoning_model
+autonomy_profile
+policy
+```
+
+After capture, `reasoning_model`, `policy_payload` and `execution_settings_payload` are immutable for that turn. Later model/autonomy changes therefore apply to future turns, while approval/rejection may still resume the same persisted turn under its original captured settings.
+
+The snapshot deliberately does not freeze revocable authorization or operational facts. User active state, company membership, ACL/record rules, capability guards/enablement and provider availability remain checked dynamically.
+
+P5.3 is not accepted yet. `TestAssistantTurnSettingsSnapshot` exists, but `P5.3-ODOO-SETTINGS-SNAPSHOT` has not been executed on the new lineage. See `research/P5.3_STABLE_SETTINGS_SNAPSHOT.md` and `research/P5.3_VALIDATION_RUNBOOK.md`.
 
 ### P5.1 frontend state implemented and accepted
 
@@ -284,7 +301,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS — P5.1 and P5.2 COMPLETE; P5.3 READY
+P5 IN_PROGRESS — P5.1 and P5.2 COMPLETE; P5.3 LOCAL_VALIDATION_REQUIRED
 P6+ NOT ELIGIBLE
 ```
 
@@ -299,10 +316,12 @@ P2 five PASS
 ```
 
 The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`. P5.2 acceptance is recorded in
-`research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`; P5.3 stable settings snapshot
-is the next READY slice.
+`research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`. P5.3 implementation is recorded
+in `research/P5.3_STABLE_SETTINGS_SNAPSHOT.md`; it has not passed its new focused Odoo gate yet.
 
 ## 14. Next action
 
-Prepare P5.3 stable settings snapshot from `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`. P5.3 is
-READY but has not been implemented or accepted.
+Run `P5.3-ODOO-SETTINGS-SNAPSHOT` from `research/P5.3_VALIDATION_RUNBOOK.md`, executing the focused
+`TestAssistantTurnSettingsSnapshot` after updating the addon on Odoo 18. Do not start P5.4 until this
+mandatory deterministic contract passes; larger P5.3 regression and real-browser validation remain a
+separate later slice.
