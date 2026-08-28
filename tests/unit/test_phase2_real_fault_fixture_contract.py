@@ -61,6 +61,8 @@ def test_fixture_setup_requires_disposable_database_and_separate_users():
     source = SETUP.read_text(encoding="utf-8")
     assert 'env.cr.dbname.startswith(_DB_PREFIX)' in source
     assert 'module.state != "installed"' in source
+    assert 'odoo_ai_assistant.codex_connection_enabled' in source
+    assert 'runtime_status.get("state") != "authenticated"' in source
     assert 'required("ODOO_AI_P2_LOGIN")' in source
     assert 'required("ODOO_AI_P2_LIMITED_LOGIN")' in source
     assert "if login == limited_login:" in source
