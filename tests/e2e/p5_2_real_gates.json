@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "gates": [
+    {
+      "id": "P5-REAL-MULTICHAT",
+      "phase": 5,
+      "preconditions": ["P5.1 accepted", "P5.2 implementation installed on disposable Odoo 18", "Codex authenticated", "two Assistant cron slots available", "Playwright/Chromium available"],
+      "user": "system administrator test user",
+      "data": "two long read-only turns in independent conversations",
+      "action": "set effective capacity to 2, enqueue both turns through the authenticated product route and observe durable states plus scheduler diagnostics",
+      "backend_expected": "two independent conversations can overlap in running state without double claim or cross-conversation serialization",
+      "browser_expected": "browser remains responsive and both durable turns are observable independently",
+      "cleanup": "restore original capacity and cancel unresolved read-only turns",
+      "command": "node tests/e2e/p5_2_scheduler_browser.mjs --gate P5-REAL-MULTICHAT"
+    },
+    {
+      "id": "P5-REAL-CONVERSATION-ORDERING",
+      "phase": 5,
+      "preconditions": ["same environment as P5-REAL-MULTICHAT"],
+      "user": "system administrator test user",
+      "data": "two long read-only turns in the same conversation",
+      "action": "start the first turn, enqueue a second turn into the same conversation while the first is unresolved, then release the predecessor",
+      "backend_expected": "the second turn remains queued while its causal predecessor is running/cancelling and becomes eligible only after the predecessor reaches a terminal state",
+      "browser_expected": "status polling shows the durable ordering without duplicate/restarted turns",
+      "cleanup": "restore capacity and cancel unresolved turns",
+      "command": "node tests/e2e/p5_2_scheduler_browser.mjs --gate P5-REAL-CONVERSATION-ORDERING"
+    },
+    {
+      "id": "P5-REAL-BACKPRESSURE",
+      "phase": 5,
+      "preconditions": ["same environment as P5-REAL-MULTICHAT"],
+      "user": "system administrator test user",
+      "data": "two long read-only turns in independent conversations",
+      "action": "set effective capacity to 1, hold one turn running, enqueue another, observe queued backpressure, then release the running turn",
+      "backend_expected": "active_count never exceeds one; excess work remains queued rather than failed and is woken promptly after capacity release",
+      "browser_expected": "normal authenticated browser/RPC activity remains usable while one turn waits",
+      "cleanup": "restore original capacity and cancel unresolved turns",
+      "command": "node tests/e2e/p5_2_scheduler_browser.mjs --gate P5-REAL-BACKPRESSURE"
+    }
+  ]
+}
