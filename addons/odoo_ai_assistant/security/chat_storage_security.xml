@@ -28,4 +28,11 @@
         <field name="domain_force">[('user_id', '=', user.id)]</field>
         <field name="perm_read" eval="True"/><field name="perm_write" eval="False"/><field name="perm_create" eval="False"/><field name="perm_unlink" eval="False"/>
     </record>
+    <record id="rule_odoo_ai_turn_live_event_owner" model="ir.rule">
+        <field name="name">AI live turn events: own records only</field>
+        <field name="model_id" ref="model_odoo_ai_turn_live_event"/>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+        <field name="perm_read" eval="True"/><field name="perm_write" eval="False"/><field name="perm_create" eval="False"/><field name="perm_unlink" eval="False"/>
+    </record>
 </odoo>
