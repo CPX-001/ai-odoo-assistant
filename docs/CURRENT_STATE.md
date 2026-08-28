@@ -1,6 +1,6 @@
 # Current implementation state
 
-Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend code is now present through `7dec542a897f453fbe244ae738a2ad2401577260`, but its Odoo/HOOT/browser acceptance is still pending.
+Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`.
 
 This document distinguishes **implemented code** from **formal roadmap acceptance** and from the target in `PRODUCT_VISION.md`.
 
@@ -109,7 +109,7 @@ Current queue behavior includes:
 
 Therefore separate queued turns can be claimed by different slots without one SQL row lock serializing the whole queue.
 
-### P5.1 frontend state now implemented, acceptance pending
+### P5.1 frontend state implemented and accepted
 
 The browser no longer relies solely on one panel-global execution owner. `zzz_assistant_turn_scope_service.js` introduces a per-conversation in-memory scope for:
 
@@ -125,7 +125,7 @@ messages
 
 The existing panel fields remain the projection of the currently visible scope so P2-P4 UI/contracts are reused rather than replaced.
 
-Intended current behavior is now:
+Accepted current behavior is:
 
 - Chat A can keep running while the user opens history or another/new conversation;
 - Chat B can have its own loading/stream/activity/failure state;
@@ -135,7 +135,9 @@ Intended current behavior is now:
 - model/autonomy controls are no longer disabled merely because the visible chat is running;
 - conversation history can show compact runtime labels.
 
-This is **implemented but not yet formally accepted**. The new HOOT/regression/browser gates recorded in `research/P5.1_TURN_SCOPED_FRONTEND_STATE.md` still need to run in the supported environment.
+The full addon HOOT suite passed with 95 tests/370 assertions, the Odoo addon battery passed with
+106 tests and no failures/errors, affected P2-P4 real regressions passed, and all three focused P5.1
+browser gates passed. See `research/evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`.
 
 Two cron slots are not the final capacity policy. P5.2 will measure/configure provider/server capacity, fairness and backpressure after P5.1 acceptance.
 
@@ -271,7 +273,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS — P5.1 LOCAL_VALIDATION_REQUIRED
+P5 IN_PROGRESS — P5.1 COMPLETE; P5.2 READY
 P6+ NOT ELIGIBLE
 ```
 
@@ -287,4 +289,4 @@ The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` and the acti
 
 ## 14. Next action
 
-Validate P5.1 before starting P5.2: run the new HOOT turn-scope tests, rerun affected P2-P4 regressions, and exercise the real browser paths for A-running -> switch/new B -> submit B -> return A, settings changes during A, and close/reopen without cancellation/restart or cross-chat leakage. Repair the smallest P5.1 owner on any failure.
+Define the bounded P5.2 scheduler concurrency/backpressure contract from measured current two-slot behavior, then implement and validate that slice without pulling in P5.3 settings semantics or later Phase 5 work.

@@ -1,9 +1,10 @@
 # Stabilization execution state
 
-State format: 6
+State format: 7
 Updated: 2026-08-28  
 Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
-P5.1 implementation lineage through: `7dec542a897f453fbe244ae738a2ad2401577260`
+Accepted P5.1 implementation lineage through: `f7f924ce944db86e896745fef83ea2fb6fd6583a`
+P5.1 validation harness lineage through: `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
@@ -13,20 +14,20 @@ phase: 5
 phase_name: natural non-blocking multi-chat product
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P5.1-turn-scoped-frontend-state
-active_slice_record: docs/research/P5.1_TURN_SCOPED_FRONTEND_STATE.md
-active_slice_state: LOCAL_VALIDATION_REQUIRED
+active_slice: P5.2-scheduler-concurrency-backpressure
+active_slice_record: docs/research/P5.2_SCHEDULER_PREPARATION.md
+active_slice_state: READY
 current_gate_type: CONTRACT_AND_DETERMINISTIC
-blocking_validations: P5.1-HOOT-TURN-SCOPES, P5.1-P2-P4-REGRESSION, P5.1-BROWSER-MULTICHAT, P5.1-BROWSER-SETTINGS-SNAPSHOT, P5.1-BROWSER-REOPEN
-accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9
-acceptance_evidence: docs/research/evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md
-next_slice: NONE_UNTIL_P5.1_DETERMINISTIC_VALIDATION
+blocking_validations: NONE
+accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a
+acceptance_evidence: docs/research/evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md
+next_slice: P5.2-scheduler-concurrency-backpressure
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
 Phases 0 through 4 are complete. The ordered P2 -> P3 -> P4 real Odoo/browser/provider acceptance
-chain passed on one linear code lineage. P5.1 production code is now landed, but it is **not accepted**
-until its deterministic/regression browser validation is executed successfully.
+chain passed on one linear code lineage. P5.1 production code and its deterministic, Odoo and real
+browser/provider acceptance are complete. P5.2 is eligible but has not been implemented.
 
 ---
 
@@ -193,7 +194,7 @@ P14 additional surfaces/automation/MCP
 P15 additional providers
 ```
 
-## P5.1 Turn-scoped frontend/background state — LOCAL_VALIDATION_REQUIRED
+## P5.1 Turn-scoped frontend/background state — COMPLETE
 
 Implementation record:
 
@@ -216,11 +217,17 @@ Landed behavior includes:
 - close/reopen keeps the web-client scope and does not intentionally cancel/restart server work;
 - focused HOOT contract tests are present.
 
-Syntax/XML preparation checks passed while authoring, but the supported Odoo/HOOT/browser runtime
-was not available in this ChatGPT connector execution. Therefore no deterministic or real P5 gate is
-recorded PASS yet.
+Accepted validation:
 
-P5.2 is not eligible until the P5.1 deterministic/regression gates are processed.
+```text
+P5.1-HOOT-TURN-SCOPES           | PASS | 95 tests / 370 assertions
+P5.1-P2-P4-REGRESSION           | PASS | P2 five, P3 representative two, P4 representative two
+P5.1-BROWSER-MULTICHAT          | PASS
+P5.1-BROWSER-SETTINGS-SNAPSHOT  | PASS
+P5.1-BROWSER-REOPEN             | PASS
+```
+
+Evidence: `evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`.
 
 ---
 
@@ -228,7 +235,6 @@ P5.2 is not eligible until the P5.1 deterministic/regression gates are processed
 
 These limitations define the remaining Phase 5 and later work:
 
-- P5.1 turn-scoped frontend state is landed but still needs deterministic/real product-path acceptance;
 - background scopes are currently web-client memory; durable reconnect/continuity is expanded later in P5;
 - backend currently has two cron slots rather than a measured/configurable concurrency/backpressure policy (P5.2);
 - post-effect verified actions still need provider continuation/natural synthesis (P5.5);
@@ -258,15 +264,13 @@ These limitations define the remaining Phase 5 and later work:
 
 # Exact next action
 
-Validate **P5.1 turn-scoped frontend/background state** before selecting another implementation slice:
+Define and implement only **P5.2 scheduler concurrency/backpressure**:
 
 ```text
-1. run HOOT including assistant_turn_scope_service.test.js;
-2. rerun affected P2 failure, P3 public-activity and P4 answer-stream regressions;
-3. exercise A running -> switch/new B -> submit B -> return A;
-4. exercise model/autonomy change while A runs and verify A's captured snapshot is unchanged;
-5. exercise close/reopen while A runs and verify no cancel/restart/cross-chat event leak.
+1. measure current two-slot behavior and provider/server capacity;
+2. define an explicit bounded admission/backpressure and fairness contract;
+3. preserve per-turn authority, cancellation, leases and durable recovery;
+4. add deterministic and real gates before changing the current capacity default.
 ```
 
-Repair the smallest owning P5.1 layer on any failure. Only after the P5.1 deterministic/real acceptance
-state is updated may execution consider P5.2 scheduler concurrency/backpressure.
+Do not fold P5.3 settings semantics, post-effect synthesis or later continuity work into this slice.

@@ -21,9 +21,9 @@ Research documents do not override:
 | `REAL_ENV_VALIDATION_PROTOCOL.md` | Named acceptance checks requiring the real Odoo/browser/provider path. |
 | `FOUNDATION_STABILIZATION_PLAYBOOK.md` | P0-P4 foundation path and historical rationale; newer phase records/current code supersede stale future-state wording inside it. |
 | `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` | P5+ gated product roadmap: non-blocking multi-chat, planning/effects, mini-framework, Evidence/RAG, technical operations, imports, multimodal, extra surfaces and providers. |
-| `P5.1_TURN_SCOPED_FRONTEND_STATE.md` | Active P5.1 implementation/validation record for per-conversation frontend execution ownership. |
+| `P5.1_TURN_SCOPED_FRONTEND_STATE.md` | Completed P5.1 implementation/validation record for per-conversation frontend execution ownership. |
 | `P5.1_VALIDATION_RUNBOOK.md` | Executable P5.1 handoff for HOOT/regression plus real multi-chat, settings-snapshot and reopen browser checks. |
-| `P5.2_SCHEDULER_PREPARATION.md` | Preparation-only analysis for the next scheduler concurrency/backpressure slice; does not make P5.2 eligible before P5.1 PASS. |
+| `P5.2_SCHEDULER_PREPARATION.md` | Reviewed preparation record for the now-eligible P5.2 scheduler concurrency/backpressure slice. |
 | `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed status record for P3 public activity. |
 | `PHASE4_ANSWER_STREAMING.md` | Formal completed status record for P4 answer streaming. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
@@ -43,7 +43,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS; P5.1 implementation landed, local validation required
+P5 IN_PROGRESS; P5.1 complete, P5.2 ready
 P6+ not eligible
 ```
 
@@ -52,9 +52,12 @@ P6+ not eligible
 The ordered P2 -> P3 -> P4 gates passed on 2026-08-28. The sanitized record is
 `evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md`.
 
-P5.1 must now pass its recorded HOOT/P2-P4 regression and browser multi-chat gates before P5.2 is selected. The executable browser manifest/runner are `tests/e2e/p5_1_real_gates.json` and `tests/e2e/p5_1_turn_scope_browser.mjs`.
+P5.1 passed its recorded HOOT/P2-P4 regression and focused real browser gates on 2026-08-28. The
+sanitized record is `evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`. P5.2 scheduler
+concurrency/backpressure is the next eligible slice.
 
-While those real gates are pending, `P5.2_SCHEDULER_PREPARATION.md` may be used to reduce design uncertainty only. It must be rechecked against the tested/repaired P5.1 lineage before any P5.2 runtime change.
+`P5.2_SCHEDULER_PREPARATION.md` remains design guidance rather than implemented behavior. It must be
+turned into a bounded slice with deterministic and real gates before any P5.2 claim is accepted.
 
 ## Recursive execution rule
 
