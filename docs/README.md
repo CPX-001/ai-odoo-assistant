@@ -26,6 +26,7 @@ When documents disagree, use:
 | `CAPABILITY_FRAMEWORK.md` | current contract + extension target | Atomic capability authority plus CapabilityProvider/Skill/Context/Evidence direction. |
 | `CHAT_PRODUCT_FLOW.md` | current + next product invariants | Browser-to-Odoo durable turn/live-stream flow and non-blocking multi-chat target. |
 | `KNOWLEDGE_INDEX.md` | target retrieval architecture | Evidence contract, installation intelligence, Knowledge/RAG and ingestion direction. |
+| `FUTURE_MODEL_ROUTING.md` | deferred optional direction | Records late-stage local/multi-model routing without creating an active phase or implementation debt; preserves only lightweight compatibility rules now. |
 | `QUERY_CONTRACT.md` | current | Schema-first live Odoo query/discovery contract. |
 | `AGENT_RUNTIME_OPTIMIZATION.md` | current guidance | Runtime performance/quality guidance. |
 | `DEPLOYMENT_CONFIG.md` | current | Supported embedded deployment/configuration. |
@@ -75,9 +76,13 @@ P12 controlled source modification
 P13 multimodal/web evidence
 P14 additional surfaces/automation/MCP
 P15 additional providers
+
+Optional post-maturity idea (not a phase): local/multi-model routing; see `FUTURE_MODEL_ROUTING.md`.
 ```
 
 Do not select a later phase merely because implementation ideas exist. Follow the blocking gates in `EXECUTION_STATE.md` and the evolution playbook.
+
+The deferred model-routing note does not alter this chain, add gates or consume look-ahead budget. Unless a future measured use case justifies it, no router/model-profile subsystem should be implemented merely to preserve theoretical flexibility.
 
 ## No GitHub Actions for roadmap validation
 
