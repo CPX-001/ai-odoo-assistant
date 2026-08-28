@@ -1,81 +1,109 @@
 # Research and execution guidance
 
-This directory contains **living decision-support and implementation playbooks** derived from current repository inspection plus external research.
-
-It is deliberately separate from the current-state documents in `docs/README.md`.
+This directory contains living implementation playbooks, validation records and decision-support material. It is separate from current implementation authority in `docs/`.
 
 ## Authority
 
-Documents here do **not** override:
+Research documents do not override:
 
 1. current code on `main` plus accepted ADRs;
 2. current documents listed in `docs/README.md`;
-3. deterministic tests exercising the current runtime.
+3. current deterministic tests.
 
-They exist to answer a different question: **what should be done next, in what order, and what evidence is required before moving on?**
+`docs/PRODUCT_VISION.md` defines intended product direction. The playbooks here turn that direction into ordered slices and gates; they do not claim future behavior is implemented.
 
-Every playbook must record the inspected commit and research date. Revalidate it when product code advances materially.
-
-## Current execution documents
+## Primary execution documents
 
 | Document | Purpose |
 | --- | --- |
-| `FOUNDATION_STABILIZATION_PLAYBOOK.md` | Step-by-step path from the current fragile chat/runtime experience to a stable, observable, provider-neutral foundation before adding major RAG/features. |
-| `E2E_AGENT_LOOP_CONVERGENCE.md` | Detailed Apexive-vs-Assistant diagnosis and ordered convergence plan for a host-owned Codex decision loop without changing the UI or authority model. |
-| `IMPLEMENTATION_PROMPT_CODEX_E2E.md` | Self-contained prompt for implementing the convergence one validated slice at a time. |
-| `EXECUTION_STATE.md` | Persistent cursor for recursive/multi-run execution: active phase/slice, blockers, validations and exact next action. |
-| `CONTINUOUS_EXECUTION_PROTOCOL.md` | Rules for repeatedly resuming the roadmap from Git without relying on chat memory, including slice sizing, stop rules and validation semantics. |
-| `REAL_ENV_VALIDATION_PROTOCOL.md` | Named tests that must be performed against real Odoo 18 + Codex before selected slices/phases may close. |
-| `ACTION_DIAGNOSTIC_EVIDENCE.md` | Sanitized boundary-level evidence required when debugging the active Phase 0 ACTION gate. |
-| `SLICE_TEMPLATE.md` | Template for atomic roadmap slices with deterministic and real-environment gates. |
-| `PHASE0_BASELINE.md` | Completed reproducible-baseline record: scenario catalog, timing/error capture contract, measurement hooks and exact real-environment evidence. |
-| `PHASE1_PROVIDER_BOUNDARY.md` | Completed provider-boundary record, deterministic coverage and exact real Odoo+Codex completion evidence. |
-| `PHASE2_FAILURE_CONTRACT.md` | Structured-failure-contract phase record covering P2.1/P2.2 and the historical P2.3 handoff. The current P2.4 cursor is in `EXECUTION_STATE.md`. |
-| `P2.3_TURN_FAILURE_PERSISTENCE.md` | Completed P2.3 implementation/real-Odoo validation record for durable terminal failure persistence/browser projection. |
-| `P2.4_BROWSER_FAILURE_PRESENTATION.md` | Implemented browser failure consumer/presentation and its hard real-environment completion gate. |
-| `PHASE3_PUBLIC_ACTIVITY_PREPARATION.md` | Independent Phase 3 contract/test preparation allowed while production Phase 3 remains blocked by the Phase 2 hard gate. |
-| `PHASE23_REAL_VALIDATION_RUNBOOK.md` | Repeatable environment, backend selector, HOOT/browser and cleanup commands for the nine P2/P3 real gates. |
+| `EXECUTION_STATE.md` | Current cursor, blockers, validation debt and exact next action. |
+| `CONTINUOUS_EXECUTION_PROTOCOL.md` | Restartable multi-run execution and validation rules. |
+| `REAL_ENV_VALIDATION_PROTOCOL.md` | Named acceptance checks requiring the real Odoo/browser/provider path. |
+| `FOUNDATION_STABILIZATION_PLAYBOOK.md` | P0-P4 foundation path and historical rationale. |
+| `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` | P5+ gated product roadmap: non-blocking multi-chat, planning/effects, mini-framework, Evidence/RAG, technical operations, imports, multimodal, extra surfaces and providers. |
+| `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
+| `SLICE_TEMPLATE.md` | Atomic implementation slice template. |
+| `PHASE23_REAL_VALIDATION_RUNBOOK.md` | Reproducible P2/P3 validation procedure. |
+| `PHASE34_REAL_VALIDATION_RUNBOOK.md` | Reproducible P3/P4 validation procedure for landed code. |
+
+Supporting phase/evidence records remain in this directory and under `evidence/`.
+
+## Current formal cursor
+
+```text
+P0 COMPLETE
+P1 COMPLETE
+P2 REAL_ENV_VALIDATION_REQUIRED
+P3 implementation landed; acceptance blocked by P2
+P4 implementation landed; acceptance blocked by P2/P3
+P5+ not eligible
+```
+
+`EXECUTION_STATE.md` is authoritative for exact gate IDs.
+
+P3/P4 code was bounded look-ahead to make one reproducible validation session possible. Do not stack P5 contract changes before the ordered P2 -> P3 -> P4 hard gates are processed.
 
 ## Recursive execution rule
 
-A repeated AI/Codex run must reconstruct the next action from `EXECUTION_STATE.md` and current `main`; it must not rely on the previous chat saying `continue`.
-
-The intended loop is:
+Each independent implementation run reconstructs state from Git:
 
 ```text
 inspect current main
--> read execution cursor
--> select one coherent slice
--> implement
--> run only tests genuinely available
--> request/consume real Odoo+Codex evidence when required
--> update state/evidence
--> commit coherent checkpoint
--> next run re-inspects from Git
+ -> read repository instructions and docs index
+ -> read EXECUTION_STATE
+ -> process new validation evidence first
+ -> repair failed hard gate if any
+ -> otherwise select one eligible coherent slice
+ -> inspect current code/ADRs/tests
+ -> implement
+ -> run only available validation
+ -> update evidence/state/docs
+ -> publish coherent checkpoint
 ```
 
-If the active state is `REAL_ENV_VALIDATION_REQUIRED` or `LOCAL_VALIDATION_REQUIRED` and no new evidence exists for a hard blocking gate, the run must stop rather than start dependent later-phase work.
+Never continue purely from previous chat memory.
+
+## Validation layers
+
+A phase/slice is not complete merely because code exists.
+
+Use as applicable:
+
+```text
+static/contract review
+deterministic executable tests
+agentic/product evals
+real Odoo/browser/provider acceptance
+```
+
+Hard gates block dependent contracts. Soft debt is allowed only when explicitly classified by the execution protocol.
+
+## External implementation references
+
+External Odoo projects are implementation references, not authority replacements:
+
+- OCA `queue_job`: configurable channels/capacity, parallel background jobs and stale-job recovery;
+- OCA `base_import_async`: large imports moved to background processing;
+- OCA `ai_tool`: reusable AI tool concepts across native/MCP-style surfaces;
+- Odoo AI Server Actions: manager/tool separation;
+- Apexive `odoo-llm`: providers, decorator-based tools, Knowledge/RAG/citations, domain tools and MCP breadth;
+- OpenAI Agents/Pydantic-style namespaces/capability loading: progressive disclosure patterns.
+
+For every borrowed pattern record what concrete problem it solves here and what authority/runtime behavior is deliberately not copied.
 
 ## No GitHub Actions
 
-The current roadmap must **not** use GitHub Actions for scheduled continuation, CI gates or validation because no GitHub runners/workers are available for this project at present.
+Do not use GitHub Actions for this roadmap while repository instructions say no usable runners/workers are available. Required tests run in an environment that actually provides the needed Odoo/provider/browser dependencies; unrun tests remain pending.
 
-Tests still remain mandatory. They must be executed in an environment that actually has the required repository/Odoo/Codex runtime, and unrun tests must remain explicitly pending.
+## Research document rules
 
-## Rules for research documents
+A playbook should:
 
-A research/playbook document should:
-
-- start from current code, not from a PDF or external framework;
-- distinguish observed behavior from proposed behavior;
-- cite the exact external pattern being borrowed and also what is rejected;
-- turn recommendations into ordered work packages with exit gates;
-- make unsafe shortcuts and tempting out-of-order work explicit;
-- define when an architectural decision needs an ADR;
-- include tests/evals/metrics that decide whether the next phase is allowed to start;
-- distinguish deterministic validation from evidence that requires a real Odoo+Codex environment;
-- never mark a phase complete because a test could not be run.
-
-For active provider/ACTION failures, sanitized reports must preserve enough host-owned boundary metadata to identify the failing layer. Capability identifiers, normalized state/error codes, timings and bounded planning counts/source labels are acceptable; raw prompts, arguments/results, business values, credentials, provider stdout/stderr and private reasoning are not.
-
-The goal is to make progress possible without repeatedly redesigning the roadmap in chat.
+- start from current code rather than an old report;
+- distinguish observed from proposed behavior;
+- record inspected baseline/date;
+- define implementable slices and exit gates;
+- identify ADR requirements;
+- preserve current authority/recovery invariants;
+- avoid premature technology choices when evals can decide them;
+- be updated/superseded when newer code invalidates assumptions.
