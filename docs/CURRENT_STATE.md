@@ -1,6 +1,6 @@
 # Current implementation state
 
-Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`.
+Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2a scheduler capacity/causal-claim code is landed through `5b952e4d47f0d59ed266df8b7803a88909bcfce0` with follow-up test/refactor commits on top, but its focused Odoo validation is still pending.
 
 This document distinguishes **implemented code** from **formal roadmap acceptance** and from the target in `PRODUCT_VISION.md`.
 
@@ -101,13 +101,17 @@ Backend turns are genuinely asynchronous/durable.
 
 Current queue behavior includes:
 
-- two `ir.cron` runner slots;
+- two physical `ir.cron` runner slots;
 - lease token/expiry;
 - bounded attempts;
 - cancellation/stale recovery;
-- `FOR UPDATE SKIP LOCKED` claim.
+- existing `FOR UPDATE SKIP LOCKED` row claiming;
+- P5.2a installation-wide logical concurrency ceiling, currently supported at 1..2;
+- transaction-scoped PostgreSQL advisory coordination around admission/claim only;
+- same-conversation causal eligibility based on predecessor turn identity;
+- `awaiting_confirmation` blocks later turns in that conversation without consuming worker capacity.
 
-Therefore separate queued turns can be claimed by different slots without one SQL row lock serializing the whole queue.
+The P5.2a scheduler overlay is implemented but **not yet formally accepted**. Its focused independent-cursor/thread Odoo tests and queue/failure regressions still need to execute. P5.2b will add fairness/anti-starvation and canonical wake-up when capacity is released after P5.2a validation.
 
 ### P5.1 frontend state implemented and accepted
 
@@ -138,8 +142,6 @@ Accepted current behavior is:
 The full addon HOOT suite passed with 95 tests/370 assertions, the Odoo addon battery passed with
 106 tests and no failures/errors, affected P2-P4 real regressions passed, and all three focused P5.1
 browser gates passed. See `research/evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`.
-
-Two cron slots are not the final capacity policy. P5.2 will measure/configure provider/server capacity, fairness and backpressure after P5.1 acceptance.
 
 ## 7. Structured failures — Phase 2 complete
 
@@ -273,7 +275,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS — P5.1 COMPLETE; P5.2 READY
+P5 IN_PROGRESS — P5.1 COMPLETE; P5.2a LOCAL_VALIDATION_REQUIRED
 P6+ NOT ELIGIBLE
 ```
 
@@ -285,8 +287,8 @@ P2 five PASS
    -> P4 four PASS
 ```
 
-The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` and the active slice record is `research/P5.1_TURN_SCOPED_FRONTEND_STATE.md`.
+The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` and the active slice record is `research/P5.2A_SCHEDULER_CAPACITY_CAUSALITY.md`.
 
 ## 14. Next action
 
-Define the bounded P5.2 scheduler concurrency/backpressure contract from measured current two-slot behavior, then implement and validate that slice without pulling in P5.3 settings semantics or later Phase 5 work.
+Validate P5.2a with its focused Odoo scheduler tests plus existing turn queue/failure regressions. If those deterministic checks pass, implement P5.2b fairness, anti-starvation and capacity-release wake-up; do not start P5.3 or later Phase 5 work yet.
