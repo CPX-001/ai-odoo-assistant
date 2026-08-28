@@ -10,6 +10,8 @@ from . import test_chat_preferences as test_chat_preferences
 from . import test_chat_storage as test_chat_storage
 from . import test_e2e_convergence_battery as test_e2e_convergence_battery
 from . import test_embedded_agent_runtime as test_embedded_agent_runtime
+from . import test_phase2_browser_failure_projection as test_phase2_browser_failure_projection
+from . import test_phase3_public_activity_real_gates as test_phase3_public_activity_real_gates
 from . import test_runtime_account as test_runtime_account
 from . import test_runtime_account_gate as test_runtime_account_gate
 from . import test_turn_failure as test_turn_failure
