@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import replace
 
@@ -21,6 +22,8 @@ from .contracts import (
 from .policy import CapabilityPolicy, ExecutionAuthority
 from .registry import CapabilityRegistry
 from .validation import validate_payload
+
+_PUBLIC_MODEL = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
 
 
 class CapabilityExecutor:
@@ -50,10 +53,11 @@ class CapabilityExecutor:
             raise CapabilityError("capability_preview_authority_invalid")
         if definition.preview_handler is None:
             raise CapabilityError("capability_preview_unavailable")
+        public = _public_operation_payload(definition.name, payload)
         context.emit(
             "tool.preview.started",
             definition.title or definition.name,
-            {"capability": definition.name},
+            public,
         )
         raw = await self._invoke(
             definition.preview_handler,
@@ -63,6 +67,7 @@ class CapabilityExecutor:
             failure_event="tool.preview.failed",
             title=definition.title or definition.name,
             capability=definition.name,
+            public_payload=public,
         )
         if not isinstance(raw, CapabilityPreview):
             raise CapabilityError("capability_preview_invalid")
@@ -74,7 +79,7 @@ class CapabilityExecutor:
         context.emit(
             "tool.preview.completed",
             definition.title or definition.name,
-            {"capability": definition.name},
+            public,
         )
         return CapabilityPreview(
             summary=dict(raw.summary),
@@ -102,10 +107,11 @@ class CapabilityExecutor:
         if calls >= definition.max_calls:
             raise CapabilityError("capability_call_limit_exceeded")
         self._calls[name] = calls + 1
+        public = _public_operation_payload(definition.name, payload)
         context.emit(
             "tool.started",
             definition.title or definition.name,
-            {"capability": definition.name},
+            public,
         )
         raw = await self._invoke(
             definition.handler,
@@ -115,6 +121,7 @@ class CapabilityExecutor:
             failure_event="tool.failed",
             title=definition.title or definition.name,
             capability=definition.name,
+            public_payload=public,
         )
         if isinstance(raw, CapabilityResult):
             result = raw
@@ -132,7 +139,7 @@ class CapabilityExecutor:
         context.emit(
             "tool.completed",
             definition.title or definition.name,
-            {"capability": definition.name},
+            public,
         )
         return CapabilityResult(
             data=output,
@@ -154,10 +161,11 @@ class CapabilityExecutor:
         metadata = dict(context.metadata)
         metadata["capability_result"] = dict(result.data)
         context = replace(context, metadata=metadata)
+        public = _public_operation_payload(definition.name, payload)
         context.emit(
             "tool.verify.started",
             definition.title or definition.name,
-            {"capability": definition.name},
+            public,
         )
         raw = await self._invoke(
             definition.verify_handler,
@@ -167,6 +175,7 @@ class CapabilityExecutor:
             failure_event="tool.verify.failed",
             title=definition.title or definition.name,
             capability=definition.name,
+            public_payload=public,
         )
         if not isinstance(raw, CapabilityVerification):
             raise CapabilityError("capability_verification_invalid")
@@ -179,13 +188,13 @@ class CapabilityExecutor:
             context.emit(
                 "tool.verify.failed",
                 definition.title or definition.name,
-                {"capability": definition.name, "code": "capability_verification_failed"},
+                {**public, "code": "capability_verification_failed"},
             )
             raise CapabilityError("capability_verification_failed")
         context.emit(
             "tool.verify.completed",
             definition.title or definition.name,
-            {"capability": definition.name},
+            public,
         )
         return CapabilityVerification(verified=True, summary=dict(raw.summary))
 
@@ -226,6 +235,7 @@ class CapabilityExecutor:
         failure_event,
         title,
         capability,
+        public_payload,
     ):
         try:
             raw = handler(context, payload)
@@ -239,23 +249,41 @@ class CapabilityExecutor:
             context.emit(
                 failure_event,
                 title,
-                {"capability": capability, "code": "capability_timeout"},
+                {**public_payload, "code": "capability_timeout"},
             )
             raise CapabilityError("capability_timeout") from error
         except CapabilityError as error:
             context.emit(
                 failure_event,
                 title,
-                {"capability": capability, "code": error.code},
+                {**public_payload, "code": error.code},
             )
             raise
         except Exception as error:  # noqa: BLE001 - framework boundary sanitizes providers
             context.emit(
                 failure_event,
                 title,
-                {"capability": capability, "code": "capability_handler_failed"},
+                {**public_payload, "code": "capability_handler_failed"},
             )
             raise CapabilityError("capability_handler_failed") from error
+
+
+def _public_operation_payload(name, payload):
+    """Project only schema-validated non-secret resource identifiers into host activity.
+
+    The capability name and title come from trusted installed ``CapabilityDefinition`` code.
+    ``model``/``record_id`` are copied only after the input schema has validated the payload;
+    arbitrary arguments, filters, values, tool results and display names never cross this seam.
+    """
+
+    result = {"capability": name}
+    model = payload.get("model")
+    if isinstance(model, str) and _PUBLIC_MODEL.fullmatch(model):
+        result["model"] = model
+    record_id = payload.get("record_id")
+    if type(record_id) is int and record_id > 0:
+        result["record_id"] = record_id
+    return result
 
 
 def _validate_bounded_mapping(value, *, maximum, code):
