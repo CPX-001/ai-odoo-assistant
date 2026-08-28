@@ -1,7 +1,10 @@
 """Independent browser-safe activity and answer-delta persistence for Assistant turns.
 
-Live rows use their own short cursor/transaction. They never commit the worker's business cursor,
-authorize a capability, or change write/recovery authority.
+Live rows intentionally do not have a foreign key to ``odoo.ai.turn``. A child FK insert can wait
+on a worker-held turn-row lock, defeating pre-final visibility. The independent store copies only
+the committed turn binding (integer id, UUID, user and company), serializes its own sequence with a
+PostgreSQL advisory transaction lock and commits only its short live cursor. It never commits the
+worker's business cursor, authorizes a capability, or changes write/recovery authority.
 """
 
 from __future__ import annotations
@@ -49,18 +52,14 @@ _INTERNAL_ACTIVITY = {
 class AssistantTurnLiveEvent(models.Model):
     _name = "odoo.ai.turn.live.event"
     _description = "Odoo AI Assistant Browser-safe Live Event"
-    _order = "turn_id, sequence"
+    _order = "turn_ref_id, sequence"
     _log_access = False
 
-    turn_id = fields.Many2one(
-        "odoo.ai.turn", required=True, readonly=True, index=True, ondelete="cascade"
-    )
-    user_id = fields.Many2one(
-        "res.users", related="turn_id.user_id", store=True, readonly=True, index=True
-    )
-    company_id = fields.Many2one(
-        "res.company", related="turn_id.company_id", store=True, readonly=True, index=True
-    )
+    # No FK to odoo.ai.turn: see module docstring and P3-REAL-LIVE-VISIBILITY.
+    turn_ref_id = fields.Integer(required=True, readonly=True, index=True)
+    turn_uuid = fields.Char(required=True, readonly=True, index=True, size=64)
+    user_id = fields.Many2one("res.users", required=True, readonly=True, index=True)
+    company_id = fields.Many2one("res.company", required=True, readonly=True, index=True)
     sequence = fields.Integer(required=True, readonly=True, index=True)
     channel = fields.Selection(
         [("activity", "Activity"), ("answer", "Answer")],
@@ -78,12 +77,17 @@ class AssistantTurnLiveEvent(models.Model):
     progress_set = fields.Boolean(readonly=True, default=False)
     diagnostic_code = fields.Char(readonly=True, size=128)
     answer_delta = fields.Text(readonly=True)
-    occurred_at = fields.Datetime(required=True, readonly=True, default=fields.Datetime.now, index=True)
+    occurred_at = fields.Datetime(
+        required=True,
+        readonly=True,
+        default=fields.Datetime.now,
+        index=True,
+    )
 
     _sql_constraints = [
         (
             "turn_live_sequence_unique",
-            "unique(turn_id, sequence)",
+            "unique(turn_ref_id, sequence)",
             "Assistant live-event sequence must be unique.",
         ),
     ]
@@ -128,7 +132,7 @@ class AssistantTurnLiveEvent(models.Model):
         try:
             event = PublicTurnEvent(
                 sequence=self.sequence,
-                turn_id=self.turn_id.turn_uuid,
+                turn_id=self.turn_uuid,
                 kind=self.kind,
                 phase=self.phase,
                 status=self.status,
@@ -152,12 +156,16 @@ class AssistantTurnLiveEvent(models.Model):
                 "event": self.activity_browser_view(),
             }
         text = self.answer_delta
-        if not isinstance(text, str) or not 1 <= len(text) <= _MAX_ANSWER_DELTA or "\x00" in text:
+        if (
+            not isinstance(text, str)
+            or not 1 <= len(text) <= _MAX_ANSWER_DELTA
+            or "\x00" in text
+        ):
             raise ValidationError("Invalid persisted Assistant answer delta")
         return {
             "sequence": self.sequence,
             "channel": "answer",
-            "turn_id": self.turn_id.turn_uuid,
+            "turn_id": self.turn_uuid,
             "text": text,
             "occurred_at": _iso_utc(self.occurred_at),
         }
@@ -177,7 +185,11 @@ class AssistantTurnEventLiveBridge(models.Model):
         diagnostic_code=None,
     ):
         if event_type == "answer.delta":
-            if diagnostic_code is not None or not isinstance(payload, dict) or set(payload) != {"text"}:
+            if (
+                diagnostic_code is not None
+                or not isinstance(payload, dict)
+                or set(payload) != {"text"}
+            ):
                 raise ValidationError("Invalid Assistant answer-delta bridge")
             self.env["odoo.ai.turn.live.event"].append_answer_delta_independent(
                 turn_id=turn.id,
@@ -188,8 +200,14 @@ class AssistantTurnEventLiveBridge(models.Model):
             if diagnostic_code is not None or not isinstance(payload, dict):
                 raise ValidationError("Invalid Assistant public-activity bridge")
             expected = {
-                "kind", "phase", "status", "label", "resource", "capability",
-                "progress", "diagnostic_code",
+                "kind",
+                "phase",
+                "status",
+                "label",
+                "resource",
+                "capability",
+                "progress",
+                "diagnostic_code",
             }
             if set(payload) != expected:
                 raise ValidationError("Invalid Assistant public-activity bridge")
@@ -199,13 +217,8 @@ class AssistantTurnEventLiveBridge(models.Model):
             )
             return self.browse()
 
-        record = super().append_for_turn(
-            turn=turn,
-            event_type=event_type,
-            title=title,
-            payload=payload,
-            diagnostic_code=diagnostic_code,
-        )
+        # Project before the historical event mutates ``turn.last_event_sequence`` on the worker
+        # cursor. With no FK this is non-blocking even when other business fields are already dirty.
         projection = _public_projection(event_type, title, payload, diagnostic_code)
         if projection is not None:
             try:
@@ -215,11 +228,18 @@ class AssistantTurnEventLiveBridge(models.Model):
                 )
             except Exception:  # noqa: BLE001 - public UX never controls business success
                 pass
-        return record
+        return super().append_for_turn(
+            turn=turn,
+            event_type=event_type,
+            title=title,
+            payload=payload,
+            diagnostic_code=diagnostic_code,
+        )
 
     @api.model
     def append_public_independent(self, *, turn_id, **values):
         """Closed compatibility API used by the Phase 3 acceptance harness."""
+
         return self.env["odoo.ai.turn.live.event"].append_activity_independent(
             turn_id=turn_id,
             **values,
@@ -231,10 +251,26 @@ class AssistantTurnLiveProjection(models.Model):
 
     @api.model
     def public_events_for_current_user(self, turn_uuid, *, after_sequence=0):
-        payload = self.live_for_current_user(turn_uuid, after_sequence=after_sequence)
-        events = [item["event"] for item in payload["items"] if item["channel"] == "activity"]
-        last = max((event["sequence"] for event in events), default=after_sequence)
-        return {"events": events, "last_sequence": last, "has_more": payload["has_more"]}
+        if type(after_sequence) is not int or after_sequence < 0:
+            raise ValidationError("Invalid Assistant public-activity cursor")
+        turn = self._owned_turn(turn_uuid)
+        rows = self.env["odoo.ai.turn.live.event"].search(
+            [
+                ("turn_ref_id", "=", turn.id),
+                ("turn_uuid", "=", turn.turn_uuid),
+                ("channel", "=", "activity"),
+                ("sequence", ">", after_sequence),
+            ],
+            order="sequence",
+            limit=_MAX_LIVE_PAGE + 1,
+        )
+        has_more = len(rows) > _MAX_LIVE_PAGE
+        page = rows[:_MAX_LIVE_PAGE]
+        return {
+            "events": [row.activity_browser_view() for row in page],
+            "last_sequence": page[-1].sequence if page else after_sequence,
+            "has_more": has_more,
+        }
 
     @api.model
     def live_for_current_user(self, turn_uuid, *, after_sequence=0):
@@ -242,7 +278,11 @@ class AssistantTurnLiveProjection(models.Model):
             raise ValidationError("Invalid Assistant live-event cursor")
         turn = self._owned_turn(turn_uuid)
         rows = self.env["odoo.ai.turn.live.event"].search(
-            [("turn_id", "=", turn.id), ("sequence", ">", after_sequence)],
+            [
+                ("turn_ref_id", "=", turn.id),
+                ("turn_uuid", "=", turn.turn_uuid),
+                ("sequence", ">", after_sequence),
+            ],
             order="sequence",
             limit=_MAX_LIVE_PAGE + 1,
         )
@@ -298,12 +338,12 @@ def _resource_from_payload(payload):
 
 
 def _append_activity(dbname, *, turn_id, **data):
-    with _live_cursor(dbname, turn_id) as (cr, env, turn, sequence):
+    with _live_cursor(dbname, turn_id) as (cr, env, binding, sequence):
         occurred_at = fields.Datetime.now()
         try:
             event = PublicTurnEvent(
                 sequence=sequence,
-                turn_id=turn.turn_uuid,
+                turn_id=binding["turn_uuid"],
                 occurred_at=_iso_utc(occurred_at),
                 **data,
             )
@@ -311,7 +351,7 @@ def _append_activity(dbname, *, turn_id, **data):
             raise ValidationError("Invalid Assistant public activity") from error
         record = env["odoo.ai.turn.live.event"].create(
             {
-                "turn_id": turn.id,
+                **_binding_values(binding),
                 "sequence": sequence,
                 "channel": "activity",
                 "kind": event.kind,
@@ -332,17 +372,22 @@ def _append_activity(dbname, *, turn_id, **data):
 
 
 def _append_answer(dbname, *, turn_id, text):
-    if not isinstance(text, str) or not 1 <= len(text) <= _MAX_ANSWER_DELTA or "\x00" in text:
+    if (
+        not isinstance(text, str)
+        or not 1 <= len(text) <= _MAX_ANSWER_DELTA
+        or "\x00" in text
+    ):
         raise ValidationError("Invalid Assistant answer delta")
-    with _live_cursor(dbname, turn_id) as (cr, env, turn, sequence):
-        if turn.state != "running":
+    with _live_cursor(dbname, turn_id) as (cr, env, binding, sequence):
+        if binding["state"] != "running":
             raise ValidationError("Assistant answer delta requires a running turn")
         live = env["odoo.ai.turn.live.event"]
-        previous = live.search(
-            [("turn_id", "=", turn.id), ("channel", "=", "answer")],
-            order="sequence",
-            limit=_MAX_LIVE_EVENTS,
-        )
+        domain = [
+            ("turn_ref_id", "=", binding["turn_ref_id"]),
+            ("turn_uuid", "=", binding["turn_uuid"]),
+            ("channel", "=", "answer"),
+        ]
+        previous = live.search(domain, order="sequence", limit=_MAX_LIVE_EVENTS)
         total = sum(len(row.answer_delta or "") for row in previous)
         if total + len(text) > _MAX_ANSWER_CHARS:
             raise ValidationError("Assistant answer-delta budget exceeded")
@@ -351,7 +396,7 @@ def _append_answer(dbname, *, turn_id, text):
             started_at = fields.Datetime.now()
             started = PublicTurnEvent(
                 sequence=sequence,
-                turn_id=turn.turn_uuid,
+                turn_id=binding["turn_uuid"],
                 kind="agent.answer.started",
                 phase="answer",
                 status="running",
@@ -364,7 +409,7 @@ def _append_answer(dbname, *, turn_id, text):
             )
             live.create(
                 {
-                    "turn_id": turn.id,
+                    **_binding_values(binding),
                     "sequence": sequence,
                     "channel": "activity",
                     "kind": started.kind,
@@ -385,7 +430,7 @@ def _append_answer(dbname, *, turn_id, text):
 
         record = live.create(
             {
-                "turn_id": turn.id,
+                **_binding_values(binding),
                 "sequence": sequence,
                 "channel": "answer",
                 "answer_delta": text,
@@ -407,12 +452,44 @@ def _live_cursor(dbname, turn_id):
         turn = env["odoo.ai.turn"].browse(turn_id).exists()
         if not turn:
             raise ValidationError("Assistant live-event turn not found")
+        binding = {
+            "turn_ref_id": turn.id,
+            "turn_uuid": turn.turn_uuid,
+            "user_id": turn.user_id.id,
+            "company_id": turn.company_id.id,
+            "state": turn.state,
+        }
+        if (
+            not isinstance(binding["turn_uuid"], str)
+            or not binding["turn_uuid"]
+            or type(binding["user_id"]) is not int
+            or binding["user_id"] <= 0
+            or type(binding["company_id"]) is not int
+            or binding["company_id"] <= 0
+        ):
+            raise ValidationError("Invalid Assistant live-event binding")
         live = env["odoo.ai.turn.live.event"]
-        last = live.search([("turn_id", "=", turn.id)], order="sequence desc", limit=1)
+        last = live.search(
+            [
+                ("turn_ref_id", "=", turn.id),
+                ("turn_uuid", "=", turn.turn_uuid),
+            ],
+            order="sequence desc",
+            limit=1,
+        )
         sequence = (last.sequence if last else 0) + 1
         if sequence > _MAX_LIVE_EVENTS:
             raise ValidationError("Assistant live-event budget exceeded")
-        yield cr, env, turn, sequence
+        yield cr, env, binding, sequence
+
+
+def _binding_values(binding):
+    return {
+        "turn_ref_id": binding["turn_ref_id"],
+        "turn_uuid": binding["turn_uuid"],
+        "user_id": binding["user_id"],
+        "company_id": binding["company_id"],
+    }
 
 
 def _require_live_writer(env):
