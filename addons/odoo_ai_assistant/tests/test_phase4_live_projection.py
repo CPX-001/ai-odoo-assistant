@@ -12,6 +12,26 @@ from odoo.tests.common import TransactionCase
 
 
 class TestPhase4LiveProjection(TransactionCase):
+    def setUp(self):
+        self._committed_turn_refs = []
+        # Register before TransactionCase adds its savepoint rollback cleanups so
+        # these externally committed fixtures are removed after that rollback.
+        self.addCleanup(self._cleanup_committed_turns)
+        super().setUp()
+
+    def _cleanup_committed_turns(self):
+        if not self._committed_turn_refs:
+            return
+        turn_ids = [item[0] for item in self._committed_turn_refs]
+        turn_uuids = [item[1] for item in self._committed_turn_refs]
+        with Registry(self.env.cr.dbname).cursor() as cr:
+            env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+            env["odoo.ai.turn.live.event"].search(
+                [("turn_uuid", "in", turn_uuids)]
+            ).unlink()
+            env["odoo.ai.turn"].browse(turn_ids).exists().unlink()
+            cr.commit()
+
     def _committed_turn(self):
         dbname = self.env.cr.dbname
         with Registry(dbname).cursor() as cr:
@@ -30,6 +50,7 @@ class TestPhase4LiveProjection(TransactionCase):
                 }
             )
             result = turn.id, turn.turn_uuid, user.id
+            self._committed_turn_refs.append((turn.id, turn.turn_uuid))
             cr.commit()
             return result
 

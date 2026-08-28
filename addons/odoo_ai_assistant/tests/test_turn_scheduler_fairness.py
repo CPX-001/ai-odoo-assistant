@@ -63,7 +63,13 @@ class TestAssistantTurnSchedulerFairness(TransactionCase):
             with Registry(self.dbname).cursor() as cr:
                 env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
                 if self._turn_ids:
-                    env["odoo.ai.turn"].browse(self._turn_ids).exists().unlink()
+                    turns = env["odoo.ai.turn"].browse(self._turn_ids).exists()
+                    turn_uuids = turns.mapped("turn_uuid")
+                    if turn_uuids:
+                        env["odoo.ai.turn.live.event"].search(
+                            [("turn_uuid", "in", turn_uuids)]
+                        ).unlink()
+                    turns.unlink()
                 if self._conversation_ids:
                     env["odoo.ai.conversation"].browse(
                         self._conversation_ids

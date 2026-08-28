@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from threading import Barrier, Thread
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -134,34 +133,24 @@ class TestAssistantTurnScheduler(TransactionCase):
         with Registry(self.dbname).cursor() as cr:
             env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
             if self._turn_ids:
-                env["odoo.ai.turn"].browse(self._turn_ids).exists().unlink()
+                turns = env["odoo.ai.turn"].browse(self._turn_ids).exists()
+                turn_uuids = turns.mapped("turn_uuid")
+                if turn_uuids:
+                    env["odoo.ai.turn.live.event"].search(
+                        [("turn_uuid", "in", turn_uuids)]
+                    ).unlink()
+                turns.unlink()
             if self._conversation_ids:
                 env["odoo.ai.conversation"].browse(
                     self._conversation_ids
                 ).exists().unlink()
             cr.commit()
 
-    def _concurrent_claims(self, count=2):
-        barrier = Barrier(count + 1)
-        results = [None] * count
-        errors = []
-
-        def claim(index):
-            try:
-                barrier.wait(timeout=5)
-                results[index] = _claim_next_turn(self.dbname)
-            except Exception as error:  # noqa: BLE001 - thread result is asserted below
-                errors.append(error)
-
-        threads = [Thread(target=claim, args=(index,)) for index in range(count)]
-        for thread in threads:
-            thread.start()
-        barrier.wait(timeout=5)
-        for thread in threads:
-            thread.join(timeout=10)
-        self.assertTrue(all(not thread.is_alive() for thread in threads))
-        self.assertFalse(errors)
-        return results
+    def _repeated_claims(self, count=2):
+        # TransactionCase replaces registry cursors with one lock-serialized
+        # TestCursor. Repeated attempts are the deterministic contract here; the
+        # real two-cron browser gates own independent-connection race coverage.
+        return [_claim_next_turn(self.dbname) for _index in range(count)]
 
     def test_registered_cron_method_uses_p5_scheduler_overlay(self):
         with (
@@ -173,11 +162,11 @@ class TestAssistantTurnScheduler(TransactionCase):
         recover.assert_called_once_with(self.dbname)
         claim.assert_called_once_with(self.dbname)
 
-    def test_capacity_one_allows_only_one_of_two_concurrent_claims(self):
+    def test_capacity_one_allows_only_one_of_two_repeated_claim_attempts(self):
         self._set_capacity(1)
         groups = self._create_turns([1, 1])
 
-        results = self._concurrent_claims()
+        results = self._repeated_claims()
 
         claimed = [result for result in results if result is not None]
         self.assertEqual(len(claimed), 1)
@@ -185,11 +174,11 @@ class TestAssistantTurnScheduler(TransactionCase):
         self.assertEqual(list(states.values()).count("running"), 1)
         self.assertEqual(list(states.values()).count("queued"), 1)
 
-    def test_one_queued_turn_is_never_double_claimed_by_two_workers(self):
+    def test_one_queued_turn_is_never_double_claimed_by_repeated_attempts(self):
         self._set_capacity(2)
         only_turn = self._create_turns([1])[0][0]
 
-        results = self._concurrent_claims()
+        results = self._repeated_claims()
 
         claimed = [result for result in results if result is not None]
         self.assertEqual(len(claimed), 1)
