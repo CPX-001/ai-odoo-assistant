@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Print/execute one prepared Phase 2/3 validation step.
 
-The runner never writes PASS evidence. Phase 2 real gates require both the focused
-Odoo regression and the real Chromium product-path observation. Phase 3 remains
-blocked until Phase 2 is formally complete.
+The runner never writes PASS evidence. Real gates require the Odoo regression plus the real
+Chromium product-path observation and sanitized evidence against the exact tested SHA.
+Phase 3 commands are executable now that its production wiring exists, but their results only count
+after all Phase 2 real gates are formally PASS on the same tested checkpoint.
 """
 
 import argparse
@@ -55,14 +56,12 @@ def backend_command(item):
 
 
 def browser_command(item):
-    if item["phase"] == 2:
-        return [
-            "node",
-            "tests/e2e/phase2_real_failure_browser.mjs",
-            "--gate",
-            item["id"],
-        ]
-    return ["node", "tests/e2e/phase23_hoot_gate.mjs"]
+    runner = (
+        "tests/e2e/phase2_real_failure_browser.mjs"
+        if item["phase"] == 2
+        else "tests/e2e/phase3_real_activity_browser.mjs"
+    )
+    return ["node", runner, "--gate", item["id"]]
 
 
 def main():
@@ -76,18 +75,16 @@ def main():
     browser = browser_command(item)
 
     print("BACKEND REGRESSION:", shlex.join(backend))
-    if item["phase"] == 2:
-        print("REAL BROWSER:", shlex.join(browser))
+    print("REAL BROWSER:", shlex.join(browser))
+    print(
+        "SUPPLEMENTAL HOOT:",
+        f"ODOO_AI_HOOT_FILTER={shlex.quote(item['browser_filter'])} "
+        "node tests/e2e/phase23_hoot_gate.mjs",
+    )
+    if item["phase"] == 3:
         print(
-            "SUPPLEMENTAL HOOT:",
-            f"ODOO_AI_HOOT_FILTER={shlex.quote(item['browser_filter'])} "
-            "node tests/e2e/phase23_hoot_gate.mjs",
-        )
-    else:
-        print(
-            "BROWSER (eligible only after Phase 2 COMPLETE):",
-            f"ODOO_AI_HOOT_FILTER={shlex.quote(item['browser_filter'])} "
-            "node tests/e2e/phase23_hoot_gate.mjs",
+            "PHASE 3 ACCEPTANCE PRECONDITION: all five P2-REAL gates must already be PASS "
+            "on the same tested checkpoint; this runner does not infer or write that evidence."
         )
     print("EXPECTED:", item["backend_expected"], "/", item["browser_expected"])
     print("REDACTION:", item["redaction"])
@@ -98,10 +95,6 @@ def main():
         if result.returncode:
             return result.returncode
     if args.execute_browser:
-        if item["phase"] != 2:
-            raise SystemExit(
-                "Phase 3 browser execution is blocked until Phase 2 is formally COMPLETE"
-            )
         result = subprocess.run(browser, cwd=ROOT, check=False)
         if result.returncode:
             return result.returncode
