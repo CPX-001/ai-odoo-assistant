@@ -1,85 +1,106 @@
 # Documentation map
 
-This file defines which repository documents describe the current product and which are retained as historical evidence.
+This file defines which repository documents describe the current product, target product and executable roadmap.
 
 ## Authority order
 
 When documents disagree, use:
 
 1. current code on `main` plus accepted ADRs;
-2. current documents in the table below;
+2. current-state/architecture documents in the table below;
 3. current tests;
-4. dated reports/task packets/research PDFs;
-5. external references.
+4. executable research/playbooks for future work;
+5. dated reports/archive material;
+6. external references.
 
-A dated document never overrides newer code. Architecture changes that intentionally break an accepted invariant require a new or superseding ADR.
+`PRODUCT_VISION.md` is authoritative for intended product direction but **never overrides current code/ADRs as an implementation claim**. Architecture changes that intentionally break an accepted invariant require a new/superseding ADR.
 
 ## Current documents
 
 | Document | Status | Purpose |
 | --- | --- | --- |
-| `CURRENT_STATE.md` | current | Audited snapshot of what exists now and what does not. |
-| `ARCHITECTURE.md` | current | Runtime, authority, persistence and component boundaries. |
-| `UNIFIED_AGENT_RUNTIME.md` | current | Turn lifecycle, reasoning/execution split and recovery. |
-| `CAPABILITY_FRAMEWORK.md` | current | Atomic capability contract, registry/executor and extension direction. |
-| `CHAT_PRODUCT_FLOW.md` | current | Browser-to-Odoo chat/turn/progress lifecycle. |
+| `CURRENT_STATE.md` | current implementation | Audited snapshot of what exists now, including landed-but-unaccepted P3/P4 code and current limitations. |
+| `PRODUCT_VISION.md` | current product direction | Defines the one-global-Agent target: broad Codex-level reasoning with Odoo/host authority, dynamic context/evidence/capabilities, non-blocking multi-chat, RAG and future technical operations. |
+| `ARCHITECTURE.md` | current + target boundaries | Runtime, authority, persistence, concurrency and component boundaries. |
+| `UNIFIED_AGENT_RUNTIME.md` | current | Turn lifecycle, provider/host split and recovery foundations. |
+| `CAPABILITY_FRAMEWORK.md` | current contract + extension target | Atomic capability authority plus CapabilityProvider/Skill/Context/Evidence direction. |
+| `CHAT_PRODUCT_FLOW.md` | current + next product invariants | Browser-to-Odoo durable turn/live-stream flow and non-blocking multi-chat target. |
+| `KNOWLEDGE_INDEX.md` | target retrieval architecture | Evidence contract, installation intelligence, Knowledge/RAG and ingestion direction. |
+| `QUERY_CONTRACT.md` | current | Schema-first live Odoo query/discovery contract. |
+| `AGENT_RUNTIME_OPTIMIZATION.md` | current guidance | Runtime performance/quality guidance. |
+| `DEPLOYMENT_CONFIG.md` | current | Supported embedded deployment/configuration. |
 | `HOW_TO_WORKFLOW.md` | current status | HOW_TO behavior inside the unified agent; no separate router. |
-| `KNOWLEDGE_INDEX.md` | current status | Current retrieval gap and constraints for future embedded knowledge/RAG. |
-| `AGENT_RUNTIME_OPTIMIZATION.md` | current | Performance/quality guidance for the embedded runtime. |
-| `DEPLOYMENT_CONFIG.md` | current | Supported embedded deployment and configuration. |
-| `QUERY_CONTRACT.md` | current | Schema-first query/discovery contract. |
-| `codex/CODEX_AUTH.md` | current | Provider-owned Codex account lifecycle and database gate. |
+| `codex/CODEX_AUTH.md` | current | Provider-owned Codex account lifecycle and DB activation gate. |
 | `adr/README.md` + accepted ADRs | current decisions | Architecture decision log. |
 | `HISTORICAL_DOCUMENTATION.md` | current index | Classification of archived/superseded material. |
-| `DOCUMENTATION_AUDIT.md` | close-out record | Repository-wide documentation reconciliation baseline and exit criteria. |
+| `DOCUMENTATION_AUDIT.md` | historical close-out baseline | 2026-08-26 documentation reconciliation record; later current docs supersede stale details. |
 
-## Research and execution guidance
+## Research and executable roadmap
 
-`docs/research/` contains living research and ordered implementation playbooks. These documents do **not** describe implemented product behavior and do not override the current documents/ADRs above. Their purpose is to turn repository inspection plus external research into explicit next steps, work packages and exit gates.
+`docs/research/` contains ordered implementation/evidence documents. They do not override implemented code/accepted ADRs.
 
-Current entry points:
+Primary entry points:
 
-- `research/README.md` — index, scope and authority for the research/execution layer;
-- `research/FOUNDATION_STABILIZATION_PLAYBOOK.md` — ordered path for provider stability, failure contracts, live public activity, real answer streaming, chat UX, latency, regression gates and capability-framework evolution before major feature/RAG expansion;
-- `research/E2E_AGENT_LOOP_CONVERGENCE.md` — Apexive-informed diagnosis and ordered host-loop convergence that keeps the current Assistant UI and authoritative Odoo capability/action lifecycle;
-- `research/IMPLEMENTATION_PROMPT_CODEX_E2E.md` — implementation prompt for executing that convergence in validated slices;
-- `research/EXECUTION_STATE.md` — persistent current cursor used to resume the roadmap across independent runs;
-- `research/CONTINUOUS_EXECUTION_PROTOCOL.md` — recursive/restartable execution algorithm, stop rules and validation semantics;
-- `research/REAL_ENV_VALIDATION_PROTOCOL.md` — named checks that require the real Odoo 18 + Codex product path;
-- `research/SLICE_TEMPLATE.md` — contract for atomic implementation slices;
-- `research/PHASE0_BASELINE.md` — current Phase 0 evidence/measurement record.
+- `research/README.md` — research/execution index;
+- `research/EXECUTION_STATE.md` — **the current cursor** used by recurring roadmap execution;
+- `research/CONTINUOUS_EXECUTION_PROTOCOL.md` — restartable slice/gate/validation rules;
+- `research/REAL_ENV_VALIDATION_PROTOCOL.md` — named real product-path acceptance gates;
+- `research/FOUNDATION_STABILIZATION_PLAYBOOK.md` — historical/current P0-P4 stabilization path; P0/P1 complete, P2 acceptance pending, P3/P4 implementation landed pending ordered gates;
+- `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` — **P5+ gated product roadmap** derived from `PRODUCT_VISION.md`;
+- `research/E2E_AGENT_LOOP_CONVERGENCE.md` — code-level reasoning loop convergence record that led to ADR-019;
+- `research/PHASE23_REAL_VALIDATION_RUNBOOK.md` and `research/PHASE34_REAL_VALIDATION_RUNBOOK.md` — reproducible current P2-P4 validation procedures;
+- `research/SLICE_TEMPLATE.md` — atomic implementation slice template.
 
-The stabilization roadmap explicitly does not use GitHub Actions for execution or validation while the project has no runners/workers available. Required tests must be run in an environment that actually provides the needed Odoo/Codex/browser/runtime dependencies; unrun tests remain pending.
+## Formal roadmap chain
 
-When a playbook item is implemented, update the authoritative current document/ADR that describes the resulting behavior. Do not treat a checked roadmap item as architecture authority by itself.
+Current accepted/blocked state is summarized as:
 
-## Historical by default
+```text
+P0 baseline                                      COMPLETE
+P1 provider boundary / host decision loop        COMPLETE
+P2 structured failure presentation               HARD REAL GATES PENDING
+P3 live public activity                          CODE LANDED; ACCEPTANCE BLOCKED BY P2
+P4 real answer streaming                         CODE LANDED; ACCEPTANCE BLOCKED BY P2/P3
 
-The following material records earlier milestones and must not be read as current deployment/runtime instructions unless a current document explicitly links to a still-valid detail:
+-- P2 -> P3 -> P4 acceptance required --
 
-- root `docs/M*_*.md`, `docs/OPERATIONS_M1.md`, `docs/M5_ROUTING_SECURITY.md`, `docs/M6_ACTION_FOUNDATION.md`, `docs/M7_*`;
-- `docs/codex/M*.md` milestone reports/workflows and `docs/codex/MILESTONES.md`;
-- everything under `docs/codex/tasks/` and `docs/codex/exec-plans/` except their archive README files;
-- third-party audit snapshots under `docs/third_party/` except its archive README;
-- PDFs and generator scripts under `docs/source-of-truth/`;
-- root `design-qa.md`, which is visual QA evidence for one UI snapshot.
+P5 natural non-blocking multi-chat + continuity
+P6 deep planning / multi-step effects / EffectJournal
+P7 mini-framework / self-awareness
+P8 Evidence / source / logs / installation intelligence
+P9 Knowledge / RAG
+P10 Developer/Operator host operations
+P11 imports/artifact workflows
+P12 controlled source modification
+P13 multimodal/web evidence
+P14 additional surfaces/automation/MCP
+P15 additional providers
+```
 
-Every `docs/codex/tasks/M0/README.md` through `M7/README.md` is now an **archive index** for its directory, not a milestone status/backlog document. Individual task packets remain unchanged so their historical acceptance evidence is preserved.
+Do not select a later phase merely because implementation ideas exist. Follow the blocking gates in `EXECUTION_STATE.md` and the evolution playbook.
 
-See `HISTORICAL_DOCUMENTATION.md` for the reason and superseding current documents.
+## No GitHub Actions for roadmap validation
 
-## Retired implementation lineage
+The current roadmap must not use GitHub Actions for execution or acceptance while repository instructions say no usable runners/workers exist.
 
-`service/`, `installer/` and root `migrations/` describe or support the former Assistant Service architecture. They are not the current product runtime. Their local `AGENTS.md`/README entry points make this explicit.
-
-## Plans/task packets
-
-Root `PLANS.md` defines current planning rules. `docs/codex/TASK_PACKET_TEMPLATE.md` is the current hand-off template. Old packets/plans are archives, not backlog.
-
-## Documentation close-out
-
-`DOCUMENTATION_AUDIT.md` records the 2026-08-26 repository-wide close-out performed before feature expansion. It states the inspected implementation baseline, current-vs-historical classification, external sanity checks and intentional non-changes.
+Required tests run in environments that actually have the repository/Odoo/Codex/browser/provider dependencies. Unrun tests remain validation debt and never become PASS by inference.
 
 ## Updating documentation
 
-Any change to current runtime behavior should update the relevant current document in the same commit. Do not rewrite historical reports to make them look as if they described the present; preserve their evidence and classify them clearly instead.
+When runtime behavior changes:
+
+1. update the relevant current document in the same coherent change;
+2. update `CURRENT_STATE.md` if the implementation claim changes materially;
+3. update `EXECUTION_STATE.md`/phase evidence if roadmap state changes;
+4. add/supersede an ADR when deployment/authority/persistence/privilege/effect invariants change;
+5. preserve historical reports rather than rewriting them to appear current.
+
+## Retired lineage
+
+`service/`, `installer/` and root historical migrations describe the former Assistant Service architecture. They are not current runtime instructions.
+
+Useful algorithms/contracts from that lineage may be reimplemented inside the embedded architecture, but no sidecar path becomes current merely because historical code exists.
+
+## External references
+
+Odoo/OCA/Apexive/OpenAI/etc. are implementation/product references only. Borrow tested patterns when they reduce risk — for example OCA queue capacity/background imports, OCA reusable AI tools, Apexive Knowledge/provider breadth — but retain this repository's accepted authority/recovery semantics and validate dependencies before adopting them.
