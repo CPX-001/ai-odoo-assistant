@@ -10,7 +10,7 @@ import {
     failureCanRetry,
     failureFromError,
 } from "@odoo_ai_assistant/services/assistant_failure_contract";
-import { streamAssistantChat } from "@odoo_ai_assistant/services/assistant_stream_client";
+import { streamAssistantChatLive } from "@odoo_ai_assistant/services/assistant_live_stream_client";
 
 let pendingMessageSequence = 0;
 
@@ -51,11 +51,24 @@ function updateConversationList(state, normalizedMessage, previousConversationId
     }
 }
 
+function appendActivity(state, event) {
+    if (!event || !Number.isSafeInteger(event.sequence)) {
+        throw new Error("invalid_stream");
+    }
+    const existing = state.activityEvents || [];
+    if (existing.some((item) => item.sequence === event.sequence)) {
+        return;
+    }
+    const next = [...existing, event].slice(-100);
+    state.activityEvents = next;
+    state.currentActivity = event;
+}
+
 export async function submitStreamingAssistantRequest({
     state,
     screenContext,
     message,
-    streamCall = streamAssistantChat,
+    streamCall = streamAssistantChatLive,
 }) {
     if (state.loading || state.decisionLoading || recoveryPending(state)) {
         return false;
@@ -70,6 +83,8 @@ export async function submitStreamingAssistantRequest({
     state.context = screenContext.capture();
     state.loading = true;
     state.streamingText = "";
+    state.activityEvents = [];
+    state.currentActivity = null;
     state.errorCode = null;
     state.failure = null;
     state.actionReceipt = null;
@@ -93,6 +108,7 @@ export async function submitStreamingAssistantRequest({
                 screen: state.context,
                 conversation_id: state.conversationId,
             },
+            onActivity: async (event) => appendActivity(state, event),
             onDelta: async (text) => {
                 if (typeof text !== "string" || !text) {
                     throw new Error("invalid_stream");
@@ -142,6 +158,8 @@ assistantPanelService.start = function (env, dependencies) {
     const service = originalStart.call(this, env, dependencies);
     const state = service.state;
     state.streamingText = "";
+    state.activityEvents = [];
+    state.currentActivity = null;
     state.failure = null;
     state.lastSubmittedMessage = "";
     service.submit = async (message) => {
@@ -158,6 +176,26 @@ assistantPanelService.start = function (env, dependencies) {
             saveDraft(browserStorage, state.conversationId, "");
         }
         return sent;
+    };
+    const originalNewConversation = service.newConversation.bind(service);
+    service.newConversation = () => {
+        const changed = originalNewConversation();
+        if (changed) {
+            state.activityEvents = [];
+            state.currentActivity = null;
+            state.streamingText = "";
+        }
+        return changed;
+    };
+    const originalSelectConversation = service.selectConversation.bind(service);
+    service.selectConversation = async (conversationId) => {
+        const changed = await originalSelectConversation(conversationId);
+        if (changed) {
+            state.activityEvents = [];
+            state.currentActivity = null;
+            state.streamingText = "";
+        }
+        return changed;
     };
     service.retryFailure = async () => {
         const message = state.lastSubmittedMessage;
