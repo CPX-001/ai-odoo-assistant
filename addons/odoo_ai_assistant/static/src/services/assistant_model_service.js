@@ -35,10 +35,8 @@ export function normalizeModelPreferences(response) {
                 item.display_name.length <= 160 &&
                 typeof item.is_default === "boolean"
         ) ||
-        (response.default_model !== null &&
-            !MODEL_PATTERN.test(response.default_model)) ||
-        (response.selected_model !== null &&
-            !MODEL_PATTERN.test(response.selected_model)) ||
+        (response.default_model !== null && !MODEL_PATTERN.test(response.default_model)) ||
+        (response.selected_model !== null && !MODEL_PATTERN.test(response.selected_model)) ||
         typeof response.can_manage_settings !== "boolean"
     ) {
         return null;
@@ -102,7 +100,6 @@ patch(assistantPanelService, {
             const normalized = model || null;
             if (
                 panel.state.modelSaving ||
-                panel.state.loading ||
                 (normalized !== null &&
                     !panel.state.modelOptions.some((item) => item.model === normalized))
             ) {
