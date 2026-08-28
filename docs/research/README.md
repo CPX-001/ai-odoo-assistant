@@ -19,8 +19,10 @@ Research documents do not override:
 | `EXECUTION_STATE.md` | Current cursor, blockers, validation debt and exact next action. |
 | `CONTINUOUS_EXECUTION_PROTOCOL.md` | Restartable multi-run execution and validation rules. |
 | `REAL_ENV_VALIDATION_PROTOCOL.md` | Named acceptance checks requiring the real Odoo/browser/provider path. |
-| `FOUNDATION_STABILIZATION_PLAYBOOK.md` | P0-P4 foundation path and historical rationale. |
+| `FOUNDATION_STABILIZATION_PLAYBOOK.md` | P0-P4 foundation path and historical rationale; newer phase records/current code supersede stale future-state wording inside it. |
 | `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` | P5+ gated product roadmap: non-blocking multi-chat, planning/effects, mini-framework, Evidence/RAG, technical operations, imports, multimodal, extra surfaces and providers. |
+| `PHASE3_PUBLIC_ACTIVITY.md` | Formal status record for landed P3 production activity code and its blocked hard gates. |
+| `PHASE4_ANSWER_STREAMING.md` | Formal status record for landed P4 answer streaming code and its blocked hard gates. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
 | `SLICE_TEMPLATE.md` | Atomic implementation slice template. |
 | `PHASE23_REAL_VALIDATION_RUNBOOK.md` | Reproducible P2/P3 validation procedure. |
@@ -28,14 +30,16 @@ Research documents do not override:
 
 Supporting phase/evidence records remain in this directory and under `evidence/`.
 
+`PHASE3_PUBLIC_ACTIVITY_PREPARATION.md` is now a historical preparation record; use `PHASE3_PUBLIC_ACTIVITY.md` for current P3 status.
+
 ## Current formal cursor
 
 ```text
 P0 COMPLETE
 P1 COMPLETE
 P2 REAL_ENV_VALIDATION_REQUIRED
-P3 implementation landed; acceptance blocked by P2
-P4 implementation landed; acceptance blocked by P2/P3
+P3 IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE; blocked by P2
+P4 IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE; blocked by P2/P3
 P5+ not eligible
 ```
 
