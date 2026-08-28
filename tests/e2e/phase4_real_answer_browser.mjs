@@ -13,7 +13,7 @@ const GATES = {
         cancel: false,
     },
     "P4-REAL-CANCEL-STREAM": {
-        prompt: "Escribe una explicación muy extensa, de al menos veinte párrafos, sobre métodos generales de planificación. No uses herramientas de Odoo.",
+        prompt: "Escribe exactamente doce frases sobre métodos generales de planificación, con al menos veinte palabras por frase. No uses herramientas de Odoo.",
         cancel: true,
     },
     "P4-REAL-UTF8-FRAGMENT": {

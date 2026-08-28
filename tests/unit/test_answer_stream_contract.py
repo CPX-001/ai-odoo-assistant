@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = ROOT / "addons/odoo_ai_assistant/runtime/agent/answer_stream.py"
+BROWSER_GATE = ROOT / "tests/e2e/phase4_real_answer_browser.mjs"
 spec = importlib.util.spec_from_file_location("p4_answer_stream", MODULE)
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
@@ -54,3 +55,11 @@ def test_short_answer_flushes_only_when_answer_field_closes():
     extractor = module.StructuredFinalAnswerDeltaExtractor()
     assert extractor.feed('{"decision":{"kind":"final_answer","answer":"Hola') == ()
     assert extractor.feed('","confidence":"high"}}') == ("Hola",)
+
+
+def test_cancel_gate_uses_bounded_output_before_cancelling_first_real_delta():
+    source = BROWSER_GATE.read_text(encoding="utf-8")
+    assert "exactamente doce frases" in source
+    assert "al menos veinte palabras por frase" in source
+    assert "al menos veinte párrafos" not in source
+    assert "if (gate.cancel && !cancelled)" in source
