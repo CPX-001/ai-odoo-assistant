@@ -23,6 +23,7 @@ Research documents do not override:
 | `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` | P5+ gated product roadmap: non-blocking multi-chat, planning/effects, mini-framework, Evidence/RAG, technical operations, imports, multimodal, extra surfaces and providers. |
 | `P5.1_TURN_SCOPED_FRONTEND_STATE.md` | Active P5.1 implementation/validation record for per-conversation frontend execution ownership. |
 | `P5.1_VALIDATION_RUNBOOK.md` | Executable P5.1 handoff for HOOT/regression plus real multi-chat, settings-snapshot and reopen browser checks. |
+| `P5.2_SCHEDULER_PREPARATION.md` | Preparation-only analysis for the next scheduler concurrency/backpressure slice; does not make P5.2 eligible before P5.1 PASS. |
 | `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed status record for P3 public activity. |
 | `PHASE4_ANSWER_STREAMING.md` | Formal completed status record for P4 answer streaming. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
@@ -52,6 +53,8 @@ The ordered P2 -> P3 -> P4 gates passed on 2026-08-28. The sanitized record is
 `evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md`.
 
 P5.1 must now pass its recorded HOOT/P2-P4 regression and browser multi-chat gates before P5.2 is selected. The executable browser manifest/runner are `tests/e2e/p5_1_real_gates.json` and `tests/e2e/p5_1_turn_scope_browser.mjs`.
+
+While those real gates are pending, `P5.2_SCHEDULER_PREPARATION.md` may be used to reduce design uncertainty only. It must be rechecked against the tested/repaired P5.1 lineage before any P5.2 runtime change.
 
 ## Recursive execution rule
 
