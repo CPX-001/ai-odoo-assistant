@@ -23,7 +23,10 @@ Research documents do not override:
 | `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` | P5+ gated product roadmap: non-blocking multi-chat, planning/effects, mini-framework, Evidence/RAG, technical operations, imports, multimodal, extra surfaces and providers. |
 | `P5.1_TURN_SCOPED_FRONTEND_STATE.md` | Completed P5.1 implementation/validation record for per-conversation frontend execution ownership. |
 | `P5.1_VALIDATION_RUNBOOK.md` | Executable P5.1 handoff for HOOT/regression plus real multi-chat, settings-snapshot and reopen browser checks. |
-| `P5.2_SCHEDULER_PREPARATION.md` | Reviewed preparation record for the now-eligible P5.2 scheduler concurrency/backpressure slice. |
+| `P5.2_SCHEDULER_PREPARATION.md` | Historical design preparation that identified the P5.2 capacity/causality/fairness/wake-up gaps before implementation. |
+| `P5.2A_SCHEDULER_CAPACITY_CAUSALITY.md` | P5.2a implementation record for bounded capacity and causal claim eligibility. |
+| `P5.2_SCHEDULER_IMPLEMENTATION.md` | Current full P5.2 implementation record: capacity, ordering, fairness, wake-up, diagnostics and real-gate harness. |
+| `P5.2_VALIDATION_RUNBOOK.md` | Batched deterministic/regression/real-environment acceptance procedure for the complete P5.2 implementation. |
 | `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed status record for P3 public activity. |
 | `PHASE4_ANSWER_STREAMING.md` | Formal completed status record for P4 answer streaming. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
@@ -33,7 +36,7 @@ Research documents do not override:
 
 Supporting phase/evidence records remain in this directory and under `evidence/`.
 
-`PHASE3_PUBLIC_ACTIVITY_PREPARATION.md` is now a historical preparation record; use `PHASE3_PUBLIC_ACTIVITY.md` for current P3 status.
+`PHASE3_PUBLIC_ACTIVITY_PREPARATION.md` is now a historical preparation record; use `PHASE3_PUBLIC_ACTIVITY.md` for current P3 status. `P5.2_SCHEDULER_PREPARATION.md` is likewise historical preparation; current P5.2 behavior is documented in `P5.2_SCHEDULER_IMPLEMENTATION.md`.
 
 ## Current formal cursor
 
@@ -43,7 +46,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS; P5.1 complete, P5.2 ready
+P5 IN_PROGRESS; P5.1 complete, P5.2 REAL_ENV_VALIDATION_REQUIRED
 P6+ not eligible
 ```
 
@@ -53,11 +56,9 @@ The ordered P2 -> P3 -> P4 gates passed on 2026-08-28. The sanitized record is
 `evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md`.
 
 P5.1 passed its recorded HOOT/P2-P4 regression and focused real browser gates on 2026-08-28. The
-sanitized record is `evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`. P5.2 scheduler
-concurrency/backpressure is the next eligible slice.
+sanitized record is `evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`.
 
-`P5.2_SCHEDULER_PREPARATION.md` remains design guidance rather than implemented behavior. It must be
-turned into a bounded slice with deterministic and real gates before any P5.2 claim is accepted.
+P5.2 scheduler concurrency/backpressure is now implemented across its intended internal a/b/c scope, including bounded capacity, causal ordering, anti-starvation fairness, capacity-release wake-up, aggregate diagnostics and the real browser gate harness. It is **not accepted yet**: the focused Odoo tests, full addon regression and three real scheduler gates must be executed together using `P5.2_VALIDATION_RUNBOOK.md`. No unexecuted P5.2 test is a PASS.
 
 ## Recursive execution rule
 
