@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "gates": [
+    {
+      "id": "P5.1-BROWSER-MULTICHAT",
+      "phase": 5,
+      "preconditions": ["P2-P4 accepted", "P5.1 implementation installed on a disposable Odoo 18 database", "Codex authenticated", "Chromium/Playwright installed", "cron enabled with at least two worker slots"],
+      "user": "internal disposable test user",
+      "data": "two long read-only prompts in separate conversations; no Odoo mutation",
+      "injection": "none; real browser, durable queue and provider path",
+      "action": "start Chat A, navigate away while unresolved, create Chat B, submit B, inspect both history entries and return to A",
+      "backend_expected": "A and B have distinct durable turn/conversation ids and neither navigation nor late callbacks create a second A turn",
+      "browser_expected": "history/new-chat navigation remains enabled while A is unresolved; A and B messages/runtime labels remain scoped to their conversations",
+      "redaction": "no raw provider payload, hidden reasoning, unrestricted arguments/results or credentials are recorded",
+      "cleanup": "cancel unresolved read-only turns and drop disposable database/filestore after the validation batch",
+      "command": "node tests/e2e/p5_1_turn_scope_browser.mjs --gate P5.1-BROWSER-MULTICHAT"
+    },
+    {
+      "id": "P5.1-BROWSER-SETTINGS-SNAPSHOT",
+      "phase": 5,
+      "preconditions": ["same as P5.1-BROWSER-MULTICHAT", "Codex model catalog exposes at least one selectable model"],
+      "user": "internal disposable test user with normal Assistant preferences",
+      "data": "read-only long Turn A followed by read-only Turn B",
+      "injection": "change model and autonomy selectors through the real Assistant UI while A is unresolved",
+      "action": "read A's persisted reasoning_model/policy_payload, change selectors, re-read A, then enqueue B and inspect B's persisted snapshot",
+      "backend_expected": "A's stored snapshot remains byte/field-equivalent for model and user policy layer; B captures the newly selected values",
+      "browser_expected": "model/autonomy controls remain enabled while A runs and the new selections are usable for a new conversation",
+      "redaction": "only bounded preference and turn snapshot fields are inspected; prompts/provider internals are not persisted as evidence",
+      "cleanup": "restore original user model/autonomy preferences, cancel unresolved turns and drop disposable database/filestore after the batch",
+      "command": "node tests/e2e/p5_1_turn_scope_browser.mjs --gate P5.1-BROWSER-SETTINGS-SNAPSHOT"
+    },
+    {
+      "id": "P5.1-BROWSER-REOPEN",
+      "phase": 5,
+      "preconditions": ["same as P5.1-BROWSER-MULTICHAT"],
+      "user": "internal disposable test user",
+      "data": "one long read-only prompt",
+      "injection": "close and reopen the Assistant panel while the durable turn is unresolved",
+      "action": "count real /turn submissions, close panel, allow server work to continue, reopen panel and inspect the same conversation/turn",
+      "backend_expected": "the original turn remains the only submitted turn and does not become cancelled solely because the panel closed",
+      "browser_expected": "reopen restores the same conversation state without resubmitting/restarting the request",
+      "redaction": "no provider-private output is recorded; only turn id/state and browser-visible state are checked",
+      "cleanup": "cancel the read-only turn if still unresolved and drop disposable database/filestore after the batch",
+      "command": "node tests/e2e/p5_1_turn_scope_browser.mjs --gate P5.1-BROWSER-REOPEN"
+    }
+  ]
+}
