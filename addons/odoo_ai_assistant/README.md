@@ -1,25 +1,130 @@
-Odoo AI Assistant
-=================
+# Odoo AI Assistant addon
 
-Installable Odoo 18 Community addon containing the current embedded AI Assistant runtime.
-The browser talks only to Odoo. Long turns are persisted in ``odoo.ai.turn`` and claimed by
-native Odoo cron workers; no separate Assistant HTTP daemon or database is required.
+This directory is the **supported product runtime**. It is an installable Odoo 18 Community addon; there is no separate Assistant application in the normal architecture.
 
-Runtime and security
---------------------
+The manifest is the authoritative source for the current addon version, dependencies, data files and assets.
 
-* Identity, companies, ACLs, record rules and field access come from the authenticated Odoo Environment.
-* Business capabilities execute with ``su=False`` and runtime-discovered/effective schemas.
-* ``CapabilityDefinition`` is the atomic safe contract used by reasoning, planning and execution views.
-* Core capability providers currently cover Odoo query, actions, batch operations and narrow runtime facts.
-* Codex App Server runs as an ephemeral subprocess under the Odoo OS user.
-* Provider-owned mutable state lives under the effective Odoo ``data_dir`` with restrictive permissions.
-* Settings and Diagnostics are administrator-only; secrets are not stored in PostgreSQL or exposed to prompts/logs.
+## What the addon owns
 
-Installation
-------------
+- the browser-facing Assistant product;
+- conversations, turns, events, approvals/effect state and preferences in Odoo models;
+- durable background execution through Odoo cron;
+- the host-owned agent loop;
+- the capability registry/executor;
+- Codex process/account lifecycle;
+- Settings/Diagnostics integration;
+- Odoo ACLs and record rules for Assistant-owned data.
 
-Add the repository ``addons`` directory to ``addons_path``, update Apps, install **Odoo AI Assistant**,
-then connect Codex and configure agent policy in Odoo Settings.
+It does **not** give the model direct database or server authority.
 
-See ``docs/README.md`` and ``docs/CURRENT_STATE.md`` at repository root for the authoritative current documentation.
+## End-to-end component map
+
+```mermaid
+flowchart TB
+    subgraph Browser
+      FE[static/src<br/>OWL components + frontend services]
+    end
+
+    subgraph Odoo
+      CTRL[controllers<br/>short sanitized endpoints]
+      MOD[models<br/>durable state + queue + policy]
+      SVC[services<br/>context/account helpers]
+      RT[runtime<br/>agent + capabilities + Codex]
+      SEC[security<br/>ACLs + record rules]
+      DATA[data/views<br/>cron + settings/admin UI]
+    end
+
+    FE --> CTRL
+    CTRL --> MOD
+    CTRL --> SVC
+    MOD --> RT
+    RT --> MOD
+    RT --> SVC
+    SEC -. constrains .-> MOD
+    DATA -. configures .-> MOD
+```
+
+## Directory guide
+
+| Directory | Responsibility | Read this |
+|---|---|---|
+| `controllers/` | short HTTP/JSON boundaries; enqueue/status/history/live/account actions | [`controllers/README.md`](controllers/README.md) |
+| `models/` | Odoo persistence and lifecycle coordination | [`models/README.md`](models/README.md) |
+| `services/` | focused application services not deserving their own model/runtime subsystem | [`services/README.md`](services/README.md) |
+| `runtime/` | provider lifecycle, agent loop and capability host | [`runtime/README.md`](runtime/README.md) |
+| `static/src/` | OWL UI and browser-side state/services | [`static/src/README.md`](static/src/README.md) |
+| `security/` | model access/record rules and residual bounded compatibility auth | [`security/README.md`](security/README.md) |
+| `views/` | Settings/Diagnostics/admin XML views | [`views/README.md`](views/README.md) |
+| `data/` | cron and installation/cleanup records | [`data/README.md`](data/README.md) |
+| `migrations/` | versioned Odoo migration hooks | [`migrations/README.md`](migrations/README.md) |
+| `tests/` | Odoo/Python runtime tests | [`tests/README.md`](tests/README.md) |
+| `static/tests/` | frontend HOOT tests | [`static/tests/README.md`](static/tests/README.md) |
+
+## Product lifecycle
+
+### 1. Browser submits
+
+The frontend sends a short request to Odoo with the message, conversation identity and bounded screen context. Odoo authenticates the user and persists a durable turn.
+
+### 2. Odoo schedules
+
+The turn is queued and native cron work is triggered. HTTP is no longer tied to the model's runtime.
+
+### 3. Host-owned agent loop runs
+
+The worker reconstructs the effective Odoo user/company context, the current capability catalog and the provider settings captured for the turn. The reasoning provider returns one untrusted `NextDecision` at a time.
+
+### 4. Capabilities are resolved by the host
+
+A requested read or action is resolved from the effective `CapabilityRegistry`, validated and executed through `CapabilityExecutor`. Business operations use the effective Odoo environment and `su=False`.
+
+### 5. Effects use a separate safety lifecycle
+
+Effect proposals are prepared and previewed before policy/approval, then revalidated, executed and verified. Provider text never grants write authority.
+
+### 6. UI observes durable/public state
+
+The browser polls short status/live endpoints. Public activity and provisional answer deltas are sanitized projections, separate from the private working transcript and final authoritative result.
+
+## Installation assumptions
+
+The addon currently depends on Odoo modules declared in `__manifest__.py` (`base`, `web`, `sale`, `account` at this snapshot). Long-running turns require working Odoo cron processing.
+
+Mutable provider/runtime files live under the effective Odoo `data_dir`, not inside this source tree.
+
+## Where should a new feature go?
+
+- Data/persistence owned by Odoo → `models/`.
+- HTTP boundary → `controllers/`, kept thin.
+- Reusable context/account helper → `services/`.
+- Model reasoning/provider logic → `runtime/agent/`.
+- Executable operation available to the agent → `runtime/capabilities/`.
+- User interaction/display state → `static/src/`.
+- Admin settings/diagnostics XML → `views/`.
+- Access rights/record rules → `security/`.
+
+Do not create a second backend, registry or scheduler merely because a feature is new.
+
+## Decoupling / replacing a piece
+
+The architecture is intentionally replaceable at **seams**, not by bypassing invariants.
+
+| Replace/extend | Safe seam | Must remain true |
+|---|---|---|
+| Reasoning provider | provider-neutral agent contract | decisions remain untrusted; Odoo owns sequencing/effects |
+| Frontend | Odoo turn/history/live endpoints | Odoo remains durable/authoritative state |
+| Capability transport | projection/adapter over registry | one capability source of truth |
+| Business vertical | new capability definitions/provider | same ACL/policy/approval/verify path |
+| Context/evidence source | future provider contracts | retrieved data cannot grant authority |
+| Scheduler/runtime topology | architecture-level change | durable recovery/effect certainty must be preserved |
+
+Replacing Odoo persistence/authority or reintroducing an operational sidecar is not a local refactor; it requires an explicit architecture decision.
+
+## Current caveats
+
+- Phase 5.1 per-conversation frontend scopes are implemented but still require their acceptance gates.
+- One canonical effect proposal/step is supported; multi-step effect planning is later roadmap work.
+- General RAG/Knowledge and external capability providers are not yet active product subsystems.
+- `controllers/internal_tools.py` retains a bounded machine-authenticated inventory callback from earlier source-scanner lineage. It is not the normal product path and should not be copied for new browser/product features.
+
+For the latest exact state see [`../../docs/CURRENT_STATE.md`](../../docs/CURRENT_STATE.md).
