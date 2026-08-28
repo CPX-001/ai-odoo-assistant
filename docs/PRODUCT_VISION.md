@@ -230,7 +230,83 @@ The durable conversation layer should therefore evolve beyond a fixed `last N me
 
 Long-lived personal memory is not required for the initial target. Session/conversation preferences that affect behavior — for example `no vuelvas a pedirme confirmación para cambios normales en este chat` — should be represented as explicit conversation policy/settings bounded by administrator/system ceilings, not as an untrusted sentence hidden in history.
 
-## 9. Agent loop and effects
+## 9. Non-blocking interaction and multi-chat concurrency
+
+A running Assistant turn is background durable work. It must **not** become a global UI lock for Odoo, the Assistant panel or the user.
+
+The target experience is:
+
+```text
+Chat A: turn running ---------------------> completes
+        user switches away
+
+Chat B: user reads history / changes model / sends another turn
+                                             |
+                                             +----> runs concurrently if capacity exists
+
+Odoo: normal navigation/forms/dropdowns remain usable throughout
+```
+
+### Conversation-scoped busy state
+
+`loading`/running state must belong to a turn/conversation, not to the entire Assistant panel.
+
+While Chat A is running, the user must be able to:
+
+- navigate normally in Odoo;
+- close/reopen the Assistant;
+- switch to Chat B/C;
+- read other conversation history;
+- create a new conversation;
+- open model/autonomy/technical-profile selectors;
+- change settings that are safe to change;
+- submit work in another conversation when execution capacity allows;
+- cancel/inspect the original background turn later.
+
+Conversation history should expose compact running/approval/failure/completed state so background work is discoverable without forcing the user to remain in that chat.
+
+### Snapshot semantics
+
+A queued turn owns an immutable effective execution snapshot for settings that affect its behavior, such as selected reasoning model, effective policy/autonomy and relevant context/profile/config versions.
+
+Changing the model/autonomy/profile while Turn A is already queued/running affects **future turns**, not Turn A retroactively. This prevents an unrelated UI change from changing authority or provider behavior halfway through execution.
+
+Approval is different: it is an explicit state transition bound to the prepared effect and may resume the same durable turn.
+
+### Ordering semantics
+
+Parallelism is primarily **across conversations**.
+
+By default, one conversation should preserve causal ordering: a new ordinary message should not race ahead of an earlier unresolved turn whose result is needed as conversation context. The initial target is therefore one active causal turn per conversation, with multiple conversations executable in parallel.
+
+Future explicit steering/branching may allow interaction with a still-running conversation, but it requires its own semantics. It must not be approximated by silently starting two independent turns against the same conversation history.
+
+### Capacity, fairness and backpressure
+
+Concurrency is bounded by real server/provider capacity and configurable hard ceilings. The product should not promise unlimited parallel agents.
+
+The scheduler must eventually account for:
+
+```text
+installation-wide concurrent turn ceiling
+provider-specific concurrency/rate limits
+Odoo cron/worker capacity
+CPU/RAM/process cost
+per-user fairness / anti-starvation
+interactive vs future background-automation workload
+```
+
+When capacity is full, extra turns remain durably `queued`; the UI stays interactive and explains that work is queued rather than becoming disabled.
+
+The scheduler must preserve exactly-once claim/lease/recovery semantics under concurrent workers. A browser polling/subscription failure must not cancel or own the server-side turn.
+
+### Background event consumption
+
+Turn execution is independent from the open browser. The UI may detach from a running turn and later resume from persisted status/live cursors.
+
+The frontend should maintain turn-scoped state and may prioritize polling/subscription for the visible conversation while using lighter background updates/badges for other running turns. Transport choice (polling, bus/SSE later) is an optimization; durable turn state is authoritative.
+
+## 10. Agent loop and effects
 
 The current host-owned `NextDecision` loop remains the right foundation, but the product target is:
 
@@ -250,7 +326,7 @@ Verification is new authoritative context, not necessarily the end of the conver
 
 The target `EffectPlan` supports multiple bounded steps. Atomicity/recovery semantics must be explicit: Odoo-local operations that can share a transaction are different from segmented/external effects. The write barrier, verification and no-blind-retry principles remain mandatory.
 
-## 10. Budgets
+## 11. Budgets
 
 Budgets prevent loops and blast-radius growth; they must not become arbitrary intelligence limits.
 
@@ -275,7 +351,9 @@ ResponseBudget
 
 All must be configurable within hard host ceilings. A complex read-only investigation may legitimately use far more tool calls than a simple greeting or a destructive action.
 
-## 11. Evidence and retrieval
+Concurrency capacity/backpressure is an additional host resource budget; it must not be conflated with per-turn exploration limits.
+
+## 12. Evidence and retrieval
 
 Retrieval is broader than vector RAG. The primary target is installation-specific intelligence, with company Knowledge as an important configurable layer.
 
@@ -315,7 +393,7 @@ Frequently changing Odoo business records should normally be queried live throug
 
 Evidence priority depends on the question. Runtime/source/configuration generally outrank generic documentation for `what does this installation do?`; official documentation can be a sensible first source for `where is the standard Odoo option?`, followed by installation verification where needed.
 
-## 12. Knowledge product
+## 13. Knowledge product
 
 The product should provide an Odoo-native Knowledge/Sources area supporting at least uploaded files and managed sources.
 
@@ -330,7 +408,7 @@ The Assistant should also be able to accept a file in chat and, when authorized,
 
 Start with deterministic extraction/structure + PostgreSQL lexical/FTS retrieval where appropriate. Add embeddings/vector/hybrid ranking only when evals show meaningful recall/answer-quality gains. Large files should be processed in bounded jobs/chunks rather than inserted wholesale into model context.
 
-## 13. Logs and diagnostics
+## 14. Logs and diagnostics
 
 Logs are evidence, not a raw prompt dump.
 
@@ -338,7 +416,7 @@ A diagnostic provider should support time/component/severity/context-aware searc
 
 The same principle applies to PostgreSQL and host diagnostics.
 
-## 14. Host operations
+## 15. Host operations
 
 The long-term Developer/Operator experience includes controlled operations such as:
 
@@ -352,7 +430,7 @@ The normal Odoo process should not simply become root. Operations requiring priv
 
 Prefer high-level tested capabilities such as `odoo.module.update` or `odoo.config.patch` over generic shell where they cover the use case. A generic command capability, if later introduced, is a high-risk fallback with dedicated sandbox/policy/audit requirements.
 
-## 15. Advanced data operations and artifacts
+## 16. Advanced data operations and artifacts
 
 Mass data work is a first-class workflow, not thousands of individual model-authored CRUD calls.
 
@@ -375,7 +453,7 @@ file/attachment
 
 CSV/XLSX/PDF/images should be routed through appropriate parsers/OCR/vision depending on provider feature support.
 
-## 16. Effect journal and recent reconstruction
+## 17. Effect journal and recent reconstruction
 
 Assistant-produced effects should have a bounded recent operation journal suitable for diagnosis and reconstruction, not an infinite database backup.
 
@@ -388,7 +466,7 @@ For a configurable short retention window it may store the minimum snapshots/rec
 
 The contract must distinguish `reversible`, `reconstructable`, `irreversible` and `external/unknown`. Deleting a record is not automatically a true undoable operation merely because some field values were captured.
 
-## 17. Multimodal and web
+## 18. Multimodal and web
 
 The product target includes file, image and document understanding comparable to modern agent products.
 
@@ -396,7 +474,7 @@ Provider feature negotiation determines whether vision/file handling is `native`
 
 Web access is evidence-oriented search/fetch, not unrestricted browser control. It should normally be used when local Odoo/runtime/company evidence is insufficient or the question is explicitly external/current.
 
-## 18. Provider-neutral feature negotiation
+## 19. Provider-neutral feature negotiation
 
 Do not force all providers to the least capable common subset.
 
@@ -414,7 +492,9 @@ large_context:     native | emulated | unavailable
 
 The effective product feature is the intersection of product support, provider support, configuration and user/policy authority. The Assistant manifest should be able to explain unavailable features.
 
-## 19. Additional surfaces
+Provider concurrency/backpressure characteristics also belong to the runtime feature/capacity profile; they must not be guessed from the provider name.
+
+## 20. Additional surfaces
 
 Chat is the primary product surface, not a separate authority model.
 
@@ -422,12 +502,15 @@ Future MCP, scheduled automations, AI fields or context launchers must reuse the
 
 Recurring Assistant work may use native Odoo scheduling/queue primitives where appropriate. Server-level recurring operations are a distinct host capability class even if both are initiated conversationally.
 
-## 20. External references and deliberate differences
+Future unattended/background work must coexist fairly with interactive chat capacity rather than starving user-facing turns.
+
+## 21. External references and deliberate differences
 
 External systems are references, not requirements:
 
 - Odoo 19 AI separates Tools from indexed Sources and makes tool availability depend on installed applications. This supports keeping executable capability and knowledge/evidence concepts distinct.
 - Apexive `odoo-llm` demonstrates useful breadth: hybrid knowledge retrieval/citations, providers, domain tools and MCP reuse. This project should match useful functionality without copying parallel authority or exposing framework complexity to normal users.
 - OpenAI Agents tool namespaces/deferred loading validate progressive disclosure for large catalogs. This project keeps its Odoo-owned runtime/authority rather than adopting another runtime wholesale.
+- Codex products demonstrate that long-running agent work can live in independent threads while the user switches to other tasks. The product target adopts the multi-tasking principle while preserving Odoo-owned durable turns and host authority.
 
 The intended product difference is a **single deeply integrated Odoo agent with broad intelligence and tightly governed authority**, not merely a chatbot or generic AI framework embedded in Odoo.
