@@ -124,6 +124,11 @@ patch(assistantPanelService, {
             }
         };
 
+        // Load once when the web-client service starts. P5 turn-scope patches may
+        // replace open()/toggle(), so picker readiness must not depend solely on
+        // wrapper order. Later opens still use the bounded catalog TTL.
+        void loadModelPreferences();
+
         const baseOpen = panel.open.bind(panel);
         const baseToggle = panel.toggle.bind(panel);
 

@@ -1,4 +1,5 @@
 import { expect, test } from "@odoo/hoot";
+import { patchTranslations } from "@web/../tests/web_test_helpers";
 import {
     AssistantFailureError,
     failureCanRetry,
@@ -81,6 +82,7 @@ test("recovery_required is browser-authoritative even if a payload claims safe r
 });
 
 test("auth, ACL, timeout, tool failure and recovery produce distinct deterministic presentation", () => {
+    patchTranslations();
     const cases = [
         [
             failure({
@@ -152,6 +154,7 @@ test("unknown stream errors retain a bounded real code instead of universal serv
 });
 
 test("presentation never renders safe_details, provider code or raw summary", () => {
+    patchTranslations();
     const raw = failure({
         safe_summary: "DO NOT DISPLAY RAW SUMMARY",
         safe_details: { http_status: 503, upstream_code: "bounded" },

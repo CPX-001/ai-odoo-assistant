@@ -6,6 +6,7 @@ import {
     conversationScopeKey,
     createConversationTurnScope,
     projectConversationTurnScope,
+    refreshTurnScopeModelPreferences,
 } from "@odoo_ai_assistant/services/zzz_assistant_turn_scope_service";
 
 function scopedState() {
@@ -115,4 +116,18 @@ test("conversation runtime state stays compact and product-facing", () => {
     scope.errorCode = null;
     scope.turnState = "completed";
     expect(conversationRuntimeState(scope)).toBe("completed");
+});
+
+test("reopening a scoped chat preserves the model-catalog refresh hook", async () => {
+    let calls = 0;
+    const loaded = await refreshTurnScopeModelPreferences({
+        loadModelPreferences() {
+            calls += 1;
+            return true;
+        },
+    });
+
+    expect(loaded).toBe(true);
+    expect(calls).toBe(1);
+    expect(await refreshTurnScopeModelPreferences({})).toBe(false);
 });

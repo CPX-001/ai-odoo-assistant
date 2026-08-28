@@ -197,6 +197,13 @@ export function conversationRuntimeLabel(scope) {
     return RUNTIME_STATE_LABELS[conversationRuntimeState(scope)] || "";
 }
 
+export function refreshTurnScopeModelPreferences(service) {
+    if (typeof service?.loadModelPreferences !== "function") {
+        return Promise.resolve(false);
+    }
+    return Promise.resolve(service.loadModelPreferences());
+}
+
 function updateConversationList(state, scope, title = null) {
     if (!scope.conversationId) {
         return;
@@ -654,6 +661,7 @@ patch(assistantPanelService, {
                 if (typeof baseRefreshRuntimeAccount === "function") {
                     void baseRefreshRuntimeAccount().then(() => syncVisibleScope());
                 }
+                void refreshTurnScopeModelPreferences(service);
                 return;
             }
             baseOpen();
