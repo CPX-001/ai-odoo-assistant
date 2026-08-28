@@ -66,5 +66,6 @@ def test_fixture_setup_requires_disposable_database_and_separate_users():
     assert 'required("ODOO_AI_P2_LOGIN")' in source
     assert 'required("ODOO_AI_P2_LIMITED_LOGIN")' in source
     assert "if login == limited_login:" in source
-    assert 'Command.set([group_user.id])' in source
+    assert 'extra_group_xmlids=("base.group_partner_manager",)' in source
+    assert "Command.set(group_ids)" in source
     assert "env.cr.commit()" in source

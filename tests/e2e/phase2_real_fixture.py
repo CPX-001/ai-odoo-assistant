@@ -29,14 +29,22 @@ def required(name: str) -> str:
     return value
 
 
-def ensure_internal_user(*, login: str, password: str, name: str):
+def ensure_internal_user(
+    *,
+    login: str,
+    password: str,
+    name: str,
+    extra_group_xmlids: tuple[str, ...] = (),
+):
     group_user = env.ref("base.group_user")
+    group_ids = [group_user.id]
+    group_ids.extend(env.ref(xmlid).id for xmlid in extra_group_xmlids)
     company = env.company
     values = {
         "active": True,
         "company_id": company.id,
         "company_ids": [Command.set([company.id])],
-        "groups_id": [Command.set([group_user.id])],
+        "groups_id": [Command.set(group_ids)],
         "login": login,
         "name": name,
         "password": password,
@@ -79,6 +87,7 @@ default_user = ensure_internal_user(
     login=login,
     password=password,
     name="Phase 2 Failure User",
+    extra_group_xmlids=("base.group_partner_manager",),
 )
 limited_user = ensure_internal_user(
     login=limited_login,
