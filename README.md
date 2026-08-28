@@ -4,7 +4,7 @@
 
 The goal is not to bolt a chatbot onto Odoo. The goal is to make an assistant that can understand the real installation, inspect and query Odoo safely, propose controlled changes, explain what it is doing, and grow through reusable capabilities without turning the model into the security boundary.
 
-> **Current state (2026-08-29):** the embedded runtime, host-owned agent loop, safe effect lifecycle, public activity, failure UX and provisional answer streaming are established. Phase 5 is in progress. P5.1 turn-scoped multi-chat and P5.2 scheduler concurrency/backpressure are accepted; P5.3 stable settings snapshot is READY. See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) and [`docs/research/EXECUTION_STATE.md`](docs/research/EXECUTION_STATE.md).
+> **Current state (2026-08-29):** the embedded runtime, host-owned agent loop, safe effect lifecycle, public activity, failure UX and provisional answer streaming are established. Phase 5 is in progress. P5.1 turn-scoped multi-chat and P5.2 scheduler concurrency/backpressure are accepted; P5.3 stable settings snapshot is implemented and stopped at its first mandatory focused Odoo gate. See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) and [`docs/research/EXECUTION_STATE.md`](docs/research/EXECUTION_STATE.md).
 
 ## What this project is
 
@@ -133,7 +133,7 @@ flowchart TB
 | Deployment | Embedded Odoo addon + ephemeral Codex | Keep Odoo as operational authority |
 | Agent loop | Host-owned iterative `NextDecision` loop | Richer planning/continuity without a rigid intent router |
 | Effects | One canonical effect proposal/step | Multi-step typed `EffectPlan` |
-| Frontend | Chat, history, public activity, answer streaming and accepted P5.1/P5.2 multi-chat scheduling | Stable settings, richer final UX and durable continuity |
+| Frontend | Chat, history, public activity, answer streaming, accepted P5.1/P5.2 multi-chat scheduling and implemented P5.3 per-turn settings snapshot pending validation | Richer final UX and durable continuity |
 | Capabilities | Core auto-discovered definitions inside this addon | Trusted addon providers + Skills/Bundles + progressive disclosure |
 | Context | Screen context + runtime Odoo context | Extensible per-model/context providers |
 | Evidence/RAG | No general active RAG layer | Source/runtime/log/document/web evidence routed by type |
