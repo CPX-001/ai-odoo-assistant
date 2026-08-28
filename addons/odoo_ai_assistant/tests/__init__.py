@@ -26,4 +26,5 @@ from . import test_turn_failure as test_turn_failure
 from . import test_turn_queue as test_turn_queue
 from . import test_turn_scheduler as test_turn_scheduler
 from . import test_turn_scheduler_fairness as test_turn_scheduler_fairness
+from . import test_turn_settings_snapshot as test_turn_settings_snapshot
 from . import test_user_preferences as test_user_preferences
