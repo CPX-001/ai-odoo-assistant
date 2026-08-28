@@ -13,6 +13,11 @@
                     <group string="Embedded runtime">
                         <field name="readiness"/>
                     </group>
+                    <group string="Scheduler">
+                        <field name="scheduler_capacity"/>
+                        <field name="scheduler_queue"/>
+                        <field name="scheduler_wait"/>
+                    </group>
                     <group string="Errors" col="1" invisible="not diagnostic_errors">
                         <field name="diagnostic_errors" nolabel="1"/>
                     </group>
