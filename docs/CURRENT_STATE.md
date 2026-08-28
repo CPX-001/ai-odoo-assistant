@@ -123,7 +123,7 @@ Target P5 changes this to turn/conversation-scoped busy state, multiple conversa
 
 Two cron slots are not the final capacity policy. Future concurrency is measured/configurable with provider/server capacity, fairness and backpressure.
 
-## 7. Structured failures — Phase 2
+## 7. Structured failures — Phase 2 complete
 
 P2 schema/provider/persistence/browser implementation exists.
 
@@ -145,17 +145,17 @@ unit tests 201 passed
 repository tests 344 passed + 36 explicit skips
 ```
 
-P2.4 browser failure presentation is implemented but Phase 2 is not formally complete until these hard real gates pass:
+P2.4 browser failure presentation passed its hard real gates on `ba4ba00`:
 
 ```text
-P2-REAL-AUTH
-P2-REAL-ACL
-P2-REAL-TIMEOUT
-P2-REAL-TOOLFAIL
-P2-REAL-RECOVERY
+P2-REAL-AUTH PASS
+P2-REAL-ACL PASS
+P2-REAL-TIMEOUT PASS
+P2-REAL-TOOLFAIL PASS
+P2-REAL-RECOVERY PASS
 ```
 
-## 8. Public activity — Phase 3 code landed, acceptance pending
+## 8. Public activity — Phase 3 complete
 
 Previous docs that say Phase 3 production has not started are stale.
 
@@ -171,16 +171,14 @@ Current `main` includes:
 - current activity + expandable history UI;
 - deterministic/Odoo/browser gate tooling.
 
-Formal acceptance remains blocked by P2, then requires:
-
 ```text
-P3-REAL-ACTIVITY-READ
-P3-REAL-ACTIVITY-ACTION
-P3-REAL-LIVE-VISIBILITY
-P3-REAL-REDACTION
+P3-REAL-ACTIVITY-READ PASS
+P3-REAL-ACTIVITY-ACTION PASS
+P3-REAL-LIVE-VISIBILITY PASS
+P3-REAL-REDACTION PASS
 ```
 
-## 9. Answer streaming — Phase 4 code landed, acceptance pending
+## 9. Answer streaming — Phase 4 complete
 
 Current `main` includes `StreamingCodexDecisionEngine` and `StructuredFinalAnswerDeltaExtractor`.
 
@@ -195,14 +193,15 @@ Properties:
 - browser uses Odoo-authenticated live polling/status reconciliation;
 - polling vs SSE/bus is still a transport optimization choice.
 
-Formal P4 acceptance requires P2 + P3 PASS, then:
-
 ```text
-P4-REAL-FIRST-DELTA
-P4-REAL-FINAL-PARITY
-P4-REAL-CANCEL-STREAM
-P4-REAL-UTF8-FRAGMENT
+P4-REAL-FIRST-DELTA PASS
+P4-REAL-FINAL-PARITY PASS
+P4-REAL-CANCEL-STREAM PASS
+P4-REAL-UTF8-FRAGMENT PASS
 ```
+
+The combined sanitized acceptance record is
+`research/evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md`.
 
 ## 10. Retrieval/RAG today
 
@@ -253,10 +252,11 @@ A future `DataImportSession` is planned for inspect/map/validate/correct/preview
 ```text
 P0 COMPLETE
 P1 COMPLETE
-P2 REAL_ENV_VALIDATION_REQUIRED
-P3 IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE
-P4 IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE
-P5+ NOT ELIGIBLE
+P2 COMPLETE
+P3 COMPLETE
+P4 COMPLETE
+P5 READY
+P6+ NOT ELIGIBLE
 ```
 
 Current hard order:
@@ -270,10 +270,11 @@ P2 five PASS
 
 The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`.
 
-The P3/P4 landed code consumes the allowed look-ahead budget. Do not start another dependent product contract layer until the ordered acceptance chain is processed.
+The ordered acceptance chain has been processed. P5.1 is the next eligible slice; no Phase 5
+production implementation is claimed yet.
 
 ## 14. Next action
 
-Run the current final `main` through the P2 gates using the real validation runbooks. If P2 passes, run P3; if P3 passes, run P4. Repair the smallest owning layer immediately on any hard-gate failure.
-
-Only after P4 acceptance should implementation begin at P5.1 turn-scoped frontend/background state.
+Begin P5.1 turn-scoped frontend/background state. Preserve the completed P2 structured-failure,
+P3 public-activity and P4 answer-streaming contracts while replacing panel-global execution
+ownership with the smallest turn/conversation-scoped state contract.

@@ -21,8 +21,8 @@ Research documents do not override:
 | `REAL_ENV_VALIDATION_PROTOCOL.md` | Named acceptance checks requiring the real Odoo/browser/provider path. |
 | `FOUNDATION_STABILIZATION_PLAYBOOK.md` | P0-P4 foundation path and historical rationale; newer phase records/current code supersede stale future-state wording inside it. |
 | `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` | P5+ gated product roadmap: non-blocking multi-chat, planning/effects, mini-framework, Evidence/RAG, technical operations, imports, multimodal, extra surfaces and providers. |
-| `PHASE3_PUBLIC_ACTIVITY.md` | Formal status record for landed P3 production activity code and its blocked hard gates. |
-| `PHASE4_ANSWER_STREAMING.md` | Formal status record for landed P4 answer streaming code and its blocked hard gates. |
+| `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed status record for P3 public activity. |
+| `PHASE4_ANSWER_STREAMING.md` | Formal completed status record for P4 answer streaming. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
 | `SLICE_TEMPLATE.md` | Atomic implementation slice template. |
 | `PHASE23_REAL_VALIDATION_RUNBOOK.md` | Reproducible P2/P3 validation procedure. |
@@ -37,15 +37,17 @@ Supporting phase/evidence records remain in this directory and under `evidence/`
 ```text
 P0 COMPLETE
 P1 COMPLETE
-P2 REAL_ENV_VALIDATION_REQUIRED
-P3 IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE; blocked by P2
-P4 IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE; blocked by P2/P3
-P5+ not eligible
+P2 COMPLETE
+P3 COMPLETE
+P4 COMPLETE
+P5 READY; P5.1 selected next
+P6+ not eligible
 ```
 
 `EXECUTION_STATE.md` is authoritative for exact gate IDs.
 
-P3/P4 code was bounded look-ahead to make one reproducible validation session possible. Do not stack P5 contract changes before the ordered P2 -> P3 -> P4 hard gates are processed.
+The ordered P2 -> P3 -> P4 gates passed on 2026-08-28. The sanitized record is
+`evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md`.
 
 ## Recursive execution rule
 

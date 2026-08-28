@@ -1,34 +1,30 @@
 # Stabilization execution state
 
-State format: 4  
+State format: 5
 Updated: 2026-08-28  
-Runtime implementation baseline audited for this reconciliation: `24b9460ad09998ec50d853e0a715b543e5991bbb`  
+Accepted runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
 
 ```text
-phase: 2
-phase_name: structured failure contract
-phase_state: IN_PROGRESS
-active_phase_record: docs/research/PHASE2_FAILURE_CONTRACT.md
-active_slice: P2.4-browser-failure-presentation
-active_slice_record: docs/research/P2.4_BROWSER_FAILURE_PRESENTATION.md
-active_slice_state: REAL_ENV_VALIDATION_REQUIRED
-current_gate_type: HARD_REAL_ENV
-blocking_validations: P2-REAL-AUTH, P2-REAL-ACL, P2-REAL-TIMEOUT, P2-REAL-TOOLFAIL, P2-REAL-RECOVERY
-phase_completion_validations: P2-REAL-AUTH, P2-REAL-ACL, P2-REAL-TIMEOUT, P2-REAL-TOOLFAIL, P2-REAL-RECOVERY
-next_slice: NONE_UNTIL_PHASE2_REAL_GATES_PASS
-lookahead_budget: EXHAUSTED_BY_LANDED_P3_P4_CONTRACTS
-next_product_phase_after_p4_acceptance: 5
+phase: 5
+phase_name: natural non-blocking multi-chat product
+phase_state: READY
+active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
+active_slice: P5.1-turn-scoped-frontend-state
+active_slice_state: READY
+current_gate_type: CONTRACT_AND_DETERMINISTIC
+blocking_validations: NONE
+accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9
+acceptance_evidence: docs/research/evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md
+next_slice: P5.1-turn-scoped-frontend-state
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
-Phase 0 and Phase 1 are complete. Phase 2 implementation is complete through the browser failure consumer but its five real presentation gates remain mandatory.
-
-Unlike the previous state document, current `main` **does contain production implementation for Phase 3 public activity and Phase 4 provisional answer streaming**. Those layers were landed as bounded look-ahead so one real Odoo/browser/provider session can validate the ordered chain. Their existence does not make them formally complete.
-
-No additional P5+ contract implementation is eligible until the P2 -> P3 -> P4 real acceptance chain is processed.
+Phases 0 through 4 are complete. The ordered P2 -> P3 -> P4 real Odoo/browser/provider acceptance
+chain passed on one linear code lineage. Phase 5 is now eligible but no P5 production change is
+claimed by this cursor update.
 
 ---
 
@@ -53,7 +49,7 @@ ADR-019/current code own the active host loop.
 
 ---
 
-# Phase 2 — IN_PROGRESS / hard real gates pending
+# Phase 2 — COMPLETE
 
 ## P2.1 FailureEnvelope — COMPLETE
 
@@ -103,23 +99,22 @@ Evidence:
 docs/research/evidence/phase2/2026-08-28/P2.3-ODOO-VALIDATION-8683ef6.md
 ```
 
-## P2.4 Browser failure presentation — REAL_ENV_VALIDATION_REQUIRED
-
-Implementation exists and deterministic preparation was recorded. Formal Phase 2 completion still requires:
+## P2.4 Browser failure presentation — COMPLETE
 
 ```text
-P2-REAL-AUTH      | HARD | NOT RUN/PENDING
-P2-REAL-ACL       | HARD | NOT RUN/PENDING
-P2-REAL-TIMEOUT   | HARD | NOT RUN/PENDING
-P2-REAL-TOOLFAIL  | HARD | NOT RUN/PENDING
-P2-REAL-RECOVERY  | HARD | NOT RUN/PENDING
+P2-REAL-AUTH      | HARD | PASS | ba4ba00
+P2-REAL-ACL       | HARD | PASS | ba4ba00
+P2-REAL-TIMEOUT   | HARD | PASS | ba4ba00
+P2-REAL-TOOLFAIL  | HARD | PASS | ba4ba00
+P2-REAL-RECOVERY  | HARD | PASS | ba4ba00
 ```
 
-Backend fixture success alone is insufficient; browser presentation/effect semantics must be observed on the real supported path.
+The browser presentation/effect semantics were observed on the supported real product path. See
+`evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md`.
 
 ---
 
-# Phase 3 — IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE
+# Phase 3 — COMPLETE
 
 Previous documents described Phase 3 as preparation-only. That is stale.
 
@@ -137,22 +132,16 @@ Current runtime now contains:
 
 Important invariant: public live persistence never authorizes a capability or commits business effects merely to make UX progress visible.
 
-Formal acceptance is blocked until all P2 real gates pass.
-
-Then execute:
-
 ```text
-P3-REAL-ACTIVITY-READ    | HARD | BLOCKED_BY_P2
-P3-REAL-ACTIVITY-ACTION  | HARD | BLOCKED_BY_P2
-P3-REAL-LIVE-VISIBILITY  | HARD | BLOCKED_BY_P2
-P3-REAL-REDACTION        | HARD | BLOCKED_BY_P2
+P3-REAL-ACTIVITY-READ    | HARD | PASS | ba4ba00
+P3-REAL-ACTIVITY-ACTION  | HARD | PASS | ba4ba00
+P3-REAL-LIVE-VISIBILITY  | HARD | PASS | ba4ba00
+P3-REAL-REDACTION        | HARD | PASS | ba4ba00
 ```
-
-A failure repairs Phase 3 before Phase 4 acceptance may count.
 
 ---
 
-# Phase 4 — IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE
+# Phase 4 — COMPLETE
 
 Current runtime contains:
 
@@ -166,22 +155,18 @@ Current runtime contains:
 
 Provisional answer text is non-authoritative. The final validated `NextDecision` remains authority and streaming cannot authorize an effect.
 
-Formal acceptance is blocked until P2 and all P3 gates pass.
-
-Then execute:
-
 ```text
-P4-REAL-FIRST-DELTA      | HARD | BLOCKED_BY_P2_P3
-P4-REAL-FINAL-PARITY     | HARD | BLOCKED_BY_P2_P3
-P4-REAL-CANCEL-STREAM    | HARD | BLOCKED_BY_P2_P3
-P4-REAL-UTF8-FRAGMENT    | HARD | BLOCKED_BY_P2_P3
+P4-REAL-FIRST-DELTA      | HARD | PASS | 8a4432d
+P4-REAL-FINAL-PARITY     | HARD | PASS | 8a4432d
+P4-REAL-CANCEL-STREAM    | HARD | PASS | 8a4432d
+P4-REAL-UTF8-FRAGMENT    | HARD | PASS | 8a4432d
 ```
 
-Use `PHASE34_REAL_VALIDATION_RUNBOOK.md`.
+The cancellation gate was rerun with all P4 gates after its bounded-fixture repair.
 
 ---
 
-# P5+ product roadmap — NOT ELIGIBLE
+# Phase 5 — READY
 
 The new product direction is documented in:
 
@@ -206,13 +191,14 @@ P14 additional surfaces/automation/MCP
 P15 additional providers
 ```
 
-These are product plans, not current implementation claims.
+These are product plans, not current implementation claims. P5.1 is selected next; P6+ remains
+ineligible until the preceding phase gates allow it.
 
 ---
 
 # Current known product limitations recorded for future phases
 
-These are not reasons to bypass the active P2-P4 hard gate, but are now explicitly captured so later work does not discover them accidentally:
+These limitations define the starting point for Phase 5 and later work:
 
 - frontend uses panel-global `state.loading` and currently disables composer/conversation/model/autonomy controls while a visible turn runs;
 - backend currently has two cron slots rather than a measured/configurable concurrency policy;
@@ -243,22 +229,7 @@ These are not reasons to bypass the active P2-P4 hard gate, but are now explicit
 
 # Exact next action
 
-On a disposable real Odoo 18 environment, test the **current final `main` SHA** using the existing runbooks.
-
-First run all Phase 2 gates:
-
-```text
-P2-REAL-AUTH
-P2-REAL-ACL
-P2-REAL-TIMEOUT
-P2-REAL-TOOLFAIL
-P2-REAL-RECOVERY
-```
-
-If any fails: record evidence, create the smallest P2 repair slice, add deterministic regression coverage and rerun that gate. Do not count P3/P4 acceptance.
-
-If all P2 gates pass: formally close Phase 2, then execute all four P3 gates on the same accepted code lineage.
-
-If all P3 gates pass: formally close Phase 3, then execute all four P4 gates.
-
-If all P4 gates pass: update this cursor to Phase 5 `READY` and select **P5.1 turn-scoped frontend/background state** from `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`.
+Begin **P5.1 turn-scoped frontend/background state** from
+`AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`: reconstruct the current panel-global loading/cancellation
+ownership, define the smallest turn/conversation-scoped state contract and its deterministic gates,
+then implement only that slice. Preserve the accepted P2-P4 authority and recovery invariants.

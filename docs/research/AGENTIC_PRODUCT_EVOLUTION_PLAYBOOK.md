@@ -19,7 +19,7 @@ The model may reason, investigate, retrieve and answer deeply. Odoo/host contrac
 
 ## 1.1 Formal prerequisite
 
-No Phase 5 implementation is eligible until the already-landed P2/P3/P4 contract chain is accepted in this order:
+The P2/P3/P4 prerequisite chain was accepted on 2026-08-28 in this order:
 
 ```text
 P2 five real gates PASS
@@ -730,11 +730,11 @@ Queue/concurrency measurements should include queue wait, admitted-running count
 ```text
 P0  baseline                                     COMPLETE
 P1  provider boundary / decision loop            COMPLETE
-P2  structured failures                          REAL GATES PENDING
-P3  live public activity                         IMPLEMENTED; ACCEPTANCE BLOCKED BY P2
-P4  real answer streaming                        IMPLEMENTED; ACCEPTANCE BLOCKED BY P2/P3
+P2  structured failures                          COMPLETE
+P3  live public activity                         COMPLETE
+P4  real answer streaming                        COMPLETE
 
-P5  natural non-blocking multi-chat + continuity
+P5  natural non-blocking multi-chat + continuity READY; P5.1 NEXT
 P6  TaskPlan / multi-step EffectPlan / EffectJournal
 P7  mini-framework + Assistant manifest
 P8  Evidence + source/runtime/log intelligence
@@ -747,4 +747,4 @@ P14 additional surfaces / automation / MCP
 P15 additional providers
 ```
 
-**Exact next action remains the existing P2 real-validation chain. Do not select P5 yet.**
+**Exact next action: begin P5.1 turn-scoped frontend/background state.**

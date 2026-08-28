@@ -19,7 +19,7 @@ When documents disagree, use:
 
 | Document | Status | Purpose |
 | --- | --- | --- |
-| `CURRENT_STATE.md` | current implementation | Audited snapshot of what exists now, including landed-but-unaccepted P3/P4 code and current limitations. |
+| `CURRENT_STATE.md` | current implementation | Audited snapshot of what exists now, including accepted P2-P4 code and current limitations. |
 | `PRODUCT_VISION.md` | current product direction | Defines the one-global-Agent target: broad Codex-level reasoning with Odoo/host authority, dynamic context/evidence/capabilities, non-blocking multi-chat, RAG and future technical operations. |
 | `ARCHITECTURE.md` | current + target boundaries | Runtime, authority, persistence, concurrency and component boundaries. |
 | `UNIFIED_AGENT_RUNTIME.md` | current | Turn lifecycle, provider/host split and recovery foundations. |
@@ -46,7 +46,7 @@ Primary entry points:
 - `research/EXECUTION_STATE.md` — **the current cursor** used by recurring roadmap execution;
 - `research/CONTINUOUS_EXECUTION_PROTOCOL.md` — restartable slice/gate/validation rules;
 - `research/REAL_ENV_VALIDATION_PROTOCOL.md` — named real product-path acceptance gates;
-- `research/FOUNDATION_STABILIZATION_PLAYBOOK.md` — historical/current P0-P4 stabilization path; P0/P1 complete, P2 acceptance pending, P3/P4 implementation landed pending ordered gates;
+- `research/FOUNDATION_STABILIZATION_PLAYBOOK.md` — historical/current P0-P4 stabilization path; P0-P4 are complete;
 - `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` — **P5+ gated product roadmap** derived from `PRODUCT_VISION.md`;
 - `research/E2E_AGENT_LOOP_CONVERGENCE.md` — code-level reasoning loop convergence record that led to ADR-019;
 - `research/PHASE23_REAL_VALIDATION_RUNBOOK.md` and `research/PHASE34_REAL_VALIDATION_RUNBOOK.md` — reproducible current P2-P4 validation procedures;
@@ -59,13 +59,13 @@ Current accepted/blocked state is summarized as:
 ```text
 P0 baseline                                      COMPLETE
 P1 provider boundary / host decision loop        COMPLETE
-P2 structured failure presentation               HARD REAL GATES PENDING
-P3 live public activity                          CODE LANDED; ACCEPTANCE BLOCKED BY P2
-P4 real answer streaming                         CODE LANDED; ACCEPTANCE BLOCKED BY P2/P3
+P2 structured failure presentation               COMPLETE
+P3 live public activity                          COMPLETE
+P4 real answer streaming                         COMPLETE
 
--- P2 -> P3 -> P4 acceptance required --
+-- accepted foundation --
 
-P5 natural non-blocking multi-chat + continuity
+P5 natural non-blocking multi-chat + continuity  READY; P5.1 NEXT
 P6 deep planning / multi-step effects / EffectJournal
 P7 mini-framework / self-awareness
 P8 Evidence / source / logs / installation intelligence

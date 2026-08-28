@@ -2,7 +2,7 @@
 
 Date: 2026-08-28
 Inspected implementation/test base: `33ca2bfaeebb85f0675594b27c6d52cbd7bc8dcf`
-Status: `IN_PROGRESS`
+Status: `COMPLETE`
 
 ## Goal
 
@@ -411,3 +411,10 @@ five `P2-REAL-*` presentation validations are not yet materially executable and 
 Implement `P2.4-browser-failure-presentation` as the smallest coherent consumer of the persisted
 browser-safe failure projection. Then run `P2-REAL-AUTH`, `P2-REAL-ACL`, `P2-REAL-TIMEOUT`,
 `P2-REAL-TOOLFAIL` and `P2-REAL-RECOVERY` before selecting Phase 3.
+
+## Phase 2 completion note
+
+P2.4 and all five `P2-REAL-*` gates subsequently passed on
+`ba4ba00f9a913854a21b571cbb4559105347cca2`. See
+`evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md`. The earlier per-slice next-action sections are
+retained as execution history rather than current instructions.

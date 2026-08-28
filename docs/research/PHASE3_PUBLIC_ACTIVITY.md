@@ -2,7 +2,7 @@
 
 Date reconciled: 2026-08-28  
 Runtime implementation baseline: `24b9460ad09998ec50d853e0a715b543e5991bbb`  
-State: `IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE`  
+State: `COMPLETE`
 Prerequisite: Phase 2 all hard real gates PASS
 
 This record supersedes `PHASE3_PUBLIC_ACTIVITY_PREPARATION.md` as the status record for production Phase 3. The preparation document remains useful historical evidence for how the contract was designed.
@@ -74,11 +74,12 @@ Relevant runbook:
 docs/research/PHASE34_REAL_VALIDATION_RUNBOOK.md
 ```
 
-The existence of tests/harnesses is not real acceptance evidence.
+The existence of tests/harnesses alone is not real acceptance evidence. The real acceptance below
+was recorded separately.
 
 ## Hard real gates
 
-After Phase 2 formally passes, execute in order/against the accepted lineage:
+Accepted against checkpoint `ba4ba00f9a913854a21b571cbb4559105347cca2`:
 
 ```text
 P3-REAL-ACTIVITY-READ
@@ -86,6 +87,9 @@ P3-REAL-ACTIVITY-ACTION
 P3-REAL-LIVE-VISIBILITY
 P3-REAL-REDACTION
 ```
+
+All four gates are `PASS`; see
+`evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md`.
 
 ### P3-REAL-ACTIVITY-READ
 
@@ -124,4 +128,4 @@ AND all four P3 real gates PASS
 AND current docs/evidence updated
 ```
 
-Then Phase 4 real acceptance becomes eligible.
+Phase 4 subsequently completed its real acceptance gates on the same linear code lineage.

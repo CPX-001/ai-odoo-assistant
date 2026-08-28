@@ -2,7 +2,7 @@
 
 Date reconciled: 2026-08-28  
 Runtime implementation baseline: `24b9460ad09998ec50d853e0a715b543e5991bbb`  
-State: `IMPLEMENTED_AWAITING_ORDERED_ACCEPTANCE`  
+State: `COMPLETE`
 Prerequisite: Phase 2 COMPLETE and Phase 3 COMPLETE
 
 ## Goal
@@ -75,7 +75,7 @@ docs/research/PHASE34_REAL_VALIDATION_RUNBOOK.md
 
 ## Hard real gates
 
-Only after all Phase 3 gates are PASS:
+Accepted against checkpoint `8a4432dc9852eacc422b8c794b6613c75da702a9`:
 
 ```text
 P4-REAL-FIRST-DELTA
@@ -83,6 +83,9 @@ P4-REAL-FINAL-PARITY
 P4-REAL-CANCEL-STREAM
 P4-REAL-UTF8-FRAGMENT
 ```
+
+All four gates are `PASS`; see
+`evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md`.
 
 ### P4-REAL-FIRST-DELTA
 
@@ -116,4 +119,5 @@ AND all four P4 real gates PASS
 AND current docs/evidence updated
 ```
 
-After that, set `EXECUTION_STATE.md` to Phase 5 READY and begin `P5.1 turn-scoped frontend/background state` from `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`.
+Phase 5 is now `READY`. The next selected slice is `P5.1 turn-scoped frontend/background state`
+from `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`.
