@@ -1,6 +1,6 @@
 # Current implementation state
 
-Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2 scheduler concurrency/backpressure is now implemented through the current main lineage, with the acceptance harness landed through `b1e49d97fce5506a2c9bb19b3a9ce1303f7add9c`; its batched Odoo/regression/browser acceptance is still pending.
+Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2 scheduler concurrency/backpressure is accepted through `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`; P5.3 stable settings snapshot is READY.
 
 This document distinguishes **implemented code** from **formal roadmap acceptance** and from the target in `PRODUCT_VISION.md`.
 
@@ -117,7 +117,10 @@ P5.2 implementation now includes:
 
 Excess work remains durable `queued`; scheduler saturation is not a turn failure. `recovery_required` remains non-replayable and terminal for scheduler eligibility, so it does not permanently freeze a conversation.
 
-This P5.2 behavior is **implemented but not formally accepted**. Its deterministic Odoo tests, full addon regression and the three real browser/provider gates are intentionally validated as one final P5.2 batch. See `research/P5.2_SCHEDULER_IMPLEMENTATION.md` and `research/P5.2_VALIDATION_RUNBOOK.md`.
+This P5.2 behavior is implemented and accepted. Its deterministic Odoo tests, full addon regression,
+HOOT/P5.1 regressions and three real browser/provider gates passed on the content lineage through
+`b4fbb034e113a41c26db77cb274f2b3b30f6eee3`. See `research/P5.2_SCHEDULER_IMPLEMENTATION.md` and
+`research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
 
 ### P5.1 frontend state implemented and accepted
 
@@ -281,7 +284,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS — P5.1 COMPLETE; P5.2 REAL_ENV_VALIDATION_REQUIRED
+P5 IN_PROGRESS — P5.1 and P5.2 COMPLETE; P5.3 READY
 P6+ NOT ELIGIBLE
 ```
 
@@ -292,10 +295,14 @@ P2 five PASS
  -> P3 four PASS
    -> P4 four PASS
    -> P5.1 accepted
+     -> P5.2 accepted
 ```
 
-The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` and the active slice record is `research/P5.2_SCHEDULER_IMPLEMENTATION.md`.
+The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`. P5.2 acceptance is recorded in
+`research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`; P5.3 stable settings snapshot
+is the next READY slice.
 
 ## 14. Next action
 
-Run the complete P5.2 acceptance batch in `research/P5.2_VALIDATION_RUNBOOK.md`: focused scheduler/fairness Odoo tests, queue/failure/full-addon regressions and `P5-REAL-MULTICHAT`, `P5-REAL-CONVERSATION-ORDERING`, `P5-REAL-BACKPRESSURE`. Repair the smallest owning P5.2 layer on failure. Only after that batch passes may P5.2 become COMPLETE and P5.3 become READY.
+Prepare P5.3 stable settings snapshot from `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`. P5.3 is
+READY but has not been implemented or accepted.

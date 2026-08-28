@@ -68,7 +68,9 @@ Excess work remains durable `queued`; scheduler saturation is not treated as a t
 
 The current physical pool still has two cron slots. P5.2 makes capacity/backpressure explicit for that pool; future measurement/provider support may justify a larger runner pool without changing turn authority or recovery semantics.
 
-P5.2 code is implemented but remains under its batched real acceptance gate. See `research/P5.2_SCHEDULER_IMPLEMENTATION.md` and `research/P5.2_VALIDATION_RUNBOOK.md`.
+P5.2 is implemented and accepted through its batched deterministic/Odoo/regression/real gates. See
+`research/P5.2_SCHEDULER_IMPLEMENTATION.md` and
+`research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
 
 ## 4. Concurrency boundary
 

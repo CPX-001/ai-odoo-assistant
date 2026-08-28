@@ -46,7 +46,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS; P5.1 complete, P5.2 REAL_ENV_VALIDATION_REQUIRED
+P5 IN_PROGRESS; P5.1 and P5.2 complete, P5.3 READY
 P6+ not eligible
 ```
 
@@ -58,7 +58,10 @@ The ordered P2 -> P3 -> P4 gates passed on 2026-08-28. The sanitized record is
 P5.1 passed its recorded HOOT/P2-P4 regression and focused real browser gates on 2026-08-28. The
 sanitized record is `evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`.
 
-P5.2 scheduler concurrency/backpressure is now implemented across its intended internal a/b/c scope, including bounded capacity, causal ordering, anti-starvation fairness, capacity-release wake-up, aggregate diagnostics and the real browser gate harness. It is **not accepted yet**: the focused Odoo tests, full addon regression and three real scheduler gates must be executed together using `P5.2_VALIDATION_RUNBOOK.md`. No unexecuted P5.2 test is a PASS.
+P5.2 scheduler concurrency/backpressure is implemented and accepted across its intended internal
+a/b/c scope, including bounded capacity, causal ordering, anti-starvation fairness, capacity-release
+wake-up, aggregate diagnostics and the real browser gates. The accepted batch is recorded in
+`evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`. P5.3 is READY.
 
 ## Recursive execution rule
 

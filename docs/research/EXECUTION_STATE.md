@@ -1,11 +1,12 @@
 # Stabilization execution state
 
-State format: 9
-Updated: 2026-08-28  
+State format: 10
+Updated: 2026-08-29
 Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
 Accepted P5.1 implementation lineage through: `f7f924ce944db86e896745fef83ea2fb6fd6583a`
 P5.1 validation harness lineage through: `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`
 P5.2 implementation/harness lineage through: `b1e49d97fce5506a2c9bb19b3a9ce1303f7add9c`
+Accepted P5.2 validation/harness lineage through: `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
@@ -15,22 +16,22 @@ phase: 5
 phase_name: natural non-blocking multi-chat product
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P5.2-scheduler-concurrency-backpressure
-active_slice_record: docs/research/P5.2_SCHEDULER_IMPLEMENTATION.md
-active_slice_state: REAL_ENV_VALIDATION_REQUIRED
-current_gate_type: HARD_REAL_ENV_AND_REGRESSION
-blocking_validations: P5.2-ODOO-SCHEDULER, P5.2-ODOO-FAIRNESS-WAKEUP, P5.2-FULL-ADDON-REGRESSION, P5-REAL-MULTICHAT, P5-REAL-CONVERSATION-ORDERING, P5-REAL-BACKPRESSURE
-accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a
-acceptance_evidence: docs/research/evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md
-next_slice: NONE_UNTIL_P5.2_ACCEPTANCE
+active_slice: P5.3-stable-settings-snapshot
+active_slice_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
+active_slice_state: READY
+current_gate_type: PRE_IMPLEMENTATION
+blocking_validations: NONE
+accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3
+acceptance_evidence: docs/research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md
+next_slice: P5.3-stable-settings-snapshot
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
 Phases 0 through 4 are complete. The ordered P2 -> P3 -> P4 real Odoo/browser/provider acceptance
 chain passed on one linear code lineage. P5.1 production code and its deterministic, Odoo and real
 browser/provider acceptance are complete. P5.2 scheduler capacity, causal ordering, fairness,
-release wake-up, diagnostics and real-gate harness are implemented, but P5.2 remains unaccepted
-until the batched deterministic/regression/real validation completes.
+release wake-up, diagnostics and real two-cron behavior are accepted. P5.3 is READY but has not
+been implemented.
 
 ---
 
@@ -232,7 +233,7 @@ P5.1-BROWSER-REOPEN             | PASS
 
 Evidence: `evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`.
 
-## P5.2 Scheduler concurrency/backpressure — REAL_ENV_VALIDATION_REQUIRED
+## P5.2 Scheduler concurrency/backpressure — COMPLETE
 
 Implementation records:
 
@@ -257,17 +258,24 @@ Implemented P5.2 behavior now includes:
 - bounded administrator-only scheduler diagnostics;
 - focused fairness/wake-up Odoo tests and P5.2 real browser gate tooling.
 
-No P5.2 deterministic or real gate is recorded PASS from the connector implementation environment.
-The required validation is intentionally batched for the completed P5.2 slice rather than stopping
-between P5.2a/P5.2b/P5.2c.
-
-Required real gates:
+Accepted validation:
 
 ```text
-P5-REAL-MULTICHAT
-P5-REAL-CONVERSATION-ORDERING
-P5-REAL-BACKPRESSURE
+P5.2-FOCUSED-ODOO              | PASS | 29 tests, 0 failures/errors
+P5.2-FULL-ADDON-REGRESSION     | PASS | 123 tests, 0 failures/errors
+P5.2-HOOT-REGRESSION           | PASS | 95 tests / 370 assertions
+P5.1-BROWSER-MULTICHAT         | PASS
+P5.1-BROWSER-REOPEN            | PASS
+P5-REAL-MULTICHAT              | PASS | peak active 2 at capacity 2
+P5-REAL-CONVERSATION-ORDERING  | PASS | successor queued, then running after release
+P5-REAL-BACKPRESSURE           | PASS | no over-admission at capacity 1; wake 1,674 ms
 ```
+
+Evidence: `evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
+
+## P5.3 Stable settings snapshot — READY
+
+P5.3 is the next eligible slice. It was not implemented or claimed in the P5.2 validation run.
 
 ---
 
@@ -276,7 +284,7 @@ P5-REAL-BACKPRESSURE
 These limitations define the remaining Phase 5 and later work:
 
 - background scopes are currently web-client memory; durable reconnect/continuity is expanded later in P5;
-- P5.2 scheduler implementation is present but still requires the batched Odoo/regression/browser acceptance before P5.3;
+- P5.3 stable settings snapshot remains the next unimplemented Phase 5 slice;
 - post-effect verified actions still need provider continuation/natural synthesis (P5.5);
 - conversation provider context is smaller than the target durable `ConversationContextManager` model (P5.6);
 - one canonical effect proposal/step is supported; multi-step effects are P6;
@@ -304,16 +312,7 @@ These limitations define the remaining Phase 5 and later work:
 
 # Exact next action
 
-Validate **all of P5.2 as one batch** using `P5.2_VALIDATION_RUNBOOK.md`:
-
-```text
-1. run focused scheduler + fairness/wake-up Odoo tests;
-2. rerun turn queue/failure and full addon regressions;
-3. run P5-REAL-MULTICHAT;
-4. run P5-REAL-CONVERSATION-ORDERING;
-5. run P5-REAL-BACKPRESSURE;
-6. record sanitized evidence on one coherent tested lineage.
-```
-
-Repair the smallest owning P5.2 layer on any failure. Only after the complete P5.2 acceptance batch
-passes may P5.2 become COMPLETE and P5.3 become READY.
+Select and prepare **P5.3 stable settings snapshot** from
+`AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`. Reconstruct its smallest coherent implementation and
+validation record before changing behavior. P5.3 is READY; no P5.3 implementation was started by
+the P5.2 acceptance run.

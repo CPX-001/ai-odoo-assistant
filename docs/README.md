@@ -53,9 +53,9 @@ Documentation should make lifecycle status obvious:
 - **Target / roadmap:** accepted product direction but not an implementation claim.
 - **Historical / retired:** kept for lineage/evidence only.
 
-This is especially important while Phase 5 is active. At the time of this README update, P0-P4 and
-P5.1 are accepted; P5.2 scheduler concurrency/backpressure is the next eligible slice. The exact live
-cursor is always [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
+This is especially important while Phase 5 is active. At the time of this README update, P0-P4,
+P5.1 and P5.2 are accepted; P5.3 stable settings snapshot is READY. The exact live cursor is always
+[`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
 
 ## Documentation layers
 
