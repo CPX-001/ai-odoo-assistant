@@ -1,0 +1,23 @@
+{
+  "format_version": 1,
+  "gates": [
+    {
+      "id": "P5-REAL-CONTINUITY",
+      "phase": 5,
+      "preconditions": [
+        "Disposable Odoo 18 Community database updated with odoo_ai_assistant",
+        "Real Codex provider account is ready",
+        "Loopback Odoo web origin is reachable by Chromium"
+      ],
+      "user": "Internal validation user with normal Assistant access",
+      "data": "Synthetic per-run conversation token only",
+      "injection": "No fault injection; browser reload creates the continuity boundary",
+      "action": "Send token, complete turn, reload web client, reopen same chat, ask for token, then repeat in a fresh chat",
+      "backend_expected": "Second turn receives versioned Odoo-owned context with only causal predecessor content; fresh conversation has isolated context",
+      "browser_expected": "Same-chat follow-up recovers the exact token after reload; fresh chat returns NO_CONTEXT and never leaks the token",
+      "redaction": "Record only gate booleans/version; do not persist raw provider payloads, credentials, hidden reasoning or full answers",
+      "cleanup": "Disposable database is the safety boundary; no business write capability is requested",
+      "command": "node tests/e2e/p5_6_continuity_browser.mjs --gate P5-REAL-CONTINUITY"
+    }
+  ]
+}

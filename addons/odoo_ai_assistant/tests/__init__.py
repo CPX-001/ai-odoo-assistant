@@ -8,6 +8,7 @@ from . import test_chat_preferences as test_chat_preferences
 from . import test_chat_storage as test_chat_storage
 from . import test_codex_decision_adapter as test_codex_decision_adapter
 from . import test_codex_planning_contract as test_codex_planning_contract
+from . import test_conversation_context as test_conversation_context
 from . import test_e2e_convergence_battery as test_e2e_convergence_battery
 from . import test_embedded_agent_runtime as test_embedded_agent_runtime
 from . import (
