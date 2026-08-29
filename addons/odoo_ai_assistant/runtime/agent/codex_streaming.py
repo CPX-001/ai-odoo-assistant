@@ -1,7 +1,8 @@
-"""Phase 4 Codex answer-delta integration without changing host authority.
+"""Codex answer and readable-reasoning-summary streaming without changing host authority.
 
-The provider still returns one validated ``NextDecision``. This adapter only projects the
-user-facing ``final_answer.answer`` field from App Server deltas into the existing host event sink.
+The provider still returns one validated ``NextDecision``. Provisional final-answer text and
+provider-declared readable reasoning summaries are optional presentation channels. Raw reasoning
+(``item/reasoning/textDelta``) is deliberately ignored and can never cross the public live seam.
 """
 
 from __future__ import annotations
@@ -34,11 +35,13 @@ from .codex_decision import (
 from .decision_validation import validate_next_decision
 
 _MAX_PROVIDER_DELTA = 16 * 1024
+_MAX_PUBLIC_REASONING_DELTA = 2 * 1024
 _MAX_ITEM_ID = 256
+_MAX_SUMMARY_INDEX = 64
 
 
 class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
-    """Current Codex decision adapter with safe provisional answer projection."""
+    """Current Codex decision adapter with safe provisional presentation streams."""
 
     async def next_decision(
         self,
@@ -117,6 +120,7 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
         extractor = StructuredFinalAnswerDeltaExtractor()
         answer_item_id: str | None = None
         streaming_enabled = True
+        reasoning_summary_enabled = True
         for _ in range(_MAX_EVENTS):
             if self._cancelled():
                 await _best_effort_interrupt(client, thread_id, turn_id)
@@ -136,6 +140,23 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                 )
                 continue
             _validate_decision_notification(method, params, thread_id=thread_id, turn_id=turn_id)
+            if method == "item/reasoning/summaryTextDelta":
+                item_id, summary_index, delta = _reasoning_summary_delta(
+                    params,
+                    thread_id=thread_id,
+                    turn_id=turn_id,
+                )
+                if reasoning_summary_enabled and delta:
+                    reasoning_summary_enabled = _emit_reasoning_summary_delta(
+                        context,
+                        item_id=item_id,
+                        summary_index=summary_index,
+                        text=delta,
+                    )
+                continue
+            if method == "item/reasoning/textDelta":
+                # This is raw/private reasoning. It is intentionally inert and never projected.
+                continue
             if method == "item/agentMessage/delta":
                 item_id, delta = _agent_message_delta(
                     params,
@@ -203,10 +224,62 @@ def _agent_message_delta(params, *, thread_id: str, turn_id: str) -> tuple[str, 
     return item_id, delta
 
 
+def _reasoning_summary_delta(
+    params,
+    *,
+    thread_id: str,
+    turn_id: str,
+) -> tuple[str, int, str]:
+    expected = {"delta", "itemId", "summaryIndex", "threadId", "turnId"}
+    if not isinstance(params, dict) or set(params) != expected:
+        raise CodexAgentError("codex_reasoning_summary_delta_invalid")
+    item_id = params.get("itemId")
+    summary_index = params.get("summaryIndex")
+    delta = params.get("delta")
+    if (
+        params.get("threadId") != thread_id
+        or params.get("turnId") != turn_id
+        or not isinstance(item_id, str)
+        or not 1 <= len(item_id) <= _MAX_ITEM_ID
+        or type(summary_index) is not int
+        or not 0 <= summary_index <= _MAX_SUMMARY_INDEX
+        or not isinstance(delta, str)
+        or len(delta) > _MAX_PROVIDER_DELTA
+        or "\x00" in delta
+    ):
+        raise CodexAgentError("codex_reasoning_summary_delta_invalid")
+    return item_id, summary_index, delta
+
+
 def _emit_answer_delta(context, text: str) -> bool:
     try:
         context.emit("answer.delta", "Respuesta", {"text": text})
     except Exception:  # noqa: BLE001 - live UX cannot become business authority
+        return False
+    return True
+
+
+def _emit_reasoning_summary_delta(
+    context,
+    *,
+    item_id: str,
+    summary_index: int,
+    text: str,
+) -> bool:
+    try:
+        for start in range(0, len(text), _MAX_PUBLIC_REASONING_DELTA):
+            chunk = text[start : start + _MAX_PUBLIC_REASONING_DELTA]
+            if chunk:
+                context.emit(
+                    "reasoning.summary.delta",
+                    "Resumen de razonamiento",
+                    {
+                        "item_id": item_id,
+                        "summary_index": summary_index,
+                        "text": chunk,
+                    },
+                )
+    except Exception:  # noqa: BLE001 - readable summaries cannot become business authority
         return False
     return True
 
