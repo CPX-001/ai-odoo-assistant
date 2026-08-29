@@ -4,22 +4,25 @@
        t-inherit="odoo_ai_assistant.AssistantPanel"
        t-inherit-mode="extension">
         <xpath expr="//div[@t-if='state.loading and state.streamingText']" position="before">
-            <section t-if="state.currentActivity"
+            <section t-if="activityItems.length"
                 class="o_ai_assistant_activity mt-3 border rounded bg-light-subtle px-2 py-2"
                 aria-label="Actividad del Assistant">
                 <details>
                     <summary class="small d-flex align-items-center gap-2">
-                        <i class="fa fa-circle-o-notch" aria-hidden="true"/>
-                        <span class="text-break" t-esc="state.currentActivity.label"/>
+                        <i t-if="state.loading" class="fa fa-circle-o-notch fa-spin" aria-hidden="true"/>
+                        <i t-else="" class="fa fa-check-circle-o" aria-hidden="true"/>
+                        <span class="text-break" t-esc="activitySummaryLabel"/>
                     </summary>
                     <div class="mt-2 d-flex flex-column gap-1">
-                        <div t-foreach="state.activityEvents" t-as="event" t-key="event.sequence"
+                        <div t-foreach="activityItems" t-as="item" t-key="item.key"
                             class="small text-muted d-flex gap-2 align-items-start">
-                            <span class="font-monospace" t-esc="event.sequence"/>
+                            <i t-if="item.status === 'running'" class="fa fa-circle-o-notch fa-spin mt-1" aria-hidden="true"/>
+                            <i t-elif="item.status === 'failed'" class="fa fa-exclamation-circle mt-1" aria-hidden="true"/>
+                            <i t-else="" class="fa fa-check mt-1" aria-hidden="true"/>
                             <span class="text-break flex-grow-1">
-                                <t t-esc="event.label"/>
-                                <t t-if="event.resource and event.resource.model">
-                                    <span class="ms-1">· <t t-esc="event.resource.model"/></span>
+                                <t t-esc="item.label"/>
+                                <t t-if="item.resource and item.resource.model">
+                                    <span class="ms-1">· <t t-esc="item.resource.model"/></span>
                                 </t>
                             </span>
                         </div>
@@ -28,7 +31,7 @@
             </section>
         </xpath>
         <xpath expr="//div[@t-if='state.loading and !state.streamingText']" position="attributes">
-            <attribute name="t-if">state.loading and !state.streamingText and !state.currentActivity</attribute>
+            <attribute name="t-if">state.loading and !state.streamingText and !activityItems.length</attribute>
         </xpath>
     </t>
 </templates>

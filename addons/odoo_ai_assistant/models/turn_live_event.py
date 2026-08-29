@@ -28,6 +28,7 @@ _MAX_ANSWER_CHARS = 16 * 1024
 _MAX_ANSWER_DELTA = 2 * 1024
 _LIVE_LOCK_NAMESPACE = 20260828
 _MODEL = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
+_ACTIVITY_ID = re.compile(r"^activity:v[1-9][0-9]*:[0-9a-f]{32}$")
 _DIAGNOSTIC = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 
 _INTERNAL_ACTIVITY = {
@@ -73,6 +74,7 @@ class AssistantTurnLiveEvent(models.Model):
     label = fields.Char(readonly=True, size=240)
     resource = fields.Json(readonly=True)
     capability = fields.Char(readonly=True, size=128)
+    activity_id = fields.Char(readonly=True, size=64, index=True)
     progress = fields.Integer(readonly=True)
     progress_set = fields.Boolean(readonly=True, default=False)
     diagnostic_code = fields.Char(readonly=True, size=128)
@@ -103,6 +105,7 @@ class AssistantTurnLiveEvent(models.Model):
         label,
         resource=None,
         capability=None,
+        activity_id=None,
         progress=None,
         diagnostic_code=None,
     ):
@@ -116,6 +119,7 @@ class AssistantTurnLiveEvent(models.Model):
             label=label,
             resource=resource,
             capability=capability,
+            activity_id=activity_id,
             progress=progress,
             diagnostic_code=diagnostic_code,
         )
@@ -142,6 +146,7 @@ class AssistantTurnLiveEvent(models.Model):
                 progress=self.progress if self.progress_set else None,
                 diagnostic_code=self.diagnostic_code or None,
                 occurred_at=_iso_utc(self.occurred_at),
+                activity_id=self.activity_id or None,
             )
         except PublicTurnEventError as error:
             raise ValidationError("Invalid persisted Assistant public activity") from error
@@ -209,7 +214,9 @@ class AssistantTurnEventLiveBridge(models.Model):
                 "progress",
                 "diagnostic_code",
             }
-            if set(payload) != expected:
+            if set(payload) == expected:
+                payload = {**payload, "activity_id": None}
+            elif set(payload) != expected | {"activity_id"}:
                 raise ValidationError("Invalid Assistant public-activity bridge")
             self.env["odoo.ai.turn.live.event"].append_activity_independent(
                 turn_id=turn.id,
@@ -306,6 +313,9 @@ def _public_projection(event_type, title, payload, diagnostic_code):
     capability = data.get("capability")
     if not isinstance(capability, str) or _MODEL.fullmatch(capability) is None:
         capability = None
+    activity_id = data.get("activity_id")
+    if not isinstance(activity_id, str) or _ACTIVITY_ID.fullmatch(activity_id) is None:
+        activity_id = None
     code = diagnostic_code or data.get("code")
     if not isinstance(code, str) or _DIAGNOSTIC.fullmatch(code) is None:
         code = None
@@ -316,6 +326,7 @@ def _public_projection(event_type, title, payload, diagnostic_code):
         "label": title,
         "resource": _resource_from_payload(data),
         "capability": capability,
+        "activity_id": activity_id,
         "progress": None,
         "diagnostic_code": code,
     }
@@ -360,6 +371,7 @@ def _append_activity(dbname, *, turn_id, **data):
                 "label": event.label,
                 "resource": event.resource or False,
                 "capability": event.capability or False,
+                "activity_id": event.activity_id or False,
                 "progress": event.progress if event.progress is not None else 0,
                 "progress_set": event.progress is not None,
                 "diagnostic_code": event.diagnostic_code or False,
@@ -406,6 +418,7 @@ def _append_answer(dbname, *, turn_id, text):
                 progress=None,
                 diagnostic_code=None,
                 occurred_at=_iso_utc(started_at),
+                activity_id=None,
             )
             live.create(
                 {
@@ -418,6 +431,7 @@ def _append_answer(dbname, *, turn_id, text):
                     "label": started.label,
                     "resource": False,
                     "capability": False,
+                    "activity_id": False,
                     "progress": 0,
                     "progress_set": False,
                     "diagnostic_code": False,
