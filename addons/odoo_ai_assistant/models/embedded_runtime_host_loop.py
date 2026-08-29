@@ -117,9 +117,6 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
         except WorkingTranscriptError as error:
             raise EmbeddedRuntimeError(error.code) from error
 
-        # A redirect that arrived after an earlier provider decision invalidates that private
-        # working transcript before a fresh claim resumes. The original user message remains on
-        # the turn and ordered redirects are projected independently by InteractiveCodexDecisionEngine.
         control_snapshot = turn.runtime_control_snapshot(turn.turn_uuid)
         if control_snapshot["cancel_requested"]:
             raise EmbeddedRuntimeError("agent_cancelled")
@@ -146,8 +143,6 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 cancellation_requested=cancellation_requested,
             ),
             component="codex",
-            # The provider decision boundary can only read or stage a plan. The write barrier and
-            # effectful plan execution happen later, outside this wrapped provider call.
             effect_state="none",
         )
         service = AgentTurnService(
@@ -205,7 +200,6 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             "plan": prepared,
         }
         if prepared["requires_confirmation"]:
-            # Persist plan and its private boundary in the same current Odoo transaction.
             turn.with_user(SUPERUSER_ID).write(
                 {"working_items_payload": transcript_payload(prepared_items)}
             )
@@ -248,11 +242,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 raise EmbeddedRuntimeError(error.code) from error
 
         def before_effect():
-            # A late Stop or redirect must win before the durable write barrier. This closes the
-            # small race between the provider returning a plan and Odoo beginning its effect.
             _ensure_turn_control_current(turn)
-            # Commit pending preview activity, the plan transcript and the barrier together on
-            # the primary worker cursor before the first effect.
             _commit_plan_barrier(
                 turn,
                 lease_token,
@@ -272,8 +262,6 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
         completed = dict(envelope)
         completed["plan"] = executed.payload
         receipt_items = _append_verified_effect_receipt(working_items, executed.payload)
-        # Business effects, verification, plan result, private receipt and final synthesis share
-        # this cursor. The separately committed pre-effect barrier remains the recovery boundary.
         turn.with_user(SUPERUSER_ID).write(
             {
                 "capability_plan_payload": completed,
@@ -325,8 +313,6 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                     cancellation_requested=cancellation_requested,
                 ),
                 component="codex",
-                # Verification already observed the effect. Any provider failure from this point
-                # must never be classified as an effect-safe retry opportunity.
                 effect_state="confirmed",
             )
         )
@@ -373,7 +359,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
         natural = dict(completed)
         natural["answer"] = result.answer
         natural["confidence"] = result.confidence
-        return self._plan_response(turn, natural, policy, completed=True)
+        return self._plan_response(turn, natural, policy)
 
 
 def _ensure_turn_control_current(turn):
