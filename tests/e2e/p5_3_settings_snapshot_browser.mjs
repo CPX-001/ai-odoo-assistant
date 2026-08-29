@@ -227,9 +227,12 @@ async function changeModelThroughUi(page, modelPreferences) {
         { timeout: 30_000 }
     );
     const optionText = targetModel === null ? "Predeterminado" : targetModel;
-    const pickerOptions = page.locator(".o_ai_assistant_picker_option").filter({ hasText: optionText });
-    assert.ok(await pickerOptions.count(), `expected a model option for ${optionText}`);
-    await pickerOptions.last().click();
+    const pickerOption = page
+        .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_option")
+        .filter({ hasText: optionText })
+        .last();
+    await pickerOption.waitFor({ state: "visible", timeout: 30_000 });
+    await pickerOption.click();
     const envelope = await (await responsePromise).json();
     assert.ok(!envelope.error, JSON.stringify(envelope.error));
     assert.equal(envelope.result?.ok, true);
@@ -249,11 +252,12 @@ async function changeAutonomyThroughUi(page, currentProfile) {
             response.request().method() === "POST",
         { timeout: 30_000 }
     );
-    const pickerOptions = page.locator(".o_ai_assistant_picker_option").filter({
-        hasText: PROFILE_LABEL[targetProfile],
-    });
-    assert.ok(await pickerOptions.count(), `expected an autonomy option for ${targetProfile}`);
-    await pickerOptions.last().click();
+    const pickerOption = page
+        .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_option")
+        .filter({ hasText: PROFILE_LABEL[targetProfile] })
+        .last();
+    await pickerOption.waitFor({ state: "visible", timeout: 30_000 });
+    await pickerOption.click();
     const envelope = await (await responsePromise).json();
     assert.ok(!envelope.error, JSON.stringify(envelope.error));
     assert.equal(envelope.result?.ok, true);
