@@ -8,6 +8,7 @@ from ..runtime.agent.codex_streaming import (
     StreamingCodexDecisionEngine,
     _emit_reasoning_summary_delta,
     _reasoning_summary_delta,
+    _streaming_thread_options,
 )
 
 
@@ -32,12 +33,25 @@ class _Context:
 
 
 class TestCodexReasoningSummary(BaseCase):
+    def _settings(self, *, effort=None):
+        return CodexAgentSettings(
+            executable=Path("/tmp/codex"),
+            codex_home=Path("/tmp/codex-home"),
+            reasoning_effort=effort,
+        )
+
     def _engine(self):
-        return StreamingCodexDecisionEngine(
-            CodexAgentSettings(
-                executable=Path("/tmp/codex"),
-                codex_home=Path("/tmp/codex-home"),
-            )
+        return StreamingCodexDecisionEngine(self._settings())
+
+    def test_streaming_adapter_requests_readable_summary_without_raw_reasoning(self):
+        self.assertEqual(
+            _streaming_thread_options(self._settings(effort="high")),
+            {
+                "config": {
+                    "model_reasoning_effort": "high",
+                    "model_reasoning_summary": "auto",
+                }
+            },
         )
 
     def test_summary_delta_uses_closed_provider_shape(self):
