@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 21
+State format: 22
 Updated: 2026-08-29
 
 Accepted foundation/runtime lineage:
@@ -32,6 +32,7 @@ Roadmaps:
 docs/research/FOUNDATION_STABILIZATION_PLAYBOOK.md
 docs/research/E2E_AGENT_LOOP_CONVERGENCE.md
 docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
+docs/research/P5.8_SEMANTIC_ACTIVITY_UX.md
 ```
 
 ## Current cursor
@@ -49,10 +50,12 @@ blocking_validations: none
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266 -> 720102f2a13af5240c779b07cc71ee65994a87b1
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md
 next_action: begin P5.7 conversation-scoped preferences in a later explicitly authorized run
+planned_successor_after_p5.7: P5.8-semantic-activity-reasoning-navigation-ux
+planned_successor_record: docs/research/P5.8_SEMANTIC_ACTIVITY_UX.md
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
-P5.6 is accepted. P5.7 is eligible but remains unstarted in this validation run.
+P5.6 is accepted. P5.7 is eligible but remains unstarted. Product review on 2026-08-29 added P5.8 as the planned semantic-activity/reasoning/navigation UX slice after P5.7 and before Phase 6; this does not make P5.8 active or implemented.
 
 ---
 
@@ -111,7 +114,7 @@ P4-REAL-UTF8-FRAGMENT  PASS
 
 # Phase 5 — IN_PROGRESS
 
-Product direction: `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`.
+Product direction: `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` plus the accepted target supplement `P5.8_SEMANTIC_ACTIVITY_UX.md`.
 
 ## P5.1 Turn-scoped frontend/background state — COMPLETE
 
@@ -210,11 +213,24 @@ P5-REAL-CONTINUITY            PASS
 
 Evidence: `evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`.
 
+## P5.7 Conversation-scoped preferences — READY_NOT_STARTED
+
+This remains the exact active slice. Supported conversational settings such as temporary autonomy/response mode are intended to mutate through explicit host-owned capabilities while administrator/system ceilings remain authoritative.
+
+## P5.8 Semantic activity/reasoning/navigation UX — PLANNED_AFTER_P5.7
+
+Target specification: `P5.8_SEMANTIC_ACTIVITY_UX.md`.
+
+This slice is intended to replace the user-visible event-log feel with a semantic work-item projection while preserving P3 durability/redaction. It covers stable operation correlation, compact live headline, grouped start/completion lifecycle, readable provider reasoning summaries only where safely supported, typed clickable Odoo/source references, progressive batch disclosure, configurable user/developer detail and complete Odoo-language localization of deterministic UI text.
+
+It must remain separate from private/raw reasoning and from Phase-6 TaskPlan/effect authority. P5.8 is not implemented or validated yet.
+
 ---
 
 # Current known limitations after P5.6 acceptance
 
 - Conversation-scoped preference mutations are P5.7; P5.6 only carries the bounded session-settings slot/fallback.
+- Current public activity remains too close to raw capability lifecycle presentation; P5.8 is the planned semantic projection/UX repair.
 - One canonical effect step remains the P5 limit; multi-step effects are P6.
 - No external `CapabilityProvider` / Skill / ContextProvider / EvidenceProvider contract yet; those are later phases.
 - No general embedded RAG/Evidence provider yet.
@@ -230,17 +246,17 @@ Evidence: `evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`.
 - `CapabilityDefinition` remains atomic executable authority.
 - Provider facts/context are advisory bounded data; host owns effect certainty.
 - Durable write barrier and recovery semantics remain authoritative.
-- Raw provider output/private reasoning is never public activity.
+- Raw provider output/private reasoning is never public activity; only explicitly safe readable reasoning summaries may later cross the P5.8 presentation seam.
 - No parallel tool-authority registry is introduced.
 - One active causal turn per conversation; independent conversations may run concurrently within scheduler capacity.
 - Turn settings snapshots are immutable but revocable Odoo authorization stays dynamic.
 - P5.5 post-effect continuation has no PLAN authority.
 - P5.6 context snapshots are derived from Odoo history and cannot authorize tools/effects.
+- Deterministic user-visible Assistant text introduced by P5.8 must use Odoo localization semantics; semantic codes/arguments are protocol identity, not hard-coded English/Spanish strings.
 - No GitHub Actions are used for roadmap validation under current instructions.
 
 ---
 
 # Exact next action
 
-P5.7 conversation-scoped preferences is `READY_NOT_STARTED`. Do not infer implementation authority
-from this acceptance checkpoint; begin it only in a later run that explicitly selects that slice.
+P5.7 conversation-scoped preferences is `READY_NOT_STARTED`. Begin it only in a run that explicitly selects that slice. If P5.7 reaches acceptance without discovering a prerequisite conflict, the planned successor is P5.8 semantic activity/reasoning/navigation UX (`P5.8_SEMANTIC_ACTIVITY_UX.md`) before Phase 6.
