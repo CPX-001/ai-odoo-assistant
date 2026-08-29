@@ -174,11 +174,7 @@ async function turnSnapshot(page, turnId) {
             page,
             "odoo.ai.turn",
             "search_read",
-            [[[
-                "turn_uuid",
-                "=",
-                turnId,
-            ]]],
+            [[["turn_uuid", "=", turnId]]],
             {
                 fields: ["turn_uuid", "reasoning_model", "policy_payload", "state", "attempt_count"],
                 limit: 1,
@@ -220,20 +216,35 @@ async function readPreferences(page) {
     return { models, autonomyProfile: autonomy.profile };
 }
 
+function familyLabel(value) {
+    const match = /^gpt[- ]?(.+)$/i.exec(value || "");
+    return match ? `GPT-${match[1]}` : value;
+}
+
+function variantLabel(value) {
+    if (value === "sol") return "Sol";
+    if (value === "terra") return "Terra";
+    if (value === "luna") return "Luna";
+    return value;
+}
+
 async function changeModelThroughUi(page, modelPreferences) {
     const button = page.getByRole("button", { name: "Modelo de Codex" });
     await button.waitFor({ state: "visible", timeout: 30_000 });
     assert.equal(await button.isEnabled(), true, "model selector is blocked by the running turn");
 
     let targetModel;
+    let targetOption = null;
     if (modelPreferences.selected_model) {
         targetModel = null;
     } else {
+        targetOption =
+            modelPreferences.models.find((item) => !item.family_alias) || modelPreferences.models[0];
         assert.ok(
-            modelPreferences.models.length > 0,
+            targetOption,
             "P5.1 settings snapshot gate needs at least one selectable Codex model"
         );
-        targetModel = modelPreferences.models[0].model;
+        targetModel = targetOption.model;
     }
 
     await button.click();
@@ -243,20 +254,41 @@ async function changeModelThroughUi(page, modelPreferences) {
             response.request().method() === "POST",
         { timeout: 30_000 }
     );
-    const optionText = targetModel === null ? "Predeterminado" : targetModel;
-    const pickerOptions = page.locator(".o_ai_assistant_picker_option").filter({
-        hasText: optionText,
-    });
-    if (!(await pickerOptions.count())) {
-        const picker = await page.locator(".o_ai_assistant_model_picker").innerHTML();
-        const menus = await page.locator(".o_ai_assistant_picker_menu").allInnerTexts();
-        assert.fail(
-            `expected a model option for ${optionText}; picker=${picker.slice(0, 1000)}; menus=${JSON.stringify(menus)}`
-        );
+    if (targetModel === null) {
+        const pickerOption = page
+            .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_option")
+            .filter({ hasText: "Predeterminado" })
+            .first();
+        await pickerOption.waitFor({ state: "visible", timeout: 30_000 });
+        await pickerOption.click();
+    } else if (targetOption.family && targetOption.variant) {
+        const family = page
+            .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_submenu_toggle")
+            .filter({ hasText: familyLabel(targetOption.family) });
+        if (await family.count()) {
+            await family.first().click();
+            const variant = page
+                .locator(".o_ai_assistant_picker_submenu:visible .o_ai_assistant_picker_option")
+                .filter({ hasText: variantLabel(targetOption.variant) })
+                .first();
+            await variant.waitFor({ state: "visible", timeout: 30_000 });
+            await variant.click();
+        } else {
+            const pickerOption = page
+                .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_option")
+                .filter({ hasText: familyLabel(targetOption.family) })
+                .last();
+            await pickerOption.waitFor({ state: "visible", timeout: 30_000 });
+            await pickerOption.click();
+        }
+    } else {
+        const pickerOption = page
+            .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_option")
+            .filter({ hasText: familyLabel(targetOption.family || targetOption.display_name) })
+            .last();
+        await pickerOption.waitFor({ state: "visible", timeout: 30_000 });
+        await pickerOption.click();
     }
-    const pickerOption = pickerOptions.last();
-    await pickerOption.waitFor({ state: "visible", timeout: 30_000 });
-    await pickerOption.click();
     const envelope = await (await responsePromise).json();
     assert.ok(!envelope.error, JSON.stringify(envelope.error));
     assert.equal(envelope.result?.ok, true);
