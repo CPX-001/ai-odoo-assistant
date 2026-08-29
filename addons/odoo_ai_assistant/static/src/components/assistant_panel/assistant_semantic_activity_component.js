@@ -7,6 +7,7 @@ import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/as
 import {
     openPublicReference,
     referenceDisclosure,
+    resourceModelReference,
     resourceReferences,
 } from "@odoo_ai_assistant/services/assistant_public_reference_service";
 import { semanticActivityPresentation } from "@odoo_ai_assistant/services/assistant_semantic_activity";
@@ -140,6 +141,7 @@ patch(AssistantPanel.prototype, {
             const disclosure = referenceDisclosure(references, {
                 pageSize: activity.preferences.batch_page_size,
                 visibleCount: this.semanticReferenceUi.visibleByKey[item.key] || null,
+                maximumRows: activity.preferences.limits.max_rendered_batch_rows,
             });
             return {
                 ...item,
@@ -149,9 +151,12 @@ patch(AssistantPanel.prototype, {
                         ? durationLabel(item.duration_ms)
                         : "",
                 references: disclosure.visible,
+                model_reference: resourceModelReference(item.resource),
                 reference_remaining_count: disclosure.remaining_count,
                 reference_next_count: disclosure.next_count,
                 can_show_more_references: disclosure.can_show_more,
+                can_show_remaining_references: disclosure.can_show_remaining,
+                references_over_limit: disclosure.remaining_blocked,
             };
         });
     },
@@ -191,23 +196,37 @@ patch(AssistantPanel.prototype, {
         if (!item?.reference_next_count) {
             return "";
         }
-        if (item.reference_remaining_count === item.reference_next_count) {
-            return _t("Mostrar los %s restantes", item.reference_remaining_count);
-        }
         return _t("Mostrar %s más", item.reference_next_count);
+    },
+
+    activityShowRemainingLabel(item) {
+        if (!item?.reference_remaining_count) {
+            return "";
+        }
+        return _t("Mostrar los %s restantes", item.reference_remaining_count);
     },
 
     showMoreActivityReferences(item) {
         if (!item?.key || !item.reference_next_count) {
             return;
         }
-        const current = this.semanticReferenceUi.visibleByKey[item.key] ||
+        const current =
+            this.semanticReferenceUi.visibleByKey[item.key] ||
             this.semanticActivity.preferences.batch_page_size;
         const maximum = this.semanticActivity.preferences.limits.max_rendered_batch_rows;
         this.semanticReferenceUi.visibleByKey[item.key] = Math.min(
             maximum,
             current + item.reference_next_count
         );
+    },
+
+    showRemainingActivityReferences(item) {
+        if (!item?.key || !item.can_show_remaining_references) {
+            return;
+        }
+        const maximum = this.semanticActivity.preferences.limits.max_rendered_batch_rows;
+        const desired = item.references.length + item.reference_remaining_count;
+        this.semanticReferenceUi.visibleByKey[item.key] = Math.min(maximum, desired);
     },
 
     async openActivityReference(reference) {
