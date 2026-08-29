@@ -23,6 +23,7 @@ function activity(sequence = 1) {
         progress: null,
         diagnostic_code: null,
         occurred_at: "2026-08-28T10:00:00.000000Z",
+        activity_id: "activity:v1:0123456789abcdef0123456789abcdef",
     };
 }
 
