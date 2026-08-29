@@ -12,6 +12,16 @@ const FOLLOW_POLL_MS = 500;
 const FOLLOW_MAX_ATTEMPTS = 360;
 const BIND_WAIT_MS = 50;
 const BIND_WAIT_ATTEMPTS = 40;
+let interventionSequence = 0;
+
+export function newClientInterventionId() {
+    const random = globalThis.crypto?.randomUUID?.();
+    if (typeof random === "string" && random.length >= 8) {
+        return `ui:${random}`;
+    }
+    interventionSequence += 1;
+    return `ui:${Date.now()}:${interventionSequence}`;
+}
 
 function activeScope(state) {
     return state.turnScopes?.[state.activeTurnScopeKey] || null;
@@ -97,13 +107,16 @@ export function composerActionMode({
     return "disabled";
 }
 
-export function normalizeRedirectResponse(response, turnId) {
+export function normalizeRedirectResponse(response, turnId, clientInterventionId = null) {
     if (
         response?.ok !== true ||
         response.turn_id !== turnId ||
         !["queued", "running"].includes(response.state) ||
         !Number.isSafeInteger(response.sequence) ||
         response.sequence <= 0 ||
+        typeof response.client_intervention_id !== "string" ||
+        (clientInterventionId !== null && response.client_intervention_id !== clientInterventionId) ||
+        typeof response.duplicate !== "boolean" ||
         !Number.isSafeInteger(response.resume_after_sequence) ||
         response.resume_after_sequence < 0 ||
         !validMessageView(response.message) ||
@@ -144,6 +157,7 @@ function noticeForError(code) {
         turn_not_redirectable: _t("Este procesamiento ya no admite nuevas indicaciones."),
         turn_redirect_budget_exceeded: _t("Se han acumulado demasiadas correcciones en este procesamiento."),
         turn_redirect_limit_exceeded: _t("Se ha alcanzado el límite de correcciones para este procesamiento."),
+        turn_intervention_id_conflict: _t("La corrección no pudo confirmarse de forma segura. Vuelve a intentarlo."),
         turn_reversion_not_ready: _t("Esta operación todavía no está lista para revertirse."),
         turn_reversion_unavailable: _t("Estos cambios no tienen una reversión automática segura."),
         capability_compensation_precondition_changed: _t(
@@ -243,6 +257,7 @@ patch(assistantPanelService, {
         const baseSubmit = service.submit.bind(service);
         state.stopLoading = false;
         state.reversionLoading = false;
+        state.reversionConfirmationOpen = false;
         state.turnControlNotice = "";
 
         service.submit = async (message) => {
@@ -258,12 +273,18 @@ patch(assistantPanelService, {
                     state.turnControlNotice = _t("El procesamiento todavía no está listo para recibir la corrección.");
                     return false;
                 }
+                const clientInterventionId = newClientInterventionId();
                 try {
                     const raw = await rpc("/odoo_ai/v1/turn/redirect", {
                         turn_id: turnId,
                         message: normalized,
+                        client_intervention_id: clientInterventionId,
                     });
-                    const redirected = normalizeRedirectResponse(raw, turnId);
+                    const redirected = normalizeRedirectResponse(
+                        raw,
+                        turnId,
+                        clientInterventionId
+                    );
                     if (!redirected) {
                         const code = errorCode(raw, "invalid_response");
                         state.turnControlNotice = noticeForError(code);
@@ -319,9 +340,7 @@ patch(assistantPanelService, {
                     state.turnControlNotice = _t("No se pudo identificar el procesamiento que debía detenerse.");
                     return false;
                 }
-                const response = await rpc("/odoo_ai/v1/turn/cancel", {
-                    turn_id: turnId,
-                });
+                const response = await rpc("/odoo_ai/v1/turn/cancel", { turn_id: turnId });
                 if (
                     response?.ok !== true ||
                     response.turn_id !== turnId ||
