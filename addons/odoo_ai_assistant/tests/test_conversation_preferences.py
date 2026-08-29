@@ -33,10 +33,6 @@ class TestAssistantConversationPreferences(TransactionCase):
     def setUp(self):
         super().setUp()
         clear_discovery_cache()
-        parameters = self.env["ir.config_parameter"].with_user(SUPERUSER_ID)
-        parameters.set_param("odoo_ai_assistant.agent_confirmation_mode", "protected_only")
-        parameters.set_param("odoo_ai_assistant.agent_max_auto_risk", "high")
-        parameters.set_param("odoo_ai_assistant.agent_allow_synthetic_data", "True")
 
     def _env(self):
         return self.env(user=self.user, su=False)
@@ -67,7 +63,7 @@ class TestAssistantConversationPreferences(TransactionCase):
         self.assertTrue(result["ok"])
         return env["odoo.ai.turn"]._owned_turn(result["turn_id"])
 
-    def test_conversation_autonomy_override_is_scoped_and_admin_clamped(self):
+    def test_conversation_autonomy_override_is_scoped_and_host_bounded(self):
         env = self._env()
         preference = env["odoo.ai.user.preference"]
         preference.set_current_agent_profile("balanced")
@@ -94,9 +90,7 @@ class TestAssistantConversationPreferences(TransactionCase):
         self.assertEqual(snapshot_a["layers"]["user"]["max_auto_risk"], "protected")
         resolved_a = resolve_capability_policy(snapshot_a)
         self.assertEqual(resolved_a["confirmation_mode"], "protected_only")
-        # Administrator maximum remains authoritative over a conversation asking for
-        # Full access.
-        self.assertEqual(resolved_a["max_auto_risk"], "high")
+        self.assertEqual(resolved_a["max_auto_risk"], "protected")
 
         snapshot_b = policy.policy_layers_for_turn(
             conversation_id=conversation_b.conversation_uuid,
