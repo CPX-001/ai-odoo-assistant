@@ -1,6 +1,6 @@
 # Current implementation state
 
-Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2 scheduler concurrency/backpressure is accepted through `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`. P5.3 stable settings snapshot is accepted through `32e836e7789ea72f3ba0d32fe6bdabbb092f5953`. P5.4 final activity/answer/failure UX is accepted through `3e2b38d68fe172cd2cf92d7794159f73476ac23d` after all local and HARD real gates passed. P5.5 post-effect reasoning is now implemented on `main`, but its first focused HARD Odoo gate has not yet been executed.
+Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2 scheduler concurrency/backpressure is accepted through `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`. P5.3 stable settings snapshot is accepted through `32e836e7789ea72f3ba0d32fe6bdabbb092f5953`. P5.4 final activity/answer/failure UX is accepted through `3e2b38d68fe172cd2cf92d7794159f73476ac23d`. P5.5 post-effect reasoning is accepted through `8427c8849b1e1f3afa6337de1209a6027410c266` after all focused, regression and HARD real gates passed. P5.6 is ready but not started.
 
 This document distinguishes **implemented code** from **formal roadmap acceptance** and from the target in `PRODUCT_VISION.md`.
 
@@ -57,7 +57,7 @@ The post-effect continuation receives the existing effective REASONING catalog b
 ### Current limitations
 
 - Only one canonical plan/effect step is accepted; multi-step `EffectPlan` is future P6 work.
-- P5.5 post-effect continuation is implemented but has not yet passed its focused Odoo, regression and real provider/product-path acceptance gates.
+- P5.5 post-effect continuation has passed its focused Odoo, regression and real provider/product-path acceptance gates.
 
 ## 4. Capability framework today
 
@@ -161,13 +161,17 @@ exercised both reject and approve decisions on a bounded disposable record, with
 write and fixture restoration. See `research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md` and
 `research/evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`.
 
-### P5.5 post-effect reasoning implemented; validation pending
+### P5.5 post-effect reasoning implemented and accepted
 
 After a plan effect is verified, the host now appends a bounded `verified_effect_receipt` containing the authoritative result and verification summary and resumes the existing provider decision loop. The continuation can use effective REASONING capabilities but receives no PLAN catalog. A provider attempt to propose another effect is rejected before execution.
 
 The fixed `_completion_answer()` prose is no longer the P5.5 current-path target for successful effectful turns: the provider composes the final answer from the verified receipt while the browser retains the completed plan/receipt as authoritative effect state.
 
-Focused Odoo coverage is prepared in `test_post_effect_reasoning.py`, and the validation procedure is recorded in `research/P5.5_VALIDATION_RUNBOOK.md`. No P5.5 PASS is claimed yet. The immediate HARD gate is `P5.5-ODOO-POST-EFFECT`.
+The accepted grouped validation passed with 227 unit tests, 19 standalone JS assertions, 132 Odoo
+tests, 102 HOOT tests / 396 assertions and the HARD real `P5-REAL-POST-EFFECT` gate. The real gate
+also exposed and verified repair of duplicate proposal/final messages after approval. See
+`research/P5.5_POST_EFFECT_REASONING.md` and
+`research/evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md`.
 
 ### P5.1 frontend state implemented and accepted
 
@@ -331,7 +335,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS — P5.1, P5.2, P5.3 and P5.4 COMPLETE; P5.5 LOCAL_VALIDATION_REQUIRED
+P5 IN_PROGRESS — P5.1, P5.2, P5.3, P5.4 and P5.5 COMPLETE; P5.6 READY_NOT_STARTED
 P6+ NOT ELIGIBLE
 ```
 
@@ -345,7 +349,8 @@ P2 five PASS
      -> P5.2 accepted
        -> P5.3 accepted
          -> P5.4 accepted
-           -> P5.5 implementation, validation pending
+           -> P5.5 accepted
+             -> P5.6 ready, not started
 ```
 
 The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`. P5.2 acceptance is recorded in
@@ -353,13 +358,12 @@ The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`. P5.2 accept
 in `research/P5.3_STABLE_SETTINGS_SNAPSHOT.md`; all focused, deterministic, full-addon and real
 browser gates are accepted in `research/evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md`.
 P5.4 acceptance is recorded in
-`research/evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`. P5.5 implementation and its
-pending validation boundary are recorded in `research/P5.5_POST_EFFECT_REASONING.md` and
-`research/P5.5_VALIDATION_RUNBOOK.md`.
+`research/evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`. P5.5 implementation and
+acceptance are recorded in `research/P5.5_POST_EFFECT_REASONING.md`,
+`research/P5.5_VALIDATION_RUNBOOK.md` and
+`research/evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md`.
 
 ## 14. Next action
 
-Run only the immediate focused HARD Odoo gate `P5.5-ODOO-POST-EFFECT` from
-`research/P5.5_VALIDATION_RUNBOOK.md`. If it fails, repair the smallest P5.5 layer and rerun it. Do
-not mark P5.5 complete, start its later real gate, or begin P5.6 until this focused test has actual
-executable evidence.
+In a later run, inspect the current code and P5.6 playbook section before preparing the smallest
+`ConversationContextManager` slice. No P5.6 implementation was started by P5.5 acceptance.
