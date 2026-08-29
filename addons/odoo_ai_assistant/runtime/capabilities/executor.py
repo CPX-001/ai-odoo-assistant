@@ -26,7 +26,7 @@ from .validation import validate_payload
 
 _PUBLIC_MODEL = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
 _PUBLIC_ACTIVITY_ID = re.compile(r"^activity:v1:[0-9a-f]{32}$")
-_MAX_PUBLIC_RECORD_REFS = 20
+_MAX_PUBLIC_RECORD_REFS = 50
 _MAX_PUBLIC_DISPLAY_NAME = 160
 
 
