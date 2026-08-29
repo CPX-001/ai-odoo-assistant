@@ -1,0 +1,43 @@
+{
+  "format_version": 1,
+  "gates": [
+    {
+      "id": "P5-REAL-CHAT-BASIC",
+      "phase": 5,
+      "slice": "P5.4",
+      "preconditions": [
+        "P5.1-P5.3 accepted",
+        "P5.4 implementation installed on a disposable Odoo 18 database",
+        "Codex authenticated",
+        "Chromium/Playwright installed"
+      ],
+      "user": "internal disposable test user",
+      "data": "one long read-only conversational turn; no Odoo business mutation",
+      "action": "submit one turn through the real Assistant UI and observe immediate user rendering, public activity, terminal answer and settled activity",
+      "backend_expected": "one durable turn completes normally",
+      "browser_expected": "user message appears before enqueue returns; activity is outside Assistant prose; no fake Pensando bubble is shown while real activity exists; exactly one final Assistant message remains after completion",
+      "redaction": "runner prints no prompt, answer, provider payload, credentials or customer data",
+      "command": "node tests/e2e/p5_4_final_ux_browser.mjs --gate P5-REAL-CHAT-BASIC"
+    },
+    {
+      "id": "P5-REAL-ERROR-UX",
+      "phase": 5,
+      "slice": "P5.4",
+      "reuses": ["P2-REAL-TIMEOUT", "P2-REAL-TOOLFAIL"],
+      "expected": "structured terminal failure remains an explicit failure surface, not Assistant prose or a silent disappearance of provisional text"
+    },
+    {
+      "id": "P5-REAL-RECOVERY-UX",
+      "phase": 5,
+      "slice": "P5.4",
+      "reuses": ["P2-REAL-RECOVERY"],
+      "expected": "recovery-required remains an explicit non-replay state with bounded user guidance"
+    },
+    {
+      "id": "P5-REAL-APPROVAL-UX",
+      "phase": 5,
+      "slice": "P5.4",
+      "expected": "an awaiting-confirmation turn presents approval as an explicit state and approval/rejection controls remain bound to that turn"
+    }
+  ]
+}

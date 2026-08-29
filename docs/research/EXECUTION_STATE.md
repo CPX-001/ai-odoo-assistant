@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 14
+State format: 15
 Updated: 2026-08-29
 Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
 Accepted P5.1 implementation lineage through: `f7f924ce944db86e896745fef83ea2fb6fd6583a`
@@ -11,6 +11,7 @@ P5.3 implementation/harness lineage through: `1803826a6516e2703497f0d14d74850082
 P5.3 focused Odoo validation lineage through: `b7428d7804cdbea263ea78ad5b588398b02fe5be`
 P5.3 deterministic regression lineage through: `525318160ac0dac4984ef11e765a8b443b8c4a28`
 Accepted P5.3 validation/harness lineage through: `32e836e7789ea72f3ba0d32fe6bdabbb092f5953`
+P5.4 implementation record: `docs/research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
@@ -21,14 +22,14 @@ phase_name: natural non-blocking multi-chat product
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P5.4-final-activity-answer-failure-ux
-active_slice_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice_state: READY
-current_gate_type: PRE_IMPLEMENTATION
-blocking_validations: NONE
+active_slice_record: docs/research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md
+active_slice_state: LOCAL_VALIDATION_REQUIRED
+current_gate_type: HARD_DETERMINISTIC_REGRESSION
+blocking_validations: P5.4-DETERMINISTIC-FINAL-UX, P5.4-FULL-ADDON-REGRESSION, P5.4-HOOT-REGRESSION, P5-REAL-CHAT-BASIC, P5-REAL-ERROR-UX, P5-REAL-APPROVAL-UX, P5-REAL-RECOVERY-UX
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953
 acceptance_evidence: docs/research/evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md
 latest_validation_evidence: docs/research/evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md
-next_slice: P5.4-final-activity-answer-failure-ux
+next_slice: P5.4-validation-batch
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
@@ -37,7 +38,8 @@ chain passed on one linear code lineage. P5.1 production code and its determinis
 browser/provider acceptance are complete. P5.2 scheduler capacity, causal ordering, fairness,
 release wake-up, diagnostics and real two-cron behavior are accepted. P5.3 stable settings snapshot
 and all four of its focused, deterministic, full-addon and real browser gates are accepted. P5.4
-final activity/answer/failure UX is READY but has not been implemented.
+final activity/answer/failure UX is implemented and now awaits one grouped local validation batch
+before its real browser acceptance gates.
 
 ---
 
@@ -129,9 +131,7 @@ The browser presentation/effect semantics were observed on the supported real pr
 
 # Phase 3 — COMPLETE
 
-Previous documents described Phase 3 as preparation-only. That is stale.
-
-Current runtime now contains:
+Current runtime contains:
 
 - production closed `PublicTurnEvent` projection;
 - trusted capability lifecycle -> public activity mapping;
@@ -175,8 +175,6 @@ P4-REAL-CANCEL-STREAM    | HARD | PASS | 8a4432d
 P4-REAL-UTF8-FRAGMENT    | HARD | PASS | 8a4432d
 ```
 
-The cancellation gate was rerun with all P4 gates after its bounded-fixture repair.
-
 ---
 
 # Phase 5 — IN_PROGRESS
@@ -188,44 +186,9 @@ docs/PRODUCT_VISION.md
 docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
-It adds gated phases for:
-
-```text
-P5  natural non-blocking multi-chat + post-effect synthesis + continuity
-P6  TaskPlan / multi-step EffectPlan / budgets / EffectJournal
-P7  mini-framework / self-awareness / progressive capability discovery
-P8  Evidence / source / runtime / logs
-P9  company Knowledge / RAG
-P10 Developer/Operator host operations
-P11 advanced imports/artifacts
-P12 controlled source writes
-P13 multimodal + web evidence
-P14 additional surfaces/automation/MCP
-P15 additional providers
-```
-
 ## P5.1 Turn-scoped frontend/background state — COMPLETE
 
-Implementation record:
-
-```text
-docs/research/P5.1_TURN_SCOPED_FRONTEND_STATE.md
-```
-
-Current implementation introduces per-conversation in-memory execution scopes while retaining the
-existing P2-P4 panel fields as the projection of the currently visible scope. This allows background
-Chat A state to continue without owning Chat B's loading/activity/answer/failure fields.
-
-Landed behavior includes:
-
-- temporary `new:N` scope -> durable `conversation:<uuid>` binding after enqueue;
-- per-conversation `turnId`, turn state, loading, approval/recovery, failure, activity and answer state;
-- late background callbacks update only their owning scope;
-- history/new-chat navigation no longer depends on another chat's running state;
-- model/autonomy controls remain selectable while another turn runs;
-- compact conversation runtime labels;
-- close/reopen keeps the web-client scope and does not intentionally cancel/restart server work;
-- focused HOOT contract tests are present.
+Implementation record: `docs/research/P5.1_TURN_SCOPED_FRONTEND_STATE.md`.
 
 Accepted validation:
 
@@ -248,21 +211,6 @@ docs/research/P5.2A_SCHEDULER_CAPACITY_CAUSALITY.md
 docs/research/P5.2_SCHEDULER_IMPLEMENTATION.md
 docs/research/P5.2_VALIDATION_RUNBOOK.md
 ```
-
-Implemented P5.2 behavior now includes:
-
-- installation-wide capacity bounded to the current two physical cron slots;
-- race-safe claim admission with a short PostgreSQL advisory lock;
-- scheduler claim cursor using `READ COMMITTED` so lock waiters observe previously committed claims;
-- same-conversation causal serialization based on durable turn identity;
-- `awaiting_confirmation` as a causal blocker without consuming worker capacity;
-- per-claim `scheduler_claimed_at` service watermark;
-- fairness order: fewer active turns -> least recently served user -> FIFO;
-- retry/requeue cannot regain priority solely from an older queue timestamp;
-- wake-up after a claimed worker releases/re-evaluates capacity;
-- post-commit wake-up for queued cancellation and approval/rejection causal release;
-- bounded administrator-only scheduler diagnostics;
-- focused fairness/wake-up Odoo tests and P5.2 real browser gate tooling.
 
 Accepted validation:
 
@@ -288,58 +236,57 @@ docs/research/P5.3_STABLE_SETTINGS_SNAPSHOT.md
 docs/research/P5.3_VALIDATION_RUNBOOK.md
 ```
 
-Implemented in deliberately small checkpoints:
+Accepted validation:
 
 ```text
-P5.3a versioned immutable settings snapshot | b46b72e
-P5.3b focused Odoo test harness              | 186eed0
-P5.3c addon version checkpoint               | 1803826
-P5.3d runtime-consumption regression harness | c47ce71
-P5.3e approval same-turn regression harness  | 7a0be46
-P5.3f accepted real-gate harness repair       | 32e836e
+P5.3-ODOO-SETTINGS-SNAPSHOT     | HARD | PASS | 2 tests, 0 failures/errors | b7428d7
+P5.3-DETERMINISTIC-REGRESSION   | HARD | PASS | 6 tests, 0 failures/errors | 5253181
+P5.3-FULL-ADDON-REGRESSION      | HARD | PASS | 126 tests, 0 failures/errors | 32e836e
+P5-REAL-SETTINGS-SNAPSHOT       | HARD | PASS after evidence review | 32e836e
 ```
-
-New normal turns derive a host-owned `execution_settings_payload` from the already resolved
-`reasoning_model` and `policy_payload`. The v1 snapshot records model, autonomy profile and policy;
-after capture those three persisted settings surfaces cannot be rewritten on that turn. Dynamic
-Odoo authorization, company membership, capability guards and provider availability remain live
-checks and are not frozen by the snapshot.
-
-The P5.1 real browser evidence already demonstrated that A retained persisted model/policy while B
-captured changed preferences. That older evidence is supporting context only; it does not accept the
-new P5.3 contract or SHA.
-
-Executed focused validation:
-
-```text
-P5.3-ODOO-SETTINGS-SNAPSHOT | HARD | PASS | 2 tests, 0 failures/errors | b7428d7
-```
-
-Evidence: `evidence/phase5/2026-08-29/P5.3-FOCUSED-ODOO-b7428d7.md`.
-
-Executed bounded deterministic regression:
-
-```text
-P5.3-DETERMINISTIC-REGRESSION | HARD | PASS | 6 tests, 0 failures/errors | 5253181
-```
-
-Evidence: `evidence/phase5/2026-08-29/P5.3-DETERMINISTIC-REGRESSION-5253181.md`.
-
-Executed final combined acceptance:
-
-```text
-P5.3-FULL-ADDON-REGRESSION  | HARD | PASS | 126 tests, 0 failures/errors | 32e836e
-P5-REAL-SETTINGS-SNAPSHOT   | HARD | PASS after evidence review          | 32e836e
-```
-
-The browser gate observed snapshot format v1, unresolved Turn A retaining its original
-model/profile/policy after selector changes, and Turn B capturing the new settings. The only
-committed repair waits for the real selector menu to become visible before clicking; it does not
-weaken the persisted snapshot checks.
 
 Evidence: `evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md`.
 
-All four P5.3 gates are accepted. P5.4 final activity/answer/failure UX is READY.
+## P5.4 Final activity/answer/failure UX — LOCAL_VALIDATION_REQUIRED
+
+Implementation records:
+
+```text
+docs/research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md
+docs/research/P5.4_VALIDATION_RUNBOOK.md
+```
+
+The P5.4 implementation deliberately stays at the existing frontend boundaries. It adds:
+
+- an idempotent per-turn final-answer reconciliation contract so one authoritative turn result maps to one local final Assistant message;
+- a closed product-facing final presentation projection for running/approval/failure/recovery/completed states;
+- a late scoped-service patch that reconciles final answers without creating global conversation state;
+- a neutral `Preparando respuesta…` status when no public activity or answer delta exists, instead of a fake Assistant prose bubble;
+- settled public activity after completion, with the spinner shown only while the turn is actually running;
+- explicit terminal failure/action-failure alerts while preserving bounded retry/recovery guidance;
+- five focused HOOT contract cases;
+- a real Chromium `P5-REAL-CHAT-BASIC` runner plus a machine-readable P5.4 real-gate manifest.
+
+No backend authority, capability policy, write semantics or P5.5 post-effect continuation is changed by this slice.
+
+No P5.4 test result is claimed yet. Required local gates:
+
+```text
+P5.4-DETERMINISTIC-FINAL-UX
+P5.4-FULL-ADDON-REGRESSION
+P5.4-HOOT-REGRESSION
+```
+
+Required HARD real gates for P5.4 acceptance:
+
+```text
+P5-REAL-CHAT-BASIC
+P5-REAL-ERROR-UX
+P5-REAL-APPROVAL-UX
+P5-REAL-RECOVERY-UX
+```
+
+P5.5 remains blocked until those gates pass on one coherent lineage.
 
 ---
 
@@ -348,7 +295,7 @@ All four P5.3 gates are accepted. P5.4 final activity/answer/failure UX is READY
 These limitations define the remaining Phase 5 and later work:
 
 - background scopes are currently web-client memory; durable reconnect/continuity is expanded later in P5;
-- P5.4 final activity/answer/failure UX is the next ready slice and is not implemented yet;
+- P5.4 final activity/answer/failure UX is implemented but awaits local and real acceptance;
 - post-effect verified actions still need provider continuation/natural synthesis (P5.5);
 - conversation provider context is smaller than the target durable `ConversationContextManager` model (P5.6);
 - one canonical effect proposal/step is supported; multi-step effects are P6;
@@ -371,13 +318,15 @@ These limitations define the remaining Phase 5 and later work:
 - P5 target concurrency is per-turn/per-conversation, not a global UI lock.
 - Model/autonomy/profile changes after a turn is queued do not mutate that running turn's captured authority/settings.
 - P5.3 freezes execution selectors, not revocable Odoo authorization or dynamic capability guards.
+- P5.4 presentation state cannot authorize or repeat an effect; the final validated turn remains answer authority.
 - No GitHub Actions are used for roadmap validation under current instructions.
 
 ---
 
 # Exact next action
 
-Define P5.4 final activity/answer/failure UX as one bounded implementation slice from
-`AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`. Reconstruct the current activity, provisional answer,
-authoritative final answer, approval, failure and recovery projections before changing behavior;
-preserve conversation/turn isolation and define deterministic plus real gates before implementation.
+Run the grouped P5.4 local validation battery from `P5.4_VALIDATION_RUNBOOK.md` against the exact
+current lineage. Execute the focused final-UX contracts, full addon regression and full HOOT suite in
+the same capable Odoo 18 environment. If that batch passes, continue directly to the P5.4 real
+browser gates rather than splitting the work into micro-slices. Do not start P5.5 until the P5.4 HARD
+real gates are accepted.
