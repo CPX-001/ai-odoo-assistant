@@ -86,3 +86,68 @@ class TestCapabilityActivityCorrelation(TransactionCase):
         self.assertEqual([item[0] for item in lifecycle], ["tool.started", "tool.failed"])
         self.assertEqual(lifecycle[0][2]["activity_id"], lifecycle[1][2]["activity_id"])
         self.assertEqual(lifecycle[1][2]["code"], "activity_probe_failed")
+
+    def test_completed_read_projects_only_revalidated_record_identities(self):
+        first = self.env["res.partner"].create({"name": "Semantic Ref A"})
+        second = self.env["res.partner"].create({"name": "Semantic Ref B"})
+        events = []
+
+        def sink(event_type, title, payload):
+            events.append((event_type, title, dict(payload)))
+
+        input_schema = {
+            "type": "object",
+            "properties": {"model": {"type": "string"}},
+            "required": ["model"],
+            "additionalProperties": False,
+        }
+        output_schema = {
+            "type": "object",
+            "properties": {
+                "model": {"type": "string"},
+                "records": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {"id": {"type": "integer"}},
+                        "required": ["id"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": ["model", "records"],
+            "additionalProperties": False,
+        }
+        definition = CapabilityDefinition(
+            name="test.reference_probe",
+            title="Reference probe",
+            description="Return already-readable records for public reference projection.",
+            input_schema=input_schema,
+            output_schema=output_schema,
+            risk=CapabilityRisk.READ,
+            effect=CapabilityEffect.READ_ONLY,
+            exposure=CapabilityExposure.REASONING,
+            handler=lambda _context, _payload: {
+                "model": "res.partner",
+                "records": [{"id": first.id}, {"id": second.id}],
+            },
+        )
+        context = CapabilityContext(
+            env=self.env(user=self.env.user, su=False),
+            turn_id="activity-reference-test",
+            event_sink=sink,
+        )
+        executor = CapabilityExecutor(
+            CapabilityRegistry([definition]),
+            context,
+            config=CapabilityConfigResolver(),
+        )
+
+        asyncio.run(executor.execute("test.reference_probe", {"model": "res.partner"}))
+        started = next(payload for event, _title, payload in events if event == "tool.started")
+        completed = next(payload for event, _title, payload in events if event == "tool.completed")
+
+        self.assertNotIn("record_ids", started)
+        self.assertEqual(completed["record_ids"], [first.id, second.id])
+        self.assertEqual(completed["display_names"], ["Semantic Ref A", "Semantic Ref B"])
+        self.assertNotIn("records", completed)
