@@ -51,6 +51,8 @@ function semanticLabel(item) {
             return _t("La operación ha fallado");
         case "activity.blocked":
             return _t("La operación está bloqueada");
+        case "activity.cancelled":
+            return _t("La operación se ha cancelado");
         case "queue.wait":
             return _t("Esperando turno");
         case "turn.finalize":
