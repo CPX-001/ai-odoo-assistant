@@ -10,7 +10,7 @@ Research documents do not override:
 2. current documents listed in `docs/README.md`;
 3. current deterministic tests.
 
-`docs/PRODUCT_VISION.md` defines intended product direction. The playbooks here turn that direction into ordered slices and gates; they do not claim future behavior is implemented.
+`docs/PRODUCT_VISION.md` defines intended product direction. The playbooks here turn that direction into ordered slices and gates; they do not turn unexecuted validation into PASS.
 
 ## Primary execution documents
 
@@ -19,32 +19,25 @@ Research documents do not override:
 | `EXECUTION_STATE.md` | Current cursor, blockers, validation debt and exact next action. |
 | `CONTINUOUS_EXECUTION_PROTOCOL.md` | Restartable multi-run execution and validation rules. |
 | `REAL_ENV_VALIDATION_PROTOCOL.md` | Named acceptance checks requiring the real Odoo/browser/provider path. |
-| `FOUNDATION_STABILIZATION_PLAYBOOK.md` | P0-P4 foundation path and historical rationale; newer phase records/current code supersede stale future-state wording inside it. |
-| `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` | P5+ gated product roadmap: non-blocking multi-chat, planning/effects, mini-framework, Evidence/RAG, technical operations, imports, multimodal, extra surfaces and providers. |
-| `P5.1_TURN_SCOPED_FRONTEND_STATE.md` | Completed P5.1 implementation/validation record for per-conversation frontend execution ownership. |
-| `P5.1_VALIDATION_RUNBOOK.md` | Executable P5.1 handoff for HOOT/regression plus real multi-chat, settings-snapshot and reopen browser checks. |
-| `P5.2_SCHEDULER_PREPARATION.md` | Historical design preparation that identified the P5.2 capacity/causality/fairness/wake-up gaps before implementation. |
-| `P5.2A_SCHEDULER_CAPACITY_CAUSALITY.md` | P5.2a implementation record for bounded capacity and causal claim eligibility. |
-| `P5.2_SCHEDULER_IMPLEMENTATION.md` | Current full P5.2 implementation record: capacity, ordering, fairness, wake-up, diagnostics and real-gate harness. |
-| `P5.2_VALIDATION_RUNBOOK.md` | Batched deterministic/regression/real-environment acceptance procedure for the complete P5.2 implementation. |
-| `P5.3_STABLE_SETTINGS_SNAPSHOT.md` | Completed P5.3 implementation/acceptance record for the versioned immutable per-turn settings snapshot. |
-| `P5.3_VALIDATION_RUNBOOK.md` | Executed P5.3 focused, deterministic, full-addon and real browser acceptance procedure. |
-| `P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md` | Completed P5.4 implementation/acceptance record for final activity, answer, approval, failure and recovery presentation. |
-| `P5.4_VALIDATION_RUNBOOK.md` | Executed P5.4 deterministic, full-addon, HOOT and HARD real browser acceptance procedure. |
-| `P5.5_POST_EFFECT_REASONING.md` | Completed P5.5 contract and acceptance record for verified-receipt continuation and natural post-effect final synthesis. |
-| `P5.5_VALIDATION_RUNBOOK.md` | Executed P5.5 focused Odoo, regression and real `P5-REAL-POST-EFFECT` acceptance procedure. |
-| `P5.7_MODEL_FAMILY_REASONING_PREFERENCES.md` | Accepted P5.7 sub-slice for provider-backed model families/variants, reasoning effort and immutable snapshot v2. |
-| `P5.7_CONVERSATION_SCOPED_PREFERENCES.md` | Current P5.7 conversation mutation implementation record and immediate focused Odoo gate. |
-| `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed status record for P3 public activity. |
-| `PHASE4_ANSWER_STREAMING.md` | Formal completed status record for P4 answer streaming. |
+| `FOUNDATION_STABILIZATION_PLAYBOOK.md` | P0-P4 foundation path and historical rationale. |
+| `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` | P5+ gated product roadmap. |
+| `P5.1_TURN_SCOPED_FRONTEND_STATE.md` / `P5.1_VALIDATION_RUNBOOK.md` | Accepted per-conversation frontend-state slice and gates. |
+| `P5.2_SCHEDULER_IMPLEMENTATION.md` / `P5.2_VALIDATION_RUNBOOK.md` | Accepted scheduler concurrency/backpressure implementation and gates. |
+| `P5.3_STABLE_SETTINGS_SNAPSHOT.md` / `P5.3_VALIDATION_RUNBOOK.md` | Accepted immutable turn settings snapshot and gates. |
+| `P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md` / `P5.4_VALIDATION_RUNBOOK.md` | Accepted final answer/activity/failure UX and gates. |
+| `P5.5_POST_EFFECT_REASONING.md` / `P5.5_VALIDATION_RUNBOOK.md` | Accepted verified-receipt post-effect continuation and gates. |
+| `P5.6_CONVERSATION_CONTEXT_MANAGER.md` / `P5.6_VALIDATION_RUNBOOK.md` | Accepted ConversationContextManager and gates. |
+| `P5.7_MODEL_FAMILY_REASONING_PREFERENCES.md` | Accepted model-family/model-variant/reasoning-effort sub-slice. |
+| `P5.7_CONVERSATION_SCOPED_PREFERENCES.md` | Accepted conversation autonomy/response-language mutation slice. |
+| `P5.8_SEMANTIC_ACTIVITY_UX.md` | Pre-implementation P5.8 target/product specification. |
+| `P5.8_IMPLEMENTATION.md` | Current P5.8 implementation record and deliberate architecture simplifications. |
+| `P5.8_VALIDATION_RUNBOOK.md` | Required local/Odoo/HOOT/real gate chain before P5.8 acceptance. |
+| `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed P3 public activity record. |
+| `PHASE4_ANSWER_STREAMING.md` | Formal completed P4 answer streaming record. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
 | `SLICE_TEMPLATE.md` | Atomic implementation slice template. |
-| `PHASE23_REAL_VALIDATION_RUNBOOK.md` | Reproducible P2/P3 validation procedure. |
-| `PHASE34_REAL_VALIDATION_RUNBOOK.md` | Reproducible P3/P4 validation procedure for landed code. |
 
 Supporting phase/evidence records remain in this directory and under `evidence/`.
-
-`PHASE3_PUBLIC_ACTIVITY_PREPARATION.md` is now a historical preparation record; use `PHASE3_PUBLIC_ACTIVITY.md` for current P3 status. `P5.2_SCHEDULER_PREPARATION.md` is likewise historical preparation; current P5.2 behavior is documented in `P5.2_SCHEDULER_IMPLEMENTATION.md`.
 
 ## Current formal cursor
 
@@ -54,60 +47,36 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS; P5.1-P5.7 COMPLETE; P5.8 ELIGIBLE_NOT_STARTED
-  model/reasoning sub-slice ACCEPTED
-  conversation preference mutation LOCAL GATES PASS / REAL PRODUCT GATES REQUIRED
-P6+ not eligible
+P5 IN_PROGRESS
+  P5.1 COMPLETE
+  P5.2 COMPLETE
+  P5.3 COMPLETE
+  P5.4 COMPLETE
+  P5.5 COMPLETE
+  P5.6 COMPLETE
+  P5.7 COMPLETE
+  P5.8 REAL_ENV_VALIDATION_REQUIRED
+P6+ NOT ELIGIBLE
 ```
 
-`EXECUTION_STATE.md` is authoritative for exact gate IDs.
+`EXECUTION_STATE.md` is authoritative for exact gate IDs and next action.
 
-The ordered P2 -> P3 -> P4 gates passed on 2026-08-28. The sanitized record is
-`evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md`.
+## Accepted Phase-5 evidence
 
-P5.1 passed its recorded HOOT/P2-P4 regression and focused real browser gates on 2026-08-28. The
-sanitized record is `evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`.
+```text
+P5.1 evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md
+P5.2 evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md
+P5.3 evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md
+P5.4 evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md
+P5.5 evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md
+P5.6 evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md
+P5.7 model/reasoning evidence/phase5/2026-08-29/P5.7-MODEL-REASONING-ACCEPTANCE-eb66e45.md
+P5.7 complete evidence/phase5/2026-08-29/P5.7-REAL-ACCEPTANCE-074a71c.md
+```
 
-P5.2 scheduler concurrency/backpressure is implemented and accepted across its intended internal
-a/b/c scope, including bounded capacity, causal ordering, anti-starvation fairness, capacity-release
-wake-up, aggregate diagnostics and the real browser gates. The accepted batch is recorded in
-`evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
+P5.8 code and tests are present, but no P5.8 validation result is recorded by the implementation-only run. Repository instructions prohibit substituting GitHub Actions for the disposable Odoo/Codex/Chromium environment, so unexecuted P5.8 gates remain pending.
 
-P5.3 has a versioned host-owned turn settings snapshot and is accepted. Its focused Odoo gate passed
-with 2 tests, bounded deterministic regression with 6 tests, full addon regression with 126 tests,
-and `P5-REAL-SETTINGS-SNAPSHOT` passed after review of the bounded real browser observation. The
-sanitized final record is `evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md`.
-
-P5.4 final activity/answer/failure UX is implemented and accepted. Its 222-unit/19-contract local
-battery, 126-test addon regression, 101-test/392-assertion HOOT suite and all four HARD real gates
-passed on one coherent lineage. The sanitized record is
-`evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`.
-
-P5.5 post-effect reasoning is implemented and accepted. Its focused Odoo gate passed with 6 tests,
-the deterministic suite with 227 unit tests plus 19 JS assertions, the full addon regression with
-132 tests, and `P5-REAL-POST-EFFECT` passed after review. The sanitized record is
-`evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md`.
-
-P5.6 ConversationContextManager is implemented and accepted. Its focused Odoo gate passed with 3
-tests, deterministic regression with 227 unit tests plus 19 JS assertions, full addon regression
-with 135 tests, and `P5-REAL-CONTINUITY` passed after review. The sanitized record is
-`evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`.
-
-P5.7's model-family/model-variant/reasoning-effort sub-slice passed 227 unit tests,
-19 JS contract assertions, the 190-execution full Odoo regression, 104 HOOT tests/409 assertions and
-both required real browser settings gates on checkpoint `eb66e45`. The sanitized record is
-`evidence/phase5/2026-08-29/P5.7-MODEL-REASONING-ACCEPTANCE-eb66e45.md`.
-
-The conversation preference implementation is now accepted on `main`: explicit per-conversation
-autonomy and response-language mutations reuse the current capability/turn/context framework. Its
-focused Odoo gate, 229-unit/19-contract deterministic regression, 143-test full addon regression and
-104-test/409-assertion HOOT suite passed on the materially tested `a61bb28` tree. The sanitized
-record is `evidence/phase5/2026-08-29/P5.7-CONVERSATION-PREFERENCES-LOCAL-a61bb28.md`.
-
-The final host-session correction and rerun passed 229 unit tests, 19 JS assertions, 145 full-addon
-Odoo tests / 199 executions, the focused 3-test HOOT account suite, and both hard real gates.
-P5.7 is accepted through `074a71c`; the sanitized record is
-`evidence/phase5/2026-08-29/P5.7-REAL-ACCEPTANCE-074a71c.md`. P5.8 is eligible but was not started.
+The P5.8 implementation adds host-owned lifecycle correlation, semantic reducer/presentation profiles, bounded readable reasoning summaries with raw-reasoning rejection, typed Odoo record/model references with fresh ACL revalidation, generic current-schema record presentation and bounded progressive disclosure. See `P5.8_IMPLEMENTATION.md` for exact current behavior and `P5.8_VALIDATION_RUNBOOK.md` for the acceptance chain.
 
 ## Recursive execution rule
 
@@ -131,9 +100,7 @@ Never continue purely from previous chat memory.
 
 ## Validation layers
 
-A phase/slice is not complete merely because code exists.
-
-Use as applicable:
+A phase/slice is not complete merely because code exists. Use as applicable:
 
 ```text
 static/contract review
@@ -146,14 +113,7 @@ Hard gates block dependent contracts. Soft debt is allowed only when explicitly 
 
 ## External implementation references
 
-External Odoo projects are implementation references, not authority replacements:
-
-- OCA `queue_job`: configurable channels/capacity, parallel background jobs and stale-job recovery;
-- OCA `base_import_async`: large imports moved to background processing;
-- OCA `ai_tool`: reusable AI tool concepts across native/MCP-style surfaces;
-- Odoo AI Server Actions: manager/tool separation;
-- Apexive `odoo-llm`: providers, decorator-based tools, Knowledge/RAG/citations, domain tools and MCP breadth;
-- OpenAI Agents/Pydantic-style namespaces/capability loading: progressive disclosure patterns.
+External Odoo projects are implementation references, not authority replacements. Relevant proven patterns include OCA `queue_job`, OCA `base_import_async`, OCA `ai_tool`, Odoo AI Server Actions, Apexive `odoo-llm`, and provider/capability progressive-disclosure patterns from modern agent frameworks.
 
 For every borrowed pattern record what concrete problem it solves here and what authority/runtime behavior is deliberately not copied.
 
