@@ -11,7 +11,10 @@ const MAX_POLL_ATTEMPTS = 360;
 const POLL_DELAY_MS = 500;
 const MAX_LIVE_ITEMS = 100;
 const MAX_DELTA_CHARS = 2048;
+const MAX_REASONING_SUMMARY_DELTA = 2048;
 const MAX_TRANSIENT_POLL_FAILURES = 3;
+const REASONING_ITEM_ID_RE = /^[A-Za-z0-9_.:-]{1,256}$/;
+const reasoningSummarySubscribers = new Set();
 
 function exactKeys(value, expected) {
     return (
@@ -100,6 +103,39 @@ function normalizeLiveItem(value, turnId, previousSequence) {
             occurred_at: value.occurred_at,
         };
     }
+    if (
+        value.channel === "reasoning" &&
+        exactKeys(value, [
+            "channel",
+            "item_id",
+            "occurred_at",
+            "sequence",
+            "summary_index",
+            "text",
+            "turn_id",
+        ]) &&
+        value.turn_id === turnId &&
+        typeof value.text === "string" &&
+        value.text.length >= 1 &&
+        value.text.length <= MAX_REASONING_SUMMARY_DELTA &&
+        !value.text.includes("\u0000") &&
+        typeof value.item_id === "string" &&
+        REASONING_ITEM_ID_RE.test(value.item_id) &&
+        Number.isSafeInteger(value.summary_index) &&
+        value.summary_index >= 0 &&
+        value.summary_index <= 64 &&
+        typeof value.occurred_at === "string"
+    ) {
+        return {
+            sequence: value.sequence,
+            channel: "reasoning",
+            turn_id: turnId,
+            item_id: value.item_id,
+            summary_index: value.summary_index,
+            text: value.text,
+            occurred_at: value.occurred_at,
+        };
+    }
     return null;
 }
 
@@ -135,12 +171,31 @@ function normalizeLivePage(value, turnId, afterSequence) {
     return { ...value, items };
 }
 
+function publishReasoningSummary(item) {
+    for (const listener of reasoningSummarySubscribers) {
+        try {
+            listener(item);
+        } catch {
+            // Presentation subscribers are isolated from the authoritative turn stream.
+        }
+    }
+}
+
+export function subscribeReasoningSummary(listener) {
+    if (typeof listener !== "function") {
+        return () => {};
+    }
+    reasoningSummarySubscribers.add(listener);
+    return () => reasoningSummarySubscribers.delete(listener);
+}
+
 async function drainLive({
     fetchCall,
     turnId,
     afterSequence,
     onActivity,
     onDelta,
+    onReasoningSummary,
     onFirstActivity,
     onFirstAnswerDelta,
 }) {
@@ -159,9 +214,12 @@ async function drainLive({
             if (item.channel === "activity") {
                 await onActivity(item.event);
                 await onFirstActivity();
-            } else {
+            } else if (item.channel === "answer") {
                 await onDelta(item.text);
                 await onFirstAnswerDelta();
+            } else {
+                await onReasoningSummary(item);
+                publishReasoningSummary(item);
             }
         }
         if (!page.has_more) {
@@ -175,6 +233,7 @@ export async function streamAssistantChatLive({
     payload,
     onDelta = () => {},
     onActivity = () => {},
+    onReasoningSummary = () => {},
     onTiming = () => {},
     fetchCall = globalThis.fetch,
     waitCall = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
@@ -184,6 +243,7 @@ export async function streamAssistantChatLive({
         typeof fetchCall !== "function" ||
         typeof onDelta !== "function" ||
         typeof onActivity !== "function" ||
+        typeof onReasoningSummary !== "function" ||
         typeof onTiming !== "function" ||
         typeof nowCall !== "function"
     ) {
@@ -257,6 +317,7 @@ export async function streamAssistantChatLive({
                 afterSequence: liveSequence,
                 onActivity,
                 onDelta,
+                onReasoningSummary,
                 onFirstActivity: recordFirstActivity,
                 onFirstAnswerDelta: recordFirstAnswerDelta,
             });
@@ -281,6 +342,7 @@ export async function streamAssistantChatLive({
                     afterSequence: liveSequence,
                     onActivity,
                     onDelta,
+                    onReasoningSummary,
                     onFirstActivity: recordFirstActivity,
                     onFirstAnswerDelta: recordFirstAnswerDelta,
                 });
