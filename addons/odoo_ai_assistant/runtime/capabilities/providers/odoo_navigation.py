@@ -1,15 +1,14 @@
 """Bounded host-resolved contextual navigation for the embedded Assistant.
 
-The model supplies only a semantic query and optional reference kinds.  Odoo discovers concrete
+The model supplies only a semantic query and optional reference kinds. Odoo discovers concrete
 models/actions/views/menus/settings under the effective non-sudo Environment and returns bounded
-presentation references.  The concrete identifiers are results, never capability arguments; the
+presentation references. Concrete identifiers are results, never capability arguments; the
 browser must send a selected reference back to Odoo for fresh validation before navigation.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
 
 from ....services.turn_context import agent_model_is_eligible, search_agent_models
 from ..contracts import CapabilityContext, CapabilityEffect, CapabilityRisk
@@ -29,22 +28,13 @@ _REFERENCE_SCHEMA = {
         "kind": {"type": "string", "enum": list(_KINDS)},
         "label": {"type": "string", "minLength": 1, "maxLength": 160},
         "description": {"type": "string", "maxLength": _MAX_DESCRIPTION},
-        "model": {"type": ["string", "null"]},
-        "action_id": {"type": ["integer", "null"]},
-        "view_id": {"type": ["integer", "null"]},
-        "menu_id": {"type": ["integer", "null"]},
-        "setting_field": {"type": ["string", "null"]},
+        "model": {"type": "string", "minLength": 1, "maxLength": 128},
+        "action_id": {"type": "integer", "minimum": 1},
+        "view_id": {"type": "integer", "minimum": 1},
+        "menu_id": {"type": "integer", "minimum": 1},
+        "setting_field": {"type": "string", "minLength": 1, "maxLength": 128},
     },
-    "required": [
-        "kind",
-        "label",
-        "description",
-        "model",
-        "action_id",
-        "view_id",
-        "menu_id",
-        "setting_field",
-    ],
+    "required": ["kind", "label", "description"],
     "additionalProperties": False,
 }
 
@@ -66,7 +56,6 @@ _REFERENCE_SCHEMA = {
                 "type": "array",
                 "items": {"type": "string", "enum": list(_KINDS)},
                 "maxItems": len(_KINDS),
-                "uniqueItems": True,
             },
             "limit": {"type": "integer", "minimum": 1, "maximum": _MAX_RESULTS},
         },
@@ -100,6 +89,8 @@ def resolve_navigation(context: CapabilityContext, arguments):
     query = _query(arguments.get("query"))
     requested = arguments.get("kinds")
     kinds = tuple(requested) if isinstance(requested, list) and requested else _KINDS
+    if len(set(kinds)) != len(kinds) or any(kind not in _KINDS for kind in kinds):
+        raise RuntimeError("navigation_request_invalid")
     limit = arguments.get("limit", 8)
     if type(limit) is not int or not 1 <= limit <= _MAX_RESULTS:
         raise RuntimeError("navigation_request_invalid")
@@ -178,8 +169,7 @@ def _score(query, label, description, model=None):
         score += 60
     elif needle in model_cf:
         score += 50
-    terms = _tokens(query)
-    for term in terms:
+    for term in _tokens(query):
         if term in label_cf:
             score += 20
         elif term in model_cf:
@@ -189,17 +179,33 @@ def _score(query, label, description, model=None):
     return score
 
 
-def _reference(kind, label, description="", *, model=None, action_id=None, view_id=None, menu_id=None, setting_field=None):
-    return {
+def _reference(
+    kind,
+    label,
+    description="",
+    *,
+    model=None,
+    action_id=None,
+    view_id=None,
+    menu_id=None,
+    setting_field=None,
+):
+    result = {
         "kind": kind,
         "label": _one_line(label, fallback=kind),
         "description": _description(description),
-        "model": model if isinstance(model, str) else None,
-        "action_id": action_id if type(action_id) is int and action_id > 0 else None,
-        "view_id": view_id if type(view_id) is int and view_id > 0 else None,
-        "menu_id": menu_id if type(menu_id) is int and menu_id > 0 else None,
-        "setting_field": setting_field if isinstance(setting_field, str) else None,
     }
+    if isinstance(model, str) and model:
+        result["model"] = model
+    if type(action_id) is int and action_id > 0:
+        result["action_id"] = action_id
+    if type(view_id) is int and view_id > 0:
+        result["view_id"] = view_id
+    if type(menu_id) is int and menu_id > 0:
+        result["menu_id"] = menu_id
+    if isinstance(setting_field, str) and setting_field:
+        result["setting_field"] = setting_field
+    return result
 
 
 def _identity(item):
@@ -292,8 +298,7 @@ def _action_available(env, action):
 
 def _actions(env, query):
     try:
-        model = env["ir.actions.act_window"]
-        records = _candidate_records(model, query)
+        records = _candidate_records(env["ir.actions.act_window"], query)
     except Exception:  # noqa: BLE001
         return []
     result = []
@@ -315,19 +320,19 @@ def _actions(env, query):
 
 def _views(env, query):
     try:
-        model = env["ir.ui.view"]
-        records = _candidate_records(model, query)
+        records = _candidate_records(env["ir.ui.view"], query)
     except Exception:  # noqa: BLE001
         return []
     result = []
     for view in records:
         try:
             view = view.exists()
+            if not view:
+                continue
             model_name = view.model
             view_type = "list" if view.type == "tree" else view.type
             if (
-                not view
-                or view_type not in _VIEW_TYPES
+                view_type not in _VIEW_TYPES
                 or not _group_allowed(env, view)
                 or not _readable_model(env, model_name)
             ):
@@ -361,8 +366,11 @@ def _menus(env, query):
     if not visible_ids:
         return []
     try:
-        menu_model = env["ir.ui.menu"]
-        records = _candidate_records(menu_model, query, extra_domain=(("id", "in", list(visible_ids)),))
+        records = _candidate_records(
+            env["ir.ui.menu"],
+            query,
+            extra_domain=(("id", "in", list(visible_ids)),),
+        )
     except Exception:  # noqa: BLE001
         return []
     result = []
@@ -371,7 +379,11 @@ def _menus(env, query):
             continue
         try:
             action = menu.action
-            if not action or action._name != "ir.actions.act_window" or not _action_available(env, action):
+            if (
+                not action
+                or action._name != "ir.actions.act_window"
+                or not _action_available(env, action)
+            ):
                 continue
             parent = menu.parent_id.name if menu.parent_id else ""
         except Exception:  # noqa: BLE001
