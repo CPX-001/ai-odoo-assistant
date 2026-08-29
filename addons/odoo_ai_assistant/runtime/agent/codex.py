@@ -112,6 +112,7 @@ class CodexAgentSettings:
     executable: Path
     codex_home: Path
     model: str | None = None
+    reasoning_effort: str | None = None
     startup_timeout_seconds: float = 5.0
     turn_timeout_seconds: float = 120.0
     shutdown_timeout_seconds: float = 2.0
@@ -125,6 +126,12 @@ class CodexAgentSettings:
             or re.fullmatch(r"[A-Za-z0-9_.:/-]+", self.model) is None
         ):
             raise CodexAgentError("codex_model_invalid")
+        if self.reasoning_effort is not None and (
+            not self.reasoning_effort
+            or len(self.reasoning_effort) > 32
+            or re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", self.reasoning_effort) is None
+        ):
+            raise CodexAgentError("codex_reasoning_effort_invalid")
         if not 0 < self.startup_timeout_seconds <= 60:
             raise CodexAgentError("codex_startup_timeout_invalid")
         if not 0 < self.turn_timeout_seconds <= 1800:
@@ -191,6 +198,15 @@ class CodexReasoningEngine:
                     "runtimeWorkspaceRoots": [],
                     "sandbox": "read-only",
                     **({"model": self._settings.model} if self._settings.model else {}),
+                    **(
+                        {
+                            "config": {
+                                "model_reasoning_effort": self._settings.reasoning_effort
+                            }
+                        }
+                        if self._settings.reasoning_effort
+                        else {}
+                    ),
                     "baseInstructions": _BASE_INSTRUCTIONS,
                 },
                 timeout=_remaining(deadline),
