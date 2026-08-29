@@ -1,10 +1,12 @@
 .o_ai_assistant_panel {
-    .o_ai_assistant_model_picker {
+    .o_ai_assistant_model_picker,
+    .o_ai_assistant_reasoning_picker {
         flex: 0 0 auto;
         margin-top: 0 !important;
     }
 
-    .o_ai_assistant_model_picker .o_ai_assistant_picker_button {
+    .o_ai_assistant_model_picker .o_ai_assistant_picker_button,
+    .o_ai_assistant_reasoning_picker .o_ai_assistant_picker_button {
         max-width: 9.5rem;
     }
 
@@ -26,6 +28,25 @@
             transform: scale(0.94);
         }
     }
+}
+
+.o_ai_assistant_picker_menu {
+    min-width: 15rem;
+    max-width: min(22rem, calc(100vw - 2rem));
+}
+
+.o_ai_assistant_picker_submenu {
+    min-width: 17rem;
+}
+
+.o_ai_assistant_picker_submenu_toggle {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.5rem;
+    border: 0;
+    background: transparent;
+    text-align: start;
 }
 
 @media (prefers-reduced-motion: reduce) {
