@@ -4,6 +4,7 @@ import { rpc } from "@web/core/network/rpc";
 
 const MODEL_RE = /^[A-Za-z_][A-Za-z0-9_.]{0,127}$/;
 const MAX_REFERENCES = 20;
+const MAX_RENDERED_REFERENCES = 100;
 
 function exactKeys(value, expected) {
     return (
@@ -46,6 +47,18 @@ export function resourceReferences(resource) {
             }),
         ];
     });
+}
+
+export function resourceModelReference(resource) {
+    if (
+        !resource ||
+        typeof resource !== "object" ||
+        typeof resource.model !== "string" ||
+        !MODEL_RE.test(resource.model)
+    ) {
+        return null;
+    }
+    return Object.freeze({ kind: "odoo_model", model: resource.model });
 }
 
 function normalizeFields(value) {
@@ -207,16 +220,29 @@ export async function openPublicReference(
     return true;
 }
 
-export function referenceDisclosure(references, { pageSize = 5, visibleCount = null } = {}) {
-    const source = Array.isArray(references) ? references.slice(0, MAX_REFERENCES) : [];
+export function referenceDisclosure(
+    references,
+    { pageSize = 5, visibleCount = null, maximumRows = MAX_RENDERED_REFERENCES } = {}
+) {
+    const total = Array.isArray(references) ? references.length : 0;
+    const hardLimit =
+        Number.isSafeInteger(maximumRows) && maximumRows >= 1 && maximumRows <= MAX_RENDERED_REFERENCES
+            ? maximumRows
+            : MAX_RENDERED_REFERENCES;
+    const source = Array.isArray(references) ? references.slice(0, hardLimit) : [];
     const size = Number.isSafeInteger(pageSize) && pageSize >= 1 && pageSize <= 20 ? pageSize : 5;
     const requested = Number.isSafeInteger(visibleCount) && visibleCount > 0 ? visibleCount : size;
     const count = Math.min(source.length, requested);
+    const blocked = total > hardLimit;
     return Object.freeze({
         visible: Object.freeze(source.slice(0, count)),
         visible_count: count,
-        remaining_count: Math.max(0, source.length - count),
+        total_count: total,
+        remaining_count: Math.max(0, total - count),
         next_count: Math.min(size, Math.max(0, source.length - count)),
         can_show_more: count < source.length,
+        can_show_remaining: !blocked && count < total,
+        remaining_blocked: blocked,
+        maximum_rows: hardLimit,
     });
 }
