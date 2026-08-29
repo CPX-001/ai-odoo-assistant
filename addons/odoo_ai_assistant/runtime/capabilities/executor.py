@@ -305,33 +305,49 @@ def _public_operation_payload(name, payload, *, activity_id=None):
 
 
 def _public_result_payload(context, public, output):
-    """Best-effort projection of already-readable record identities for semantic UI.
+    """Project bounded result identities only after output-schema validation.
 
-    Only a result whose model matches the validated operation model is considered. Record IDs are
-    bounded, re-read under the same effective Odoo Environment and reduced to ``display_name``.
-    Any ambiguity/access failure simply removes the optional references; it can never affect the
-    authoritative capability result.
+    The optional projection is still re-read under the same effective Odoo user before display
+    names are attached. It never changes capability success and never grants navigation authority;
+    the browser revalidates a typed reference again immediately before opening it.
     """
 
     result = dict(public)
-    model = result.get("model")
-    if not isinstance(model, str) or output.get("model") != model:
-        return result
-    raw_records = output.get("records")
-    if not isinstance(raw_records, list):
-        return result
-    ids = []
-    for row in raw_records[:_MAX_PUBLIC_RECORD_REFS]:
-        if not isinstance(row, Mapping):
+    operation_model = result.get("model")
+    output_model = output.get("model")
+    if isinstance(output_model, str) and _PUBLIC_MODEL.fullmatch(output_model):
+        if operation_model is not None and output_model != operation_model:
             return result
-        record_id = row.get("id")
+        result["model"] = output_model
+        operation_model = output_model
+    if not isinstance(operation_model, str):
+        return result
+
+    ids = []
+    raw_record_ids = output.get("record_ids")
+    if isinstance(raw_record_ids, list):
+        candidates = raw_record_ids
+    elif type(output.get("record_id")) is int:
+        candidates = [output["record_id"]]
+    else:
+        raw_records = output.get("records")
+        if not isinstance(raw_records, list):
+            return result
+        candidates = []
+        for row in raw_records:
+            if not isinstance(row, Mapping):
+                return result
+            candidates.append(row.get("id"))
+
+    for record_id in candidates[:_MAX_PUBLIC_RECORD_REFS]:
         if type(record_id) is not int or record_id <= 0 or record_id in ids:
             return result
         ids.append(record_id)
     if not ids:
         return result
+
     try:
-        records = context.env[model].browse(ids).exists()
+        records = context.env[operation_model].browse(ids).exists()
         if records.ids != ids:
             return result
         records.check_access("read")
