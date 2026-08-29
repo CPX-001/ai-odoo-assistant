@@ -31,6 +31,8 @@ Research documents do not override:
 | `P5.3_VALIDATION_RUNBOOK.md` | Executed P5.3 focused, deterministic, full-addon and real browser acceptance procedure. |
 | `P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md` | Completed P5.4 implementation/acceptance record for final activity, answer, approval, failure and recovery presentation. |
 | `P5.4_VALIDATION_RUNBOOK.md` | Executed P5.4 deterministic, full-addon, HOOT and HARD real browser acceptance procedure. |
+| `P5.5_POST_EFFECT_REASONING.md` | Implemented P5.5 contract for verified-receipt continuation and natural post-effect final synthesis; validation pending. |
+| `P5.5_VALIDATION_RUNBOOK.md` | Ordered P5.5 focused Odoo, regression and real `P5-REAL-POST-EFFECT` acceptance procedure. |
 | `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed status record for P3 public activity. |
 | `PHASE4_ANSWER_STREAMING.md` | Formal completed status record for P4 answer streaming. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
@@ -50,7 +52,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS; P5.1-P5.4 COMPLETE; P5.5 NOT STARTED
+P5 IN_PROGRESS; P5.1-P5.4 COMPLETE; P5.5 LOCAL_VALIDATION_REQUIRED
 P6+ not eligible
 ```
 
@@ -75,7 +77,12 @@ sanitized final record is `evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e83
 P5.4 final activity/answer/failure UX is implemented and accepted. Its 222-unit/19-contract local
 battery, 126-test addon regression, 101-test/392-assertion HOOT suite and all four HARD real gates
 passed on one coherent lineage. The sanitized record is
-`evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`. P5.5 remains not started.
+`evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`.
+
+P5.5 post-effect reasoning is implemented but not accepted. The host now continues from a bounded
+verified effect receipt, exposes no PLAN catalog after the effect, and prepares a natural final
+provider answer. Its immediate HARD gate is `P5.5-ODOO-POST-EFFECT`; P5.6 remains blocked until the
+ordered P5.5 gates are executed and accepted.
 
 ## Recursive execution rule
 
