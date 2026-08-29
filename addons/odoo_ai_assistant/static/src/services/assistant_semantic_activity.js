@@ -1,7 +1,8 @@
 /** @odoo-module **/
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "blocked", "cancelled"]);
-const IMPORTANT_STATUSES = new Set(["failed", "blocked"]);
+const IMPORTANT_STATUSES = new Set(["failed", "blocked", "cancelled"]);
+const TURN_TERMINAL_KINDS = new Set(["turn.completed", "turn.failed", "turn.cancelled"]);
 const MEANINGFUL_PHASES = new Set([
     "provider",
     "answer",
@@ -41,7 +42,13 @@ function itemKey(event) {
 
 function semanticCode(item) {
     if (IMPORTANT_STATUSES.has(item.status)) {
-        return item.status === "failed" ? "activity.failed" : "activity.blocked";
+        if (item.status === "failed") {
+            return "activity.failed";
+        }
+        if (item.status === "cancelled") {
+            return "activity.cancelled";
+        }
+        return "activity.blocked";
     }
     switch (item.phase) {
         case "provider":
@@ -126,6 +133,27 @@ export function normalizeActivityPresentationPreferences(value) {
     });
 }
 
+function settleRunningItems(ordered, event) {
+    if (
+        event.phase !== "finalization" ||
+        !TURN_TERMINAL_KINDS.has(event.kind) ||
+        !["completed", "failed", "cancelled"].includes(event.status)
+    ) {
+        return;
+    }
+    for (const item of ordered) {
+        if (item.status !== "running") {
+            continue;
+        }
+        item.status = event.status;
+        item.ended_at = event.occurred_at;
+        item.last_sequence = Math.max(item.last_sequence, event.sequence);
+        if (event.status === "failed") {
+            item.diagnostic_code = item.diagnostic_code || event.diagnostic_code || null;
+        }
+    }
+}
+
 export function reduceSemanticActivity(events) {
     if (!Array.isArray(events)) {
         return Object.freeze([]);
@@ -142,6 +170,7 @@ export function reduceSemanticActivity(events) {
             continue;
         }
         seenSequences.add(event.sequence);
+        settleRunningItems(ordered, event);
         const key = itemKey(event);
         const existing = byKey.get(key);
         if (!existing) {
@@ -210,7 +239,9 @@ function selectByDetail(reduced, preferences) {
         );
     }
     const normal = reduced.filter((item) => visibleAtNormalDetail(item, preferences));
-    const fallback = normal.length ? normal : reduced.filter((item) => MEANINGFUL_PHASES.has(item.phase));
+    const fallback = normal.length
+        ? normal
+        : reduced.filter((item) => MEANINGFUL_PHASES.has(item.phase));
     if (preferences.detail_level === "compact") {
         return fallback.length ? [fallback[fallback.length - 1]] : [];
     }
@@ -219,7 +250,10 @@ function selectByDetail(reduced, preferences) {
 
 function latestMeaningful(items) {
     for (let index = items.length - 1; index >= 0; index -= 1) {
-        if (MEANINGFUL_PHASES.has(items[index].phase) || IMPORTANT_STATUSES.has(items[index].status)) {
+        if (
+            MEANINGFUL_PHASES.has(items[index].phase) ||
+            IMPORTANT_STATUSES.has(items[index].status)
+        ) {
             return items[index];
         }
     }
@@ -247,7 +281,9 @@ export function semanticActivityPresentation(
 ) {
     const normalizedPreferences = normalizeActivityPresentationPreferences(preferences);
     const reduced = reduceSemanticActivity(events);
-    const normalVisible = reduced.filter((item) => visibleAtNormalDetail(item, normalizedPreferences));
+    const normalVisible = reduced.filter((item) =>
+        visibleAtNormalDetail(item, normalizedPreferences)
+    );
     const semanticItems = normalVisible.length
         ? normalVisible
         : reduced.filter((item) => MEANINGFUL_PHASES.has(item.phase));
