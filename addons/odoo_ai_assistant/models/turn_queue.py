@@ -23,6 +23,9 @@ _MAX_SCREEN_BYTES = 16 * 1024
 _MAX_EVENTS_PAGE = 100
 # One transient planning retry plus the normal post-approval execution claim must fit.
 _MAX_ATTEMPTS = 3
+# Explicit user redirects may require a new provider claim. They remain bounded separately from
+# automatic retries, and each stale-decision requeue grows this ceiling by at most one.
+_MAX_ATTEMPTS_WITH_REDIRECTS = _MAX_ATTEMPTS + 16
 _LEASE_SECONDS = 300
 _STALE_SCAN_LIMIT = 25
 _CLIENT_REQUEST_ID = "^[A-Za-z0-9_.:-]{8,128}$"
@@ -387,7 +390,8 @@ def _fail_claimed_turn(dbname, turn_id, lease_token, error_code):
         turn = env["odoo.ai.turn"].browse(turn_id).exists()
         if not turn or turn.lease_token != lease_token:
             return
-        if turn.state == "cancel_requested":
+        if turn.state == "cancel_requested" or _control_cancel_requested_in_env(env, turn):
+            _finalize_interrupted_answer(turn)
             turn.write(
                 {
                     "state": "cancelled",
@@ -400,6 +404,13 @@ def _fail_claimed_turn(dbname, turn_id, lease_token, error_code):
             _append_event(dbname, turn_id, "cancelled", "Petición cancelada")
             return
         retryable = error_code not in _NON_RETRYABLE_TURN_ERRORS
+        if (
+            error_code == "agent_redirected"
+            and not turn.write_barrier
+            and turn.max_attempts < _MAX_ATTEMPTS_WITH_REDIRECTS
+            and turn.attempt_count >= turn.max_attempts
+        ):
+            turn.write({"max_attempts": min(_MAX_ATTEMPTS_WITH_REDIRECTS, turn.max_attempts + 1)})
         if retryable and not turn.write_barrier and turn.attempt_count < turn.max_attempts:
             turn.write(
                 {
@@ -463,7 +474,8 @@ def _recover_stale_turns(dbname):
             return
         env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
         for turn in env["odoo.ai.turn"].browse(turn_ids).exists():
-            if turn.state == "cancel_requested":
+            if turn.state == "cancel_requested" or _control_cancel_requested_in_env(env, turn):
+                _finalize_interrupted_answer(turn)
                 turn.write(
                     {
                         "state": "cancelled",
@@ -538,7 +550,10 @@ def _cancellation_requested(dbname, turn_id, lease_token):
         return bool(
             turn
             and turn.lease_token == lease_token
-            and turn.state == "cancel_requested"
+            and (
+                turn.state == "cancel_requested"
+                or _control_cancel_requested_in_env(env, turn)
+            )
         )
 
 
@@ -548,6 +563,7 @@ def _cancel_claimed_turn(dbname, turn_id, lease_token):
         turn = env["odoo.ai.turn"].browse(turn_id).exists()
         if not turn or turn.lease_token != lease_token:
             return
+        _finalize_interrupted_answer(turn)
         turn.write(
             {
                 "state": "cancelled",
@@ -558,6 +574,26 @@ def _cancel_claimed_turn(dbname, turn_id, lease_token):
         )
         cr.commit()
     _append_event(dbname, turn_id, "cancelled", "Petición cancelada")
+
+
+def _control_cancel_requested_in_env(env, turn):
+    control_model = env.get("odoo.ai.turn.control") if hasattr(env, "get") else None
+    if control_model is None:
+        try:
+            control_model = env["odoo.ai.turn.control"]
+        except KeyError:
+            return False
+    control = control_model.with_user(SUPERUSER_ID).search(
+        [("turn_ref_id", "=", turn.id), ("turn_uuid", "=", turn.turn_uuid)],
+        limit=1,
+    )
+    return bool(control and control.cancel_requested)
+
+
+def _finalize_interrupted_answer(turn):
+    finalize = getattr(turn, "_finalize_interrupted_answer", None)
+    if callable(finalize):
+        finalize()
 
 
 def _append_event(
