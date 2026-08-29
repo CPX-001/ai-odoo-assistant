@@ -2,7 +2,7 @@
 
 Preferences are Odoo-owned user state. They may shape future turns, but they never
 create capability/ACL authority. Autonomy overrides replace the user's durable
-selector for one conversation and remain clamped by system/administrator policy.
+selector for one conversation and remain bounded by the existing host policy layers.
 """
 
 from __future__ import annotations
@@ -29,8 +29,6 @@ _RESPONSE_LANGUAGE_SELECTION = [
 ]
 _RESPONSE_LANGUAGE_MODES = frozenset(item[0] for item in _RESPONSE_LANGUAGE_SELECTION)
 _LANGUAGE_TAG = re.compile(r"^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{2,8}){0,3}$")
-_MODES = frozenset({"always_confirm", "risk_based", "protected_only"})
-_RISKS = frozenset({"low", "moderate", "high", "protected"})
 
 
 class AssistantConversationPreferences(models.Model):
@@ -142,32 +140,15 @@ class AssistantConversationAutonomyPolicy(models.Model):
             return snapshot
         mode, risk = _AUTONOMY_PROFILES[profile]
         user_layer = snapshot["layers"]["user"]
+        # The explicit conversation selector replaces the user's default selector only
+        # for this conversation. System/administrator/conversation layers remain in the
+        # same host-owned policy snapshot and therefore cannot be bypassed by the model.
         snapshot["layers"]["user"] = _policy_layer(
             mode=mode,
             risk=risk,
             synthetic=user_layer["allow_synthetic_data"],
         )
         return snapshot
-
-    @api.model
-    def _administrator_layer(self):
-        parameters = self.env["ir.config_parameter"]
-        mode = parameters._get_param("odoo_ai_assistant.agent_confirmation_mode") or "protected_only"
-        risk = parameters._get_param("odoo_ai_assistant.agent_max_auto_risk") or "high"
-        if mode not in _MODES:
-            mode = "protected_only"
-        if risk not in _RISKS:
-            risk = "high"
-        raw_synthetic = parameters._get_param(
-            "odoo_ai_assistant.agent_allow_synthetic_data"
-        )
-        if raw_synthetic in (None, False, ""):
-            raw_synthetic = "True"
-        return _policy_layer(
-            mode=mode,
-            risk=risk,
-            synthetic=str(raw_synthetic).strip().lower() in {"1", "true", "yes"},
-        )
 
 
 class AssistantTurnConversationPreferenceContext(models.Model):
