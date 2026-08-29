@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import json
 import re
+import secrets
 from collections.abc import Mapping
 from dataclasses import replace
 
@@ -24,6 +25,7 @@ from .registry import CapabilityRegistry
 from .validation import validate_payload
 
 _PUBLIC_MODEL = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
+_PUBLIC_ACTIVITY_ID = re.compile(r"^activity:v1:[0-9a-f]{32}$")
 
 
 class CapabilityExecutor:
@@ -53,7 +55,9 @@ class CapabilityExecutor:
             raise CapabilityError("capability_preview_authority_invalid")
         if definition.preview_handler is None:
             raise CapabilityError("capability_preview_unavailable")
-        public = _public_operation_payload(definition.name, payload)
+        public = _public_operation_payload(
+            definition.name, payload, activity_id=_new_activity_id()
+        )
         context.emit(
             "tool.preview.started",
             definition.title or definition.name,
@@ -107,7 +111,9 @@ class CapabilityExecutor:
         if calls >= definition.max_calls:
             raise CapabilityError("capability_call_limit_exceeded")
         self._calls[name] = calls + 1
-        public = _public_operation_payload(definition.name, payload)
+        public = _public_operation_payload(
+            definition.name, payload, activity_id=_new_activity_id()
+        )
         context.emit(
             "tool.started",
             definition.title or definition.name,
@@ -161,7 +167,9 @@ class CapabilityExecutor:
         metadata = dict(context.metadata)
         metadata["capability_result"] = dict(result.data)
         context = replace(context, metadata=metadata)
-        public = _public_operation_payload(definition.name, payload)
+        public = _public_operation_payload(
+            definition.name, payload, activity_id=_new_activity_id()
+        )
         context.emit(
             "tool.verify.started",
             definition.title or definition.name,
@@ -268,15 +276,22 @@ class CapabilityExecutor:
             raise CapabilityError("capability_handler_failed") from error
 
 
-def _public_operation_payload(name, payload):
+def _new_activity_id():
+    return f"activity:v1:{secrets.token_hex(16)}"
+
+
+def _public_operation_payload(name, payload, *, activity_id=None):
     """Project only schema-validated non-secret resource identifiers into host activity.
 
     The capability name and title come from trusted installed ``CapabilityDefinition`` code.
     ``model``/``record_id`` are copied only after the input schema has validated the payload;
     arbitrary arguments, filters, values, tool results and display names never cross this seam.
+    ``activity_id`` is host-generated correlation metadata and never originates from model arguments.
     """
 
     result = {"capability": name}
+    if isinstance(activity_id, str) and _PUBLIC_ACTIVITY_ID.fullmatch(activity_id):
+        result["activity_id"] = activity_id
     model = payload.get("model")
     if isinstance(model, str) and _PUBLIC_MODEL.fullmatch(model):
         result["model"] = model
