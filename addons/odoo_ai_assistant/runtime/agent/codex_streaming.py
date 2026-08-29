@@ -73,6 +73,15 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                     "runtimeWorkspaceRoots": [],
                     "sandbox": "read-only",
                     **({"model": self._settings.model} if self._settings.model else {}),
+                    **(
+                        {
+                            "config": {
+                                "model_reasoning_effort": self._settings.reasoning_effort
+                            }
+                        }
+                        if self._settings.reasoning_effort
+                        else {}
+                    ),
                     "baseInstructions": _DECISION_INSTRUCTIONS,
                 },
                 timeout=_remaining(deadline),
