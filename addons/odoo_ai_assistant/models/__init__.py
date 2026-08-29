@@ -14,6 +14,7 @@ from . import turn_settings_snapshot as turn_settings_snapshot
 from . import turn_failure as turn_failure
 from . import turn_scheduler as turn_scheduler
 from . import turn_live_event as turn_live_event
+from . import turn_reasoning_summary as turn_reasoning_summary
 from . import turn_working_transcript as turn_working_transcript
 from . import embedded_runtime_host_loop as embedded_runtime_host_loop
 from . import user_preferences as user_preferences
