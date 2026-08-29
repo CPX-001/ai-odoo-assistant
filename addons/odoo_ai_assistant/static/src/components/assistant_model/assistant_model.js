@@ -95,6 +95,12 @@ patch(AssistantPanel.prototype, {
         return this.reasoningModelOption?.default_reasoning_effort || null;
     },
 
+    get defaultReasoningEffortLabel() {
+        return this.defaultReasoningEffort
+            ? reasoningEffortLabel(this.defaultReasoningEffort)
+            : "";
+    },
+
     get reasoningEffortCompactLabel() {
         return reasoningEffortLabel(
             this.state.selectedReasoningEffort || this.defaultReasoningEffort
