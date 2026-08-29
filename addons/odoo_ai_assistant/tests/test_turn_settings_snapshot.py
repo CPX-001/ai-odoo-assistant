@@ -51,6 +51,7 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         env = self.env(user=self.user, su=False)
         preference = env["odoo.ai.user.preference"]
         preference.set_current_reasoning_model("snapshot-model-a")
+        preference.set_current_reasoning_effort("high")
         preference.set_current_agent_profile("strict")
 
         turn_a = self._enqueue(
@@ -59,8 +60,9 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
             message="Captura la configuración A",
         )
         snapshot_a = turn_a.execution_settings_snapshot()
-        self.assertEqual(snapshot_a["format_version"], 1)
+        self.assertEqual(snapshot_a["format_version"], 2)
         self.assertEqual(snapshot_a["reasoning_model"], "snapshot-model-a")
+        self.assertEqual(snapshot_a["reasoning_effort"], "high")
         self.assertEqual(snapshot_a["autonomy_profile"], "strict")
         self.assertEqual(
             snapshot_a["policy"]["layers"]["user"]["confirmation_mode"],
@@ -68,6 +70,7 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         )
 
         preference.set_current_reasoning_model("snapshot-model-b")
+        preference.set_current_reasoning_effort("low")
         preference.set_current_agent_profile("full_access")
         turn_a.invalidate_recordset()
         self.assertEqual(turn_a.execution_settings_snapshot(), snapshot_a)
@@ -79,6 +82,7 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         )
         snapshot_b = turn_b.execution_settings_snapshot()
         self.assertEqual(snapshot_b["reasoning_model"], "snapshot-model-b")
+        self.assertEqual(snapshot_b["reasoning_effort"], "low")
         self.assertEqual(snapshot_b["autonomy_profile"], "full_access")
         self.assertEqual(
             snapshot_b["policy"]["layers"]["user"]["max_auto_risk"],
@@ -90,6 +94,7 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         env = self.env(user=self.user, su=False)
         preference = env["odoo.ai.user.preference"]
         preference.set_current_reasoning_model("snapshot-model-fixed")
+        preference.set_current_reasoning_effort("medium")
         preference.set_current_agent_profile("balanced")
         turn = self._enqueue(
             env,
@@ -101,30 +106,34 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         with self.assertRaisesRegex(ValidationError, "execution settings are immutable"):
             technical.write({"reasoning_model": "mutated-model"})
         with self.assertRaisesRegex(ValidationError, "execution settings are immutable"):
+            technical.write({"reasoning_effort": "max"})
+        with self.assertRaisesRegex(ValidationError, "execution settings are immutable"):
             technical.write({"policy_payload": {}})
         with self.assertRaisesRegex(ValidationError, "execution settings are immutable"):
             technical.write({"execution_settings_payload": False})
 
         technical.write({"error_code": "settings_snapshot_test"})
         self.assertEqual(technical.error_code, "settings_snapshot_test")
-        self.assertEqual(
-            technical.execution_settings_snapshot()["reasoning_model"],
-            "snapshot-model-fixed",
-        )
+        snapshot = technical.execution_settings_snapshot()
+        self.assertEqual(snapshot["reasoning_model"], "snapshot-model-fixed")
+        self.assertEqual(snapshot["reasoning_effort"], "medium")
 
-    def test_runtime_codex_settings_use_captured_turn_model(self):
+    def test_runtime_codex_settings_use_captured_turn_model_and_effort(self):
         env = self.env(user=self.user, su=False)
         preference = env["odoo.ai.user.preference"]
         preference.set_current_reasoning_model("snapshot-runtime-model-a")
+        preference.set_current_reasoning_effort("xhigh")
         turn = self._enqueue(
             env,
             request_id="request.settings.snapshot.0004",
-            message="Usa el modelo capturado",
+            message="Usa el modelo y razonamiento capturados",
         )
 
         preference.set_current_reasoning_model("snapshot-runtime-model-b")
+        preference.set_current_reasoning_effort("low")
         turn.invalidate_recordset()
         self.assertEqual(turn.reasoning_model, "snapshot-runtime-model-a")
+        self.assertEqual(turn.reasoning_effort, "xhigh")
 
         detected = SimpleNamespace(
             ready=True,
@@ -141,3 +150,4 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
             settings = env["odoo.ai.embedded.runtime"]._codex_settings(turn)
 
         self.assertEqual(settings.model, "snapshot-runtime-model-a")
+        self.assertEqual(settings.reasoning_effort, "xhigh")
