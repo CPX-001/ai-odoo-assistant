@@ -64,6 +64,47 @@ test("failure updates the same work item and reconnect replay is idempotent", ()
     expect(items[0].semantic_code).toBe("activity.failed");
 });
 
+test("turn completion settles an unmatched running answer item", () => {
+    const items = reduceSemanticActivity([
+        event(1, {
+            kind: "agent.answer.started",
+            phase: "answer",
+            activity_id: null,
+            capability: null,
+            label: "Redactando respuesta",
+        }),
+        event(2, {
+            kind: "turn.completed",
+            phase: "finalization",
+            status: "completed",
+            activity_id: null,
+            capability: null,
+            label: "Turn completed",
+        }),
+    ]);
+
+    expect(items[0].phase).toBe("answer");
+    expect(items[0].status).toBe("completed");
+    expect(items[0].ended_at).toBe("2026-08-29T10:00:02.000000Z");
+});
+
+test("turn cancellation settles unmatched running work as cancelled", () => {
+    const items = reduceSemanticActivity([
+        event(1),
+        event(2, {
+            kind: "turn.cancelled",
+            phase: "finalization",
+            status: "cancelled",
+            activity_id: null,
+            capability: null,
+            label: "Turn cancelled",
+        }),
+    ]);
+
+    expect(items[0].status).toBe("cancelled");
+    expect(items[0].semantic_code).toBe("activity.cancelled");
+});
+
 test("headline and completed step count ignore queue/finalization noise", () => {
     const presentation = semanticActivityPresentation([
         event(1, {
