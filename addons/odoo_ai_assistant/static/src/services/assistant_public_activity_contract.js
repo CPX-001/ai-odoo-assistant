@@ -54,9 +54,11 @@ const KEYS = [
     "progress",
     "diagnostic_code",
     "occurred_at",
+    "activity_id",
 ];
 const TURN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 const MODEL_RE = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
+const ACTIVITY_ID_RE = /^activity:v[1-9][0-9]*:[0-9a-f]{32}$/;
 const DIAGNOSTIC_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
 const OCCURRED_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
 
@@ -133,7 +135,9 @@ export function normalizePublicTurnEvent(value) {
             (typeof value.diagnostic_code !== "string" ||
                 !DIAGNOSTIC_RE.test(value.diagnostic_code))) ||
         typeof value.occurred_at !== "string" ||
-        !OCCURRED_AT_RE.test(value.occurred_at)
+        !OCCURRED_AT_RE.test(value.occurred_at) ||
+        (value.activity_id !== null &&
+            (typeof value.activity_id !== "string" || !ACTIVITY_ID_RE.test(value.activity_id)))
     ) {
         return null;
     }
@@ -149,6 +153,7 @@ export function normalizePublicTurnEvent(value) {
         progress: value.progress,
         diagnostic_code: value.diagnostic_code,
         occurred_at: value.occurred_at,
+        activity_id: value.activity_id,
     });
 }
 
