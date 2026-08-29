@@ -26,6 +26,7 @@ _MAX_LIVE_EVENTS = 1024
 _MAX_LIVE_PAGE = 100
 _MAX_ANSWER_CHARS = 16 * 1024
 _MAX_ANSWER_DELTA = 2 * 1024
+_MAX_RESOURCE_RECORDS = 50
 _LIVE_LOCK_NAMESPACE = 20260828
 _MODEL = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _ACTIVITY_ID = re.compile(r"^activity:v[1-9][0-9]*:[0-9a-f]{32}$")
@@ -343,7 +344,11 @@ def _resource_from_payload(payload):
         record_ids = [payload["record_id"]]
     if not isinstance(record_ids, list):
         record_ids = []
-    record_ids = [item for item in record_ids[:20] if type(item) is int and item > 0]
+    record_ids = [
+        item
+        for item in record_ids[:_MAX_RESOURCE_RECORDS]
+        if type(item) is int and item > 0
+    ]
     names = payload.get("display_names")
     if not isinstance(names, list) or len(names) != len(record_ids):
         names = []
