@@ -231,12 +231,8 @@ try {
     await selectAutonomy(page, "Estricto");
 
     const composer = page.locator("#o_ai_assistant_question");
-    const queuedResponse = page.waitForResponse(
-        (response) =>
-            new URL(response.url()).pathname === "/odoo_ai/v1/turn" &&
-            response.request().method() === "POST",
-        { timeout: 60_000 }
-    );
+    await composer.waitFor({ state: "visible", timeout: 30_000 });
+    assert.equal(await composer.isEnabled(), true, "P5.5 composer is unexpectedly disabled");
     await composer.fill(
         `En el registro actual cambia únicamente el campo ref al valor ${proposed}. `
         + "Prepara exactamente una propuesta con odoo.record.patch y espera mi aprobación; "
@@ -244,8 +240,18 @@ try {
         + `continúa razonando desde el resultado verificado y responde en español incluyendo literalmente ${finalMarker}. `
         + "No propongas ni ejecutes una segunda modificación después de verificar."
     );
-    await page.getByRole("button", { name: "Enviar mensaje" }).click();
-    const queuedEnvelope = await (await queuedResponse).json();
+    const sendButton = page.locator(".o_ai_assistant_send_button");
+    assert.equal(await sendButton.count(), 1, "P5.5 Assistant send button is ambiguous");
+    const [queuedResponse] = await Promise.all([
+        page.waitForResponse(
+            (response) =>
+                new URL(response.url()).pathname === "/odoo_ai/v1/turn" &&
+                response.request().method() === "POST",
+            { timeout: 60_000 }
+        ),
+        sendButton.click(),
+    ]);
+    const queuedEnvelope = await queuedResponse.json();
     assert.ok(!queuedEnvelope.error, JSON.stringify(queuedEnvelope.error));
     const queued = queuedEnvelope.result;
     assert.equal(queued?.ok, true);
@@ -261,14 +267,16 @@ try {
     assert.equal(pending.response?.plan?.steps?.length, 1);
     assert.equal(pending.response.plan.steps[0].capability, "odoo.record.patch");
 
-    const decisionResponse = page.waitForResponse(
-        (response) =>
-            new URL(response.url()).pathname === "/odoo_ai/v1/turn/plan-decision" &&
-            response.request().method() === "POST",
-        { timeout: 60_000 }
-    );
-    await approval.getByRole("button", { name: "Continuar" }).click();
-    const decisionEnvelope = await (await decisionResponse).json();
+    const [decisionResponse] = await Promise.all([
+        page.waitForResponse(
+            (response) =>
+                new URL(response.url()).pathname === "/odoo_ai/v1/turn/plan-decision" &&
+                response.request().method() === "POST",
+            { timeout: 60_000 }
+        ),
+        approval.getByRole("button", { name: "Continuar" }).click(),
+    ]);
+    const decisionEnvelope = await decisionResponse.json();
     assert.ok(!decisionEnvelope.error, JSON.stringify(decisionEnvelope.error));
     assert.equal(decisionEnvelope.result?.ok, true);
     assert.equal(decisionEnvelope.result?.plan_id, queued.turn_id);
