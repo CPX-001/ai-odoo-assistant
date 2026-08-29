@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from odoo import fields, models
+from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
 from .turn_live_event import (
@@ -61,6 +61,7 @@ class AssistantTurnLiveReasoningSummary(models.Model):
             "occurred_at": _iso_utc(self.occurred_at),
         }
 
+    @api.model
     def append_reasoning_summary_independent(
         self,
         *,
@@ -82,6 +83,7 @@ class AssistantTurnLiveReasoningSummary(models.Model):
 class AssistantTurnEventReasoningBridge(models.Model):
     _inherit = "odoo.ai.turn.event"
 
+    @api.model
     def append_for_turn(
         self,
         *,
