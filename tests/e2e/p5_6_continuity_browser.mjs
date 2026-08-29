@@ -62,12 +62,15 @@ async function login(page, { baseUrl, database, loginName, password }) {
 
 async function openAssistant(page) {
     const open = page.getByRole("button", { name: "Abrir AI Assistant" });
-    if (await open.count()) {
+    const composer = page.locator("#o_ai_assistant_question");
+    const history = page.locator(".o_ai_assistant_history");
+    if (!(await composer.isVisible()) && !(await history.isVisible())) {
+        await open.waitFor({ state: "visible", timeout: 60_000 });
         await open.click();
     }
     await Promise.race([
-        page.locator("#o_ai_assistant_question").waitFor({ state: "visible", timeout: 60_000 }),
-        page.locator(".o_ai_assistant_history").waitFor({ state: "visible", timeout: 60_000 }),
+        composer.waitFor({ state: "visible", timeout: 60_000 }),
+        history.waitFor({ state: "visible", timeout: 60_000 }),
     ]);
 }
 
