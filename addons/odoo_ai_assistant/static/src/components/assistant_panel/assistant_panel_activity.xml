@@ -43,12 +43,14 @@
                                     class="d-flex flex-wrap gap-2 align-items-center">
                                     <button t-if="item.can_show_more_references" type="button"
                                         class="btn btn-link btn-sm p-0"
-                                        t-on-click="() => showMoreActivityReferences(item)"
-                                        t-esc="activityShowMoreLabel(item)"/>
+                                        t-on-click="() => showMoreActivityReferences(item)">
+                                        <t t-esc="activityShowMoreLabel(item)"/>
+                                    </button>
                                     <button t-if="item.can_show_remaining_references and item.reference_remaining_count > item.reference_next_count"
                                         type="button" class="btn btn-link btn-sm p-0"
-                                        t-on-click="() => showRemainingActivityReferences(item)"
-                                        t-esc="activityShowRemainingLabel(item)"/>
+                                        t-on-click="() => showRemainingActivityReferences(item)">
+                                        <t t-esc="activityShowRemainingLabel(item)"/>
+                                    </button>
                                 </div>
                             </div>
                             <div t-if="item.references_over_limit" class="ms-4 mt-1 small text-muted">
