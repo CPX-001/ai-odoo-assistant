@@ -15,7 +15,7 @@ from odoo.exceptions import AccessError, MissingError
 from ..services.turn_context import agent_model_is_eligible, visible_query_fields
 
 _MODEL = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
-_MAX_REFERENCES = 20
+_MAX_REFERENCES = 50
 _MAX_PRESENTATION_FIELDS = 3
 _MAX_LABEL = 160
 _SAFE_FIELD_TYPES = frozenset(
