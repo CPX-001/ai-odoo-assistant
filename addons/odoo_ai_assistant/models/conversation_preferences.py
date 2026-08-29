@@ -21,7 +21,13 @@ _AUTONOMY_PROFILES = {
     "autonomous": ("protected_only", "high"),
     "full_access": ("protected_only", "protected"),
 }
-_RESPONSE_LANGUAGE_MODES = frozenset({"inherit", "automatic", "odoo", "fixed"})
+_RESPONSE_LANGUAGE_SELECTION = [
+    ("inherit", "Inherit"),
+    ("automatic", "Automatic"),
+    ("odoo", "Odoo user language"),
+    ("fixed", "Fixed language"),
+]
+_RESPONSE_LANGUAGE_MODES = frozenset(item[0] for item in _RESPONSE_LANGUAGE_SELECTION)
 _LANGUAGE_TAG = re.compile(r"^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{2,8}){0,3}$")
 _MODES = frozenset({"always_confirm", "risk_based", "protected_only"})
 _RISKS = frozenset({"low", "moderate", "high", "protected"})
@@ -31,12 +37,7 @@ class AssistantConversationPreferences(models.Model):
     _inherit = "odoo.ai.conversation"
 
     response_language_mode = fields.Selection(
-        selection=[
-            ("inherit", "Inherit"),
-            ("automatic", "Automatic"),
-            ("odoo", "Odoo user language"),
-            ("fixed", "Fixed language"),
-        ],
+        selection=_RESPONSE_LANGUAGE_SELECTION,
         required=True,
         default="inherit",
         copy=False,
@@ -172,14 +173,59 @@ class AssistantConversationAutonomyPolicy(models.Model):
 class AssistantTurnConversationPreferenceContext(models.Model):
     _inherit = "odoo.ai.turn"
 
+    response_language_mode = fields.Selection(
+        selection=_RESPONSE_LANGUAGE_SELECTION,
+        required=True,
+        readonly=True,
+        default="inherit",
+        copy=False,
+    )
+    response_language = fields.Char(readonly=True, size=35, copy=False)
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        captured = []
+        for original in vals_list:
+            values = dict(original)
+            conversation_id = values.get("conversation_id")
+            if conversation_id and "response_language_mode" not in values:
+                conversation = self.env["odoo.ai.conversation"].browse(conversation_id).exists()
+                if not conversation:
+                    raise ValidationError("Assistant conversation does not exist")
+                values["response_language_mode"] = (
+                    conversation.response_language_mode or "inherit"
+                )
+                values["response_language"] = conversation.response_language or False
+            captured.append(values)
+        return super().create(captured)
+
+    def write(self, values):
+        protected = {"response_language_mode", "response_language"}.intersection(values)
+        if protected:
+            for record in self:
+                for field_name in protected:
+                    current = record[field_name] or False
+                    incoming = values[field_name] or False
+                    if current != incoming:
+                        raise ValidationError(
+                            "Assistant turn response-language settings are immutable"
+                        )
+        return super().write(values)
+
+    @api.constrains("response_language_mode", "response_language")
+    def _check_turn_response_language_preference(self):
+        for record in self:
+            _normalize_response_language(
+                record.response_language_mode,
+                record.response_language or "",
+            )
+
     def _build_conversation_context_snapshot(self):
         self.ensure_one()
         snapshot = super()._build_conversation_context_snapshot()
-        if not self.conversation_id:
-            return snapshot
         settings = dict(snapshot["session_settings"])
-        mode = self.conversation_id.response_language_mode or "inherit"
-        language = self.conversation_id.response_language or ""
+        mode = self.response_language_mode or "inherit"
+        language = self.response_language or ""
         _normalize_response_language(mode, language)
         settings["response_language_mode"] = mode
         settings["response_language"] = language or False
