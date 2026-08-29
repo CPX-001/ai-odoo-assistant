@@ -63,6 +63,14 @@ class ResConfigSettingsRuntime(models.TransientModel):
         readonly=True,
         groups="base.group_system",
     )
+    # Upgrade bridge for databases whose stored runtime-settings view predates
+    # 18.0.10.19.0.  Keep these model-only fields until that upgrade floor is retired:
+    # Odoo validates the old inherited view before loading its replacement XML.
+    assistant_codex_login_pending = fields.Boolean(
+        string="Legacy ChatGPT login pending",
+        readonly=True,
+        groups="base.group_system",
+    )
     assistant_codex_auth_mode = fields.Char(
         string="Authentication mode",
         readonly=True,
@@ -75,6 +83,16 @@ class ResConfigSettingsRuntime(models.TransientModel):
     )
     assistant_codex_plan_type = fields.Char(
         string="Plan",
+        readonly=True,
+        groups="base.group_system",
+    )
+    assistant_codex_login_url = fields.Char(
+        string="Legacy ChatGPT login page",
+        readonly=True,
+        groups="base.group_system",
+    )
+    assistant_codex_login_code = fields.Char(
+        string="Legacy ChatGPT device code",
         readonly=True,
         groups="base.group_system",
     )
@@ -137,6 +155,21 @@ class ResConfigSettingsRuntime(models.TransientModel):
         self._require_capability_admin()
         self.ensure_one()
         return _reload_action()
+
+    # These fail-closed shims exist only so Odoo can validate and replace a stored
+    # pre-18.0.10.19.0 view during module upgrade.  The current view exposes none
+    # of them and authentication remains owned by the host Codex installation.
+    def action_assistant_codex_login_start(self):
+        return self._retired_database_login_action()
+
+    def action_assistant_codex_login_open(self):
+        return self._retired_database_login_action()
+
+    def action_assistant_codex_login_cancel(self):
+        return self._retired_database_login_action()
+
+    def action_assistant_codex_logout(self):
+        return self._retired_database_login_action()
 
     @api.model
     def assistant_codex_account_status(self):
@@ -228,6 +261,12 @@ class ResConfigSettingsRuntime(models.TransientModel):
         if not self.env.user.has_group("base.group_system"):
             raise AccessError("Assistant capability settings require Settings access")
 
+    def _retired_database_login_action(self):
+        self._require_capability_admin()
+        raise ValidationError(
+            _("ChatGPT authentication is managed by the installation's primary Codex session.")
+        )
+
     def _codex_account_manager(self):
         configured = (
             self.env["ir.config_parameter"]._get_param("odoo_ai_assistant.codex_executable")
@@ -247,9 +286,12 @@ class ResConfigSettingsRuntime(models.TransientModel):
         return {
             "assistant_codex_account_state": self._account_state_label(status.state),
             "assistant_codex_account_connected": status.connected,
+            "assistant_codex_login_pending": False,
             "assistant_codex_auth_mode": status.auth_mode or "",
             "assistant_codex_account_email": status.email or "",
             "assistant_codex_plan_type": status.plan_type or "",
+            "assistant_codex_login_url": "",
+            "assistant_codex_login_code": "",
             "assistant_codex_account_message": self._account_detail(status),
             "assistant_codex_rate_limits": _format_rate_limits(status.rate_limits),
         }

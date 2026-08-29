@@ -4,6 +4,12 @@ Versioned migration hooks live here when an addon upgrade needs a deterministic 
 
 Current tree includes the `18.0.7.6.0` migration that refreshes indexes.
 
+The runtime settings model also retains model-only, fail-closed compatibility fields/actions for
+the pre-`18.0.10.19.0` account view. Odoo validates that stored inherited view before replacing its
+XML during an upgrade, so removing both sides in one release prevents older databases from
+updating. These bridge names are not exposed by the current view or browser account payload and
+may be removed only after the supported upgrade floor no longer includes that stored view.
+
 ## Migration principles
 
 A migration should be:

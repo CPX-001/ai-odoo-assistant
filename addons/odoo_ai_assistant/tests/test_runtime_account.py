@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from odoo import Command
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, ValidationError
 from odoo.tests import TransactionCase, tagged
 
 from ..runtime.account import (
@@ -382,6 +382,20 @@ class TestEmbeddedCodexAccount(TransactionCase):
         self.assertNotIn("access_token", arch)
         self.assertNotIn("refresh_token", arch)
         self.assertNotIn("auth.json", arch)
+
+    def test_legacy_database_login_view_contract_is_upgrade_only_and_fails_closed(self):
+        settings = self.env["res.config.settings"].create({})
+        self.assertIn("assistant_codex_login_pending", settings._fields)
+        self.assertIn("assistant_codex_login_url", settings._fields)
+        self.assertIn("assistant_codex_login_code", settings._fields)
+        for method_name in (
+            "action_assistant_codex_login_start",
+            "action_assistant_codex_login_open",
+            "action_assistant_codex_login_cancel",
+            "action_assistant_codex_logout",
+        ):
+            with self.assertRaisesRegex(ValidationError, "managed by the installation"):
+                getattr(settings, method_name)()
 
     def test_settings_rpc_returns_no_tokens_or_internal_login_state(self):
         fake_status = CodexAccountStatus(
