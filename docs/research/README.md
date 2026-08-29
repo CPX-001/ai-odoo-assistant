@@ -54,7 +54,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS; P5.1-P5.6 COMPLETE; P5.7 IN_PROGRESS
+P5 IN_PROGRESS; P5.1-P5.7 COMPLETE; P5.8 ELIGIBLE_NOT_STARTED
   model/reasoning sub-slice ACCEPTED
   conversation preference mutation LOCAL GATES PASS / REAL PRODUCT GATES REQUIRED
 P6+ not eligible
@@ -93,19 +93,21 @@ tests, deterministic regression with 227 unit tests plus 19 JS assertions, full 
 with 135 tests, and `P5-REAL-CONTINUITY` passed after review. The sanitized record is
 `evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`.
 
-P5.7 is in progress. Its model-family/model-variant/reasoning-effort sub-slice passed 227 unit tests,
+P5.7's model-family/model-variant/reasoning-effort sub-slice passed 227 unit tests,
 19 JS contract assertions, the 190-execution full Odoo regression, 104 HOOT tests/409 assertions and
 both required real browser settings gates on checkpoint `eb66e45`. The sanitized record is
 `evidence/phase5/2026-08-29/P5.7-MODEL-REASONING-ACCEPTANCE-eb66e45.md`.
 
-The remaining conversation preference implementation is now on `main`: explicit per-conversation
+The conversation preference implementation is now accepted on `main`: explicit per-conversation
 autonomy and response-language mutations reuse the current capability/turn/context framework. Its
 focused Odoo gate, 229-unit/19-contract deterministic regression, 143-test full addon regression and
 104-test/409-assertion HOOT suite passed on the materially tested `a61bb28` tree. The sanitized
 record is `evidence/phase5/2026-08-29/P5.7-CONVERSATION-PREFERENCES-LOCAL-a61bb28.md`.
 
-P5.7 is not accepted yet. The Odoo-owned Codex session was not authenticated, so
-`P5-REAL-SESSION-POLICY` and `P5-REAL-LANGUAGE-PREFERENCE` remain hard blockers.
+The final host-session correction and rerun passed 229 unit tests, 19 JS assertions, 145 full-addon
+Odoo tests / 199 executions, the focused 3-test HOOT account suite, and both hard real gates.
+P5.7 is accepted through `074a71c`; the sanitized record is
+`evidence/phase5/2026-08-29/P5.7-REAL-ACCEPTANCE-074a71c.md`. P5.8 is eligible but was not started.
 
 ## Recursive execution rule
 

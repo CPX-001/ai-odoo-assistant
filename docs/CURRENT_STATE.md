@@ -11,14 +11,12 @@ P5.4 accepted through 3e2b38d68fe172cd2cf92d7794159f73476ac23d
 P5.5 accepted through 8427c8849b1e1f3afa6337de1209a6027410c266
 P5.6 accepted through 720102f2a13af5240c779b07cc71ee65994a87b1
 P5.7 model/reasoning preference sub-slice accepted through eb66e45447c4d64e1ebbb5e8322bffa759c12773
-P5.7 conversation preference mutation local gates pass; real product gates pending
+P5.7 complete through 074a71c29a6a6109ae7412e7b1f9850c4449e379
 ```
 
-P5.6 is formally accepted. P5.7 is in progress: the provider-backed model/reasoning preference
-sub-slice is accepted, and the explicit conversation-scoped mutation implementation has passed its
-focused/local regression boundary. It remains unaccepted until `P5-REAL-SESSION-POLICY` and
-`P5-REAL-LANGUAGE-PREFERENCE` pass. The exact live cursor is always
-`research/EXECUTION_STATE.md`.
+P5.6 and P5.7 are formally accepted. P5.7's conversation-scoped preference implementation passed
+its focused, full regression, HOOT and real Codex/Chromium product-path gates. P5.8 is eligible but
+not started. The exact live cursor is always `research/EXECUTION_STATE.md`.
 
 ## 1. Product/deployment baseline
 
@@ -97,7 +95,7 @@ technical access profile
 
 P5.6 adds conversation-context management at the current runtime seam; it does not pre-empt P7's general ContextProvider extension contract.
 
-## 5. Conversation/context today — P5.6 accepted, P5.7 extension pending gate
+## 5. Conversation/context today — P5.6 and P5.7 accepted
 
 Complete `odoo.ai.message` and `odoo.ai.turn` records remain history authority.
 
@@ -129,7 +127,7 @@ The provider port still uses the historical `conversation_summary: str` paramete
 
 Context remains data, never authority. ACLs, record rules, capability guards, policy, approval and effect execution are still re-evaluated host-side.
 
-P5.7 now adds stored conversation response-language preferences and snapshots the selected mode/fixed language on each durable turn before projecting them into `session_settings` alongside `odoo_user_language`. The same P5.7 slice adds an explicit temporary autonomy override on the conversation policy layer. These changes are implementation-only until the focused gate passes.
+P5.7 adds stored conversation response-language preferences and snapshots the selected mode/fixed language on each durable turn before projecting them into `session_settings` alongside `odoo_user_language`. The same accepted slice adds an explicit temporary autonomy override on the conversation policy layer.
 
 ## 6. Queue, concurrency and settings
 
@@ -159,7 +157,7 @@ policy
 
 Legacy v1 snapshots remain readable. New turns capture the current per-user model and explicit provider-supported reasoning effort; `Predeterminado` stores no synthetic effort. Those selectors are immutable per turn. Revocable Odoo authorization, capability guards and provider availability remain dynamic.
 
-The pending P5.7 conversation slice additionally captures `response_language_mode` and `response_language` as immutable turn fields. Conversation autonomy is resolved into the already-existing per-turn policy snapshot, so later preference changes do not rewrite a queued turn's authority.
+The accepted P5.7 conversation slice additionally captures `response_language_mode` and `response_language` as immutable turn fields. Conversation autonomy is resolved into the already-existing per-turn policy snapshot, so later preference changes do not rewrite a queued turn's authority.
 
 ## 7. Frontend/product state
 
@@ -237,17 +235,18 @@ P5 IN_PROGRESS
   P5.4 COMPLETE
   P5.5 COMPLETE
   P5.6 COMPLETE
-  P5.7 IN_PROGRESS
+  P5.7 COMPLETE
     model/reasoning sub-slice ACCEPTED
-    conversation preference mutation LOCAL GATES PASS / REAL PRODUCT GATES REQUIRED
+    conversation preference mutation ACCEPTED
+  P5.8 ELIGIBLE_NOT_STARTED
 P6+ NOT ELIGIBLE
 ```
 
-Current blocking gates:
+Latest accepted P5.7 gates:
 
 ```text
-P5-REAL-SESSION-POLICY
-P5-REAL-LANGUAGE-PREFERENCE
+P5-REAL-SESSION-POLICY       PASS
+P5-REAL-LANGUAGE-PREFERENCE PASS
 ```
 
 Implementation/validation record:
@@ -256,5 +255,4 @@ Implementation/validation record:
 research/P5.7_CONVERSATION_SCOPED_PREFERENCES.md
 ```
 
-Do not begin P5.8 until both real product-path gates pass on a materially unchanged P5.7
-implementation.
+P5.8 may begin from its accepted target specification; it was not started in this run.
