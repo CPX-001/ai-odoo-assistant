@@ -151,3 +151,54 @@ class TestCapabilityActivityCorrelation(TransactionCase):
         self.assertEqual(completed["record_ids"], [first.id, second.id])
         self.assertEqual(completed["display_names"], ["Semantic Ref A", "Semantic Ref B"])
         self.assertNotIn("records", completed)
+
+    def test_completed_mutation_can_project_output_model_and_single_record(self):
+        partner = self.env["res.partner"].create({"name": "Semantic Mutation Ref"})
+        events = []
+
+        def sink(event_type, title, payload):
+            events.append((event_type, title, dict(payload)))
+
+        output_schema = {
+            "type": "object",
+            "properties": {
+                "model": {"type": "string"},
+                "record_id": {"type": "integer"},
+                "operation": {"type": "string"},
+            },
+            "required": ["model", "record_id", "operation"],
+            "additionalProperties": False,
+        }
+        definition = CapabilityDefinition(
+            name="test.mutation_reference_probe",
+            title="Mutation reference probe",
+            description="Return one mutation identity for semantic navigation projection.",
+            input_schema=_SCHEMA,
+            output_schema=output_schema,
+            risk=CapabilityRisk.READ,
+            effect=CapabilityEffect.READ_ONLY,
+            exposure=CapabilityExposure.REASONING,
+            handler=lambda _context, _payload: {
+                "model": "res.partner",
+                "record_id": partner.id,
+                "operation": "probe",
+            },
+        )
+        context = CapabilityContext(
+            env=self.env(user=self.env.user, su=False),
+            turn_id="activity-mutation-reference-test",
+            event_sink=sink,
+        )
+        executor = CapabilityExecutor(
+            CapabilityRegistry([definition]),
+            context,
+            config=CapabilityConfigResolver(),
+        )
+
+        asyncio.run(executor.execute("test.mutation_reference_probe", {}))
+        completed = next(payload for event, _title, payload in events if event == "tool.completed")
+
+        self.assertEqual(completed["model"], "res.partner")
+        self.assertEqual(completed["record_ids"], [partner.id])
+        self.assertEqual(completed["display_names"], ["Semantic Mutation Ref"])
+        self.assertNotIn("operation", completed)
