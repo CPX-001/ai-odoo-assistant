@@ -11,6 +11,7 @@ from . import test_codex_planning_contract as test_codex_planning_contract
 from . import test_conversation_context as test_conversation_context
 from . import test_e2e_convergence_battery as test_e2e_convergence_battery
 from . import test_embedded_agent_runtime as test_embedded_agent_runtime
+from . import test_model_catalog as test_model_catalog
 from . import (
     test_phase2_browser_failure_projection as test_phase2_browser_failure_projection,
 )
