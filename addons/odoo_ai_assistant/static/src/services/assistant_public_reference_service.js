@@ -3,6 +3,15 @@
 import { rpc } from "@web/core/network/rpc";
 
 const MODEL_RE = /^[A-Za-z_][A-Za-z0-9_.]{0,127}$/;
+const FIELD_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+const VIEW_TYPES = new Set(["list", "form", "kanban", "calendar", "graph", "pivot", "activity"]);
+const NAVIGATION_KINDS = new Set([
+    "odoo_model",
+    "odoo_action",
+    "odoo_view",
+    "odoo_menu",
+    "odoo_setting",
+]);
 const MAX_REFERENCES = 50;
 const MAX_RENDERED_REFERENCES = 100;
 
@@ -13,6 +22,10 @@ function exactKeys(value, expected) {
         !Array.isArray(value) &&
         Object.keys(value).sort().join("|") === [...expected].sort().join("|")
     );
+}
+
+function validLabel(value, maximum = 240) {
+    return typeof value === "string" && !value.includes("\u0000") && value.trim().length <= maximum;
 }
 
 export function resourceReferences(resource) {
@@ -61,6 +74,100 @@ export function resourceModelReference(resource) {
     return Object.freeze({ kind: "odoo_model", model: resource.model });
 }
 
+export function normalizeHostNavigationReference(value) {
+    if (!value || typeof value !== "object" || !NAVIGATION_KINDS.has(value.kind)) {
+        return null;
+    }
+    if (!validLabel(value.label, 160) || !validLabel(value.description, 240)) {
+        return null;
+    }
+    const common = { kind: value.kind, label: value.label.trim(), description: value.description.trim() };
+    if (value.kind === "odoo_model") {
+        if (!exactKeys(value, ["kind", "label", "description", "model"]) || !MODEL_RE.test(value.model)) {
+            return null;
+        }
+        return Object.freeze({ ...common, model: value.model });
+    }
+    if (value.kind === "odoo_action") {
+        if (
+            !exactKeys(value, ["kind", "label", "description", "model", "action_id"]) ||
+            !MODEL_RE.test(value.model) ||
+            !Number.isSafeInteger(value.action_id) ||
+            value.action_id <= 0
+        ) {
+            return null;
+        }
+        return Object.freeze({ ...common, model: value.model, action_id: value.action_id });
+    }
+    if (value.kind === "odoo_view") {
+        if (
+            !exactKeys(value, ["kind", "label", "description", "model", "view_id"]) ||
+            !MODEL_RE.test(value.model) ||
+            !Number.isSafeInteger(value.view_id) ||
+            value.view_id <= 0
+        ) {
+            return null;
+        }
+        return Object.freeze({ ...common, model: value.model, view_id: value.view_id });
+    }
+    if (value.kind === "odoo_menu") {
+        if (
+            !exactKeys(value, ["kind", "label", "description", "model", "action_id", "menu_id"]) ||
+            !MODEL_RE.test(value.model) ||
+            !Number.isSafeInteger(value.action_id) ||
+            value.action_id <= 0 ||
+            !Number.isSafeInteger(value.menu_id) ||
+            value.menu_id <= 0
+        ) {
+            return null;
+        }
+        return Object.freeze({
+            ...common,
+            model: value.model,
+            action_id: value.action_id,
+            menu_id: value.menu_id,
+        });
+    }
+    if (
+        !exactKeys(value, [
+            "kind",
+            "label",
+            "description",
+            "model",
+            "action_id",
+            "setting_field",
+        ]) ||
+        value.model !== "res.config.settings" ||
+        !Number.isSafeInteger(value.action_id) ||
+        value.action_id <= 0 ||
+        typeof value.setting_field !== "string" ||
+        !FIELD_RE.test(value.setting_field)
+    ) {
+        return null;
+    }
+    return Object.freeze({
+        ...common,
+        model: value.model,
+        action_id: value.action_id,
+        setting_field: value.setting_field,
+    });
+}
+
+export function normalizeHostNavigationReferences(value, maximum = 12) {
+    if (!Array.isArray(value) || value.length > maximum) {
+        return null;
+    }
+    const result = [];
+    for (const raw of value) {
+        const reference = normalizeHostNavigationReference(raw);
+        if (!reference) {
+            return null;
+        }
+        result.push(reference);
+    }
+    return Object.freeze(result);
+}
+
 function normalizeFields(value) {
     if (!Array.isArray(value) || value.length > 3) {
         return null;
@@ -81,8 +188,48 @@ function normalizeFields(value) {
     return fields;
 }
 
-function normalizeReference(value) {
+function normalizeNavigation(value) {
     if (!value || typeof value !== "object") {
+        return null;
+    }
+    if (value.mode === "record") {
+        return exactKeys(value, ["mode", "model", "record_id"]) &&
+            MODEL_RE.test(value.model) &&
+            Number.isSafeInteger(value.record_id) &&
+            value.record_id > 0
+            ? Object.freeze({ ...value })
+            : null;
+    }
+    if (value.mode === "model") {
+        return exactKeys(value, ["mode", "model"]) && MODEL_RE.test(value.model)
+            ? Object.freeze({ ...value })
+            : null;
+    }
+    if (value.mode === "action") {
+        return exactKeys(value, ["mode", "action_id"]) &&
+            Number.isSafeInteger(value.action_id) &&
+            value.action_id > 0
+            ? Object.freeze({ ...value })
+            : null;
+    }
+    if (value.mode === "view") {
+        return exactKeys(value, ["mode", "model", "view_id", "view_type"]) &&
+            MODEL_RE.test(value.model) &&
+            Number.isSafeInteger(value.view_id) &&
+            value.view_id > 0 &&
+            VIEW_TYPES.has(value.view_type)
+            ? Object.freeze({ ...value })
+            : null;
+    }
+    return null;
+}
+
+function normalizeReference(value) {
+    if (!value || typeof value !== "object" || !validLabel(value.label, 160)) {
+        return null;
+    }
+    const navigation = normalizeNavigation(value.navigation);
+    if (!navigation || !validLabel(value.description, 240)) {
         return null;
     }
     if (value.kind === "odoo_record") {
@@ -95,13 +242,13 @@ function normalizeReference(value) {
                 "model_label",
                 "navigation",
                 "record_id",
+                "description",
             ]) ||
             !MODEL_RE.test(value.model) ||
             !Number.isSafeInteger(value.record_id) ||
             value.record_id <= 0 ||
-            typeof value.label !== "string" ||
             typeof value.model_label !== "string" ||
-            value.navigation?.view_type !== "form"
+            navigation.mode !== "record"
         ) {
             return null;
         }
@@ -109,20 +256,67 @@ function normalizeReference(value) {
         if (fields === null) {
             return null;
         }
-        return Object.freeze({ ...value, fields: Object.freeze(fields) });
+        return Object.freeze({ ...value, navigation, fields: Object.freeze(fields) });
     }
     if (value.kind === "odoo_model") {
         if (
-            !exactKeys(value, ["kind", "label", "model", "navigation"]) ||
+            !exactKeys(value, ["kind", "label", "model", "description", "navigation"]) ||
             !MODEL_RE.test(value.model) ||
-            typeof value.label !== "string" ||
-            value.navigation?.view_type !== "list"
+            navigation.mode !== "model"
         ) {
             return null;
         }
-        return Object.freeze({ ...value });
+        return Object.freeze({ ...value, navigation });
     }
-    return null;
+    const expected = {
+        odoo_action: ["kind", "action_id", "model", "label", "description", "navigation"],
+        odoo_view: ["kind", "view_id", "model", "label", "description", "navigation"],
+        odoo_menu: [
+            "kind",
+            "action_id",
+            "menu_id",
+            "model",
+            "label",
+            "description",
+            "navigation",
+        ],
+        odoo_setting: [
+            "kind",
+            "action_id",
+            "setting_field",
+            "model",
+            "label",
+            "description",
+            "navigation",
+        ],
+    }[value.kind];
+    if (!expected || !exactKeys(value, expected) || !MODEL_RE.test(value.model)) {
+        return null;
+    }
+    if (value.kind === "odoo_view") {
+        if (!Number.isSafeInteger(value.view_id) || value.view_id <= 0 || navigation.mode !== "view") {
+            return null;
+        }
+    } else if (
+        !Number.isSafeInteger(value.action_id) ||
+        value.action_id <= 0 ||
+        navigation.mode !== "action"
+    ) {
+        return null;
+    }
+    if (
+        value.kind === "odoo_menu" &&
+        (!Number.isSafeInteger(value.menu_id) || value.menu_id <= 0)
+    ) {
+        return null;
+    }
+    if (
+        value.kind === "odoo_setting" &&
+        (typeof value.setting_field !== "string" || !FIELD_RE.test(value.setting_field))
+    ) {
+        return null;
+    }
+    return Object.freeze({ ...value, navigation });
 }
 
 export function normalizeReferenceResponse(response) {
@@ -152,6 +346,32 @@ export function normalizeReferenceResponse(response) {
     return Object.freeze(result);
 }
 
+export function publicReferenceRequest(reference) {
+    if (reference?.kind === "odoo_record") {
+        return { kind: "odoo_record", model: reference.model, record_id: reference.record_id };
+    }
+    if (reference?.kind === "odoo_model") {
+        return { kind: "odoo_model", model: reference.model };
+    }
+    if (reference?.kind === "odoo_action") {
+        return { kind: "odoo_action", action_id: reference.action_id };
+    }
+    if (reference?.kind === "odoo_view") {
+        return { kind: "odoo_view", view_id: reference.view_id };
+    }
+    if (reference?.kind === "odoo_menu") {
+        return { kind: "odoo_menu", menu_id: reference.menu_id };
+    }
+    if (reference?.kind === "odoo_setting") {
+        return {
+            kind: "odoo_setting",
+            action_id: reference.action_id,
+            setting_field: reference.setting_field,
+        };
+    }
+    return null;
+}
+
 export async function resolvePublicReferences(references, { rpcCall = rpc } = {}) {
     if (
         !Array.isArray(references) ||
@@ -161,19 +381,7 @@ export async function resolvePublicReferences(references, { rpcCall = rpc } = {}
     ) {
         return null;
     }
-    const request = references.map((reference) => {
-        if (reference?.kind === "odoo_record") {
-            return {
-                kind: "odoo_record",
-                model: reference.model,
-                record_id: reference.record_id,
-            };
-        }
-        if (reference?.kind === "odoo_model") {
-            return { kind: "odoo_model", model: reference.model };
-        }
-        return null;
-    });
+    const request = references.map(publicReferenceRequest);
     if (request.some((item) => item === null)) {
         return null;
     }
@@ -186,10 +394,7 @@ export async function resolvePublicReferences(references, { rpcCall = rpc } = {}
     }
 }
 
-export async function openPublicReference(
-    reference,
-    { actionService, rpcCall = rpc } = {}
-) {
+export async function openPublicReference(reference, { actionService, rpcCall = rpc } = {}) {
     if (!actionService || typeof actionService.doAction !== "function") {
         return false;
     }
@@ -198,19 +403,36 @@ export async function openPublicReference(
     if (!target) {
         return false;
     }
-    const action = {
-        type: "ir.actions.act_window",
-        res_model: target.model,
-        target: "current",
-    };
-    if (target.kind === "odoo_record") {
-        action.res_id = target.record_id;
-        action.views = [[false, "form"]];
+    let action;
+    if (target.navigation.mode === "action") {
+        action = target.navigation.action_id;
+    } else if (target.navigation.mode === "view") {
+        action = {
+            type: "ir.actions.act_window",
+            res_model: target.navigation.model,
+            target: "current",
+            views: [[target.navigation.view_id, target.navigation.view_type]],
+        };
+    } else if (target.navigation.mode === "record") {
+        action = {
+            type: "ir.actions.act_window",
+            res_model: target.navigation.model,
+            res_id: target.navigation.record_id,
+            target: "current",
+            views: [[false, "form"]],
+        };
+    } else if (target.navigation.mode === "model") {
+        action = {
+            type: "ir.actions.act_window",
+            res_model: target.navigation.model,
+            target: "current",
+            views: [
+                [false, "list"],
+                [false, "form"],
+            ],
+        };
     } else {
-        action.views = [
-            [false, "list"],
-            [false, "form"],
-        ];
+        return false;
     }
     try {
         await actionService.doAction(action);
