@@ -40,6 +40,20 @@ _MAX_ITEM_ID = 256
 _MAX_SUMMARY_INDEX = 64
 
 
+def _streaming_thread_options(settings):
+    """Request only the provider's supported readable summary channel.
+
+    ``auto`` lets the current App Server/model negotiate whether a readable summary is available.
+    It is intentionally unrelated to raw reasoning, which remains ignored below.
+    """
+
+    options = dict(_model_thread_options(settings))
+    config = dict(options.get("config") or {})
+    config.setdefault("model_reasoning_summary", "auto")
+    options["config"] = config
+    return options
+
+
 class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
     """Current Codex decision adapter with safe provisional presentation streams."""
 
@@ -78,7 +92,7 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                     "ephemeral": True,
                     "runtimeWorkspaceRoots": [],
                     "sandbox": "read-only",
-                    **_model_thread_options(self._settings),
+                    **_streaming_thread_options(self._settings),
                     "baseInstructions": _DECISION_INSTRUCTIONS,
                 },
                 timeout=_remaining(deadline),
