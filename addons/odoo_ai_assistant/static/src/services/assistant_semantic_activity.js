@@ -1,6 +1,7 @@
 /** @odoo-module **/
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "blocked", "cancelled"]);
+const IMPORTANT_STATUSES = new Set(["failed", "blocked"]);
 const MEANINGFUL_PHASES = new Set([
     "provider",
     "answer",
@@ -11,6 +12,23 @@ const MEANINGFUL_PHASES = new Set([
     "execution",
     "verification",
 ]);
+const DETAIL_LEVELS = new Set(["compact", "normal", "detailed", "diagnostic"]);
+const REASONING_SUMMARY_LEVELS = new Set(["off", "concise", "detailed"]);
+const DEFAULT_LIMITS = Object.freeze({
+    max_rendered_activity_items: 100,
+    max_rendered_batch_rows: 100,
+    max_reasoning_summary_chars: 2000,
+});
+
+export const DEFAULT_ACTIVITY_PRESENTATION = Object.freeze({
+    detail_level: "normal",
+    transient_threshold_ms: 1200,
+    batch_page_size: 5,
+    show_technical_names: false,
+    show_step_durations: false,
+    reasoning_summary: "concise",
+    limits: DEFAULT_LIMITS,
+});
 
 function timestamp(value) {
     const parsed = Date.parse(value || "");
@@ -21,10 +39,90 @@ function itemKey(event) {
     return event.activity_id ? `activity:${event.activity_id}` : `event:${event.sequence}`;
 }
 
+function semanticCode(item) {
+    if (IMPORTANT_STATUSES.has(item.status)) {
+        return item.status === "failed" ? "activity.failed" : "activity.blocked";
+    }
+    switch (item.phase) {
+        case "provider":
+            return "request.analysis";
+        case "answer":
+            return "answer.compose";
+        case "retrieval":
+            return "evidence.search";
+        case "preview":
+            return "capability.prepare";
+        case "approval":
+            return "approval.wait";
+        case "execution":
+            return "capability.execute";
+        case "verification":
+            return "capability.verify";
+        case "capability":
+            return "capability.use";
+        case "queue":
+            return "queue.wait";
+        case "finalization":
+            return "turn.finalize";
+        default:
+            return "activity.generic";
+    }
+}
+
+function itemDurationMs(item) {
+    const start = timestamp(item.started_at);
+    const end = timestamp(item.ended_at);
+    if (start === null || end === null) {
+        return null;
+    }
+    return Math.max(0, end - start);
+}
+
 function freezeItem(item) {
     return Object.freeze({
         ...item,
         resource: item.resource || null,
+        semantic_code: semanticCode(item),
+        duration_ms: itemDurationMs(item),
+    });
+}
+
+export function normalizeActivityPresentationPreferences(value) {
+    const raw = value && typeof value === "object" ? value : {};
+    const rawLimits = raw.limits && typeof raw.limits === "object" ? raw.limits : {};
+    const maxItems = Number.isSafeInteger(rawLimits.max_rendered_activity_items)
+        ? Math.min(Math.max(rawLimits.max_rendered_activity_items, 1), 100)
+        : DEFAULT_LIMITS.max_rendered_activity_items;
+    const maxBatchRows = Number.isSafeInteger(rawLimits.max_rendered_batch_rows)
+        ? Math.min(Math.max(rawLimits.max_rendered_batch_rows, 1), 100)
+        : DEFAULT_LIMITS.max_rendered_batch_rows;
+    const maxSummaryChars = Number.isSafeInteger(rawLimits.max_reasoning_summary_chars)
+        ? Math.min(Math.max(rawLimits.max_reasoning_summary_chars, 128), 8000)
+        : DEFAULT_LIMITS.max_reasoning_summary_chars;
+    return Object.freeze({
+        detail_level: DETAIL_LEVELS.has(raw.detail_level) ? raw.detail_level : "normal",
+        transient_threshold_ms:
+            Number.isSafeInteger(raw.transient_threshold_ms) &&
+            raw.transient_threshold_ms >= 0 &&
+            raw.transient_threshold_ms <= 5000
+                ? raw.transient_threshold_ms
+                : 1200,
+        batch_page_size:
+            Number.isSafeInteger(raw.batch_page_size) &&
+            raw.batch_page_size >= 1 &&
+            raw.batch_page_size <= 20
+                ? raw.batch_page_size
+                : 5,
+        show_technical_names: raw.show_technical_names === true,
+        show_step_durations: raw.show_step_durations === true,
+        reasoning_summary: REASONING_SUMMARY_LEVELS.has(raw.reasoning_summary)
+            ? raw.reasoning_summary
+            : "concise",
+        limits: Object.freeze({
+            max_rendered_activity_items: maxItems,
+            max_rendered_batch_rows: maxBatchRows,
+            max_reasoning_summary_chars: maxSummaryChars,
+        }),
     });
 }
 
@@ -84,22 +182,51 @@ export function reduceSemanticActivity(events) {
     return Object.freeze(ordered.slice(-100).map(freezeItem));
 }
 
+function visibleAtNormalDetail(item, preferences) {
+    if (IMPORTANT_STATUSES.has(item.status) || item.phase === "approval") {
+        return true;
+    }
+    if (!MEANINGFUL_PHASES.has(item.phase)) {
+        return false;
+    }
+    if (
+        item.phase === "verification" &&
+        item.status === "completed" &&
+        item.duration_ms !== null &&
+        item.duration_ms < preferences.transient_threshold_ms
+    ) {
+        return false;
+    }
+    return true;
+}
+
+function selectByDetail(reduced, preferences) {
+    if (preferences.detail_level === "diagnostic") {
+        return [...reduced];
+    }
+    if (preferences.detail_level === "detailed") {
+        return reduced.filter(
+            (item) => MEANINGFUL_PHASES.has(item.phase) || IMPORTANT_STATUSES.has(item.status)
+        );
+    }
+    const normal = reduced.filter((item) => visibleAtNormalDetail(item, preferences));
+    const fallback = normal.length ? normal : reduced.filter((item) => MEANINGFUL_PHASES.has(item.phase));
+    if (preferences.detail_level === "compact") {
+        return fallback.length ? [fallback[fallback.length - 1]] : [];
+    }
+    return fallback;
+}
+
 function latestMeaningful(items) {
     for (let index = items.length - 1; index >= 0; index -= 1) {
-        if (MEANINGFUL_PHASES.has(items[index].phase)) {
+        if (MEANINGFUL_PHASES.has(items[index].phase) || IMPORTANT_STATUSES.has(items[index].status)) {
             return items[index];
         }
     }
     return items.at(-1) || null;
 }
 
-export function semanticActivityPresentation(events, { running = false } = {}) {
-    const reduced = reduceSemanticActivity(events);
-    const meaningful = reduced.filter(
-        (item) => MEANINGFUL_PHASES.has(item.phase) || ["failed", "blocked"].includes(item.status)
-    );
-    const items = meaningful.length ? Object.freeze(meaningful) : reduced;
-    const headline = latestMeaningful(items);
+function activityDurationMs(items) {
     const times = [];
     for (const item of items) {
         const start = timestamp(item.started_at);
@@ -111,12 +238,31 @@ export function semanticActivityPresentation(events, { running = false } = {}) {
             times.push(end);
         }
     }
-    const durationMs = times.length >= 2 ? Math.max(...times) - Math.min(...times) : 0;
+    return times.length >= 2 ? Math.max(...times) - Math.min(...times) : 0;
+}
+
+export function semanticActivityPresentation(
+    events,
+    { running = false, preferences = DEFAULT_ACTIVITY_PRESENTATION } = {}
+) {
+    const normalizedPreferences = normalizeActivityPresentationPreferences(preferences);
+    const reduced = reduceSemanticActivity(events);
+    const normalVisible = reduced.filter((item) => visibleAtNormalDetail(item, normalizedPreferences));
+    const semanticItems = normalVisible.length
+        ? normalVisible
+        : reduced.filter((item) => MEANINGFUL_PHASES.has(item.phase));
+    const selected = selectByDetail(reduced, normalizedPreferences);
+    const maxItems = normalizedPreferences.limits.max_rendered_activity_items;
+    const truncated = selected.length > maxItems;
+    const items = Object.freeze(selected.slice(-maxItems));
+    const headline = latestMeaningful(semanticItems.length ? semanticItems : items);
     return Object.freeze({
         items,
         headline,
-        step_count: items.length,
-        duration_ms: Math.max(0, durationMs),
+        step_count: semanticItems.length,
+        duration_ms: Math.max(0, activityDurationMs(reduced)),
         running: Boolean(running),
+        truncated,
+        preferences: normalizedPreferences,
     });
 }
