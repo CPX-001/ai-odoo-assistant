@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 20  
+State format: 21
 Updated: 2026-08-29
 
 Accepted foundation/runtime lineage:
@@ -12,13 +12,15 @@ P5.2 accepted through b4fbb034e113a41c26db77cb274f2b3b30f6eee3
 P5.3 accepted through 32e836e7789ea72f3ba0d32fe6bdabbb092f5953
 P5.4 accepted through 3e2b38d68fe172cd2cf92d7794159f73476ac23d
 P5.5 accepted through 8427c8849b1e1f3afa6337de1209a6027410c266
+P5.6 accepted through 720102f2a13af5240c779b07cc71ee65994a87b1
 ```
 
-Current unaccepted P5.6 lineage:
+Accepted P5.6 lineage:
 
 ```text
 implementation: f141f1dd56b95c5eb3e372bc61a49f265772c657
 validation batch/harness: 29452d85e2c21f625fc38b5bda814524168be5f2
+validation repairs and accepted checkpoint: 720102f2a13af5240c779b07cc71ee65994a87b1
 implementation record: docs/research/P5.6_CONVERSATION_CONTEXT_MANAGER.md
 validation runbook: docs/research/P5.6_VALIDATION_RUNBOOK.md
 acceptance batch: tests/e2e/p5_6_acceptance_batch.py
@@ -39,19 +41,18 @@ phase: 5
 phase_name: natural non-blocking multi-chat product
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P5.6-conversation-context-manager
-active_slice_record: docs/research/P5.6_CONVERSATION_CONTEXT_MANAGER.md
-active_slice_state: LOCAL_VALIDATION_REQUIRED
-current_gate_type: HARD_LOCAL_AND_REAL
-blocking_validations: P5.6-ODOO-CONTEXT, P5.6-DETERMINISTIC-REGRESSION, P5.6-FULL-ADDON-REGRESSION, P5-REAL-CONTINUITY
-accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266
-latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md
-next_action: execute the complete P5.6 acceptance batch and review the bounded real observation
-blocked_successor: P5.7-conversation-scoped-preferences
+active_slice: P5.7-conversation-scoped-preferences
+active_slice_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
+active_slice_state: READY_NOT_STARTED
+current_gate_type: NONE
+blocking_validations: none
+accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266 -> 720102f2a13af5240c779b07cc71ee65994a87b1
+latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md
+next_action: begin P5.7 conversation-scoped preferences in a later explicitly authorized run
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
-P5.6 is one coherent implementation slice. The next boundary is validation, not another product micro-slice.
+P5.6 is accepted. P5.7 is eligible but remains unstarted in this validation run.
 
 ---
 
@@ -169,7 +170,7 @@ P5-REAL-POST-EFFECT            PASS
 
 Evidence: `evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md`.
 
-## P5.6 ConversationContextManager — LOCAL_VALIDATION_REQUIRED
+## P5.6 ConversationContextManager — COMPLETE
 
 Implementation is present on `main` and deliberately covers the whole P5.6 context contract in one slice:
 
@@ -198,13 +199,21 @@ P5.6-ODOO-CONTEXT
   -> bounded evidence review
 ```
 
-No P5.6 PASS is claimed yet because this GitHub-only implementation run cannot execute the disposable Odoo/Codex/Chromium environment.
+The complete local Odoo/Codex/Chromium batch passed on exact checkpoint `720102f`:
+
+```text
+P5.6-ODOO-CONTEXT              PASS
+P5.6-DETERMINISTIC-REGRESSION PASS
+P5.6-FULL-ADDON-REGRESSION    PASS
+P5-REAL-CONTINUITY            PASS
+```
+
+Evidence: `evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`.
 
 ---
 
-# Current known limitations after P5.6 implementation
+# Current known limitations after P5.6 acceptance
 
-- P5.6 has not yet crossed its executable acceptance boundary.
 - Conversation-scoped preference mutations are P5.7; P5.6 only carries the bounded session-settings slot/fallback.
 - One canonical effect step remains the P5 limit; multi-step effects are P6.
 - No external `CapabilityProvider` / Skill / ContextProvider / EvidenceProvider contract yet; those are later phases.
@@ -233,11 +242,5 @@ No P5.6 PASS is claimed yet because this GitHub-only implementation run cannot e
 
 # Exact next action
 
-Run the complete prepared P5.6 batch on a clean checkout of current `main`:
-
-```bash
-python tests/e2e/p5_6_acceptance_batch.py \
-  --summary-out /tmp/p5_6_acceptance.json
-```
-
-Do **not** stop manually after a green focused gate. Continue through deterministic, full-addon and real continuity checks unless a genuine failure blocks the chain. If all executable gates succeed, review the sanitized observation, record exact-SHA evidence, mark P5.6 `COMPLETE`, and continue directly into P5.7.
+P5.7 conversation-scoped preferences is `READY_NOT_STARTED`. Do not infer implementation authority
+from this acceptance checkpoint; begin it only in a later run that explicitly selects that slice.

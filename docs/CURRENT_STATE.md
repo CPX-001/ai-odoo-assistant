@@ -11,9 +11,10 @@ P5.4 accepted through 3e2b38d68fe172cd2cf92d7794159f73476ac23d
 P5.5 accepted through 8427c8849b1e1f3afa6337de1209a6027410c266
 P5.6 implementation through f141f1dd56b95c5eb3e372bc61a49f265772c657
 P5.6 acceptance harness through 29452d85e2c21f625fc38b5bda814524168be5f2
+P5.6 accepted through 720102f2a13af5240c779b07cc71ee65994a87b1
 ```
 
-P5.6 code is implemented but **not yet formally accepted**. The exact live cursor is always `research/EXECUTION_STATE.md`.
+P5.6 is formally accepted. P5.7 is ready but not started. The exact live cursor is always `research/EXECUTION_STATE.md`.
 
 ## 1. Product/deployment baseline
 
@@ -89,7 +90,7 @@ technical access profile
 
 P5.6 adds conversation-context management at the current runtime seam; it does not pre-empt P7's general ContextProvider extension contract.
 
-## 5. Conversation/context today — P5.6 implemented, validation pending
+## 5. Conversation/context today — P5.6 accepted
 
 Complete `odoo.ai.message` and `odoo.ai.turn` records remain history authority.
 
@@ -222,8 +223,8 @@ P5 IN_PROGRESS
   P5.3 COMPLETE
   P5.4 COMPLETE
   P5.5 COMPLETE
-  P5.6 LOCAL_VALIDATION_REQUIRED
-  P5.7 BLOCKED_BY_P5.6
+  P5.6 COMPLETE
+  P5.7 READY_NOT_STARTED
 P6+ NOT ELIGIBLE
 ```
 
@@ -250,8 +251,10 @@ P5.6-ODOO-CONTEXT
  -> evidence review
 ```
 
-No P5.6 PASS is claimed from the GitHub-only implementation run.
+All four gates passed on exact checkpoint `720102f`; see
+`research/evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`.
 
 ## 13. Next action
 
-Execute the complete P5.6 acceptance batch on a clean checkout of current `main`. Do not stop after the focused Odoo gate if it is green. If the chain passes, record exact-SHA evidence, mark P5.6 complete and continue directly into P5.7 conversation-scoped preferences.
+P5.7 conversation-scoped preferences is `READY_NOT_STARTED`. Begin it only in a later run that
+explicitly selects that slice; it was not implemented during P5.6 validation.

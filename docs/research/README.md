@@ -52,7 +52,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS; P5.1-P5.5 COMPLETE; P5.6 READY_NOT_STARTED
+P5 IN_PROGRESS; P5.1-P5.6 COMPLETE; P5.7 READY_NOT_STARTED
 P6+ not eligible
 ```
 
@@ -82,7 +82,12 @@ passed on one coherent lineage. The sanitized record is
 P5.5 post-effect reasoning is implemented and accepted. Its focused Odoo gate passed with 6 tests,
 the deterministic suite with 227 unit tests plus 19 JS assertions, the full addon regression with
 132 tests, and `P5-REAL-POST-EFFECT` passed after review. The sanitized record is
-`evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md`. P5.6 is ready but not started.
+`evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md`.
+
+P5.6 ConversationContextManager is implemented and accepted. Its focused Odoo gate passed with 3
+tests, deterministic regression with 227 unit tests plus 19 JS assertions, full addon regression
+with 135 tests, and `P5-REAL-CONTINUITY` passed after review. The sanitized record is
+`evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`. P5.7 is ready but not started.
 
 ## Recursive execution rule
 
