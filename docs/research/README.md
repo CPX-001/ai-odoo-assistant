@@ -29,6 +29,8 @@ Research documents do not override:
 | `P5.2_VALIDATION_RUNBOOK.md` | Batched deterministic/regression/real-environment acceptance procedure for the complete P5.2 implementation. |
 | `P5.3_STABLE_SETTINGS_SNAPSHOT.md` | Completed P5.3 implementation/acceptance record for the versioned immutable per-turn settings snapshot. |
 | `P5.3_VALIDATION_RUNBOOK.md` | Executed P5.3 focused, deterministic, full-addon and real browser acceptance procedure. |
+| `P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md` | Completed P5.4 implementation/acceptance record for final activity, answer, approval, failure and recovery presentation. |
+| `P5.4_VALIDATION_RUNBOOK.md` | Executed P5.4 deterministic, full-addon, HOOT and HARD real browser acceptance procedure. |
 | `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed status record for P3 public activity. |
 | `PHASE4_ANSWER_STREAMING.md` | Formal completed status record for P4 answer streaming. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
@@ -48,7 +50,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS; P5.1, P5.2 and P5.3 COMPLETE; P5.4 READY
+P5 IN_PROGRESS; P5.1-P5.4 COMPLETE; P5.5 NOT STARTED
 P6+ not eligible
 ```
 
@@ -68,8 +70,12 @@ wake-up, aggregate diagnostics and the real browser gates. The accepted batch is
 P5.3 has a versioned host-owned turn settings snapshot and is accepted. Its focused Odoo gate passed
 with 2 tests, bounded deterministic regression with 6 tests, full addon regression with 126 tests,
 and `P5-REAL-SETTINGS-SNAPSHOT` passed after review of the bounded real browser observation. The
-sanitized final record is `evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md`. P5.4 final
-activity/answer/failure UX is READY.
+sanitized final record is `evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md`.
+
+P5.4 final activity/answer/failure UX is implemented and accepted. Its 222-unit/19-contract local
+battery, 126-test addon regression, 101-test/392-assertion HOOT suite and all four HARD real gates
+passed on one coherent lineage. The sanitized record is
+`evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`. P5.5 remains not started.
 
 ## Recursive execution rule
 

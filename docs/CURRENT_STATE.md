@@ -1,13 +1,13 @@
 # Current implementation state
 
-Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2 scheduler concurrency/backpressure is accepted through `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`. P5.3 stable settings snapshot is implemented through `1803826a6516e2703497f0d14d74850082ad7665` and accepted through the repaired validation/harness checkpoint `32e836e7789ea72f3ba0d32fe6bdabbb092f5953` after all four required gates passed.
+Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2 scheduler concurrency/backpressure is accepted through `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`. P5.3 stable settings snapshot is accepted through `32e836e7789ea72f3ba0d32fe6bdabbb092f5953`. P5.4 final activity/answer/failure UX is accepted through `3e2b38d68fe172cd2cf92d7794159f73476ac23d` after all local and HARD real gates passed.
 
 This document distinguishes **implemented code** from **formal roadmap acceptance** and from the target in `PRODUCT_VISION.md`.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.12.0` at the current manifest.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.14.0` at the current manifest.
 - Embedded runtime; browser talks to Odoo, not a sidecar.
 - Odoo PostgreSQL owns conversations/messages/turns/effect state/live public events.
 - Native `ir.cron` runs durable turns.
@@ -142,6 +142,22 @@ P5.3 is accepted. `P5.3-ODOO-SETTINGS-SNAPSHOT` passed with 2 tests,
 tests, and `P5-REAL-SETTINGS-SNAPSHOT` passed after review of the real browser observation. See
 `research/P5.3_STABLE_SETTINGS_SNAPSHOT.md`, `research/P5.3_VALIDATION_RUNBOOK.md` and
 `research/evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md`.
+
+### P5.4 final activity/answer/failure UX implemented and accepted
+
+The browser now reconciles one authoritative final Assistant message per turn, keeps public activity,
+provisional answer text and terminal failures in distinct presentation channels, suppresses the fake
+thinking bubble when real activity exists, and preserves explicit approval/recovery states. Verified
+model-scoped batch receipts no longer become `invalid_response` merely because they do not have one
+singular record id.
+
+The final grouped validation passed with 222 unit tests, 19 standalone JS contract assertions, 126
+Odoo tests, 101 HOOT tests / 392 assertions and all four HARD real gates. The real approval gate
+exercised both reject and approve decisions on a bounded disposable record, with no pre-approval
+write and fixture restoration. See `research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md` and
+`research/evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`.
+
+P5.5 post-effect reasoning remains not started.
 
 ### P5.1 frontend state implemented and accepted
 
@@ -305,7 +321,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS — P5.1, P5.2 and P5.3 COMPLETE; P5.4 READY
+P5 IN_PROGRESS — P5.1, P5.2, P5.3 and P5.4 COMPLETE; P5.5 NOT STARTED
 P6+ NOT ELIGIBLE
 ```
 
@@ -317,15 +333,19 @@ P2 five PASS
    -> P4 four PASS
    -> P5.1 accepted
      -> P5.2 accepted
+       -> P5.3 accepted
+         -> P5.4 accepted
 ```
 
 The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`. P5.2 acceptance is recorded in
 `research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`. P5.3 implementation is recorded
 in `research/P5.3_STABLE_SETTINGS_SNAPSHOT.md`; all focused, deterministic, full-addon and real
 browser gates are accepted in `research/evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md`.
+P5.4 acceptance is recorded in
+`research/evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`.
 
 ## 14. Next action
 
-Define P5.4 final activity/answer/failure UX as one bounded slice from
-`research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`, with explicit deterministic and real acceptance
-gates. P5.4 is ready but not implemented.
+Stop at the accepted P5.4 boundary. P5.5 post-effect reasoning is the next eligible slice in
+`research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`, but it remains not started and has no implementation
+claim in this run.

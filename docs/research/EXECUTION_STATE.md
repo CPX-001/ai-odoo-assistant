@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 15
+State format: 16
 Updated: 2026-08-29
 Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
 Accepted P5.1 implementation lineage through: `f7f924ce944db86e896745fef83ea2fb6fd6583a`
@@ -12,6 +12,7 @@ P5.3 focused Odoo validation lineage through: `b7428d7804cdbea263ea78ad5b588398b
 P5.3 deterministic regression lineage through: `525318160ac0dac4984ef11e765a8b443b8c4a28`
 Accepted P5.3 validation/harness lineage through: `32e836e7789ea72f3ba0d32fe6bdabbb092f5953`
 P5.4 implementation record: `docs/research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md`
+Accepted P5.4 validation/harness lineage through: `3e2b38d68fe172cd2cf92d7794159f73476ac23d`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
@@ -23,13 +24,14 @@ phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P5.4-final-activity-answer-failure-ux
 active_slice_record: docs/research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md
-active_slice_state: LOCAL_VALIDATION_REQUIRED
-current_gate_type: HARD_DETERMINISTIC_REGRESSION
-blocking_validations: P5.4-DETERMINISTIC-FINAL-UX, P5.4-FULL-ADDON-REGRESSION, P5.4-HOOT-REGRESSION, P5-REAL-CHAT-BASIC, P5-REAL-ERROR-UX, P5-REAL-APPROVAL-UX, P5-REAL-RECOVERY-UX
-accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953
-acceptance_evidence: docs/research/evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md
-latest_validation_evidence: docs/research/evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md
-next_slice: P5.4-validation-batch
+active_slice_state: COMPLETE
+current_gate_type: NONE
+blocking_validations: none
+accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d
+acceptance_evidence: docs/research/evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md
+latest_validation_evidence: docs/research/evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md
+next_slice: P5.5-post-effect-reasoning
+next_slice_state: READY_NOT_STARTED
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
@@ -38,8 +40,8 @@ chain passed on one linear code lineage. P5.1 production code and its determinis
 browser/provider acceptance are complete. P5.2 scheduler capacity, causal ordering, fairness,
 release wake-up, diagnostics and real two-cron behavior are accepted. P5.3 stable settings snapshot
 and all four of its focused, deterministic, full-addon and real browser gates are accepted. P5.4
-final activity/answer/failure UX is implemented and now awaits one grouped local validation batch
-before its real browser acceptance gates.
+final activity/answer/failure UX and all three local plus four HARD real gates are accepted. P5.5 is
+eligible for a later run but remains not started.
 
 ---
 
@@ -247,7 +249,7 @@ P5-REAL-SETTINGS-SNAPSHOT       | HARD | PASS after evidence review | 32e836e
 
 Evidence: `evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md`.
 
-## P5.4 Final activity/answer/failure UX — LOCAL_VALIDATION_REQUIRED
+## P5.4 Final activity/answer/failure UX — COMPLETE
 
 Implementation records:
 
@@ -264,29 +266,31 @@ The P5.4 implementation deliberately stays at the existing frontend boundaries. 
 - a neutral `Preparando respuesta…` status when no public activity or answer delta exists, instead of a fake Assistant prose bubble;
 - settled public activity after completion, with the spinner shown only while the turn is actually running;
 - explicit terminal failure/action-failure alerts while preserving bounded retry/recovery guidance;
-- five focused HOOT contract cases;
-- a real Chromium `P5-REAL-CHAT-BASIC` runner plus a machine-readable P5.4 real-gate manifest.
+- focused HOOT contract coverage;
+- real Chromium basic-chat and approval runners plus a machine-readable P5.4 real-gate manifest.
 
 No backend authority, capability policy, write semantics or P5.5 post-effect continuation is changed by this slice.
 
-No P5.4 test result is claimed yet. Required local gates:
+Accepted local gates on `3e2b38d`:
 
 ```text
-P5.4-DETERMINISTIC-FINAL-UX
-P5.4-FULL-ADDON-REGRESSION
-P5.4-HOOT-REGRESSION
+P5.4-DETERMINISTIC-FINAL-UX   | HARD | PASS | 222 unit tests + 19 JS contract assertions
+P5.4-FULL-ADDON-REGRESSION    | HARD | PASS | 126 tests, 0 failures/errors
+P5.4-HOOT-REGRESSION          | HARD | PASS | 101 tests / 392 assertions
 ```
 
-Required HARD real gates for P5.4 acceptance:
+Accepted HARD real gates on the same content lineage:
 
 ```text
-P5-REAL-CHAT-BASIC
-P5-REAL-ERROR-UX
-P5-REAL-APPROVAL-UX
-P5-REAL-RECOVERY-UX
+P5-REAL-CHAT-BASIC      | HARD | PASS
+P5-REAL-ERROR-UX        | HARD | PASS
+P5-REAL-APPROVAL-UX     | HARD | PASS | reject + approve, fixture restored
+P5-REAL-RECOVERY-UX     | HARD | PASS
 ```
 
-P5.5 remains blocked until those gates pass on one coherent lineage.
+Evidence: `evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`.
+
+P5.5 is now eligible, but it was not started or implemented in this run.
 
 ---
 
@@ -295,7 +299,6 @@ P5.5 remains blocked until those gates pass on one coherent lineage.
 These limitations define the remaining Phase 5 and later work:
 
 - background scopes are currently web-client memory; durable reconnect/continuity is expanded later in P5;
-- P5.4 final activity/answer/failure UX is implemented but awaits local and real acceptance;
 - post-effect verified actions still need provider continuation/natural synthesis (P5.5);
 - conversation provider context is smaller than the target durable `ConversationContextManager` model (P5.6);
 - one canonical effect proposal/step is supported; multi-step effects are P6;
@@ -325,8 +328,6 @@ These limitations define the remaining Phase 5 and later work:
 
 # Exact next action
 
-Run the grouped P5.4 local validation battery from `P5.4_VALIDATION_RUNBOOK.md` against the exact
-current lineage. Execute the focused final-UX contracts, full addon regression and full HOOT suite in
-the same capable Odoo 18 environment. If that batch passes, continue directly to the P5.4 real
-browser gates rather than splitting the work into micro-slices. Do not start P5.5 until the P5.4 HARD
-real gates are accepted.
+Stop at the accepted P5.4 boundary. The next eligible slice is P5.5 post-effect reasoning, but it is
+`READY_NOT_STARTED` and was deliberately not begun by this validation run. A later independent run
+must reconstruct its scope from the current playbook and add no implementation claim before doing so.
