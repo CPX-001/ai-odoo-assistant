@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 
 from odoo import api, fields, models
@@ -9,11 +10,13 @@ from odoo.exceptions import ValidationError
 
 from .chat_policy import resolve_capability_policy
 
-_SETTINGS_FORMAT_VERSION = 1
+_SETTINGS_FORMAT_VERSION = 2
+_LEGACY_SETTINGS_FORMAT_VERSION = 1
 _BOUND_SETTINGS_FIELDS = frozenset(
-    {"reasoning_model", "policy_payload", "execution_settings_payload"}
+    {"reasoning_model", "reasoning_effort", "policy_payload", "execution_settings_payload"}
 )
 _AUTONOMY_PROFILES = frozenset({"strict", "balanced", "autonomous", "full_access"})
+_EFFORT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
 class AssistantTurnSettingsSnapshot(models.Model):
@@ -25,9 +28,10 @@ class AssistantTurnSettingsSnapshot(models.Model):
     def create(self, vals_list):
         """Capture product selectors from the already host-resolved turn inputs.
 
-        The queue already resolves model and policy under the originating user before
-        creating the turn. P5.3 binds those values into one versioned snapshot without
-        freezing dynamic ACL/record-rule/capability availability checks.
+        The queue resolves model and policy under the originating user before creating
+        the turn. Reasoning effort is read from the same user's Odoo-owned preference at
+        this creation boundary. P5.3 then binds those values into one versioned snapshot
+        without freezing dynamic ACL/record-rule/capability availability checks.
         """
 
         prepared = []
@@ -38,8 +42,12 @@ class AssistantTurnSettingsSnapshot(models.Model):
             values.pop("execution_settings_payload", None)
             policy = values.get("policy_payload")
             if isinstance(policy, dict) and policy:
+                if "reasoning_effort" not in values:
+                    effort = _reasoning_effort_for_user(self.env, values.get("user_id"))
+                    values["reasoning_effort"] = effort or False
                 values["execution_settings_payload"] = _build_settings_snapshot(
                     reasoning_model=values.get("reasoning_model"),
+                    reasoning_effort=values.get("reasoning_effort"),
                     policy=policy,
                 )
             prepared.append(values)
@@ -64,32 +72,57 @@ class AssistantTurnSettingsSnapshot(models.Model):
         validated = _validate_settings_snapshot(snapshot)
         if validated["reasoning_model"] != (self.reasoning_model or None):
             raise ValidationError("Assistant turn settings snapshot does not match model")
+        if validated["format_version"] >= 2 and validated["reasoning_effort"] != (
+            self.reasoning_effort or None
+        ):
+            raise ValidationError("Assistant turn settings snapshot does not match reasoning effort")
         if validated["policy"] != (self.policy_payload or {}):
             raise ValidationError("Assistant turn settings snapshot does not match policy")
         return validated
 
 
-def _build_settings_snapshot(*, reasoning_model, policy):
+def _build_settings_snapshot(*, reasoning_model, reasoning_effort, policy):
     # Reuse the existing policy validator instead of creating a second policy schema.
     resolve_capability_policy(policy)
+    effort = reasoning_effort or None
+    if effort is not None and (
+        not isinstance(effort, str) or _EFFORT_PATTERN.fullmatch(effort) is None
+    ):
+        raise ValidationError("Invalid Assistant turn reasoning effort")
     return {
         "format_version": _SETTINGS_FORMAT_VERSION,
         "reasoning_model": reasoning_model or None,
+        "reasoning_effort": effort,
         "autonomy_profile": _autonomy_profile_from_policy(policy),
         "policy": deepcopy(policy),
     }
 
 
 def _validate_settings_snapshot(value):
-    if not isinstance(value, dict) or set(value) != {
+    if not isinstance(value, dict):
+        raise ValidationError("Invalid Assistant turn settings snapshot")
+    version = value.get("format_version")
+    legacy_keys = {
         "format_version",
         "reasoning_model",
         "autonomy_profile",
         "policy",
-    }:
-        raise ValidationError("Invalid Assistant turn settings snapshot")
-    if value.get("format_version") != _SETTINGS_FORMAT_VERSION:
+    }
+    current_keys = legacy_keys | {"reasoning_effort"}
+    if version == _LEGACY_SETTINGS_FORMAT_VERSION:
+        if set(value) != legacy_keys:
+            raise ValidationError("Invalid Assistant turn settings snapshot")
+    elif version == _SETTINGS_FORMAT_VERSION:
+        if set(value) != current_keys:
+            raise ValidationError("Invalid Assistant turn settings snapshot")
+        effort = value.get("reasoning_effort")
+        if effort is not None and (
+            not isinstance(effort, str) or _EFFORT_PATTERN.fullmatch(effort) is None
+        ):
+            raise ValidationError("Invalid Assistant turn reasoning effort")
+    else:
         raise ValidationError("Unsupported Assistant turn settings snapshot")
+
     model = value.get("reasoning_model")
     if model is not None and (not isinstance(model, str) or not 1 <= len(model) <= 128):
         raise ValidationError("Invalid Assistant turn settings model")
@@ -101,6 +134,16 @@ def _validate_settings_snapshot(value):
     if profile != _autonomy_profile_from_policy(policy):
         raise ValidationError("Assistant turn autonomy snapshot does not match policy")
     return deepcopy(value)
+
+
+def _reasoning_effort_for_user(env, user_id):
+    if type(user_id) is not int or user_id <= 0:
+        return None
+    user = env["res.users"].browse(user_id).exists()
+    if not user:
+        return None
+    preference = env["odoo.ai.user.preference"].with_user(user)
+    return preference.current_reasoning_effort()
 
 
 def _autonomy_profile_from_policy(policy):
