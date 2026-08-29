@@ -96,6 +96,22 @@ async function login(page, { baseUrl, database, loginName, password }) {
     }
 }
 
+async function assertSettingsPickersOpen(page) {
+    for (const [label, heading] of [
+        ["Modelo de Codex", "Modelo"],
+        ["Nivel de razonamiento", "Nivel de razonamiento"],
+    ]) {
+        const button = page.getByRole("button", { name: label });
+        await button.waitFor({ state: "visible", timeout: 30_000 });
+        assert.equal(await button.isEnabled(), true, `${label} is unexpectedly disabled`);
+        await button.click();
+        const menu = page.locator(".o_ai_assistant_picker_menu:visible").first();
+        await menu.waitFor({ state: "visible", timeout: 30_000 });
+        assert.ok((await menu.innerText()).includes(heading), `${label} opened an invalid menu`);
+        await page.keyboard.press("Escape");
+    }
+}
+
 function longPrompt(token) {
     return `${token} Responde en español con exactamente dieciocho frases numeradas sobre métodos generales de organización del trabajo. Cada frase debe tener al menos dieciocho palabras. No uses herramientas de Odoo ni realices cambios.`;
 }
@@ -470,6 +486,7 @@ try {
         if (message.type() === "error") browserErrors.push(message.text());
     });
     await login(page, { baseUrl, database, loginName, password });
+    await assertSettingsPickersOpen(page);
     await runGate(page, stamp, browserErrors);
     assert.deepEqual(browserErrors, []);
     await context.close();

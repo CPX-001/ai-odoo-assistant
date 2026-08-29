@@ -173,6 +173,10 @@ patch(AssistantPanel.prototype, {
         await this.panel.setReasoningEffort(effort || null);
     },
 
+    async retryModelPreferences() {
+        await this.panel.loadModelPreferences({ force: true });
+    },
+
     async openAssistantSettings() {
         this.panel.close();
         await this.actionService.doAction("base_setup.action_general_configuration", {
