@@ -63,6 +63,19 @@ class BrowserChatController(http.Controller):
         return request.env["odoo.ai.user.preference"].set_chat_model_preference(model)
 
     @http.route(
+        "/odoo_ai/v1/chat-reasoning-effort",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def set_reasoning_effort(self, effort=None, **unexpected):
+        if unexpected:
+            return _error("invalid_context")
+        return request.env[
+            "odoo.ai.user.preference"
+        ].set_chat_reasoning_effort_preference(effort)
+
+    @http.route(
         "/odoo_ai/v1/agent-autonomy",
         type="json",
         auth="user",
