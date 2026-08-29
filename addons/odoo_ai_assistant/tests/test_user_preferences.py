@@ -49,3 +49,19 @@ class TestAssistantUserPreferences(TransactionCase):
         self.assertIsNone(preferences_a.set_current_reasoning_model(None))
         self.assertIsNone(preferences_a.current_reasoning_model())
         self.assertEqual(preferences_b.current_reasoning_model(), "gpt-fast")
+
+    def test_reasoning_effort_is_owned_by_current_user(self):
+        preferences_a = self.env["odoo.ai.user.preference"].with_user(self.user_a)
+        preferences_b = self.env["odoo.ai.user.preference"].with_user(self.user_b)
+
+        self.assertEqual(preferences_a.set_current_reasoning_effort("high"), "high")
+        self.assertEqual(preferences_a.current_reasoning_effort(), "high")
+        self.assertIsNone(preferences_b.current_reasoning_effort())
+
+        self.assertEqual(preferences_b.set_current_reasoning_effort("low"), "low")
+        self.assertEqual(preferences_b.current_reasoning_effort(), "low")
+        self.assertEqual(preferences_a.current_reasoning_effort(), "high")
+
+        self.assertIsNone(preferences_a.set_current_reasoning_effort(None))
+        self.assertIsNone(preferences_a.current_reasoning_effort())
+        self.assertEqual(preferences_b.current_reasoning_effort(), "low")
