@@ -294,6 +294,9 @@ class TestCapabilityActions(TransactionCase):
         context, _registry, _executor, plans = self._runtime()
         prepared = asyncio.run(plans.prepare(self._planned_patch()))
         user_env = context.env
+        preference = user_env["odoo.ai.user.preference"]
+        preference.set_current_reasoning_model("approval-model-a")
+        preference.set_current_agent_profile("strict")
         queued = user_env["odoo.ai.turn"].enqueue_for_current_user(
             message="Cambia el nombre del contacto",
             screen={
@@ -309,6 +312,10 @@ class TestCapabilityActions(TransactionCase):
             client_request_id="action.approve.test.0001",
         )
         turn = user_env["odoo.ai.turn"]._owned_turn(queued["turn_id"])
+        original_turn_uuid = turn.turn_uuid
+        original_snapshot = turn.execution_settings_snapshot()
+        self.assertEqual(original_snapshot["reasoning_model"], "approval-model-a")
+        self.assertEqual(original_snapshot["autonomy_profile"], "strict")
         envelope = {
             "format_version": 1,
             "answer": "He preparado el cambio solicitado.",
@@ -330,16 +337,32 @@ class TestCapabilityActions(TransactionCase):
             }
         )
 
+        preference.set_current_reasoning_model("approval-model-b")
+        preference.set_current_agent_profile("full_access")
         decision = user_env["odoo.ai.turn"].decide_capability_plan_for_current_user(
             turn.turn_uuid,
             "approve",
         )
 
-        turn.invalidate_recordset(["state", "result_payload", "capability_plan_payload"])
+        turn.invalidate_recordset(
+            [
+                "state",
+                "result_payload",
+                "capability_plan_payload",
+                "reasoning_model",
+                "policy_payload",
+                "execution_settings_payload",
+            ]
+        )
         self.assertEqual(decision["state"], "authorized")
+        self.assertEqual(turn.turn_uuid, original_turn_uuid)
         self.assertEqual(turn.state, "queued")
         self.assertFalse(turn.result_payload)
         self.assertTrue(turn.capability_plan_payload["human_approved"])
         self.assertEqual(turn.capability_plan_payload["plan"]["state"], "authorized")
+        self.assertEqual(turn.execution_settings_snapshot(), original_snapshot)
+        self.assertEqual(turn.reasoning_model, "approval-model-a")
+        self.assertEqual(decision["plan"]["policy"]["confirmation_mode"], "always_confirm")
+        self.assertEqual(decision["plan"]["policy"]["max_auto_risk"], "low")
         self.target.invalidate_recordset(["name"])
         self.assertEqual(self.target.name, "AI ACTION ORIGINAL")
