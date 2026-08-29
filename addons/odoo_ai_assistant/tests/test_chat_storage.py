@@ -1,12 +1,14 @@
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from odoo import Command
 from odoo.exceptions import AccessError
 from odoo.tests.common import TransactionCase
 from odoo.tools import config
 
-from ..runtime import RuntimePaths, detect_codex
+from ..runtime import RuntimePathError, RuntimePaths, detect_codex
 
 
 class TestAssistantNativeStorage(TransactionCase):
@@ -74,10 +76,25 @@ class TestAssistantNativeStorage(TransactionCase):
 
 class TestAssistantRuntimeLayout(TransactionCase):
     def test_runtime_root_is_below_odoo_data_dir(self):
-        paths = RuntimePaths.from_odoo()
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("CODEX_HOME", None)
+            paths = RuntimePaths.from_odoo()
         expected_parent = Path(config["data_dir"]).expanduser().resolve(strict=False)
         self.assertEqual(paths.root.parent, expected_parent)
         self.assertEqual(paths.codex_home.parent, paths.root)
+
+    def test_runtime_reuses_absolute_host_codex_home_without_database_state(self):
+        with TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {"CODEX_HOME": directory}):
+                paths = RuntimePaths.from_odoo().ensure()
+
+            self.assertEqual(paths.codex_home, Path(directory).resolve())
+            self.assertNotEqual(paths.codex_home.parent, paths.root)
+
+    def test_runtime_rejects_relative_host_codex_home(self):
+        with patch.dict(os.environ, {"CODEX_HOME": "relative-codex-home"}):
+            with self.assertRaises(RuntimePathError):
+                RuntimePaths.from_odoo()
 
     def test_codex_detection_requires_an_executable_file(self):
         with TemporaryDirectory() as directory:

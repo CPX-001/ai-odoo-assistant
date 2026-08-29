@@ -22,8 +22,8 @@ browser/Odoo RPC
 
 Important scenarios include:
 
-- fresh database account disabled/gated;
-- administrator device-code connect/cancel/logout;
+- fresh database automatically consumes the authenticated host session;
+- missing/inaccessible primary host session fails closed without a per-database login;
 - normal authenticated chat turn;
 - account/provider unavailable;
 - effective-user ACL/record-rule/field-access/multi-company behavior;
@@ -76,7 +76,7 @@ handling rules.
 
 `embedded_phase0_scenarios.json` is the machine-readable Phase 0 scenario catalog.
 Its format distinguishes persisted-turn outcomes from failures rejected by the current
-pre-enqueue runtime/account gate. In particular, a disconnected Codex account currently returns
+pre-enqueue runtime/account gate. In particular, an unauthenticated primary Codex session returns
 `codex_not_connected` before a turn exists, and a missing Codex executable returns
 `codex_unavailable`.
 

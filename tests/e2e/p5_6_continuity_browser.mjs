@@ -61,7 +61,7 @@ async function login(page, { baseUrl, database, loginName, password }) {
     assert.equal(
         runtime?.state,
         "authenticated",
-        `Odoo-owned Codex account is not authenticated: ${runtime?.state || "unknown"}`
+        `Primary host Codex session is not authenticated: ${runtime?.state || "unknown"}`
     );
     await openAssistant(page);
 }

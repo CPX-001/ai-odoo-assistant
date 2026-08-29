@@ -20,7 +20,7 @@ Admin views should expose **safe configuration and explainable health**, not raw
 Good examples of admin-visible information:
 
 - runtime available/unavailable;
-- database activation state;
+- primary host Codex session state;
 - executable path/config health;
 - scheduler/turn health;
 - enabled policy/profile choices;

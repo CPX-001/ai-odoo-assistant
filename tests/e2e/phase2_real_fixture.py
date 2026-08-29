@@ -64,12 +64,8 @@ module = env["ir.module.module"].search([("name", "=", _REQUIRED_MODULE)], limit
 if not module or module.state != "installed":
     raise RuntimeError("odoo_ai_phase2_faults must be installed before fixture setup")
 
-# The deterministic terminal faults are injected after enqueue. Keep the normal
-# database/account gate enabled and prove the installation-scoped Codex session is
-# authenticated before creating browser users.
-env["ir.config_parameter"].set_param(
-    "odoo_ai_assistant.codex_connection_enabled", "true"
-)
+# The deterministic terminal faults are injected after enqueue. Prove the
+# installation-scoped primary Codex session is authenticated before creating users.
 runtime_status = runtime_status_payload(env)
 if runtime_status.get("state") != "authenticated":
     raise RuntimeError(
@@ -99,7 +95,7 @@ env["odoo.ai.user.preference"].with_user(default_user).set_current_agent_profile
 )
 
 # ``odoo-bin shell`` rolls its cursor back on exit. Persist only this disposable
-# database activation, users and strict action-gate profile before reporting ready.
+# users and strict action-gate profile before reporting ready.
 env.cr.commit()
 
 print(

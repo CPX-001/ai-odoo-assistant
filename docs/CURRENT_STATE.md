@@ -23,12 +23,12 @@ focused/local regression boundary. It remains unaccepted until `P5-REAL-SESSION-
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.18.0`.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.19.0`.
 - Embedded runtime; browser talks to Odoo, not a sidecar.
 - Odoo/PostgreSQL own conversations, messages, turns, effect state, private working checkpoints and public events.
 - Native `ir.cron` runs durable turns.
 - Business authority is the originating effective user with `su=False`.
-- Primary provider is local Codex App Server with provider-owned authentication.
+- Primary provider is local Codex App Server with one provider-owned host session consumed automatically by the installation. Odoo user/company authority remains isolated per turn.
 - Product target remains one global general Assistant; see `PRODUCT_VISION.md`.
 
 ## 2. Host-owned agent loop

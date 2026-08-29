@@ -91,8 +91,9 @@ through `eb66e45`. The exact live cursor is always
 ```text
 ADR-016  Embedded Odoo runtime / one operational application
 ADR-017  CapabilityDefinition as the atomic capability contract
-ADR-018  Database-scoped Codex activation
+ADR-018  Superseded database-scoped Codex activation
 ADR-019  Host-owned iterative decision loop
+ADR-020  Host primary Codex session shared by the installation
 ```
 
 An ADR explains a decision and its trade-offs; it does not replace the current code if implementation later evolves under a newer accepted ADR.

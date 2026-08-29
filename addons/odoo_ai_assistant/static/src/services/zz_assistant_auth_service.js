@@ -69,7 +69,6 @@ export function normalizeRuntimeAccount(response) {
         !exactKeys(response, [
             "account",
             "can_configure",
-            "login",
             "ok",
             "requires_setup",
             "state",
@@ -110,39 +109,18 @@ export function normalizeRuntimeAccount(response) {
         };
     }
 
-    let login = null;
-    if (response.login !== null) {
-        if (!exactKeys(response.login, ["user_code", "verification_url"])) {
-            return null;
-        }
-        const verificationUrl = normalizeNullableString(response.login.verification_url, 2048);
-        const userCode = normalizeNullableString(response.login.user_code, 128);
-        if (verificationUrl === undefined || userCode === undefined) {
-            return null;
-        }
-        login = {
-            verification_url: verificationUrl,
-            user_code: userCode,
-        };
-    }
-
-    if (!response.can_configure && (account !== null || login !== null)) {
+    if (!response.can_configure && account !== null) {
         return null;
     }
     if (response.state === "authenticated" && response.can_configure && account === null) {
         return null;
     }
-    if (response.state === "login_pending" && response.can_configure && login === null) {
-        return null;
-    }
-
     return {
         ok: true,
         state: response.state,
         requires_setup: response.requires_setup,
         can_configure: response.can_configure,
         account,
-        login,
     };
 }
 
@@ -150,8 +128,6 @@ function applyRuntimeAccount(state, payload) {
     state.runtimeState = payload.state;
     state.runtimeCanConfigure = payload.can_configure;
     state.runtimeAccount = payload.account;
-    state.runtimeVerificationUrl = payload.login?.verification_url || null;
-    state.runtimeUserCode = payload.login?.user_code || null;
 }
 
 patch(assistantPanelService, {
@@ -168,8 +144,6 @@ patch(assistantPanelService, {
 
         state.runtimeActionLoading = false;
         state.runtimeAccount = null;
-        state.runtimeVerificationUrl = null;
-        state.runtimeUserCode = null;
         state.chatBootstrapped = false;
 
         const clearAccountPoll = () => {
@@ -211,8 +185,6 @@ patch(assistantPanelService, {
                 state.runtimeLoading = true;
                 state.runtimeState = null;
                 state.runtimeAccount = null;
-                state.runtimeVerificationUrl = null;
-                state.runtimeUserCode = null;
                 lockChat();
             }
             try {
@@ -277,41 +249,6 @@ patch(assistantPanelService, {
                 clearAccountPoll();
             }
         });
-
-        const runtimeAction = async (action) => {
-            if (state.runtimeActionLoading) {
-                return false;
-            }
-            state.runtimeActionLoading = true;
-            state.errorCode = null;
-            try {
-                const payload = normalizeRuntimeAccount(
-                    await rpc("/odoo_ai/v1/runtime-account", { action })
-                );
-                if (!payload) {
-                    state.runtimeState = "authentication_error";
-                    state.runtimeAccount = null;
-                    lockChat();
-                    return false;
-                }
-                applyRuntimeAccount(state, payload);
-                if (payload.state === "authenticated") {
-                    await initializeChat();
-                } else {
-                    lockChat();
-                }
-                scheduleAccountPoll();
-                return true;
-            } catch {
-                state.runtimeState = "authentication_error";
-                state.runtimeAccount = null;
-                lockChat();
-                return false;
-            } finally {
-                state.runtimeActionLoading = false;
-                state.runtimeLoading = false;
-            }
-        };
 
         const open = () => {
             state.isOpen = true;
@@ -378,10 +315,6 @@ patch(assistantPanelService, {
                 scheduleAccountPoll();
             }
         };
-        service.connectRuntimeAccount = () => runtimeAction("connect");
-        service.cancelRuntimeLogin = () => runtimeAction("cancel");
-        service.logoutRuntimeAccount = () => runtimeAction("logout");
-
         return service;
     },
 });

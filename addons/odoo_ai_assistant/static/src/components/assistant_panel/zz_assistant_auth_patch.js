@@ -5,24 +5,6 @@ import { patch } from "@web/core/utils/patch";
 
 import { AssistantPanel } from "./assistant_panel";
 
-function safeLoginUrl(value) {
-    if (typeof value !== "string" || !value) {
-        return null;
-    }
-    try {
-        const url = new URL(value);
-        const host = url.hostname.toLowerCase();
-        const trusted =
-            host === "chatgpt.com" ||
-            host.endsWith(".chatgpt.com") ||
-            host === "openai.com" ||
-            host.endsWith(".openai.com");
-        return url.protocol === "https:" && trusted ? url.href : null;
-    } catch {
-        return null;
-    }
-}
-
 export function runtimeUsageWindowLabel(row) {
     const duration = row?.window_duration_mins;
     if (duration === 300) {
@@ -58,41 +40,10 @@ patch(AssistantPanel.prototype, {
         return this.openAssistantSettings();
     },
 
-    async connectRuntimeAccount(ev) {
-        ev?.preventDefault?.();
-        ev?.stopPropagation?.();
-        this.ui.accountOpen = false;
-        return this.panel.connectRuntimeAccount();
-    },
-
     async refreshRuntimeAccount(ev) {
         ev?.preventDefault?.();
         ev?.stopPropagation?.();
         return this.panel.refreshRuntimeAccount();
-    },
-
-    async cancelRuntimeLogin(ev) {
-        ev?.preventDefault?.();
-        ev?.stopPropagation?.();
-        return this.panel.cancelRuntimeLogin();
-    },
-
-    async logoutRuntimeAccount(ev) {
-        ev?.preventDefault?.();
-        ev?.stopPropagation?.();
-        this.ui.accountOpen = false;
-        return this.panel.logoutRuntimeAccount();
-    },
-
-    openRuntimeLoginPage(ev) {
-        ev?.preventDefault?.();
-        ev?.stopPropagation?.();
-        const url = safeLoginUrl(this.state.runtimeVerificationUrl);
-        if (!url) {
-            return false;
-        }
-        globalThis.open?.(url, "_blank", "noopener,noreferrer");
-        return true;
     },
 
     runtimeUsageLabel(row) {

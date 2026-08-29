@@ -23,23 +23,18 @@ test("runtime account accepts an authenticated admin profile", () => {
                 },
             ],
         },
-        login: null,
     };
 
     expect(normalizeRuntimeAccount(payload)).toEqual(payload);
 });
 
-test("runtime account accepts a pending device login", () => {
+test("runtime account accepts externally pending host authentication without login data", () => {
     const payload = {
         ok: true,
         state: "login_pending",
         requires_setup: true,
         can_configure: true,
         account: null,
-        login: {
-            verification_url: "https://auth.openai.com/codex/device",
-            user_code: "ABCD-1234",
-        },
     };
 
     expect(normalizeRuntimeAccount(payload)).toEqual(payload);
@@ -58,7 +53,6 @@ test("runtime account rejects account details for non administrators", () => {
                 plan_type: "plus",
                 rate_limits: [],
             },
-            login: null,
         })
     ).toBe(null);
 });

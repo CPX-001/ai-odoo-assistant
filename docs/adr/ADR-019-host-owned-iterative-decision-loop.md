@@ -55,8 +55,9 @@ thread persistence. A completed `call_id` is never executed twice; an ambiguous 
 represented explicitly and handled within bounded recovery rules. Post-write-barrier ambiguity
 continues to use the ADR-016 recovery path rather than automatic retry.
 
-ADR-018 remains unchanged: Codex credentials are provider-owned and installation-scoped while each
-database has an explicit non-secret activation gate.
+ADR-020 supersedes ADR-018's activation gate: Codex credentials remain provider-owned and
+installation-scoped, and Odoo consumes the host's primary session automatically. This does not
+change the host-owned loop or its effective-user authority.
 
 ## Consecuencias
 
@@ -80,4 +81,5 @@ write barrier continues to follow existing verification/recovery semantics.
 - `docs/adr/ADR-016-embedded-odoo-runtime.md`
 - `docs/adr/ADR-017-addon-capability-framework.md`
 - `docs/adr/ADR-018-database-scoped-codex-activation.md`
+- `docs/adr/ADR-020-host-primary-codex-session.md`
 - `docs/research/E2E_AGENT_LOOP_CONVERGENCE.md`

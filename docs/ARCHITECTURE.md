@@ -188,7 +188,7 @@ See `KNOWLEDGE_INDEX.md`.
 
 ## 9. Provider boundary
 
-Codex App Server is the primary current provider and is owned as a local subprocess by the Odoo runtime identity. Credentials remain provider-owned.
+Codex App Server is the primary current provider and is owned as a local subprocess by the Odoo runtime identity. Credentials remain provider-owned in one host-configured primary `CODEX_HOME` consumed by the installation. Odoo users share that provider identity and quota, never Odoo business authority or conversation data.
 
 The product contract is provider-neutral. Future `ProviderProfile` feature negotiation records capabilities such as structured output, tool calls, answer streaming, vision/file input, web and context support as `native`, `emulated` or `unavailable`.
 
@@ -251,7 +251,7 @@ Historical root migrations/Assistant SQLAlchemy DB are retired lineage.
 
 ## 13. Filesystem
 
-`RuntimePaths.from_odoo()` derives private paths below Odoo `data_dir`, including Codex/runtime/cache/source areas. Current code rejects unsafe paths/symlinks and tightens permissions.
+`RuntimePaths.from_odoo()` derives runtime/cache/source paths below Odoo `data_dir`. The persistent provider home comes from the absolute host `CODEX_HOME`; when absent, the managed `<data_dir>/odoo_ai_assistant/codex` path remains a compatible fallback. Current code validates external homes and rejects unsafe managed paths/symlinks.
 
 Future source/host capabilities must use explicit approved roots/locators; a reasoning provider does not gain arbitrary filesystem authority merely because Odoo can read files.
 

@@ -73,12 +73,6 @@
                                         t-on-click="openRuntimeSettings">
                                         Configuración del Assistant
                                     </button>
-                                    <button type="button"
-                                        class="btn btn-sm btn-outline-danger w-100"
-                                        t-att-disabled="state.runtimeActionLoading"
-                                        t-on-click="logoutRuntimeAccount">
-                                        Desconectar ChatGPT
-                                    </button>
                                 </t>
                                 <t t-else="">
                                     <div class="small text-muted">
@@ -122,65 +116,25 @@
 
                             <t t-else="">
                                 <i class="fa fa-link fa-2x mb-3 text-muted" aria-hidden="true"/>
-                                <h3 class="h5 mb-2">Conecta ChatGPT</h3>
+                                <h3 class="h5 mb-2">Sesión principal de Codex no disponible</h3>
                                 <p class="small text-muted mb-3" t-esc="runtimeSetupMessage"/>
 
                                 <t t-if="state.runtimeCanConfigure">
-                                    <button t-if="state.runtimeState === 'not_authenticated'"
-                                        type="button" class="btn btn-primary"
-                                        t-att-disabled="state.runtimeActionLoading"
-                                        t-on-click="connectRuntimeAccount">
-                                        <i t-if="state.runtimeActionLoading"
-                                            class="fa fa-spinner fa-spin me-1"
-                                            aria-hidden="true"/>
-                                        Conectar con ChatGPT
-                                    </button>
-
-                                    <div t-if="state.runtimeState === 'login_pending'"
-                                        class="border rounded p-3 text-start bg-light-subtle">
-                                        <div class="small text-muted mb-1">Código de acceso</div>
-                                        <div class="fs-5 fw-semibold font-monospace text-center py-2"
-                                            t-esc="state.runtimeUserCode or '—'"/>
-                                        <div class="d-flex flex-wrap gap-2 mt-2">
-                                            <button t-if="state.runtimeVerificationUrl"
-                                                type="button" class="btn btn-primary btn-sm flex-grow-1"
-                                                t-on-click="openRuntimeLoginPage">
-                                                Abrir ChatGPT
-                                            </button>
-                                            <button type="button"
-                                                class="btn btn-outline-secondary btn-sm"
-                                                t-att-disabled="state.runtimeActionLoading"
-                                                t-on-click="cancelRuntimeLogin">
-                                                Cancelar
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div t-if="state.runtimeState === 'codex_unavailable'"
-                                        class="d-flex flex-column gap-2">
+                                    <div class="d-flex flex-column gap-2">
                                         <button type="button" class="btn btn-primary"
                                             t-on-click="openRuntimeSettings">
                                             Configurar Codex
                                         </button>
-                                    </div>
-
-                                    <div t-if="state.runtimeState === 'authentication_error'"
-                                        class="d-flex justify-content-center gap-2">
                                         <button type="button"
                                             class="btn btn-outline-primary"
                                             t-att-disabled="state.runtimeActionLoading"
                                             t-on-click="refreshRuntimeAccount">
                                             Reintentar
                                         </button>
-                                        <button type="button"
-                                            class="btn btn-outline-secondary"
-                                            t-on-click="openRuntimeSettings">
-                                            Configuración
-                                        </button>
                                     </div>
                                 </t>
                                 <div t-else="" class="alert alert-light border small mb-0">
-                                    Un administrador debe conectar ChatGPT antes de poder usar el Assistant.
+                                    La sesión principal de Codex la gestiona el host de Odoo.
                                 </div>
                             </t>
                         </div>

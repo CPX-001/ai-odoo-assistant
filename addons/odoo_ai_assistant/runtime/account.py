@@ -26,6 +26,7 @@ _FRAME: Final = 256 * 1024
 _STDOUT: Final = 2 * 1024 * 1024
 _STDERR: Final = 64 * 1024
 _STATE: Final = 64 * 1024
+_AUTH: Final = 2 * 1024 * 1024
 _SAFE_ENV: Final = frozenset(
     {"HOME", "LANG", "LC_ALL", "LOGNAME", "PATH", "SSL_CERT_DIR", "SSL_CERT_FILE", "TZ", "USER"}
 )
@@ -122,7 +123,7 @@ class CodexAccountManager:
 
     def _runtime_status(self, *, include_rate_limits: bool) -> CodexAccountStatus:
         try:
-            payload = asyncio.run(self._request("account/read", {"refreshToken": False}))
+            payload = asyncio.run(self._status_request("account/read", {"refreshToken": False}))
             account = _account(payload)
         except CodexAccountError as error:
             return CodexAccountStatus(state="authentication_error", error_code=error.code)
@@ -131,7 +132,7 @@ class CodexAccountManager:
         limits: tuple[dict[str, object], ...] = ()
         if include_rate_limits:
             try:
-                limits = _limits(asyncio.run(self._request("account/rateLimits/read", {})))
+                limits = _limits(asyncio.run(self._status_request("account/rateLimits/read", {})))
             except CodexAccountError:
                 pass
         return CodexAccountStatus(
@@ -152,6 +153,28 @@ class CodexAccountManager:
         )
         async with client:
             return await client.request(method, params)
+
+    async def _status_request(self, method: str, params: dict[str, object]):
+        """Read account state through the same credential-only HOME used by turns.
+
+        A primary host home can live on DrvFS or another filesystem unsuitable for
+        Codex's transient SQLite runtime. The credential remains provider-owned in
+        place; only the bounded auth file is copied to an ephemeral Linux HOME.
+        """
+
+        temporary = _isolated_credential_home(self.paths.codex_home)
+        try:
+            client = await _Client.start(
+                self.executable,
+                Path(temporary.name),
+                startup=self.startup_timeout_seconds,
+                request=self.request_timeout_seconds,
+                shutdown=self.shutdown_timeout_seconds,
+            )
+            async with client:
+                return await client.request(method, params)
+        finally:
+            temporary.cleanup()
 
     def start_login(self) -> CodexAccountStatus:
         lock_fd = _open_lock(self.lock_path)
@@ -730,10 +753,31 @@ def _home(path: Path) -> Path:
         resolved = path.resolve(strict=True)
         if not resolved.is_dir() or resolved.is_symlink():
             raise OSError
-        resolved.chmod(0o700)
+        # RuntimePaths hardens the managed data-dir fallback. A host-provided
+        # CODEX_HOME may live on DrvFS or another provider-managed filesystem
+        # where chmod is unsupported; validating access must not mutate it.
+        if not os.access(resolved, os.R_OK | os.W_OK | os.X_OK):
+            raise OSError
         return resolved
     except OSError:
         raise CodexAccountError("codex_home_unavailable") from None
+
+
+def _isolated_credential_home(source_home: Path):
+    temporary = tempfile.TemporaryDirectory(prefix="odoo-ai-codex-account-")
+    try:
+        auth = source_home.resolve(strict=True) / "auth.json"
+        if not auth.exists():
+            return temporary
+        if auth.is_symlink() or not auth.is_file() or auth.stat().st_size > _AUTH:
+            raise CodexAccountError("codex_auth_file_invalid")
+        target = Path(temporary.name) / "auth.json"
+        target.write_bytes(auth.read_bytes())
+        target.chmod(0o600)
+        return temporary
+    except BaseException:
+        temporary.cleanup()
+        raise
 
 
 def _worker_paths(home: Path, state: Path, cancel: Path) -> None:

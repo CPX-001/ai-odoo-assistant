@@ -21,10 +21,9 @@
                     </setting>
                     <setting
                         string="ChatGPT account"
-                        help="One installation uses one Codex/ChatGPT identity. Codex owns token storage and refresh; Odoo stores no ChatGPT tokens in PostgreSQL."
+                        help="One installation uses the primary Codex/ChatGPT identity configured by the host. Every Odoo user shares that provider session while Odoo keeps user authority and data isolated."
                     >
                         <field name="assistant_codex_account_connected" invisible="1"/>
-                        <field name="assistant_codex_login_pending" invisible="1"/>
                         <div>
                             State: <field name="assistant_codex_account_state" class="oe_inline"/>
                         </div>
@@ -37,44 +36,10 @@
                         <div invisible="not assistant_codex_plan_type" class="text-muted">
                             Plan: <field name="assistant_codex_plan_type" class="oe_inline"/>
                         </div>
-                        <div invisible="not assistant_codex_login_pending" class="mt8">
-                            <strong>Open:</strong>
-                            <field name="assistant_codex_login_url" class="oe_inline"/>
-                        </div>
-                        <div invisible="not assistant_codex_login_pending">
-                            <strong>Code:</strong>
-                            <field name="assistant_codex_login_code" class="oe_inline"/>
-                        </div>
                         <div class="text-muted mt8">
                             <field name="assistant_codex_account_message" nolabel="1"/>
                         </div>
                         <div class="mt8">
-                            <button
-                                name="action_assistant_codex_login_start"
-                                type="object"
-                                string="Connect with ChatGPT"
-                                class="btn-primary"
-                                invisible="assistant_codex_account_connected or assistant_codex_login_pending or assistant_codex_state != 'ready'"
-                            />
-                            <button
-                                name="action_assistant_codex_login_open"
-                                type="object"
-                                string="Open login page"
-                                class="btn-primary"
-                                invisible="not assistant_codex_login_pending or not assistant_codex_login_url"
-                            />
-                            <button
-                                name="action_assistant_codex_login_cancel"
-                                type="object"
-                                string="Cancel"
-                                invisible="not assistant_codex_login_pending"
-                            />
-                            <button
-                                name="action_assistant_codex_logout"
-                                type="object"
-                                string="Disconnect"
-                                invisible="not assistant_codex_account_connected or assistant_codex_login_pending"
-                            />
                             <button
                                 name="action_assistant_codex_account_refresh"
                                 type="object"
@@ -91,7 +56,7 @@
                     </setting>
                     <setting
                         string="Runtime data"
-                        help="Mutable Assistant and CODEX_HOME state lives below Odoo data_dir and inherits the Odoo process identity."
+                        help="Assistant runtime state lives below Odoo data_dir. CODEX_HOME may point to the host's existing primary Codex session."
                     >
                         <field name="assistant_runtime_directory"/>
                         <div class="text-muted">

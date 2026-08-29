@@ -39,17 +39,15 @@ browser. Distingue como mínimo:
 - authenticated / ready;
 - authenticated / unusable.
 
-Cuando hay una cuenta, `account/read` es la fuente de verdad. Diagnostics pide a
-Codex `account/read(refreshToken=true)` **únicamente sobre el `CODEX_HOME`
-persistente**, de forma que cualquier rotación/actualización de credenciales siga
-perteneciendo al store privado administrado por Codex. Odoo no inspecciona ni
-persiste el token resultante.
+Cuando hay una cuenta, `account/read` es la fuente de verdad. Diagnostics usa
+`refreshToken=false` sobre el mismo HOME temporal credential-only que los product
+turns. La autenticación/rotación pertenece al lifecycle principal de Codex en el
+host; Odoo no refresca, inspecciona ni persiste el token.
 
-Después, un probe independiente arranca el mismo HOME temporal credential-only
-usado por los product turns y ejecuta `account/read(refreshToken=false)`. El HOME
-temporal se usa sólo para comprobar compatibilidad/visibilidad y nunca para
-refrescar, evitando que una posible rotación de refresh token quede atrapada en un
-directorio que se elimina al cerrar el probe.
+Un probe independiente vuelve a comprobar ese mismo camino de aislamiento. El HOME
+temporal se usa sólo para compatibilidad/visibilidad y nunca para refrescar, evitando
+además depender de que el filesystem del provider home soporte el SQLite efímero de
+Codex.
 
 Email y `planType` sólo se muestran a administradores si el App Server los
 proporciona. `account/rateLimits/read` es opcional; si existe se renderizan los
@@ -83,7 +81,7 @@ fuerza `ERROR`; un estado `degraded`/`unknown` impide `FULLY_READY`.
 | `retry` | repetir la comprobación después de corregir la causa |
 | `rescan` | usar el scan bounded de source ya existente |
 | `reindex` | requiere la operación bounded de knowledge prevista en M7-05 |
-| `authenticate_runtime` | abrir Settings → AI Assistant → Embedded runtime y usar **Connect with ChatGPT** |
+| `authenticate_runtime` | autenticar la sesión Codex principal del host y exponer su `CODEX_HOME` al servicio Odoo |
 
 Ningún remediation kind ejecuta shell, systemd, root, SQL arbitrario ni una
 acción producida por el modelo.
@@ -122,14 +120,14 @@ Siguen siendo host-owned:
 - provisión/rotación de secretos host-owned todavía existentes durante la migración;
 - cambios de systemd/root.
 
-**La autenticación ChatGPT normal ya no requiere consola.** Sólo el fallback
-manual de Codex queda como recovery/debug; debe apuntar al mismo `CODEX_HOME` y
-nunca copiar tokens a Odoo.
+La autenticación pertenece al lifecycle normal de Codex en el host, no a Odoo.
+Debe hacerse sobre el `CODEX_HOME` principal que recibe el servicio; nunca se
+copian tokens a Odoo.
 
 ## Estado de verificación
 
 El lifecycle de cuenta embebido tiene cobertura de protocolo con App Server
-falso y tests Odoo escritos. La aceptación contra un Codex real requiere una
-ceremonia humana de device login y, por diseño, no forma parte del CI. Ver
-`docs/codex/CODEX_AUTH.md` para el procedimiento y las comprobaciones de
-restart/cancel/logout.
+falso y tests Odoo escritos. La aceptación contra un Codex real reutiliza la
+sesión principal ya autenticada del host y comprueba lectura tras restart; no
+crea una segunda sesión ni registra credenciales en evidencia. Ver
+`docs/codex/CODEX_AUTH.md`.

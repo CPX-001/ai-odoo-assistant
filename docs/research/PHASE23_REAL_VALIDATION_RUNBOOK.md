@@ -61,10 +61,10 @@ createdb "$ODOO_AI_TEST_DB"
   --stop-after-init --log-level=test
 ```
 
-The machine must already have the supported Codex executable and authenticated installation-scoped
-Codex session. The deterministic faults are injected **after** the normal `/turn` authentication
-precondition, so the fixture setup deliberately enables the disposable database activation and then
-fails unless the real runtime status is `authenticated`.
+The machine must already have the supported Codex executable and an authenticated primary host
+session exposed to Odoo through `CODEX_HOME`. The deterministic faults are injected **after** the
+normal `/turn` authentication precondition, so the fixture fails unless the real runtime status is
+`authenticated`; no per-database activation is required.
 
 Create the two disposable internal users and verify that prerequisite:
 

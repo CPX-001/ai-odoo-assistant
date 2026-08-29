@@ -24,7 +24,7 @@ The PDFs under `docs/source-of-truth/` are dated research snapshots. They are us
 - The model proposes; the host validates capability, schema, policy, approval, execution and verification.
 - `CapabilityDefinition` is the atomic executable contract. Extend the existing capability framework instead of creating parallel tool/action registries.
 - No arbitrary SQL, Python, shell, sudo or unrestricted Odoo method execution is exposed to the model.
-- Codex App Server is an ephemeral subprocess. Its credentials remain provider-owned under Odoo's `data_dir`, not in PostgreSQL, prompts or logs.
+- Codex App Server is an ephemeral subprocess. Its credentials remain provider-owned in the host-configured primary `CODEX_HOME` (with the Odoo `data_dir` location only as a compatible fallback), not in PostgreSQL, prompts or logs.
 
 ## Legacy areas
 

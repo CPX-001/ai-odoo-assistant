@@ -16,6 +16,7 @@ from ..runtime.account import (
     CodexAccountError,
     CodexAccountManager,
     CodexAccountStatus,
+    _home,
     _read_state,
     run_device_login_worker,
 )
@@ -33,8 +34,10 @@ def _fake_codex(root: Path) -> Path:
         "home = Path(os.environ['CODEX_HOME'])\n"
         "auth = home / 'auth.json'\n"
         "mode_file = home / 'fake-mode'\n"
+        "fixture_mode_file = Path(__file__).resolve().parent / 'fake-mode'\n"
         "def mode():\n"
-        "    return mode_file.read_text().strip() if mode_file.exists() else 'normal'\n"
+        "    selected = fixture_mode_file if fixture_mode_file.exists() else mode_file\n"
+        "    return selected.read_text().strip() if selected.exists() else 'normal'\n"
         "for raw in sys.stdin:\n"
         "    request = json.loads(raw)\n"
         "    method = request.get('method')\n"
@@ -111,8 +114,15 @@ class TestEmbeddedCodexAccount(TransactionCase):
             login_timeout_seconds=overrides.get("login_timeout_seconds", 60),
         )
 
+    def test_provider_home_validation_does_not_chmod_host_storage(self):
+        with patch.object(Path, "chmod", side_effect=OSError("unsupported")):
+            resolved = _home(self.paths.codex_home)
+
+        self.assertEqual(resolved, self.paths.codex_home.resolve())
+
     def _mode(self, value: str):
         (self.paths.codex_home / "fake-mode").write_text(value, encoding="utf-8")
+        (self.executable.parent / "fake-mode").write_text(value, encoding="utf-8")
 
     def _wait_status(self, manager, *, terminal_states, timeout=4.0):
         deadline = time.monotonic() + timeout
@@ -331,7 +341,7 @@ class TestEmbeddedCodexAccount(TransactionCase):
         self.assertEqual(status.state, "authentication_error")
         self.assertEqual(status.error_code, "codex_login_interrupted")
 
-    def test_settings_and_diagnostics_follow_connect_disconnect(self):
+    def test_settings_and_diagnostics_read_the_primary_host_session(self):
         self.env["ir.config_parameter"].set_param(
             "odoo_ai_assistant.codex_executable", str(self.executable)
         )
@@ -341,17 +351,13 @@ class TestEmbeddedCodexAccount(TransactionCase):
         settings = self.env["res.config.settings"].create({})
         diagnostics = self.env["odoo.ai.assistant.diagnostics"]
         with patch.object(RuntimePaths, "from_odoo", return_value=self.paths):
-            settings.action_assistant_codex_login_start()
             values = settings.get_values()
             self.assertTrue(values["assistant_codex_account_connected"])
             self.assertEqual(values["assistant_codex_plan_type"], "plus")
             before = diagnostics._diagnostic_values()
             self.assertIn("Authenticated", before["codex_account_state"])
-            settings.action_assistant_codex_logout()
-            after = diagnostics._diagnostic_values()
-            self.assertEqual(after["codex_account_state"], "Not connected")
 
-    def test_non_admin_cannot_manage_global_account(self):
+    def test_non_admin_cannot_read_primary_account_metadata(self):
         user = self.env["res.users"].create(
             {
                 "name": "Auth Non Admin",
@@ -361,21 +367,18 @@ class TestEmbeddedCodexAccount(TransactionCase):
         )
         settings = self.env["res.config.settings"].create({}).with_user(user)
         with self.assertRaises(AccessError):
-            settings.action_assistant_codex_login_start()
-        with self.assertRaises(AccessError):
-            settings.action_assistant_codex_logout()
-        with self.assertRaises(AccessError):
             settings.assistant_codex_account_status()
 
-    def test_settings_view_exposes_device_flow_without_secret_fields(self):
+    def test_settings_view_exposes_status_only_without_login_or_secret_fields(self):
         view = self.env.ref(
             "odoo_ai_assistant.res_config_settings_view_form_odoo_ai_assistant_runtime"
         )
         arch = view.arch_db
-        self.assertIn("Connect with ChatGPT", arch)
-        self.assertIn("Open login page", arch)
-        self.assertIn("Disconnect", arch)
-        self.assertIn("action_assistant_codex_login_cancel", arch)
+        self.assertIn("Refresh account status", arch)
+        self.assertNotIn("Connect with ChatGPT", arch)
+        self.assertNotIn("Open login page", arch)
+        self.assertNotIn("Disconnect", arch)
+        self.assertNotIn("action_assistant_codex_login_cancel", arch)
         self.assertNotIn("access_token", arch)
         self.assertNotIn("refresh_token", arch)
         self.assertNotIn("auth.json", arch)

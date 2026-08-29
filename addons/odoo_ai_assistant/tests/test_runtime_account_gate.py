@@ -50,15 +50,11 @@ class _FakeManager:
 
 @tagged("post_install", "-at_install")
 class TestRuntimeAccountGate(TransactionCase):
-    def setUp(self):
-        super().setUp()
-        self.parameters = self.env["ir.config_parameter"]
-        self.parameters.set_param(
+    def test_host_provider_session_is_reused_without_database_activation(self):
+        self.env["ir.config_parameter"].set_param(
             "odoo_ai_assistant.codex_connection_enabled",
             "false",
         )
-
-    def test_fresh_database_requires_explicit_connection_even_with_provider_session(self):
         manager = _FakeManager(
             CodexAccountStatus(
                 state="authenticated",
@@ -70,38 +66,18 @@ class TestRuntimeAccountGate(TransactionCase):
         with patch.object(runtime_account, "_runtime_manager", return_value=manager):
             payload = runtime_account.runtime_account_payload(self.env)
 
-        self.assertEqual(payload["state"], "not_authenticated")
-        self.assertTrue(payload["requires_setup"])
-        self.assertIsNone(payload["account"])
+        self.assertEqual(payload["state"], "authenticated")
+        self.assertFalse(payload["requires_setup"])
+        self.assertEqual(payload["account"]["email"], "admin@example.com")
         self.assertFalse(manager.started)
 
-    def test_legacy_database_without_activation_parameter_keeps_existing_binding(self):
-        self.parameters.set_param(
-            "odoo_ai_assistant.codex_connection_enabled",
-            False,
-        )
-        self.assertTrue(runtime_account.database_connection_enabled(self.env))
-
-    def test_connect_marks_database_and_reuses_existing_provider_session(self):
-        manager = _FakeManager(
-            CodexAccountStatus(
-                state="authenticated",
-                auth_mode="chatgpt",
-                email="admin@example.com",
-                plan_type="plus",
-            )
-        )
-        with patch.object(runtime_account, "_runtime_manager", return_value=manager):
-            payload = runtime_account.connect_database(self.env)
-
-        self.assertTrue(manager.started)
-        self.assertTrue(runtime_account.database_connection_enabled(self.env))
-        self.assertEqual(payload["state"], "authenticated")
-        self.assertEqual(payload["account"]["email"], "admin@example.com")
-        self.assertEqual(payload["account"]["rate_limits"][0]["used_percent"], 23)
-
-    def test_turn_gate_fails_closed_before_database_connection(self):
+    def test_turn_gate_uses_the_installation_session_directly(self):
         manager = _FakeManager(CodexAccountStatus(state="authenticated"))
+        with patch.object(runtime_account, "_runtime_manager", return_value=manager):
+            runtime_account.require_runtime_authenticated(self.env)
+
+    def test_turn_gate_fails_closed_when_primary_session_is_not_authenticated(self):
+        manager = _FakeManager(CodexAccountStatus(state="not_authenticated"))
         with (
             patch.object(runtime_account, "_runtime_manager", return_value=manager),
             self.assertRaises(runtime_account.RuntimeAccountGateError) as caught,

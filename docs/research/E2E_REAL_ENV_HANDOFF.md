@@ -212,7 +212,6 @@ partner = env['res.partner'].create({
 icp = env['ir.config_parameter'].sudo()
 icp.set_param('odoo_ai_assistant.agent_confirmation_mode', 'always_confirm')
 icp.set_param('odoo_ai_assistant.agent_max_auto_risk', 'low')
-icp.set_param('odoo_ai_assistant.codex_connection_enabled', 'true')
 env.cr.commit()
 print(json.dumps({'user_id': user.id, 'partner_id': partner.id, 'marker': marker}, sort_keys=True))
 PY
@@ -224,7 +223,9 @@ Record the returned disposable `partner_id` locally:
 export E2E_PARTNER_ID='<DISPOSABLE_PARTNER_ID>'
 ```
 
-If the installation-scoped Codex account is not actually authenticated, stop here and connect it through the supported Settings/device-code flow. Setting the database enablement flag does not manufacture provider credentials.
+Before starting Odoo, expose the already authenticated primary host session through
+`CODEX_HOME` and verify the Odoo OS identity can use it. Do not copy provider files or
+create a per-database login.
 
 Start Odoo for live HTTP/browser validation:
 

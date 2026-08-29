@@ -252,9 +252,11 @@ export class AssistantPanel extends Component {
                 "Codex no está disponible para el proceso Odoo. Un administrador debe configurarlo."
             ),
             login_pending: _t(
-                "La conexión con ChatGPT está pendiente. Completa el acceso; el Assistant la detectará automáticamente."
+                "La sesión principal de Codex se está autenticando fuera de Odoo; el Assistant detectará el cambio automáticamente."
             ),
-            not_authenticated: _t("Conecta una cuenta de ChatGPT antes de usar el Assistant."),
+            not_authenticated: _t(
+                "La sesión principal de Codex no está autenticada. Un administrador del host debe configurarla."
+            ),
         };
         return messages[this.state.runtimeState] || _t("Comprobando la conexión con ChatGPT…");
     }

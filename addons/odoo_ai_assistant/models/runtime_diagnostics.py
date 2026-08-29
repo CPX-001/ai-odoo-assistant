@@ -85,22 +85,11 @@ class AssistantDiagnosticsCodexAccount(models.TransientModel):
             )
             return values
 
-        # Refresh only against the persistent Codex-owned store. Refreshing a copied
-        # product-turn HOME could rotate a refresh token inside a disposable directory
-        # and leave the persistent credential store stale.
+        # Authentication/refresh belongs to the host's primary Codex lifecycle.
+        # Diagnostics only validates the credential through the product-turn isolation
+        # path and never mutates the provider-owned persistent HOME.
         if status.connected:
-            try:
-                asyncio.run(manager._request("account/read", {"refreshToken": True}))
-                status = manager.status(include_rate_limits=True)
-            except CodexAccountError as error:
-                values.update(
-                    codex_account_state=_account_error_state(error.code),
-                    codex_account_identity=False,
-                    codex_account_plan=False,
-                    codex_account_usage=False,
-                    codex_account_detail=_account_error_detail(error.code),
-                )
-                return values
+            status = manager.status(include_rate_limits=True)
 
         detail = {
             "not_authenticated": _("Codex is available but no account is connected."),
@@ -153,8 +142,8 @@ class AssistantDiagnosticsCodexAccount(models.TransientModel):
     def _reasoning_setup_message(self, detail):
         if detail == "auth_unavailable":
             return _(
-                "Authenticate Codex from Settings → AI Assistant → Embedded runtime "
-                "using Connect with ChatGPT."
+                "Authenticate the installation's primary Codex CLI session and make its "
+                "CODEX_HOME available to the Odoo service."
             )
         return super()._reasoning_setup_message(detail)
 

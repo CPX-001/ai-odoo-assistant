@@ -10,9 +10,6 @@ from odoo.http import request
 
 from ..services.runtime_account import (
     RuntimeAccountGateError,
-    cancel_database_login,
-    connect_database,
-    logout_database,
     require_runtime_authenticated,
     runtime_account_payload,
     runtime_status_payload,
@@ -45,12 +42,6 @@ class AssistantTurnController(http.Controller):
         try:
             if action in {"status", "refresh"}:
                 return runtime_account_payload(request.env)
-            if action == "connect":
-                return connect_database(request.env)
-            if action == "cancel":
-                return cancel_database_login(request.env)
-            if action == "logout":
-                return logout_database(request.env)
             return _error("invalid_context")
         except AccessError:
             return _error("access_denied")

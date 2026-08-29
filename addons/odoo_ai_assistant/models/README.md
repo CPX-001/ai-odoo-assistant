@@ -10,7 +10,7 @@ flowchart TB
     TURN --> WORK[private working transcript]
     TURN --> EFFECT[action/plan execution state]
     PREF[user/chat preferences] --> TURN
-    SETTINGS[runtime settings/account binding] --> TURN
+    SETTINGS[runtime settings/host account status] --> TURN
     CRON[Odoo cron] --> TURN
 ```
 
@@ -38,7 +38,7 @@ flowchart TB
 ### Runtime configuration and diagnostics
 
 - `embedded_runtime.py` — Odoo-side embedded runtime integration.
-- `runtime_settings.py`, `runtime_account_binding.py`, `res_config_settings.py` — configuration/account/activation state.
+- `runtime_settings.py`, `res_config_settings.py` — runtime configuration and read-only host account status.
 - `runtime_diagnostics.py`, `assistant_diagnostics.py` — admin-facing health/diagnostic projections.
 
 The exact class/model names and fields in code are authoritative; this README explains responsibility, not a database schema reference.

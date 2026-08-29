@@ -4,7 +4,7 @@ Codex App Server is the current reasoning-provider adapter for the embedded Odoo
 
 ## Current documents
 
-- [`CODEX_AUTH.md`](CODEX_AUTH.md) — provider-owned account lifecycle, `CODEX_HOME`, device-code login and database activation.
+- [`CODEX_AUTH.md`](CODEX_AUTH.md) — provider-owned primary host session, `CODEX_HOME` and Odoo authority isolation.
 - [`../CURRENT_STATE.md`](../CURRENT_STATE.md) — audited implementation snapshot.
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — product/runtime boundaries.
 - [`../UNIFIED_AGENT_RUNTIME.md`](../UNIFIED_AGENT_RUNTIME.md) — turn/reasoning/execution lifecycle.

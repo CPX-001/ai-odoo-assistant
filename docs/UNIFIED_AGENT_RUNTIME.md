@@ -116,8 +116,8 @@ changing UI settings affects subsequent turns rather than mutating an in-flight 
 
 The previous `CodexReasoningEngine.run_agent_turn()` remains installed only as the bounded ADR-019
 rollback seam pending an explicit cleanup slice. It is not the active embedded product composition.
-The Odoo RPC boundary, account lifecycle from ADR-018 and existing approval/recovery authority remain
-unchanged while the product UX evolves.
+The Odoo RPC boundary, host-primary account lifecycle from ADR-020 and existing
+approval/recovery authority remain unchanged while the product UX evolves.
 
 ## Current validation status
 

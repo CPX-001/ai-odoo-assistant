@@ -63,11 +63,6 @@ class ResConfigSettingsRuntime(models.TransientModel):
         readonly=True,
         groups="base.group_system",
     )
-    assistant_codex_login_pending = fields.Boolean(
-        string="ChatGPT login pending",
-        readonly=True,
-        groups="base.group_system",
-    )
     assistant_codex_auth_mode = fields.Char(
         string="Authentication mode",
         readonly=True,
@@ -80,16 +75,6 @@ class ResConfigSettingsRuntime(models.TransientModel):
     )
     assistant_codex_plan_type = fields.Char(
         string="Plan",
-        readonly=True,
-        groups="base.group_system",
-    )
-    assistant_codex_login_url = fields.Char(
-        string="Login page",
-        readonly=True,
-        groups="base.group_system",
-    )
-    assistant_codex_login_code = fields.Char(
-        string="Device code",
         readonly=True,
         groups="base.group_system",
     )
@@ -147,48 +132,6 @@ class ResConfigSettingsRuntime(models.TransientModel):
             }
         )
         return values
-
-    def action_assistant_codex_login_start(self):
-        self._require_capability_admin()
-        self.ensure_one()
-        try:
-            self._codex_account_manager().start_login()
-        except CodexAccountError as error:
-            raise ValidationError(self._account_error_message(error.code)) from error
-        return _reload_action()
-
-    def action_assistant_codex_login_open(self):
-        self._require_capability_admin()
-        self.ensure_one()
-        try:
-            status = self._codex_account_manager().status(include_rate_limits=False)
-        except CodexAccountError as error:
-            raise ValidationError(self._account_error_message(error.code)) from error
-        if not status.login_pending or not status.verification_url:
-            raise ValidationError(_("There is no active ChatGPT device login to open."))
-        return {
-            "type": "ir.actions.act_url",
-            "url": status.verification_url,
-            "target": "new",
-        }
-
-    def action_assistant_codex_login_cancel(self):
-        self._require_capability_admin()
-        self.ensure_one()
-        try:
-            self._codex_account_manager().cancel_login()
-        except CodexAccountError as error:
-            raise ValidationError(self._account_error_message(error.code)) from error
-        return _reload_action()
-
-    def action_assistant_codex_logout(self):
-        self._require_capability_admin()
-        self.ensure_one()
-        try:
-            self._codex_account_manager().logout()
-        except CodexAccountError as error:
-            raise ValidationError(self._account_error_message(error.code)) from error
-        return _reload_action()
 
     def action_assistant_codex_account_refresh(self):
         self._require_capability_admin()
@@ -304,12 +247,9 @@ class ResConfigSettingsRuntime(models.TransientModel):
         return {
             "assistant_codex_account_state": self._account_state_label(status.state),
             "assistant_codex_account_connected": status.connected,
-            "assistant_codex_login_pending": status.login_pending,
             "assistant_codex_auth_mode": status.auth_mode or "",
             "assistant_codex_account_email": status.email or "",
             "assistant_codex_plan_type": status.plan_type or "",
-            "assistant_codex_login_url": status.verification_url or "",
-            "assistant_codex_login_code": status.user_code or "",
             "assistant_codex_account_message": self._account_detail(status),
             "assistant_codex_rate_limits": _format_rate_limits(status.rate_limits),
         }
@@ -327,13 +267,11 @@ class ResConfigSettingsRuntime(models.TransientModel):
     @api.model
     def _account_detail(self, status):
         if status.state == "login_pending":
-            if status.verification_url and status.user_code:
-                return _("Open the login page and enter the device code, then refresh this status.")
-            return _("Codex is preparing the device login. Refresh this status shortly.")
+            return _("The installation's primary Codex session is being authenticated externally.")
         if status.state == "authenticated":
-            return _("Codex manages and refreshes this account session in the private runtime storage.")
+            return _("Odoo is using the installation's primary Codex session.")
         if status.state == "not_authenticated":
-            return _("Connect a ChatGPT account to enable Codex turns.")
+            return _("Authenticate the installation's primary Codex CLI session outside Odoo.")
         if status.state == "runtime_unavailable":
             return _("Install or configure the Codex executable first.")
         return self._account_error_message(status.error_code or "codex_account_unavailable")
