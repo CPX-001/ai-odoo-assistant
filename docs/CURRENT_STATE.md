@@ -9,18 +9,17 @@ P5.2 accepted through b4fbb034e113a41c26db77cb274f2b3b30f6eee3
 P5.3 accepted through 32e836e7789ea72f3ba0d32fe6bdabbb092f5953
 P5.4 accepted through 3e2b38d68fe172cd2cf92d7794159f73476ac23d
 P5.5 accepted through 8427c8849b1e1f3afa6337de1209a6027410c266
-P5.6 implementation through f141f1dd56b95c5eb3e372bc61a49f265772c657
-P5.6 acceptance harness through 29452d85e2c21f625fc38b5bda814524168be5f2
 P5.6 accepted through 720102f2a13af5240c779b07cc71ee65994a87b1
 P5.7 model/reasoning preference sub-slice accepted through eb66e45447c4d64e1ebbb5e8322bffa759c12773
+P5.7 conversation preference mutation implementation present; focused Odoo gate pending
 ```
 
-P5.6 is formally accepted. P5.7 is in progress: the provider-backed model/reasoning preference sub-slice is accepted, while explicit conversation-scoped preference mutations remain. The exact live cursor is always `research/EXECUTION_STATE.md`.
+P5.6 is formally accepted. P5.7 is in progress: the provider-backed model/reasoning preference sub-slice is accepted, and the explicit conversation-scoped mutation implementation is now present but not accepted until `P5.7-ODOO-CONVERSATION-PREFERENCES` passes. The exact live cursor is always `research/EXECUTION_STATE.md`.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.17.0`.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.18.0`.
 - Embedded runtime; browser talks to Odoo, not a sidecar.
 - Odoo/PostgreSQL own conversations, messages, turns, effect state, private working checkpoints and public events.
 - Native `ir.cron` runs durable turns.
@@ -70,11 +69,14 @@ Current limit: one canonical effect step. Bounded multi-step `EffectPlan` is P6 
 Core providers:
 
 ```text
+assistant_preferences
 odoo_query
 odoo_actions
 odoo_batch
 odoo_runtime
 ```
+
+`assistant_preferences` is the P5.7 host-owned conversation preference surface. Its autonomy mutation is approval-bound; response-language mutation is reversible and bounded. Neither creates Odoo/capability authority.
 
 Settings can inspect and configure discovered definitions. Generic providers intentionally do not expose unrestricted ORM methods, SQL, Python, filesystem or shell.
 
@@ -91,7 +93,7 @@ technical access profile
 
 P5.6 adds conversation-context management at the current runtime seam; it does not pre-empt P7's general ContextProvider extension contract.
 
-## 5. Conversation/context today — P5.6 accepted
+## 5. Conversation/context today — P5.6 accepted, P5.7 extension pending gate
 
 Complete `odoo.ai.message` and `odoo.ai.turn` records remain history authority.
 
@@ -106,7 +108,7 @@ verified-effect references
 conversation/session settings
 ```
 
-Current v1 is built from durable **predecessor turn order**, not raw message creation order. This matters because Phase 5 permits Turn B's user message to be queued before Turn A's Assistant reply is persisted. The new builder therefore:
+Current v1 is built from durable **predecessor turn order**, not raw message creation order. This matters because Phase 5 permits Turn B's user message to be queued before Turn A's Assistant reply is persisted. The builder therefore:
 
 ```text
 selects only same-conversation lower-id turns
@@ -123,9 +125,7 @@ The provider port still uses the historical `conversation_summary: str` paramete
 
 Context remains data, never authority. ACLs, record rules, capability guards, policy, approval and effect execution are still re-evaluated host-side.
 
-Current `session_settings` carries the captured Odoo language fallback. Explicit conversation-scoped preference mutations belong to P5.7.
-
-The real continuity gate reloads the browser and requires a same-chat follow-up to recover a synthetic prior token while a new chat remains isolated.
+P5.7 now adds stored conversation response-language preferences and snapshots the selected mode/fixed language on each durable turn before projecting them into `session_settings` alongside `odoo_user_language`. The same P5.7 slice adds an explicit temporary autonomy override on the conversation policy layer. These changes are implementation-only until the focused gate passes.
 
 ## 6. Queue, concurrency and settings
 
@@ -155,6 +155,8 @@ policy
 
 Legacy v1 snapshots remain readable. New turns capture the current per-user model and explicit provider-supported reasoning effort; `Predeterminado` stores no synthetic effort. Those selectors are immutable per turn. Revocable Odoo authorization, capability guards and provider availability remain dynamic.
 
+The pending P5.7 conversation slice additionally captures `response_language_mode` and `response_language` as immutable turn fields. Conversation autonomy is resolved into the already-existing per-turn policy snapshot, so later preference changes do not rewrite a queued turn's authority.
+
 ## 7. Frontend/product state
 
 P5.1-P5.4 plus the accepted P5.7 model/reasoning sub-slice provide:
@@ -165,10 +167,12 @@ P5.1-P5.4 plus the accepted P5.7 model/reasoning sub-slice provide:
 - provisional answer deltas separate from activity;
 - one authoritative final Assistant message;
 - explicit approval/failure/recovery presentation;
-- no fake `Pensando…` bubble when real activity exists.
+- no fake `Pensando…` bubble when real activity exists;
 - provider-backed model families/variants in a nested Odoo dropdown;
 - a reasoning-effort selector bounded by the effective model's advertised catalog;
 - selectors that remain usable for future turns while another turn keeps its captured settings.
+
+The new conversation preferences are intentionally chat-capability driven at this checkpoint; no extra frontend settings subsystem was introduced before the focused backend/runtime contract is validated.
 
 Background scopes are still primarily web-client memory; P5.6 improves provider continuity through Odoo-owned turn context but does not by itself turn every frontend projection into durable UI state.
 
@@ -229,38 +233,22 @@ P5 IN_PROGRESS
   P5.4 COMPLETE
   P5.5 COMPLETE
   P5.6 COMPLETE
-  P5.7 IN_PROGRESS (model/reasoning sub-slice accepted)
+  P5.7 IN_PROGRESS
+    model/reasoning sub-slice ACCEPTED
+    conversation preference mutation IMPLEMENTED / FOCUSED ODOO GATE REQUIRED
 P6+ NOT ELIGIBLE
 ```
 
-P5.6 implementation record:
+Current blocking gate:
 
 ```text
-research/P5.6_CONVERSATION_CONTEXT_MANAGER.md
+P5.7-ODOO-CONVERSATION-PREFERENCES
 ```
 
-Prepared one-command acceptance batch:
-
-```bash
-python tests/e2e/p5_6_acceptance_batch.py \
-  --summary-out /tmp/p5_6_acceptance.json
-```
-
-Required chain:
+Implementation/validation record:
 
 ```text
-P5.6-ODOO-CONTEXT
- -> P5.6-DETERMINISTIC-REGRESSION
- -> P5.6-FULL-ADDON-REGRESSION
- -> P5-REAL-CONTINUITY
- -> evidence review
+research/P5.7_CONVERSATION_SCOPED_PREFERENCES.md
 ```
 
-All four gates passed on exact checkpoint `720102f`; see
-`research/evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`.
-
-## 13. Next action
-
-Continue P5.7 with an explicit conversation-scoped preference-mutation sub-slice. Reuse the current
-host-owned snapshot and capability framework, preserve administrator ceilings, and do not treat the
-accepted per-user model/reasoning picker as completion of the broader conversation-scoped contract.
+Do not begin P5.8 or broader P5.7 acceptance until this focused gate passes on a clean current SHA.
