@@ -10,13 +10,12 @@ from __future__ import annotations
 from ..capabilities import CapabilityContext, CapabilityDefinition
 from .contracts import NextDecision, PlanStepProposal
 from .decision_validation import NextDecisionValidationError
-from .service import NextDecisionEngine
 
 
 class PostEffectDecisionEngine:
     """Allow read/final decisions after verification while forbidding another effect proposal."""
 
-    def __init__(self, provider: NextDecisionEngine) -> None:
+    def __init__(self, provider) -> None:
         self._provider = provider
 
     async def next_decision(
