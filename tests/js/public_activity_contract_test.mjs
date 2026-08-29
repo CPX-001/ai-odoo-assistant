@@ -28,9 +28,34 @@ assert.equal(contract.normalizePublicTurnEvent(event(1)).activity_id, activityId
 assert.equal(contract.normalizePublicTurnEvent(event(1, { kind: "agent.thinking" })), null);
 assert.equal(contract.normalizePublicTurnEvent(event(1, { activity_id: "operation-42" })), null);
 assert.equal(contract.normalizePublicTurnEvent({ ...event(1), payload: { prompt: "private" } }), null);
+const fiftyIds = Array.from({ length: 50 }, (_value, index) => index + 1);
+assert.equal(
+    contract.normalizePublicTurnEvent(
+        event(1, {
+            resource: {
+                model: "sale.order",
+                record_ids: fiftyIds,
+                display_names: fiftyIds.map((recordId) => `S${String(recordId).padStart(4, "0")}`),
+            },
+        })
+    ).resource.record_ids.length,
+    50
+);
+assert.equal(
+    contract.normalizePublicTurnEvent(
+        event(1, {
+            resource: {
+                model: "sale.order",
+                record_ids: [...fiftyIds, 51],
+                display_names: [],
+            },
+        })
+    ),
+    null
+);
 assert.deepEqual(
     contract.normalizePublicTurnEventBatch([event(4), event(5)], { afterSequence: 3 }).map((x) => x.sequence),
     [4, 5]
 );
 assert.equal(contract.normalizePublicTurnEventBatch([event(5), event(4)], { afterSequence: 3 }), null);
-console.log("public activity contract: 6 assertions passed");
+console.log("public activity contract: 8 assertions passed");
