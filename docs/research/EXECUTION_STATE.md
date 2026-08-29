@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 22
+State format: 23
 Updated: 2026-08-29
 
 Accepted foundation/runtime lineage:
@@ -13,6 +13,7 @@ P5.3 accepted through 32e836e7789ea72f3ba0d32fe6bdabbb092f5953
 P5.4 accepted through 3e2b38d68fe172cd2cf92d7794159f73476ac23d
 P5.5 accepted through 8427c8849b1e1f3afa6337de1209a6027410c266
 P5.6 accepted through 720102f2a13af5240c779b07cc71ee65994a87b1
+P5.7 model/reasoning preference sub-slice accepted through eb66e45447c4d64e1ebbb5e8322bffa759c12773
 ```
 
 Accepted P5.6 lineage:
@@ -43,19 +44,19 @@ phase_name: natural non-blocking multi-chat product
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P5.7-conversation-scoped-preferences
-active_slice_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice_state: READY_NOT_STARTED
+active_slice_record: docs/research/P5.7_MODEL_FAMILY_REASONING_PREFERENCES.md
+active_slice_state: IN_PROGRESS_ACCEPTED_SUBSLICE
 current_gate_type: NONE
 blocking_validations: none
-accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266 -> 720102f2a13af5240c779b07cc71ee65994a87b1
-latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md
-next_action: begin P5.7 conversation-scoped preferences in a later explicitly authorized run
+accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266 -> 720102f2a13af5240c779b07cc71ee65994a87b1 -> eb66e45447c4d64e1ebbb5e8322bffa759c12773
+latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.7-MODEL-REASONING-ACCEPTANCE-eb66e45.md
+next_action: continue P5.7 with an explicit conversation-scoped preference-mutation sub-slice; model/reasoning selection is already accepted
 planned_successor_after_p5.7: P5.8-semantic-activity-reasoning-navigation-ux
 planned_successor_record: docs/research/P5.8_SEMANTIC_ACTIVITY_UX.md
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
-P5.6 is accepted. P5.7 is eligible but remains unstarted. Product review on 2026-08-29 added P5.8 as the planned semantic-activity/reasoning/navigation UX slice after P5.7 and before Phase 6; this does not make P5.8 active or implemented.
+P5.6 is accepted. P5.7 is in progress: its model-family/reasoning-effort sub-slice is accepted through `eb66e45`, while explicit conversation-scoped preference mutations remain. Product review on 2026-08-29 added P5.8 as the planned semantic-activity/reasoning/navigation UX slice after all P5.7 work and before Phase 6; this does not make P5.8 active or implemented.
 
 ---
 
@@ -213,9 +214,22 @@ P5-REAL-CONTINUITY            PASS
 
 Evidence: `evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`.
 
-## P5.7 Conversation-scoped preferences — READY_NOT_STARTED
+## P5.7 Conversation-scoped preferences — IN_PROGRESS
 
-This remains the exact active slice. Supported conversational settings such as temporary autonomy/response mode are intended to mutate through explicit host-owned capabilities while administrator/system ceilings remain authoritative.
+The model-family/model-variant/reasoning-effort preference sub-slice is accepted through `eb66e45`. Its immutable execution snapshot is format v2 and the exact explicit effort reaches all current App Server adapters.
+
+```text
+P5.7-ODOO-MODEL-REASONING-PREFERENCES PASS
+P5.7-JS-MODEL-REASONING-PICKER       PASS
+P5.3-FULL-ADDON-REGRESSION            PASS
+P5.7-HOOT-ADDON                       PASS
+P5-REAL-SETTINGS-SNAPSHOT             PASS
+P5.1-BROWSER-SETTINGS-SNAPSHOT        PASS
+```
+
+Evidence: `evidence/phase5/2026-08-29/P5.7-MODEL-REASONING-ACCEPTANCE-eb66e45.md`.
+
+P5.7 remains the exact active slice. Supported conversational settings such as response language/mode and temporary autonomy are still intended to mutate through explicit host-owned capabilities while administrator/system ceilings remain authoritative.
 
 ## P5.8 Semantic activity/reasoning/navigation UX — PLANNED_AFTER_P5.7
 
@@ -227,9 +241,9 @@ It must remain separate from private/raw reasoning and from Phase-6 TaskPlan/eff
 
 ---
 
-# Current known limitations after P5.6 acceptance
+# Current known limitations after the accepted P5.7 model/reasoning sub-slice
 
-- Conversation-scoped preference mutations are P5.7; P5.6 only carries the bounded session-settings slot/fallback.
+- Explicit conversation-scoped preference mutations remain P5.7 work; the accepted model/reasoning picker is currently a per-user future-turn preference.
 - Current public activity remains too close to raw capability lifecycle presentation; P5.8 is the planned semantic projection/UX repair.
 - One canonical effect step remains the P5 limit; multi-step effects are P6.
 - No external `CapabilityProvider` / Skill / ContextProvider / EvidenceProvider contract yet; those are later phases.
@@ -259,4 +273,4 @@ It must remain separate from private/raw reasoning and from Phase-6 TaskPlan/eff
 
 # Exact next action
 
-P5.7 conversation-scoped preferences is `READY_NOT_STARTED`. Begin it only in a run that explicitly selects that slice. If P5.7 reaches acceptance without discovering a prerequisite conflict, the planned successor is P5.8 semantic activity/reasoning/navigation UX (`P5.8_SEMANTIC_ACTIVITY_UX.md`) before Phase 6.
+Continue P5.7 with one coherent explicit conversation-scoped preference-mutation sub-slice, reusing the current snapshot/capability framework and preserving administrator ceilings. Do not reopen the accepted model/reasoning sub-slice without a regression. P5.8 remains planned only after the complete P5.7 contract is accepted.

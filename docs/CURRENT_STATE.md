@@ -12,14 +12,15 @@ P5.5 accepted through 8427c8849b1e1f3afa6337de1209a6027410c266
 P5.6 implementation through f141f1dd56b95c5eb3e372bc61a49f265772c657
 P5.6 acceptance harness through 29452d85e2c21f625fc38b5bda814524168be5f2
 P5.6 accepted through 720102f2a13af5240c779b07cc71ee65994a87b1
+P5.7 model/reasoning preference sub-slice accepted through eb66e45447c4d64e1ebbb5e8322bffa759c12773
 ```
 
-P5.6 is formally accepted. P5.7 is ready but not started. The exact live cursor is always `research/EXECUTION_STATE.md`.
+P5.6 is formally accepted. P5.7 is in progress: the provider-backed model/reasoning preference sub-slice is accepted, while explicit conversation-scoped preference mutations remain. The exact live cursor is always `research/EXECUTION_STATE.md`.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.16.0`.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.17.0`.
 - Embedded runtime; browser talks to Odoo, not a sidecar.
 - Odoo/PostgreSQL own conversations, messages, turns, effect state, private working checkpoints and public events.
 - Native `ir.cron` runs durable turns.
@@ -142,20 +143,21 @@ P5.2 accepted scheduler behavior includes:
 - wake-up after capacity release, cancellation and approval decisions;
 - bounded administrator diagnostics.
 
-P5.3 accepted execution-settings snapshot v1 stores:
+The accepted P5.7 model/reasoning sub-slice promotes the execution-settings snapshot to v2:
 
 ```text
 format_version
 reasoning_model
+reasoning_effort
 autonomy_profile
 policy
 ```
 
-Those selectors are immutable per turn. Revocable Odoo authorization, capability guards and provider availability remain dynamic.
+Legacy v1 snapshots remain readable. New turns capture the current per-user model and explicit provider-supported reasoning effort; `Predeterminado` stores no synthetic effort. Those selectors are immutable per turn. Revocable Odoo authorization, capability guards and provider availability remain dynamic.
 
 ## 7. Frontend/product state
 
-P5.1-P5.4 are accepted:
+P5.1-P5.4 plus the accepted P5.7 model/reasoning sub-slice provide:
 
 - per-conversation in-memory turn scopes rather than one global frontend execution lock;
 - user can navigate/open another conversation while work continues;
@@ -164,6 +166,9 @@ P5.1-P5.4 are accepted:
 - one authoritative final Assistant message;
 - explicit approval/failure/recovery presentation;
 - no fake `Pensando…` bubble when real activity exists.
+- provider-backed model families/variants in a nested Odoo dropdown;
+- a reasoning-effort selector bounded by the effective model's advertised catalog;
+- selectors that remain usable for future turns while another turn keeps its captured settings.
 
 Background scopes are still primarily web-client memory; P5.6 improves provider continuity through Odoo-owned turn context but does not by itself turn every frontend projection into durable UI state.
 
@@ -224,7 +229,7 @@ P5 IN_PROGRESS
   P5.4 COMPLETE
   P5.5 COMPLETE
   P5.6 COMPLETE
-  P5.7 READY_NOT_STARTED
+  P5.7 IN_PROGRESS (model/reasoning sub-slice accepted)
 P6+ NOT ELIGIBLE
 ```
 
@@ -256,5 +261,6 @@ All four gates passed on exact checkpoint `720102f`; see
 
 ## 13. Next action
 
-P5.7 conversation-scoped preferences is `READY_NOT_STARTED`. Begin it only in a later run that
-explicitly selects that slice; it was not implemented during P5.6 validation.
+Continue P5.7 with an explicit conversation-scoped preference-mutation sub-slice. Reuse the current
+host-owned snapshot and capability framework, preserve administrator ceilings, and do not treat the
+accepted per-user model/reasoning picker as completion of the broader conversation-scoped contract.

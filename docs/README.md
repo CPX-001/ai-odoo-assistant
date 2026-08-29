@@ -55,7 +55,8 @@ Documentation should make lifecycle status obvious:
 - **Historical / retired:** kept for lineage/evidence only.
 
 This is especially important while Phase 5 is active. At the time of this README update, P0-P4 and
-P5.1-P5.6 are accepted; P5.7 is ready but not started. The exact live cursor is always
+P5.1-P5.6 are accepted; P5.7 is in progress with its model/reasoning preference sub-slice accepted
+through `eb66e45`. The exact live cursor is always
 [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
 
 ## Documentation layers

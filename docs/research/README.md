@@ -33,6 +33,7 @@ Research documents do not override:
 | `P5.4_VALIDATION_RUNBOOK.md` | Executed P5.4 deterministic, full-addon, HOOT and HARD real browser acceptance procedure. |
 | `P5.5_POST_EFFECT_REASONING.md` | Completed P5.5 contract and acceptance record for verified-receipt continuation and natural post-effect final synthesis. |
 | `P5.5_VALIDATION_RUNBOOK.md` | Executed P5.5 focused Odoo, regression and real `P5-REAL-POST-EFFECT` acceptance procedure. |
+| `P5.7_MODEL_FAMILY_REASONING_PREFERENCES.md` | Accepted P5.7 sub-slice for provider-backed model families/variants, reasoning effort and immutable snapshot v2; broader P5.7 remains active. |
 | `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed status record for P3 public activity. |
 | `PHASE4_ANSWER_STREAMING.md` | Formal completed status record for P4 answer streaming. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
@@ -52,7 +53,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS; P5.1-P5.6 COMPLETE; P5.7 READY_NOT_STARTED
+P5 IN_PROGRESS; P5.1-P5.6 COMPLETE; P5.7 IN_PROGRESS (model/reasoning sub-slice accepted)
 P6+ not eligible
 ```
 
@@ -87,7 +88,13 @@ the deterministic suite with 227 unit tests plus 19 JS assertions, the full addo
 P5.6 ConversationContextManager is implemented and accepted. Its focused Odoo gate passed with 3
 tests, deterministic regression with 227 unit tests plus 19 JS assertions, full addon regression
 with 135 tests, and `P5-REAL-CONTINUITY` passed after review. The sanitized record is
-`evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`. P5.7 is ready but not started.
+`evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`.
+
+P5.7 is in progress. Its model-family/model-variant/reasoning-effort sub-slice passed 227 unit tests,
+19 JS contract assertions, the 190-execution full Odoo regression, 104 HOOT tests/409 assertions and
+both required real browser settings gates on checkpoint `eb66e45`. The sanitized record is
+`evidence/phase5/2026-08-29/P5.7-MODEL-REASONING-ACCEPTANCE-eb66e45.md`. This accepts only that
+sub-slice; explicit conversation-scoped preference mutations remain active P5.7 work.
 
 ## Recursive execution rule
 
