@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 
 from odoo import SUPERUSER_ID, api, models
 from odoo.exceptions import AccessError, ValidationError
@@ -146,21 +147,33 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             cancellation_requested=cancellation_requested,
             allow_plan_proposals=True,
         )
+        reasoning_activity_id = _new_reasoning_activity_id()
         event_sink(
             "reasoning.started",
             "Analizando petición",
-            {"reasoning_capabilities": len(registry.for_reasoning(context))},
+            {
+                "reasoning_capabilities": len(registry.for_reasoning(context)),
+                "activity_id": reasoning_activity_id,
+            },
         )
-        result = asyncio.run(
-            service.run(
-                message=turn.input_message,
-                conversation_summary=self._conversation_summary(turn),
+        try:
+            result = asyncio.run(
+                service.run(
+                    message=turn.input_message,
+                    conversation_summary=self._conversation_summary(turn),
+                )
             )
-        )
+        except Exception:
+            event_sink(
+                "reasoning.failed",
+                "Análisis no completado",
+                {"activity_id": reasoning_activity_id},
+            )
+            raise
         event_sink(
             "reasoning.completed",
             "Respuesta preparada",
-            {"confidence": result.confidence},
+            {"confidence": result.confidence, "activity_id": reasoning_activity_id},
         )
         if not result.plan:
             return self._read_only_response(turn, result, policy_snapshot)
@@ -309,26 +322,43 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             cancellation_requested=cancellation_requested,
             allow_plan_proposals=False,
         )
+        reasoning_activity_id = _new_reasoning_activity_id()
         context.emit(
             "reasoning.started",
             "Sintetizando resultado verificado",
-            {"post_effect": True},
+            {"post_effect": True, "activity_id": reasoning_activity_id},
         )
-        result = await service.run(
-            message=turn.input_message,
-            conversation_summary=self._conversation_summary(turn),
-        )
+        try:
+            result = await service.run(
+                message=turn.input_message,
+                conversation_summary=self._conversation_summary(turn),
+            )
+        except Exception:
+            context.emit(
+                "reasoning.failed",
+                "Síntesis no completada",
+                {"post_effect": True, "activity_id": reasoning_activity_id},
+            )
+            raise
         if result.plan:
             raise EmbeddedRuntimeError("agent_post_effect_plan_forbidden")
         context.emit(
             "reasoning.completed",
             "Respuesta final preparada",
-            {"confidence": result.confidence, "post_effect": True},
+            {
+                "confidence": result.confidence,
+                "post_effect": True,
+                "activity_id": reasoning_activity_id,
+            },
         )
         natural = dict(completed)
         natural["answer"] = result.answer
         natural["confidence"] = result.confidence
         return self._plan_response(turn, natural, policy)
+
+
+def _new_reasoning_activity_id():
+    return f"activity:v1:{secrets.token_hex(16)}"
 
 
 def _append_plan_prepared(working_items, prepared):
