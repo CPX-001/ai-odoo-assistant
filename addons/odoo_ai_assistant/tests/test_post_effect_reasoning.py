@@ -1,9 +1,11 @@
 import asyncio
+from uuid import uuid4
 
-from odoo import Command
+from odoo import SUPERUSER_ID, Command
 from odoo.tests.common import TransactionCase
 
 from ..models.embedded_runtime_host_loop import _append_verified_effect_receipt
+from ..models.turn_queue import _stage_completed_turn
 from ..runtime.agent import AgentTurnService, PostEffectDecisionEngine
 from ..runtime.agent.contracts import FinalAnswer, PlanStepProposal
 from ..runtime.agent.decision_validation import NextDecisionValidationError
@@ -138,6 +140,53 @@ class TestPostEffectReasoning(TransactionCase):
                     }
                 ],
             },
+        )
+
+    def test_completed_approved_turn_reuses_provisional_assistant_message(self):
+        env = self.env(user=self.user, su=False)
+        conversation = env["odoo.ai.conversation"].create(
+            {"title": "Post-effect completion"}
+        )
+        provisional = env["odoo.ai.message"].create(
+            {
+                "conversation_id": conversation.id,
+                "role": "assistant",
+                "content": "Propuesta pendiente de aprobación",
+                "internal_workflow": "AGENT",
+            }
+        )
+        turn = env["odoo.ai.turn"].with_user(SUPERUSER_ID).create(
+            {
+                "turn_uuid": str(uuid4()),
+                "conversation_id": conversation.id,
+                "user_id": self.user.id,
+                "company_id": self.user.company_id.id,
+                "state": "running",
+                "input_message": "Actualiza el contacto",
+                "allowed_company_ids": [self.user.company_id.id],
+                "assistant_message_id": provisional.id,
+            }
+        )
+
+        _stage_completed_turn(
+            turn.env,
+            turn,
+            {"answer": "El cambio quedó aplicado y verificado."},
+        )
+
+        turn.invalidate_recordset(["assistant_message_id", "state"])
+        provisional.invalidate_recordset(["content"])
+        self.assertEqual(turn.state, "completed")
+        self.assertEqual(turn.assistant_message_id, provisional)
+        self.assertEqual(provisional.content, "El cambio quedó aplicado y verificado.")
+        self.assertEqual(
+            env["odoo.ai.message"].search_count(
+                [
+                    ("conversation_id", "=", conversation.id),
+                    ("role", "=", "assistant"),
+                ]
+            ),
+            1,
         )
 
     def test_verified_receipt_keeps_effect_result_and_verification(self):

@@ -354,14 +354,18 @@ def _stage_completed_turn(env, turn, result):
     answer = result.get("answer")
     if not isinstance(answer, str) or not 1 <= len(answer.strip()) <= 16_384:
         raise ValidationError("Invalid embedded Assistant answer")
-    assistant_message = env["odoo.ai.message"].create(
-        {
-            "conversation_id": turn.conversation_id.id,
-            "role": "assistant",
-            "content": answer,
-            "internal_workflow": "AGENT",
-        }
-    )
+    assistant_message = turn.assistant_message_id
+    if assistant_message:
+        assistant_message.write({"content": answer})
+    else:
+        assistant_message = env["odoo.ai.message"].create(
+            {
+                "conversation_id": turn.conversation_id.id,
+                "role": "assistant",
+                "content": answer,
+                "internal_workflow": "AGENT",
+            }
+        )
     turn.write(
         {
             "state": "completed",

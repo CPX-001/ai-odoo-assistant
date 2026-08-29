@@ -51,7 +51,9 @@ export function reconcileFinalAssistantMessage(
     }
     const messageId = finalAssistantMessageId(turnId);
     const messages = safeMessages(scope);
-    const matching = messages.filter((message) => message?.message_id === messageId);
+    const isTurnLocalMessage = (message) =>
+        message?.message_id === messageId || message?.message_id?.startsWith(`${messageId}-`);
+    const matching = messages.filter(isTurnLocalMessage);
     const previous = matching.length ? matching[matching.length - 1] : null;
     const canonical = {
         ...(previous || {}),
@@ -66,7 +68,7 @@ export function reconcileFinalAssistantMessage(
     let inserted = false;
     const next = [];
     for (const message of messages) {
-        if (message?.message_id !== messageId) {
+        if (!isTurnLocalMessage(message)) {
             next.push(message);
             continue;
         }

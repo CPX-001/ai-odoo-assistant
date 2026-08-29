@@ -49,11 +49,18 @@ patch(assistantPanelService, {
         const service = super.start(env, dependencies);
         const state = service.state;
         const baseSubmit = service.submit.bind(service);
+        const baseDecide = service.decide.bind(service);
 
         service.submit = async (message) => {
             const submitted = await baseSubmit(message);
             reconcileFinalUxState(state);
             return submitted;
+        };
+
+        service.decide = async (decision) => {
+            const decided = await baseDecide(decision);
+            reconcileFinalUxState(state);
+            return decided;
         };
 
         service.finalUxPresentation = (conversationId = state.conversationId) => {

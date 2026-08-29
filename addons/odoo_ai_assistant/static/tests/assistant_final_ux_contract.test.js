@@ -76,6 +76,36 @@ test("reconciling the same final answer is idempotent", () => {
     expect(current.messages[1].created_at).toBe("2026-08-29T01:00:02.000Z");
 });
 
+test("approved turn replaces its provisional and suffixed local messages", () => {
+    const current = scope();
+    const turnId = current.turnId;
+    const messageId = finalAssistantMessageId(turnId);
+    current.messages.push(
+        {
+            message_id: messageId,
+            role: "assistant",
+            content: "Propuesta pendiente de aprobación",
+            created_at: "2026-08-29T01:00:01.000Z",
+        },
+        {
+            message_id: `${messageId}-final`,
+            role: "assistant",
+            content: "Respuesta final duplicada",
+            created_at: "2026-08-29T01:00:02.000Z",
+        }
+    );
+
+    const changed = reconcileFinalAssistantMessage(current, {
+        turnId,
+        answer: "Respuesta final autoritativa",
+    });
+
+    expect(changed).toBe(true);
+    expect(current.messages.filter((message) => message.role === "assistant")).toHaveLength(1);
+    expect(current.messages.at(-1).message_id).toBe(messageId);
+    expect(current.messages.at(-1).content).toBe("Respuesta final autoritativa");
+});
+
 test("real public activity suppresses only the fallback waiting status", () => {
     const current = scope();
     current.currentActivity = { sequence: 1, label: "Consultando Odoo" };
