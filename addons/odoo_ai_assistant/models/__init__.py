@@ -19,6 +19,7 @@ from . import embedded_runtime_host_loop as embedded_runtime_host_loop
 from . import turn_control as turn_control
 from . import turn_control_projection as turn_control_projection
 from . import turn_control_post_effect as turn_control_post_effect
+from . import turn_control_interrupt_persistence as turn_control_interrupt_persistence
 from . import user_preferences as user_preferences
 from . import activity_preferences as activity_preferences
 from . import public_references as public_references
