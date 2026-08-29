@@ -383,7 +383,9 @@ def _environment_facts(odoo_bin: list[str]) -> dict[str, object]:
             _version_output(["psql", "--version"]) if shutil.which("psql") else None
         ),
         "codex": _version_output(["codex", "--version"]) if shutil.which("codex") else None,
-        "playwright": _version_output(["npx", "playwright", "--version"]),
+        "playwright": _version_output(
+            ["node", "-p", "require('playwright/package.json').version"]
+        ),
     }
 
 
