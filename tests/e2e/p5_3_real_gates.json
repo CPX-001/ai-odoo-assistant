@@ -1,5 +1,13 @@
 {
   "format_version": 1,
+  "acceptance_batch": {
+    "command": "python tests/e2e/p5_3_acceptance_batch.py",
+    "required_before_p5_4": [
+      "P5.3-FULL-ADDON-REGRESSION",
+      "P5-REAL-SETTINGS-SNAPSHOT"
+    ],
+    "formal_result": "PASS_PENDING_EVIDENCE_REVIEW until the browser observation is reviewed and recorded"
+  },
   "gates": [
     {
       "id": "P5-REAL-SETTINGS-SNAPSHOT",

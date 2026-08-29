@@ -34,6 +34,44 @@ Important scenarios include:
 - sanitized progress/diagnostics with no secrets or chain-of-thought;
 - prompt injection/untrusted record/document text when relevant.
 
+## P5.3 -> P5.4 acceptance battery
+
+`p5_3_acceptance_batch.py` is the single local orchestrator for the remaining P5.3 acceptance work
+before P5.4 becomes eligible. It preserves the formal gate IDs but runs them in one execution:
+
+```text
+P5.3-FULL-ADDON-REGRESSION
+P5-REAL-SETTINGS-SNAPSHOT
+```
+
+It requires a clean exact SHA, runs the complete addon Odoo test battery with `--stop-after-init`,
+then starts an isolated loopback Odoo process with two cron threads and executes
+`p5_3_settings_snapshot_browser.mjs`. The browser observation is still
+`OBSERVED_OK_NOT_AUTOMATIC_PASS`; the batch ends in `PASS_PENDING_EVIDENCE_REVIEW` so formal roadmap
+acceptance remains an explicit evidence-review step.
+
+Required environment:
+
+```text
+ODOO_BIN
+ODOO_CONF
+ODOO_AI_ADDONS_PATH
+ODOO_AI_P5_BASE_URL
+ODOO_AI_P5_DB
+ODOO_AI_P5_LOGIN
+ODOO_AI_P5_PASSWORD
+```
+
+Example:
+
+```bash
+python tests/e2e/p5_3_acceptance_batch.py \
+  --summary-out /tmp/p5_3_acceptance.json
+```
+
+See `../../docs/research/P5.3_VALIDATION_RUNBOOK.md` for the complete gate contract and failure
+handling rules.
+
 ## Foundation Stabilization Phase 0 capture
 
 `embedded_phase0_scenarios.json` is the machine-readable Phase 0 scenario catalog.
