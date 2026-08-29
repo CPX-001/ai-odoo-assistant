@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 28
+State format: 29
 Updated: 2026-08-30
 
 Accepted foundation/runtime lineage:
@@ -25,7 +25,9 @@ Roadmaps / active records:
 docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 docs/research/P5.8_SEMANTIC_ACTIVITY_UX.md
 docs/research/P5.8_IMPLEMENTATION.md
+docs/research/P5.8_TURN_CONTROL_IMPLEMENTATION.md
 docs/research/P5.8_VALIDATION_RUNBOOK.md
+docs/research/P5.8_CODEX_TEST_HANDOFF.md
 ```
 
 ## Current cursor
@@ -39,12 +41,13 @@ active_slice: P5.8-semantic-activity-reasoning-navigation-ux
 active_slice_record: docs/research/P5.8_IMPLEMENTATION.md
 active_slice_state: REAL_ENV_VALIDATION_REQUIRED
 current_gate_type: HARD
-blocking_validations: P5.8-DETERMINISTIC-REGRESSION, P5.8-FULL-ADDON-REGRESSION, P5.8-HOOT-ADDON, P5-REAL-SEMANTIC-ACTIVITY, P5-REAL-ACTIVITY-DEDUPE, P5-REAL-REASONING-SUMMARY, P5-REAL-ACTIVITY-I18N, P5-REAL-NAVIGATION-REFS, P5-REAL-BATCH-DISCLOSURE, P5-REAL-ACTIVITY-RECONNECT
+blocking_validations: P5.8-DETERMINISTIC-REGRESSION, P5.8-FULL-ADDON-REGRESSION, P5.8-HOOT-ADDON, P5-REAL-SEMANTIC-ACTIVITY, P5-REAL-ACTIVITY-DEDUPE, P5-REAL-REASONING-SUMMARY, P5-REAL-ACTIVITY-I18N, P5-REAL-NAVIGATION-REFS, P5-REAL-BATCH-DISCLOSURE, P5-REAL-ACTIVITY-RECONNECT, P5-REAL-TURN-STOP-REDIRECT, P5-REAL-TURN-EFFECT-BOUNDARY-RACE, P5-REAL-TURN-REVERSION
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266 -> 720102f2a13af5240c779b07cc71ee65994a87b1 -> eb66e45447c4d64e1ebbb5e8322bffa759c12773 -> 074a71c29a6a6109ae7412e7b1f9850c4449e379
 p5_8_implementation_checkpoint: bfc774dd0ad1992e71ab05f75c4897d088dc7fe5
+p5_8_turn_control_implementation_checkpoint: ffb381669b85972c77b692f7edecb4d871607e1e
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.7-REAL-ACCEPTANCE-074a71c.md
 latest_executed_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-FOCUSED-AND-LANGUAGE-faf21f4.md
-next_action: pull exact current main into the disposable Odoo 18 validation environment and execute docs/research/P5.8_VALIDATION_RUNBOOK.md; process local/full-addon/HOOT results first, then the real semantic/reasoning/i18n/navigation/batch/reconnect gates; do not mark P5.8 COMPLETE or start P6 until the HARD gates are reviewed
+next_action: pull exact current main into the disposable Odoo 18 validation environment and execute docs/research/P5.8_CODEX_TEST_HANDOFF.md / P5.8_VALIDATION_RUNBOOK.md; process deterministic/full-addon/HOOT first, then the complete real semantic/reasoning/i18n/navigation/batch/reconnect/Stop/redirect/effect-boundary/reversion chain; do not mark P5.8 COMPLETE or start P6 until the HARD gates are reviewed
 planned_successor_after_p5.8: Phase 6 bounded multi-step EffectPlan / TaskPlan work
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
@@ -88,20 +91,23 @@ fresh ACL/existence revalidation immediately before navigation
 generic effective-schema/access-driven record presentation
 safe result-identity projection from bounded capability results
 five-row progressive disclosure with hard browser limit and list/model fallback
+current-chat Stop with durable Odoo cancellation plus best-effort Codex turn/interrupt
+ordered same-turn redirect while queued/running and proposal supersession while awaiting approval
+provider-applied redirect sequence tracking and stale-decision rejection
+transaction-scoped advisory serialization of browser control versus write-barrier commit
+visible interrupted partial-answer persistence without cross-chat cancellation
+host-only verified compensation for patch/archive effects with conflict-safe preconditions
 ```
 
-Implementation details and the deliberate presenter simplification are recorded in `P5.8_IMPLEMENTATION.md`.
+Implementation details and the deliberate presenter simplification are recorded in `P5.8_IMPLEMENTATION.md`; interactive-control/effect-boundary details are recorded in `P5.8_TURN_CONTROL_IMPLEMENTATION.md`.
 
-Prepared deterministic/Odoo/HOOT tests cover correlation, repeated identical operations, provider completion/failure, transient filtering, replay, user preference isolation, reasoning-summary bounds/privacy, current ACL reference validation, generic field presentation, read/mutation result references and disclosure limits.
+Prepared deterministic/Odoo/HOOT tests cover correlation, repeated identical operations, provider completion/failure, transient filtering, replay, user preference isolation, reasoning-summary bounds/privacy, current ACL reference validation, generic field presentation, read/mutation result references, disclosure limits, composer control modes, ordered redirects, turn isolation, approval supersession, advisory-lock keying and compensation conflict safety.
 
-The requested focused P5.8 selectors and the real response-language prompt-redirection gate were
-rerun on `faf21f4809cf04020e795a8b824b3197b56c4ace` and passed. Evidence is recorded in
-`evidence/phase5/2026-08-30/P5.8-FOCUSED-AND-LANGUAGE-faf21f4.md`. This bounded execution does not
-represent the remaining full P5.8 HARD chain as executed or accepted.
+The requested focused P5.8 selectors and the real response-language prompt-redirection gate were rerun on `faf21f4809cf04020e795a8b824b3197b56c4ace` and passed. Evidence is recorded in `evidence/phase5/2026-08-30/P5.8-FOCUSED-AND-LANGUAGE-faf21f4.md`. That bounded execution predates the interactive turn-control extension and does not represent the remaining full P5.8 HARD chain as executed or accepted.
 
 ## Required P5.8 gate chain
 
-Run `P5.8_VALIDATION_RUNBOOK.md` on one coherent materially unchanged checkpoint:
+Run `P5.8_CODEX_TEST_HANDOFF.md` and `P5.8_VALIDATION_RUNBOOK.md` on one coherent materially unchanged checkpoint:
 
 ```text
 P5.8-DETERMINISTIC-REGRESSION
@@ -114,6 +120,9 @@ P5.8-DETERMINISTIC-REGRESSION
   -> P5-REAL-NAVIGATION-REFS
   -> P5-REAL-BATCH-DISCLOSURE
   -> P5-REAL-ACTIVITY-RECONNECT
+  -> P5-REAL-TURN-STOP-REDIRECT
+  -> P5-REAL-TURN-EFFECT-BOUNDARY-RACE
+  -> P5-REAL-TURN-REVERSION
 ```
 
 `P5-REAL-REASONING-SUMMARY` may record the provider feature as unsupported only if the reviewed product observation proves the privacy-safe fallback: no raw/private reasoning reaches browser state and semantic host activity remains correct. Unsupported provider output is not itself a reason to invent or expose a private reasoning channel.
@@ -125,6 +134,8 @@ P5.8-DETERMINISTIC-REGRESSION
 - `CapabilityDefinition` remains atomic executable authority.
 - Provider/context/presentation data never grants effect authority.
 - P5.5 durable write barrier, verification and post-effect certainty remain authoritative.
+- Browser Stop/redirect cannot bypass policy, approval, ACL, preview, verification or recovery.
+- The effect-boundary advisory lock orders control versus barrier commit only; it does not grant execution authority and is not held across provider/business work.
 - Raw provider output/private chain-of-thought is never public activity.
 - Answer deltas, semantic activity and readable reasoning summaries are independent presentation channels.
 - Typed references are revalidated under current Odoo access before navigation; model-generated arbitrary routes are never trusted.
