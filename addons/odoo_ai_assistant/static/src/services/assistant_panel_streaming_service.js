@@ -12,6 +12,7 @@ import {
 } from "@odoo_ai_assistant/services/assistant_failure_contract";
 import { streamAssistantChatLive } from "@odoo_ai_assistant/services/assistant_live_stream_client";
 
+const MAX_ACTIVITY_EVENTS = 1024;
 let pendingMessageSequence = 0;
 
 function storage() {
@@ -59,7 +60,7 @@ function appendActivity(state, event) {
     if (existing.some((item) => item.sequence === event.sequence)) {
         return;
     }
-    const next = [...existing, event].slice(-100);
+    const next = [...existing, event].slice(-MAX_ACTIVITY_EVENTS);
     state.activityEvents = next;
     state.currentActivity = event;
 }
