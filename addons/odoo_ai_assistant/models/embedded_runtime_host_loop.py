@@ -14,7 +14,7 @@ from ..runtime.agent import (
     CapabilityPlanService,
     PostEffectDecisionEngine,
 )
-from ..runtime.agent.codex_decision import CodexDecisionEngine
+from ..runtime.agent.interactive_codex import InteractiveCodexDecisionEngine
 from ..runtime.agent.provider_failure import FailureNormalizingDecisionEngine
 from ..runtime.agent.working_transcript import (
     WorkingTranscriptError,
@@ -117,6 +117,19 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
         except WorkingTranscriptError as error:
             raise EmbeddedRuntimeError(error.code) from error
 
+        # A redirect that arrived after an earlier provider decision invalidates that private
+        # working transcript before a fresh claim resumes. The original user message remains on
+        # the turn and ordered redirects are projected independently by InteractiveCodexDecisionEngine.
+        control_snapshot = turn.runtime_control_snapshot(turn.turn_uuid)
+        if control_snapshot["cancel_requested"]:
+            raise EmbeddedRuntimeError("agent_cancelled")
+        if control_snapshot["sequence"] > control_snapshot["applied_sequence"]:
+            working_items = ()
+            try:
+                persist_working_transcript(turn, lease_token, working_items)
+            except RuntimeError as error:
+                raise EmbeddedRuntimeError(str(error)) from error
+
         def persist(items):
             try:
                 persist_working_transcript(
@@ -128,7 +141,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 raise EmbeddedRuntimeError(str(error)) from error
 
         decision_engine = FailureNormalizingDecisionEngine(
-            CodexDecisionEngine(
+            InteractiveCodexDecisionEngine(
                 settings,
                 cancellation_requested=cancellation_requested,
             ),
@@ -163,6 +176,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                     conversation_summary=self._conversation_summary(turn),
                 )
             )
+            _ensure_turn_control_current(turn)
         except Exception:
             event_sink(
                 "reasoning.failed",
@@ -181,6 +195,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
         if len(result.plan) != 1:
             raise EmbeddedRuntimeError("agent_plan_limit_exceeded")
         prepared = asyncio.run(plans.prepare(result.plan))
+        _ensure_turn_control_current(turn)
         prepared_items = _append_plan_prepared(service.working_items, prepared)
         envelope = {
             "format_version": 1,
@@ -233,6 +248,9 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 raise EmbeddedRuntimeError(error.code) from error
 
         def before_effect():
+            # A late Stop or redirect must win before the durable write barrier. This closes the
+            # small race between the provider returning a plan and Odoo beginning its effect.
+            _ensure_turn_control_current(turn)
             # Commit pending preview activity, the plan transcript and the barrier together on
             # the primary worker cursor before the first effect.
             _commit_plan_barrier(
@@ -302,7 +320,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
 
         decision_engine = PostEffectDecisionEngine(
             FailureNormalizingDecisionEngine(
-                CodexDecisionEngine(
+                InteractiveCodexDecisionEngine(
                     self._codex_settings(turn),
                     cancellation_requested=cancellation_requested,
                 ),
@@ -333,6 +351,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 message=turn.input_message,
                 conversation_summary=self._conversation_summary(turn),
             )
+            _ensure_turn_control_current(turn)
         except Exception:
             context.emit(
                 "reasoning.failed",
@@ -354,7 +373,15 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
         natural = dict(completed)
         natural["answer"] = result.answer
         natural["confidence"] = result.confidence
-        return self._plan_response(turn, natural, policy)
+        return self._plan_response(turn, natural, policy, completed=True)
+
+
+def _ensure_turn_control_current(turn):
+    snapshot = turn.runtime_control_snapshot(turn.turn_uuid)
+    if snapshot["cancel_requested"]:
+        raise EmbeddedRuntimeError("agent_cancelled")
+    if snapshot["sequence"] != snapshot["applied_sequence"]:
+        raise EmbeddedRuntimeError("agent_redirected")
 
 
 def _new_reasoning_activity_id():
