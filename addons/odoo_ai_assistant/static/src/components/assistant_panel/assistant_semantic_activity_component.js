@@ -1,8 +1,14 @@
 /** @odoo-module **/
 
+import { useState } from "@odoo/owl";
 import { _t } from "@web/core/l10n/translation";
 import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
+import {
+    openPublicReference,
+    referenceDisclosure,
+    resourceReferences,
+} from "@odoo_ai_assistant/services/assistant_public_reference_service";
 import { semanticActivityPresentation } from "@odoo_ai_assistant/services/assistant_semantic_activity";
 
 function durationLabel(milliseconds) {
@@ -115,6 +121,11 @@ function visibleReasoningParts(state, preferences) {
 }
 
 patch(AssistantPanel.prototype, {
+    setup() {
+        super.setup(...arguments);
+        this.semanticReferenceUi = useState({ visibleByKey: {} });
+    },
+
     get semanticActivity() {
         return semanticActivityPresentation(this.state.activityEvents, {
             running: Boolean(this.state.loading),
@@ -124,14 +135,25 @@ patch(AssistantPanel.prototype, {
 
     get activityItems() {
         const activity = this.semanticActivity;
-        return activity.items.map((item) => ({
-            ...item,
-            display_label: `${semanticLabel(item)}${technicalSuffix(item, activity.preferences)}`,
-            duration_label:
-                activity.preferences.show_step_durations && item.duration_ms !== null
-                    ? durationLabel(item.duration_ms)
-                    : "",
-        }));
+        return activity.items.map((item) => {
+            const references = resourceReferences(item.resource);
+            const disclosure = referenceDisclosure(references, {
+                pageSize: activity.preferences.batch_page_size,
+                visibleCount: this.semanticReferenceUi.visibleByKey[item.key] || null,
+            });
+            return {
+                ...item,
+                display_label: `${semanticLabel(item)}${technicalSuffix(item, activity.preferences)}`,
+                duration_label:
+                    activity.preferences.show_step_durations && item.duration_ms !== null
+                        ? durationLabel(item.duration_ms)
+                        : "",
+                references: disclosure.visible,
+                reference_remaining_count: disclosure.remaining_count,
+                reference_next_count: disclosure.next_count,
+                can_show_more_references: disclosure.can_show_more,
+            };
+        });
     },
 
     get activityReasoningSummaryParts() {
@@ -163,6 +185,33 @@ patch(AssistantPanel.prototype, {
 
     get activityReasoningSummaryLevel() {
         return this.semanticActivity.preferences.reasoning_summary;
+    },
+
+    activityShowMoreLabel(item) {
+        if (!item?.reference_next_count) {
+            return "";
+        }
+        if (item.reference_remaining_count === item.reference_next_count) {
+            return _t("Mostrar los %s restantes", item.reference_remaining_count);
+        }
+        return _t("Mostrar %s más", item.reference_next_count);
+    },
+
+    showMoreActivityReferences(item) {
+        if (!item?.key || !item.reference_next_count) {
+            return;
+        }
+        const current = this.semanticReferenceUi.visibleByKey[item.key] ||
+            this.semanticActivity.preferences.batch_page_size;
+        const maximum = this.semanticActivity.preferences.limits.max_rendered_batch_rows;
+        this.semanticReferenceUi.visibleByKey[item.key] = Math.min(
+            maximum,
+            current + item.reference_next_count
+        );
+    },
+
+    async openActivityReference(reference) {
+        return openPublicReference(reference, { actionService: this.actionService });
     },
 
     async changeActivityDetailLevel(event) {
