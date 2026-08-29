@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 17
+State format: 18
 Updated: 2026-08-29
 Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
 Accepted P5.1 implementation lineage through: `f7f924ce944db86e896745fef83ea2fb6fd6583a`
@@ -15,6 +15,7 @@ P5.4 implementation record: `docs/research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX
 Accepted P5.4 validation/harness lineage through: `3e2b38d68fe172cd2cf92d7794159f73476ac23d`
 P5.5 implementation record: `docs/research/P5.5_POST_EFFECT_REASONING.md`
 P5.5 implementation/test lineage through: `c19eda29dd790e855d43127fb96cec4460c32d40`
+P5.5 complete acceptance harness: `tests/e2e/p5_5_acceptance_batch.py`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
@@ -27,13 +28,14 @@ active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P5.5-post-effect-reasoning
 active_slice_record: docs/research/P5.5_POST_EFFECT_REASONING.md
 active_slice_state: LOCAL_VALIDATION_REQUIRED
-current_gate_type: HARD
-blocking_validations: P5.5-ODOO-POST-EFFECT
+current_gate_type: HARD_LOCAL_AND_REAL
+blocking_validations: P5.5-ODOO-POST-EFFECT, P5.5-DETERMINISTIC-REGRESSION, P5.5-FULL-ADDON-REGRESSION, P5-REAL-POST-EFFECT
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d
 acceptance_evidence: docs/research/evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md
 latest_validation_evidence: docs/research/evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md
-next_slice: P5.6-conversation-context-manager
-next_slice_state: BLOCKED
+next_slice: P5.5-acceptance-batch
+next_slice_state: LOCAL_VALIDATION_REQUIRED
+blocked_successor: P5.6-conversation-context-manager
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
@@ -43,8 +45,9 @@ browser/provider acceptance are complete. P5.2 scheduler capacity, causal orderi
 release wake-up, diagnostics and real two-cron behavior are accepted. P5.3 stable settings snapshot
 and all four of its focused, deterministic, full-addon and real browser gates are accepted. P5.4
 final activity/answer/failure UX and all three local plus four HARD real gates are accepted. P5.5
-post-effect reasoning is implemented with focused Odoo coverage prepared, but no P5.5 validation has
-been executed in this GitHub-only run. The immediate HARD gate is `P5.5-ODOO-POST-EFFECT`.
+post-effect reasoning is implemented and its complete focused/regression/real acceptance harness is
+prepared, but no P5.5 validation result is claimed from this GitHub-only run. P5.6 remains blocked
+until the prepared P5.5 batch is executed and accepted.
 
 ---
 
@@ -310,15 +313,27 @@ Current implementation:
 - rejects a repeated `PlanStepProposal` through the normal host correction path;
 - preserves the completed verified browser plan while replacing fixed host completion prose with provider-produced final prose;
 - normalizes provider failures after verification as `effect_state=confirmed`, never as effect-safe blind retries;
-- adds focused deterministic Odoo coverage in `test_post_effect_reasoning.py`.
+- covers oversized-receipt compaction and missing-receipt rejection in focused Odoo tests;
+- prepares a real Chromium gate that requires a durable post-receipt `final_answer` and forbids a second executable plan proposal;
+- packages focused, deterministic, full-addon and real checks into one acceptance command.
 
-No P5.5 test has been executed in this GitHub-only run. The immediate HARD gate is:
+Prepared acceptance command:
+
+```bash
+python tests/e2e/p5_5_acceptance_batch.py \
+  --summary-out /tmp/p5_5_acceptance.json
+```
+
+No P5.5 validation result has been executed or accepted in this GitHub-only preparation. Formal completion still requires:
 
 ```text
 P5.5-ODOO-POST-EFFECT
+P5.5-DETERMINISTIC-REGRESSION
+P5.5-FULL-ADDON-REGRESSION
+P5-REAL-POST-EFFECT
 ```
 
-P5.6 remains blocked until P5.5 validation is processed in order.
+P5.6 remains blocked until all four pass on one coherent lineage and the real observation is reviewed.
 
 ---
 
@@ -357,12 +372,14 @@ These limitations define the remaining Phase 5 and later work:
 
 # Exact next action
 
-Stop at the P5.5 implementation boundary and run only the immediate focused HARD gate described in
-`P5.5_VALIDATION_RUNBOOK.md`:
+Run the complete prepared P5.5 acceptance batch on the real disposable Odoo/Codex environment:
 
-```text
-P5.5-ODOO-POST-EFFECT
+```bash
+python tests/e2e/p5_5_acceptance_batch.py \
+  --summary-out /tmp/p5_5_acceptance.json
 ```
 
-Do not mark P5.5 complete, run its later real gate, or start P5.6 until this focused Odoo gate has
-actual executable evidence. If it fails, repair the smallest responsible P5.5 layer and rerun it.
+Do not stop manually after a green focused gate. The batch should continue through deterministic,
+full-addon and real post-effect validation unless a genuine failure blocks it. If every gate succeeds,
+review the sanitized observation, record exact-SHA evidence, mark P5.5 `COMPLETE`, and continue directly
+into P5.6. If any gate fails, repair the smallest responsible layer and rerun the affected chain.

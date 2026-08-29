@@ -6,6 +6,11 @@ from odoo.tests.common import TransactionCase
 from ..models.embedded_runtime_host_loop import _append_verified_effect_receipt
 from ..runtime.agent import AgentTurnService, PostEffectDecisionEngine
 from ..runtime.agent.contracts import FinalAnswer, PlanStepProposal
+from ..runtime.agent.decision_validation import NextDecisionValidationError
+from ..runtime.agent.provider_failure import (
+    FailureNormalizingDecisionEngine,
+    ProviderFailureError,
+)
 from ..runtime.agent.working_transcript import append_working_item
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
@@ -43,6 +48,24 @@ class _RepeatThenSummarizeEngine:
             "El cambio ya quedó aplicado y verificado.",
             "high",
         )
+
+
+class _FinalOnlyEngine:
+    def __init__(self):
+        self.calls = 0
+
+    async def next_decision(self, **_kwargs):
+        self.calls += 1
+        return FinalAnswer(
+            "final_answer",
+            "Resultado final desde el proveedor.",
+            "high",
+        )
+
+
+class _FailingPostEffectProvider:
+    async def next_decision(self, **_kwargs):
+        raise TimeoutError("post-effect provider timeout")
 
 
 class TestPostEffectReasoning(TransactionCase):
@@ -92,6 +115,31 @@ class TestPostEffectReasoning(TransactionCase):
         )
         return context, registry, executor
 
+    def _verified_working_items(self):
+        working = append_working_item(
+            (),
+            "user_input",
+            {"message": "Actualiza el contacto"},
+        )
+        return append_working_item(
+            working,
+            "verified_effect_receipt",
+            {
+                "verified": True,
+                "plan_state": "completed",
+                "step_count": 1,
+                "steps": [
+                    {
+                        "position": 0,
+                        "capability": "odoo.record.patch",
+                        "title": "Actualizar contacto",
+                        "result": {"model": "res.partner", "record_id": self.partner.id},
+                        "verification": {"name": "POST EFFECT VERIFIED"},
+                    }
+                ],
+            },
+        )
+
     def test_verified_receipt_keeps_effect_result_and_verification(self):
         items = append_working_item((), "user_input", {"message": "Actualiza el contacto"})
         completed_plan = {
@@ -119,31 +167,103 @@ class TestPostEffectReasoning(TransactionCase):
             "POST EFFECT VERIFIED",
         )
 
-    def test_post_effect_boundary_rejects_repeat_plan_and_allows_natural_final_answer(self):
-        context, registry, executor = self._runtime()
+    def test_oversized_verified_receipt_falls_back_to_compact_authoritative_context(self):
+        items = append_working_item((), "user_input", {"message": "Actualiza el contacto"})
+        completed_plan = {
+            "state": "completed",
+            "steps": [
+                {
+                    "position": 0,
+                    "capability": "odoo.record.patch",
+                    "title": "Actualizar contacto",
+                    "state": "completed",
+                    "result": {
+                        "model": "res.partner",
+                        "record_id": self.partner.id,
+                        "oversized": "x" * 40_000,
+                    },
+                    "verification": {"name": "POST EFFECT VERIFIED"},
+                }
+            ],
+        }
+
+        result = _append_verified_effect_receipt(items, completed_plan)
+        receipt = result[-1]
+
+        self.assertEqual(receipt.kind, "verified_effect_receipt")
+        self.assertTrue(receipt.data["verified"])
+        self.assertTrue(receipt.data["details_omitted"])
+        self.assertEqual(receipt.data["step_count"], 1)
+        self.assertEqual(receipt.data["capabilities"], ["odoo.record.patch"])
+        self.assertNotIn("steps", receipt.data)
+
+    def test_post_effect_boundary_requires_verified_receipt_before_provider_call(self):
+        context, registry, _executor = self._runtime()
+        underlying = _FinalOnlyEngine()
+        engine = PostEffectDecisionEngine(underlying)
         working = append_working_item(
             (),
             "user_input",
             {"message": "Actualiza el contacto"},
         )
-        working = append_working_item(
-            working,
-            "verified_effect_receipt",
-            {
-                "verified": True,
-                "plan_state": "completed",
-                "step_count": 1,
-                "steps": [
-                    {
-                        "position": 0,
-                        "capability": "odoo.record.patch",
-                        "title": "Actualizar contacto",
-                        "result": {"model": "res.partner", "record_id": self.partner.id},
-                        "verification": {"name": "POST EFFECT VERIFIED"},
-                    }
-                ],
-            },
+
+        with self.assertRaises(NextDecisionValidationError) as captured:
+            asyncio.run(
+                engine.next_decision(
+                    message="Actualiza el contacto",
+                    conversation_summary="",
+                    context=context,
+                    reasoning_capabilities=registry.for_reasoning(context),
+                    planning_capabilities=registry.for_planning(context),
+                    working_items=tuple(item.payload() for item in working),
+                    remaining_budgets={
+                        "provider_decisions": 1,
+                        "capability_calls": 1,
+                        "correctable_failures": 1,
+                        "transcript_bytes": 1_000,
+                        "result_bytes": 1_000,
+                    },
+                )
+            )
+
+        self.assertEqual(captured.exception.code, "agent_post_effect_receipt_missing")
+        self.assertEqual(underlying.calls, 0)
+
+    def test_post_effect_provider_failure_is_marked_after_confirmed_effect(self):
+        context, registry, _executor = self._runtime()
+        working = self._verified_working_items()
+        engine = PostEffectDecisionEngine(
+            FailureNormalizingDecisionEngine(
+                _FailingPostEffectProvider(),
+                component="codex",
+                effect_state="confirmed",
+            )
         )
+
+        with self.assertRaises(ProviderFailureError) as captured:
+            asyncio.run(
+                engine.next_decision(
+                    message="Actualiza el contacto",
+                    conversation_summary="",
+                    context=context,
+                    reasoning_capabilities=registry.for_reasoning(context),
+                    planning_capabilities=registry.for_planning(context),
+                    working_items=tuple(item.payload() for item in working),
+                    remaining_budgets={
+                        "provider_decisions": 1,
+                        "capability_calls": 1,
+                        "correctable_failures": 1,
+                        "transcript_bytes": 1_000,
+                        "result_bytes": 1_000,
+                    },
+                )
+            )
+
+        self.assertEqual(captured.exception.failure.effect_state, "confirmed")
+
+    def test_post_effect_boundary_rejects_repeat_plan_and_allows_natural_final_answer(self):
+        context, registry, executor = self._runtime()
+        working = self._verified_working_items()
         underlying = _RepeatThenSummarizeEngine(record_id=self.partner.id)
         service = AgentTurnService(
             registry=registry,

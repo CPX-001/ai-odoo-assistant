@@ -1,0 +1,38 @@
+{
+  "phase": "P5.5",
+  "gates": [
+    {
+      "id": "P5-REAL-POST-EFFECT",
+      "type": "HARD_REAL_ENV",
+      "runner": "tests/e2e/p5_5_post_effect_browser.mjs",
+      "preconditions": [
+        "P5.4 accepted",
+        "P5.5 focused and regression gates green",
+        "disposable Odoo 18 Community database with odoo_ai_* prefix",
+        "authenticated current Codex runtime",
+        "Playwright/Chromium available",
+        "ODOO_AI_P5_APPROVAL_ACTION_ID identifies a res.partner form action usable by the validation user"
+      ],
+      "fixture": {
+        "model": "res.partner",
+        "created_by_runner": true,
+        "field": "ref",
+        "cleanup": "best-effort unlink plus disposable database teardown"
+      },
+      "required_observations": [
+        "one odoo.record.patch proposal reaches awaiting_confirmation",
+        "record is unchanged before approval",
+        "approved effect executes once and verifies",
+        "durable write barrier is present",
+        "working transcript contains exactly one verified_effect_receipt",
+        "one final_answer appears after the verified receipt",
+        "final provider answer contains the per-run requested marker",
+        "final answer is not deterministic _completion_answer prose",
+        "no plan_step_proposed enters the executable transcript after the verified receipt",
+        "completed plan and browser receipt still contain exactly one verified step",
+        "one final Assistant message remains in the UI"
+      ],
+      "success_marker": "OBSERVED_OK_NOT_AUTOMATIC_PASS"
+    }
+  ]
+}
