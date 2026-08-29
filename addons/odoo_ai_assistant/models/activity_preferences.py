@@ -68,9 +68,9 @@ class AssistantUserPreference(models.Model):
         for record in self:
             threshold = record.activity_transient_threshold_ms
             page_size = record.activity_batch_page_size
-            if threshold and not MIN_TRANSIENT_THRESHOLD_MS <= threshold <= MAX_TRANSIENT_THRESHOLD_MS:
+            if not MIN_TRANSIENT_THRESHOLD_MS <= threshold <= MAX_TRANSIENT_THRESHOLD_MS:
                 raise ValidationError("Invalid Assistant activity transient threshold.")
-            if page_size and not MIN_BATCH_PAGE_SIZE <= page_size <= MAX_BATCH_PAGE_SIZE:
+            if not MIN_BATCH_PAGE_SIZE <= page_size <= MAX_BATCH_PAGE_SIZE:
                 raise ValidationError("Invalid Assistant activity batch page size.")
 
     @api.model
