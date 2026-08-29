@@ -153,7 +153,7 @@ def _reasoning_metadata(item):
     if default is not None and (
         not isinstance(default, str)
         or not _EFFORT_PATTERN.fullmatch(default)
-        or (seen and default not in seen)
+        or default not in seen
     ):
         raise CodexModelCatalogError()
     return efforts, default

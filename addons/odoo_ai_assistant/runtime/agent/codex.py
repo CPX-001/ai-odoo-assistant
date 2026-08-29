@@ -140,6 +140,19 @@ class CodexAgentSettings:
             raise CodexAgentError("codex_shutdown_timeout_invalid")
 
 
+def _model_thread_options(settings: CodexAgentSettings) -> dict[str, object]:
+    """Return the bounded model configuration shared by every App Server adapter."""
+
+    options: dict[str, object] = {}
+    if settings.model:
+        options["model"] = settings.model
+    if settings.reasoning_effort:
+        options["config"] = {
+            "model_reasoning_effort": settings.reasoning_effort,
+        }
+    return options
+
+
 class CodexReasoningEngine:
     """Translate CapabilityRegistry views into one bounded App Server turn."""
 
@@ -197,16 +210,7 @@ class CodexReasoningEngine:
                     "ephemeral": True,
                     "runtimeWorkspaceRoots": [],
                     "sandbox": "read-only",
-                    **({"model": self._settings.model} if self._settings.model else {}),
-                    **(
-                        {
-                            "config": {
-                                "model_reasoning_effort": self._settings.reasoning_effort
-                            }
-                        }
-                        if self._settings.reasoning_effort
-                        else {}
-                    ),
+                    **_model_thread_options(self._settings),
                     "baseInstructions": _BASE_INSTRUCTIONS,
                 },
                 timeout=_remaining(deadline),

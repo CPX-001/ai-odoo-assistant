@@ -130,4 +130,28 @@ test("model preferences reject duplicate, malformed or inconsistent metadata", (
             can_manage_settings: false,
         })
     ).toBe(null);
+
+    const missingSupported = model("gpt-5.6-sol", "sol");
+    missingSupported.supported_reasoning_efforts = [];
+    expect(
+        normalizeModelPreferences({
+            ok: true,
+            models: [missingSupported],
+            default_model: "gpt-5.6-sol",
+            selected_model: null,
+            selected_reasoning_effort: null,
+            can_manage_settings: false,
+        })
+    ).toBe(null);
+
+    expect(
+        normalizeModelPreferences({
+            ok: true,
+            models: [model("gpt-5.6-sol", "sol")],
+            default_model: "gpt-5.6-sol",
+            selected_model: null,
+            selected_reasoning_effort: "low",
+            can_manage_settings: false,
+        })
+    ).toBe(null);
 });

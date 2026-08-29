@@ -4,7 +4,11 @@ from pathlib import Path
 
 from odoo.tests.common import BaseCase
 
-from ..runtime.agent.codex import CodexAgentError, CodexAgentSettings
+from ..runtime.agent.codex import (
+    CodexAgentError,
+    CodexAgentSettings,
+    _model_thread_options,
+)
 from ..runtime.agent.codex_decision import (
     CodexDecisionEngine,
     _codex_next_decision_schema,
@@ -23,6 +27,27 @@ class _EventClient:
 
 
 class TestCodexDecisionAdapter(BaseCase):
+    def test_model_and_reasoning_effort_share_one_bounded_thread_config(self):
+        configured = CodexAgentSettings(
+            executable=Path("/tmp/codex"),
+            codex_home=Path("/tmp/codex-home"),
+            model="gpt-5.6-terra",
+            reasoning_effort="high",
+        )
+        defaulted = CodexAgentSettings(
+            executable=Path("/tmp/codex"),
+            codex_home=Path("/tmp/codex-home"),
+        )
+
+        self.assertEqual(
+            _model_thread_options(configured),
+            {
+                "model": "gpt-5.6-terra",
+                "config": {"model_reasoning_effort": "high"},
+            },
+        )
+        self.assertEqual(_model_thread_options(defaulted), {})
+
     def test_wire_schema_wraps_union_and_encodes_open_arguments(self):
         schema = _codex_next_decision_schema()
 

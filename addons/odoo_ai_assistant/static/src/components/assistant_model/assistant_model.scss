@@ -31,8 +31,9 @@
 }
 
 .o_ai_assistant_picker_menu {
+    width: 22rem;
     min-width: 15rem;
-    max-width: min(22rem, calc(100vw - 2rem));
+    max-width: calc(100vw - 2rem);
 }
 
 .o_ai_assistant_picker_submenu {

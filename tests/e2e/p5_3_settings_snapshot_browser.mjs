@@ -84,26 +84,44 @@ async function login(page, { baseUrl, database, loginName, password }) {
     ]);
     await page.goto(`${baseUrl}/web?db=${encodeURIComponent(database)}`);
     await page.getByRole("button", { name: "Abrir AI Assistant" }).click();
-    await page.locator("#o_ai_assistant_question").waitFor({ state: "visible", timeout: 60_000 });
+    const composer = page.locator("#o_ai_assistant_question");
+    const history = page.locator(".o_ai_assistant_history");
+    await Promise.race([
+        composer.waitFor({ state: "visible", timeout: 60_000 }),
+        history.waitFor({ state: "visible", timeout: 60_000 }),
+    ]);
+    if (!(await composer.isVisible())) {
+        await page.locator(".o_ai_assistant_history_item_new").click();
+        await composer.waitFor({ state: "visible", timeout: 30_000 });
+    }
 }
 
 function longPrompt(token) {
     return `${token} Responde en español con exactamente dieciocho frases numeradas sobre métodos generales de organización del trabajo. Cada frase debe tener al menos dieciocho palabras. No uses herramientas de Odoo ni realices cambios.`;
 }
 
-async function startTurn(page, prompt) {
+async function startTurn(page, prompt, browserErrors = []) {
     const composer = page.locator("#o_ai_assistant_question");
     await composer.waitFor({ state: "visible", timeout: 30_000 });
     assert.equal(await composer.isEnabled(), true, "active conversation composer is unexpectedly disabled");
     await composer.fill(prompt);
-    const responsePromise = page.waitForResponse(
-        (response) =>
-            new URL(response.url()).pathname === "/odoo_ai/v1/turn" &&
-            response.request().method() === "POST",
-        { timeout: 60_000 }
+    const blockingNotifications = page.locator(".o_notification:visible");
+    const notificationErrors = await blockingNotifications.allInnerTexts();
+    assert.deepEqual(
+        { notificationErrors, browserErrors },
+        { notificationErrors: [], browserErrors: [] },
+        "unexpected browser error before turn submission"
     );
-    await page.getByRole("button", { name: "Enviar mensaje" }).click();
-    const envelope = await (await responsePromise).json();
+    const [response] = await Promise.all([
+        page.waitForResponse(
+            (candidate) =>
+                new URL(candidate.url()).pathname === "/odoo_ai/v1/turn" &&
+                candidate.request().method() === "POST",
+            { timeout: 60_000 }
+        ),
+        page.getByRole("button", { name: "Enviar mensaje" }).click(),
+    ]);
+    const envelope = await response.json();
     assert.ok(!envelope.error, JSON.stringify(envelope.error));
     const queued = envelope.result;
     assert.equal(queued?.ok, true);
@@ -264,23 +282,16 @@ async function changeModelThroughUi(page, modelPreferences) {
     } else if (targetOption.family && targetOption.variant) {
         const family = page
             .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_submenu_toggle")
-            .filter({ hasText: familyLabel(targetOption.family) });
-        if (await family.count()) {
-            await family.first().click();
-            const variant = page
-                .locator(".o_ai_assistant_picker_submenu:visible .o_ai_assistant_picker_option")
-                .filter({ hasText: variantLabel(targetOption.variant) })
-                .first();
-            await variant.waitFor({ state: "visible", timeout: 30_000 });
-            await variant.click();
-        } else {
-            const pickerOption = page
-                .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_option")
-                .filter({ hasText: familyLabel(targetOption.family) })
-                .last();
-            await pickerOption.waitFor({ state: "visible", timeout: 30_000 });
-            await pickerOption.click();
-        }
+            .filter({ hasText: familyLabel(targetOption.family) })
+            .first();
+        await family.waitFor({ state: "visible", timeout: 30_000 });
+        await family.click();
+        const variant = page
+            .locator(".o_ai_assistant_picker_submenu:visible .o_ai_assistant_picker_option")
+            .filter({ hasText: variantLabel(targetOption.variant) })
+            .first();
+        await variant.waitFor({ state: "visible", timeout: 30_000 });
+        await variant.click();
     } else {
         const pickerOption = page
             .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_option")
@@ -375,7 +386,7 @@ async function restorePreferences(page, originalModel, originalEffort, originalP
     }
 }
 
-async function runGate(page, stamp) {
+async function runGate(page, stamp, browserErrors) {
     const original = await readPreferences(page);
     const originalModel = original.models.selected_model ?? null;
     const originalEffort = original.models.selected_reasoning_effort ?? null;
@@ -385,7 +396,7 @@ async function runGate(page, stamp) {
     let turnA = null;
     let turnB = null;
     try {
-        turnA = await startTurn(page, longPrompt(tokenA));
+        turnA = await startTurn(page, longPrompt(tokenA), browserErrors);
         await requireUnresolved(page, turnA.turn_id);
         const before = await turnSnapshot(page, turnA.turn_id);
         const capturedA = assertExecutionSnapshot(
@@ -412,7 +423,7 @@ async function runGate(page, stamp) {
         await newChat.click();
         await page.locator("#o_ai_assistant_question").waitFor({ state: "visible", timeout: 30_000 });
 
-        turnB = await startTurn(page, longPrompt(tokenB));
+        turnB = await startTurn(page, longPrompt(tokenB), browserErrors);
         const snapshotB = await turnSnapshot(page, turnB.turn_id);
         assertExecutionSnapshot(snapshotB, selectedModel, selectedEffort, selectedProfile);
         assert.notDeepEqual(snapshotB.execution_settings_payload, capturedA);
@@ -455,8 +466,11 @@ try {
     const page = await context.newPage();
     const browserErrors = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
+    page.on("console", (message) => {
+        if (message.type() === "error") browserErrors.push(message.text());
+    });
     await login(page, { baseUrl, database, loginName, password });
-    await runGate(page, stamp);
+    await runGate(page, stamp, browserErrors);
     assert.deepEqual(browserErrors, []);
     await context.close();
 } finally {

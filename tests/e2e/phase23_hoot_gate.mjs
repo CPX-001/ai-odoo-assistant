@@ -11,13 +11,26 @@ function required(name) {
 const base = required("ODOO_AI_HOOT_BASE_URL").replace(/\/$/, "");
 const database = required("ODOO_AI_HOOT_DB");
 const filter = required("ODOO_AI_HOOT_FILTER");
+const canonicalFilter = process.env.ODOO_AI_HOOT_CANONICAL?.trim() || "";
 const login = required("ODOO_AI_HOOT_LOGIN");
 const password = required("ODOO_AI_HOOT_PASSWORD");
 const timeout = Number(process.env.ODOO_AI_HOOT_TIMEOUT_MS || 180_000);
 assert.ok(Number.isInteger(timeout) && timeout >= 1_000 && timeout <= 300_000);
+function hootHash(value) {
+    let hash = 0;
+    for (let index = 0; index < value.length; index += 1) {
+        hash = (hash << 5) - hash + value.charCodeAt(index);
+        hash |= 0;
+    }
+    return (hash + 16 ** 8).toString(16).slice(-8);
+}
+
+const selection = canonicalFilter
+    ? `&id=${hootHash(canonicalFilter)}`
+    : `&filter=${encodeURIComponent(filter)}`;
 const url =
     process.env.ODOO_AI_HOOT_URL?.trim() ||
-    `${base}/web/tests?db=${encodeURIComponent(database)}&mod=odoo_ai_assistant&headless&loglevel=2&preset=desktop&timeout=15000&filter=${encodeURIComponent(filter)}`;
+    `${base}/web/tests?db=${encodeURIComponent(database)}&mod=odoo_ai_assistant&headless&loglevel=2&preset=desktop&timeout=15000${selection}`;
 
 const browser = await chromium.launch({ headless: true });
 try {
@@ -81,7 +94,9 @@ try {
     const passed = Number(summary.match(/Passed (\d+) tests/)?.[1]);
     assert.ok(passed > 0, `HOOT filter matched no tests: ${filter}`);
     assert.deepEqual(errors, []);
-    console.log(`HOOT filtered gate completed: ${filter}; ${summary}`);
+    console.log(
+        `HOOT filtered gate completed: ${canonicalFilter || filter}; ${summary}`
+    );
 } finally {
     await browser.close();
 }

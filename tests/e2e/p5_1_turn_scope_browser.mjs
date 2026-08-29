@@ -79,7 +79,16 @@ async function login(page, { baseUrl, database, loginName, password }) {
     ]);
     await page.goto(`${baseUrl}/web?db=${encodeURIComponent(database)}`);
     await page.getByRole("button", { name: "Abrir AI Assistant" }).click();
-    await page.locator("#o_ai_assistant_question").waitFor({ state: "visible", timeout: 60_000 });
+    const composer = page.locator("#o_ai_assistant_question");
+    const history = page.locator(".o_ai_assistant_history");
+    await Promise.race([
+        composer.waitFor({ state: "visible", timeout: 60_000 }),
+        history.waitFor({ state: "visible", timeout: 60_000 }),
+    ]);
+    if (!(await composer.isVisible())) {
+        await page.locator(".o_ai_assistant_history_item_new").click();
+        await composer.waitFor({ state: "visible", timeout: 30_000 });
+    }
 }
 
 function longPrompt(token) {
@@ -91,14 +100,16 @@ async function startTurn(page, prompt) {
     await composer.waitFor({ state: "visible", timeout: 30_000 });
     assert.equal(await composer.isEnabled(), true, "active conversation composer is unexpectedly disabled");
     await composer.fill(prompt);
-    const responsePromise = page.waitForResponse(
-        (response) =>
-            new URL(response.url()).pathname === "/odoo_ai/v1/turn" &&
-            response.request().method() === "POST",
-        { timeout: 60_000 }
-    );
-    await page.getByRole("button", { name: "Enviar mensaje" }).click();
-    const envelope = await (await responsePromise).json();
+    const [response] = await Promise.all([
+        page.waitForResponse(
+            (candidate) =>
+                new URL(candidate.url()).pathname === "/odoo_ai/v1/turn" &&
+                candidate.request().method() === "POST",
+            { timeout: 60_000 }
+        ),
+        page.getByRole("button", { name: "Enviar mensaje" }).click(),
+    ]);
+    const envelope = await response.json();
     assert.ok(!envelope.error, JSON.stringify(envelope.error));
     const queued = envelope.result;
     assert.equal(queued?.ok, true);
@@ -264,23 +275,16 @@ async function changeModelThroughUi(page, modelPreferences) {
     } else if (targetOption.family && targetOption.variant) {
         const family = page
             .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_submenu_toggle")
-            .filter({ hasText: familyLabel(targetOption.family) });
-        if (await family.count()) {
-            await family.first().click();
-            const variant = page
-                .locator(".o_ai_assistant_picker_submenu:visible .o_ai_assistant_picker_option")
-                .filter({ hasText: variantLabel(targetOption.variant) })
-                .first();
-            await variant.waitFor({ state: "visible", timeout: 30_000 });
-            await variant.click();
-        } else {
-            const pickerOption = page
-                .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_option")
-                .filter({ hasText: familyLabel(targetOption.family) })
-                .last();
-            await pickerOption.waitFor({ state: "visible", timeout: 30_000 });
-            await pickerOption.click();
-        }
+            .filter({ hasText: familyLabel(targetOption.family) })
+            .first();
+        await family.waitFor({ state: "visible", timeout: 30_000 });
+        await family.click();
+        const variant = page
+            .locator(".o_ai_assistant_picker_submenu:visible .o_ai_assistant_picker_option")
+            .filter({ hasText: variantLabel(targetOption.variant) })
+            .first();
+        await variant.waitFor({ state: "visible", timeout: 30_000 });
+        await variant.click();
     } else {
         const pickerOption = page
             .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_option")
@@ -308,11 +312,10 @@ async function changeAutonomyThroughUi(page, currentProfile) {
             response.request().method() === "POST",
         { timeout: 30_000 }
     );
-    const pickerOptions = page.locator(".o_ai_assistant_picker_option").filter({
-        hasText: PROFILE_LABEL[targetProfile],
-    });
-    assert.ok(await pickerOptions.count(), `expected an autonomy option for ${targetProfile}`);
-    const pickerOption = pickerOptions.last();
+    const pickerOption = page
+        .locator(".o_ai_assistant_picker_menu:visible .o_ai_assistant_picker_option")
+        .filter({ hasText: PROFILE_LABEL[targetProfile] })
+        .last();
     await pickerOption.waitFor({ state: "visible", timeout: 30_000 });
     await pickerOption.click();
     const envelope = await (await responsePromise).json();

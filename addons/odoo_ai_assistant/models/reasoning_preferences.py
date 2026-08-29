@@ -59,7 +59,11 @@ class AssistantUserReasoningPreference(models.Model):
             default_model=response.get("default_model"),
         )
         supported = _supported_efforts(effective)
-        if selected_effort is not None and supported and selected_effort not in supported:
+        if (
+            selected_effort is not None
+            and _has_reasoning_metadata(effective)
+            and selected_effort not in supported
+        ):
             selected_effort = self.set_current_reasoning_effort(None)
         return {**response, "selected_reasoning_effort": selected_effort}
 
@@ -79,7 +83,11 @@ class AssistantUserReasoningPreference(models.Model):
             default_model=catalog.get("default_model"),
         )
         supported = _supported_efforts(effective)
-        if selected_effort is not None and supported and selected_effort not in supported:
+        if (
+            selected_effort is not None
+            and _has_reasoning_metadata(effective)
+            and selected_effort not in supported
+        ):
             selected_effort = self.set_current_reasoning_effort(None)
         return {**response, "selected_reasoning_effort": selected_effort}
 
@@ -162,6 +170,13 @@ def _supported_efforts(model):
         if isinstance(effort, str) and _EFFORT_PATTERN.fullmatch(effort):
             result.append(effort)
     return tuple(result)
+
+
+def _has_reasoning_metadata(model):
+    return isinstance(model, dict) and isinstance(
+        model.get("supported_reasoning_efforts"),
+        list,
+    )
 
 
 def _error(code):

@@ -98,10 +98,22 @@ export function normalizeModelPreferences(response) {
     if (ids.size !== models.length) {
         return null;
     }
+    const selectedModel = ids.has(response.selected_model) ? response.selected_model : null;
+    const effectiveModelId = selectedModel || response.default_model;
+    const effectiveModel = models.find((item) => item.model === effectiveModelId) || null;
+    if (
+        response.selected_reasoning_effort != null &&
+        effectiveModel?.reasoning_metadata_available &&
+        !effectiveModel.supported_reasoning_efforts.some(
+            (item) => item.effort === response.selected_reasoning_effort
+        )
+    ) {
+        return null;
+    }
     return {
         models,
         defaultModel: response.default_model,
-        selectedModel: ids.has(response.selected_model) ? response.selected_model : null,
+        selectedModel,
         selectedReasoningEffort: response.selected_reasoning_effort || null,
         canManageSettings: response.can_manage_settings,
     };
@@ -126,6 +138,7 @@ function _normalizeModelOption(item) {
     const familyAlias = item.family_alias ?? false;
     const defaultEffort = item.default_reasoning_effort ?? null;
     const rawEfforts = item.supported_reasoning_efforts ?? [];
+    const reasoningMetadataAvailable = Object.hasOwn(item, "supported_reasoning_efforts");
     if (
         !MODEL_PATTERN.test(family) ||
         (variant !== null && !EFFORT_PATTERN.test(variant)) ||
@@ -154,7 +167,7 @@ function _normalizeModelOption(item) {
         seen.add(entry.effort);
         efforts.push({ effort: entry.effort, description: entry.description });
     }
-    if (defaultEffort !== null && seen.size && !seen.has(defaultEffort)) {
+    if (defaultEffort !== null && !seen.has(defaultEffort)) {
         return null;
     }
     return {
@@ -163,6 +176,7 @@ function _normalizeModelOption(item) {
         variant,
         description,
         family_alias: familyAlias,
+        reasoning_metadata_available: reasoningMetadataAvailable,
         supported_reasoning_efforts: efforts,
         default_reasoning_effort: defaultEffort,
     };

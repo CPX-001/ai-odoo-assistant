@@ -89,3 +89,9 @@ class TestCodexModelCatalog(TestCase):
         payload["data"][1]["defaultReasoningEffort"] = "unsupported"
         with self.assertRaises(CodexModelCatalogError):
             parse_codex_model_catalog(payload)
+
+    def test_default_reasoning_effort_without_supported_catalog_is_rejected(self):
+        payload = self._payload()
+        payload["data"][1]["supportedReasoningEfforts"] = []
+        with self.assertRaises(CodexModelCatalogError):
+            parse_codex_model_catalog(payload)

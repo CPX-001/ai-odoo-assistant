@@ -12,8 +12,9 @@ from ..capabilities import CapabilityContext, CapabilityDefinition
 from .codex import (
     CodexAgentError,
     CodexAgentSettings,
-    _CodexClient,
     _best_effort_interrupt,
+    _CodexClient,
+    _model_thread_options,
     _remaining,
     _thread_id,
     _turn_id,
@@ -137,16 +138,7 @@ class CodexDecisionEngine:
                     "ephemeral": True,
                     "runtimeWorkspaceRoots": [],
                     "sandbox": "read-only",
-                    **({"model": self._settings.model} if self._settings.model else {}),
-                    **(
-                        {
-                            "config": {
-                                "model_reasoning_effort": self._settings.reasoning_effort
-                            }
-                        }
-                        if self._settings.reasoning_effort
-                        else {}
-                    ),
+                    **_model_thread_options(self._settings),
                     "baseInstructions": _DECISION_INSTRUCTIONS,
                 },
                 timeout=_remaining(deadline),

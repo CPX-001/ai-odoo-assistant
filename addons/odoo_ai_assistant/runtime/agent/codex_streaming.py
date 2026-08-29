@@ -10,16 +10,16 @@ import asyncio
 
 from .answer_stream import AnswerStreamError, StructuredFinalAnswerDeltaExtractor
 from .codex_decision import (
-    CodexAgentError,
-    CodexDecisionEngine as _BaseCodexDecisionEngine,
-    _CodexClient,
     _DECISION_INSTRUCTIONS,
     _MAX_EVENTS,
+    CodexAgentError,
     _best_effort_interrupt,
     _codex_next_decision_schema,
+    _CodexClient,
     _decision_result,
     _decision_terminal_error,
     _decision_turn_input,
+    _model_thread_options,
     _remaining,
     _thread_id,
     _turn_id,
@@ -27,6 +27,9 @@ from .codex_decision import (
     _validate_decision_error_event,
     _validate_decision_notification,
     _with_completed_agent_messages,
+)
+from .codex_decision import (
+    CodexDecisionEngine as _BaseCodexDecisionEngine,
 )
 from .decision_validation import validate_next_decision
 
@@ -72,16 +75,7 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                     "ephemeral": True,
                     "runtimeWorkspaceRoots": [],
                     "sandbox": "read-only",
-                    **({"model": self._settings.model} if self._settings.model else {}),
-                    **(
-                        {
-                            "config": {
-                                "model_reasoning_effort": self._settings.reasoning_effort
-                            }
-                        }
-                        if self._settings.reasoning_effort
-                        else {}
-                    ),
+                    **_model_thread_options(self._settings),
                     "baseInstructions": _DECISION_INSTRUCTIONS,
                 },
                 timeout=_remaining(deadline),
