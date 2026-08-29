@@ -3,7 +3,7 @@
 import { rpc } from "@web/core/network/rpc";
 
 const MODEL_RE = /^[A-Za-z_][A-Za-z0-9_.]{0,127}$/;
-const MAX_REFERENCES = 20;
+const MAX_REFERENCES = 50;
 const MAX_RENDERED_REFERENCES = 100;
 
 function exactKeys(value, expected) {
