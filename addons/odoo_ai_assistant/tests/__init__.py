@@ -27,6 +27,7 @@ from . import (
 )
 from . import test_phase4_live_projection as test_phase4_live_projection
 from . import test_post_effect_reasoning as test_post_effect_reasoning
+from . import test_public_references as test_public_references
 from . import test_reasoning_summary_projection as test_reasoning_summary_projection
 from . import test_runtime_account as test_runtime_account
 from . import test_runtime_account_gate as test_runtime_account_gate
