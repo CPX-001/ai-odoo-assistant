@@ -39,6 +39,20 @@ def test_round_trip_closed_public_event():
     assert module.public_turn_event_payload(module.parse_public_turn_event(event())) == event()
 
 
+def test_fifty_record_resource_is_bounded_and_valid():
+    record_ids = list(range(1, 51))
+    parsed = module.parse_public_turn_event(
+        event(
+            resource={
+                "model": "sale.order",
+                "record_ids": record_ids,
+                "display_names": [f"S{record_id:04d}" for record_id in record_ids],
+            }
+        )
+    )
+    assert parsed.resource["record_ids"] == record_ids
+
+
 def test_private_reasoning_extra_payload_and_bad_activity_id_fail_closed():
     invalid_values = [
         event(kind="agent.thinking"),
@@ -48,7 +62,7 @@ def test_private_reasoning_extra_payload_and_bad_activity_id_fail_closed():
         event(
             resource={
                 "model": "sale.order",
-                "record_ids": list(range(1, 22)),
+                "record_ids": list(range(1, 52)),
                 "display_names": [],
             }
         ),
