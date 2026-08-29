@@ -8,34 +8,48 @@ Frontend services hold reusable browser-side state and RPC/live coordination. Th
 |---|---|
 | `assistant_panel_service.js` | central panel/conversation/turn orchestration |
 | `assistant_history_service.js` | native history loading/navigation |
-| `assistant_model_service.js` | model preference state |
+| `assistant_model_service.js` | model-family/model-variant/reasoning preference state |
 | `assistant_autonomy_service.js` | autonomy profile state |
 | `zz_assistant_auth_service.js` | runtime account/auth UI state |
 | `assistant_stream_client.js` | authoritative turn status/event polling |
-| `assistant_live_stream_client.js` | public live event/delta polling |
+| `assistant_live_stream_client.js` | independent activity/answer/readable-summary live polling |
 | `assistant_panel_streaming_service.js` | binds stream data to panel presentation state |
-| `assistant_public_activity_contract.js` | browser-safe public activity contract |
+| `assistant_public_activity_contract.js` | closed browser-safe public activity contract |
+| `assistant_semantic_activity.js` | P5.8 semantic reducer, detail profiles, transient filtering and render bounds |
+| `assistant_activity_preferences_service.js` | per-user P5.8 presentation preferences; presentation only, never authority |
+| `assistant_reasoning_summary_service.js` | turn-scoped bounded readable reasoning-summary reduction |
+| `assistant_public_reference_service.js` | typed Odoo record/model resolution, fresh host revalidation and safe navigation |
 | `assistant_failure_contract.js` | safe structured failure contract |
 | `screen_context_service.js` | captures bounded current Odoo screen context |
-| `zzz_assistant_turn_scope_service.js` | P5.1 per-conversation/background execution scopes |
+| `zzz_assistant_turn_scope_service.js` | per-conversation/background execution scopes |
 
-## Three state rules
+## State/authority rules
 
 ### 1. Scope async callbacks to the owning turn/conversation
 
-A late result from Chat A must update Chat A, not whichever chat is visible when the callback arrives.
+A late result from Chat A must update Chat A, not whichever chat is visible when the callback arrives. This applies equally to semantic activity, provisional answer text and readable reasoning summaries.
 
 ### 2. Server state wins
 
-Browser state optimizes UX. Odoo still owns turn status, approval state, final history and effect certainty.
+Browser state optimizes UX. Odoo owns turn status, ACLs, approval, final history, typed-reference authorization and effect certainty.
 
-### 3. Provisional text is provisional
+### 3. Provisional presentation is not authority
 
-Answer deltas improve responsiveness but are reconciled with the final persisted answer.
+Answer deltas, semantic progress and readable reasoning summaries improve responsiveness but cannot authorize tools/effects or override the final persisted answer.
 
-## P5.1 note
+### 4. Private reasoning never enters browser state
 
-`zzz_assistant_turn_scope_service.js` is implemented in `main` to remove the single global panel execution scope. Required P5.1 deterministic/real validation is still open, so do not treat this implementation as accepted foundation until `docs/research/EXECUTION_STATE.md` says so.
+Only the provider-declared readable summary channel is accepted. Raw/private reasoning deltas are intentionally ignored before the public live seam.
+
+### 5. Navigation is typed and revalidated
+
+The browser never executes arbitrary model-generated Odoo routes. `assistant_public_reference_service.js` sends a closed record/model descriptor back to Odoo immediately before navigation; the host revalidates current access and returns only a bounded form/list descriptor.
+
+## P5.8 presentation behavior
+
+P5.8 adds compact/normal/detailed/diagnostic semantic activity projections without changing the underlying P3 durable/live facts. Default normal mode groups correlated lifecycle rows, hides low-value transient verification, keeps failures/approval visible and uses a five-row progressive disclosure page.
+
+The implementation is present but remains validation-pending until `docs/research/EXECUTION_STATE.md` records the required P5.8 gates as accepted.
 
 ## Adding a service
 
@@ -46,6 +60,7 @@ Do not:
 - cache permissions as permanent authority;
 - hide server-side `recovery_required`/uncertain effect states;
 - cancel another conversation merely because the user navigated away;
-- put provider-specific secrets or raw responses into browser storage.
+- put provider-specific secrets/raw responses/private reasoning into browser storage;
+- construct arbitrary Odoo actions from model text.
 
 A new channel/surface should reuse server contracts and equivalent scoped state rather than clone the agent runtime.
