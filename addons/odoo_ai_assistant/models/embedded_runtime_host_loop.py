@@ -7,7 +7,12 @@ import asyncio
 from odoo import SUPERUSER_ID, api, models
 from odoo.exceptions import AccessError, ValidationError
 
-from ..runtime.agent import AgentTurnService, CapabilityPlanError, CapabilityPlanService
+from ..runtime.agent import (
+    AgentTurnService,
+    CapabilityPlanError,
+    CapabilityPlanService,
+    PostEffectDecisionEngine,
+)
 from ..runtime.agent.codex_decision import CodexDecisionEngine
 from ..runtime.agent.provider_failure import FailureNormalizingDecisionEngine
 from ..runtime.agent.working_transcript import (
@@ -93,6 +98,9 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                     envelope=envelope,
                     plans=plans,
                     policy=policy_snapshot,
+                    registry=registry,
+                    context=context,
+                    executor=executor,
                 )
             )
 
@@ -184,6 +192,9 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 plans=plans,
                 policy=policy_snapshot,
                 working_items=prepared_items,
+                registry=registry,
+                context=context,
+                executor=executor,
             )
         )
 
@@ -195,9 +206,12 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
         envelope,
         plans,
         policy,
+        registry,
+        context,
+        executor,
         working_items=None,
     ):
-        """Execute the unchanged action lifecycle and persist a verified private receipt."""
+        """Execute, verify, append an authoritative receipt and synthesize the final answer."""
 
         if working_items is None:
             try:
@@ -226,27 +240,95 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
 
         completed = dict(envelope)
         completed["plan"] = executed.payload
-        receipt_items = append_working_item(
-            working_items,
-            "verified_effect_receipt",
-            {
-                "verified": True,
-                "plan_state": executed.payload["state"],
-                "step_count": len(executed.payload["steps"]),
-                "capabilities": [
-                    step["capability"] for step in executed.payload["steps"]
-                ],
-            },
-        )
-        # Business effects, verification, plan result and receipt share this cursor.
-        # The caller commits them together; failure after the durable barrier is recovery-only.
+        receipt_items = _append_verified_effect_receipt(working_items, executed.payload)
+        # Business effects, verification, plan result, private receipt and final synthesis share
+        # this cursor. The separately committed pre-effect barrier remains the recovery boundary.
         turn.with_user(SUPERUSER_ID).write(
             {
                 "capability_plan_payload": completed,
                 "working_items_payload": transcript_payload(receipt_items),
             }
         )
-        return self._plan_response(turn, completed, policy, completed=True)
+        return await self._continue_after_effect(
+            turn,
+            lease_token=lease_token,
+            completed=completed,
+            policy=policy,
+            registry=registry,
+            context=context,
+            executor=executor,
+            working_items=receipt_items,
+        )
+
+    async def _continue_after_effect(
+        self,
+        turn,
+        *,
+        lease_token,
+        completed,
+        policy,
+        registry,
+        context,
+        executor,
+        working_items,
+    ):
+        """Reason from the verified receipt without exposing another PLAN authority surface."""
+
+        dbname = self.env.cr.dbname
+
+        def cancellation_requested():
+            from .turn_queue import _cancellation_requested
+
+            return _cancellation_requested(dbname, turn.id, lease_token)
+
+        def persist(items):
+            try:
+                persist_working_transcript(turn, lease_token, items)
+            except RuntimeError as error:
+                raise EmbeddedRuntimeError(str(error)) from error
+
+        decision_engine = PostEffectDecisionEngine(
+            FailureNormalizingDecisionEngine(
+                CodexDecisionEngine(
+                    self._codex_settings(turn),
+                    cancellation_requested=cancellation_requested,
+                ),
+                component="codex",
+                # Verification already observed the effect. Any provider failure from this point
+                # must never be classified as an effect-safe retry opportunity.
+                effect_state="confirmed",
+            )
+        )
+        service = AgentTurnService(
+            registry=registry,
+            context=context,
+            executor=executor,
+            decision_engine=decision_engine,
+            working_items=working_items,
+            persist_working_items=persist,
+            cancellation_requested=cancellation_requested,
+            allow_plan_proposals=False,
+        )
+        context.emit(
+            "reasoning.started",
+            "Sintetizando resultado verificado",
+            {"post_effect": True},
+        )
+        result = await service.run(
+            message=turn.input_message,
+            conversation_summary=self._conversation_summary(turn),
+        )
+        if result.plan:
+            raise EmbeddedRuntimeError("agent_post_effect_plan_forbidden")
+        context.emit(
+            "reasoning.completed",
+            "Respuesta final preparada",
+            {"confidence": result.confidence, "post_effect": True},
+        )
+        natural = dict(completed)
+        natural["answer"] = result.answer
+        natural["confidence"] = result.confidence
+        return self._plan_response(turn, natural, policy)
 
 
 def _append_plan_prepared(working_items, prepared):
@@ -276,3 +358,52 @@ def _append_plan_prepared(working_items, prepared):
             "step_count": 1,
         },
     )
+
+
+def _append_verified_effect_receipt(working_items, plan):
+    steps = plan.get("steps") if isinstance(plan, dict) else None
+    if plan.get("state") != "completed" or not isinstance(steps, list) or not steps:
+        raise EmbeddedRuntimeError("capability_plan_corrupt")
+    receipt_steps = []
+    for step in steps:
+        if not isinstance(step, dict):
+            raise EmbeddedRuntimeError("capability_plan_corrupt")
+        result = step.get("result")
+        verification = step.get("verification")
+        if step.get("state") != "completed" or not isinstance(result, dict) or not isinstance(verification, dict):
+            raise EmbeddedRuntimeError("capability_plan_corrupt")
+        receipt_steps.append(
+            {
+                "position": step.get("position"),
+                "capability": step.get("capability"),
+                "title": step.get("title"),
+                "result": dict(result),
+                "verification": dict(verification),
+            }
+        )
+    rich = {
+        "verified": True,
+        "plan_state": "completed",
+        "step_count": len(receipt_steps),
+        "steps": receipt_steps,
+    }
+    try:
+        return append_working_item(working_items, "verified_effect_receipt", rich)
+    except WorkingTranscriptError as error:
+        if error.code != "agent_working_item_too_large":
+            raise EmbeddedRuntimeError(error.code) from error
+        compact = {
+            "verified": True,
+            "plan_state": "completed",
+            "step_count": len(receipt_steps),
+            "details_omitted": True,
+            "capabilities": [step["capability"] for step in receipt_steps],
+        }
+        try:
+            return append_working_item(
+                working_items,
+                "verified_effect_receipt",
+                compact,
+            )
+        except WorkingTranscriptError as compact_error:
+            raise EmbeddedRuntimeError(compact_error.code) from compact_error
