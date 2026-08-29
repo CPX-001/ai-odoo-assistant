@@ -20,6 +20,7 @@ from . import (
     test_phase3_public_activity_real_gates as test_phase3_public_activity_real_gates,
 )
 from . import test_phase4_live_projection as test_phase4_live_projection
+from . import test_post_effect_reasoning as test_post_effect_reasoning
 from . import test_runtime_account as test_runtime_account
 from . import test_runtime_account_gate as test_runtime_account_gate
 from . import test_turn_failure as test_turn_failure
