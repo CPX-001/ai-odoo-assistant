@@ -211,6 +211,8 @@ def _session_settings_for_turn(existing, lang):
     settings = deepcopy(existing)
     if isinstance(lang, str) and lang and len(lang) <= 35 and "\x00" not in lang:
         settings["odoo_user_language"] = lang
+    elif not lang:
+        settings["odoo_user_language"] = False
     return settings
 
 
