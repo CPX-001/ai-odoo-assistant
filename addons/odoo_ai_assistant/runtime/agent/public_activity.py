@@ -56,6 +56,7 @@ PUBLIC_EVENT_STATUSES = frozenset(
 _TURN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$")
 _MODEL_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _CAPABILITY_RE = _MODEL_RE
+_ACTIVITY_ID_RE = re.compile(r"^activity:v[1-9][0-9]*:[0-9a-f]{32}$")
 _DIAGNOSTIC_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _OCCURRED_AT_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$"
@@ -136,6 +137,7 @@ class PublicTurnEvent:
     progress: int | None
     diagnostic_code: str | None
     occurred_at: str
+    activity_id: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.sequence) is not int or self.sequence <= 0:
@@ -167,6 +169,11 @@ class PublicTurnEvent:
         if (
             not isinstance(self.occurred_at, str)
             or _OCCURRED_AT_RE.fullmatch(self.occurred_at) is None
+        ):
+            raise PublicTurnEventError()
+        if self.activity_id is not None and (
+            not isinstance(self.activity_id, str)
+            or _ACTIVITY_ID_RE.fullmatch(self.activity_id) is None
         ):
             raise PublicTurnEventError()
 
@@ -210,6 +217,7 @@ def parse_public_turn_event(value: object) -> PublicTurnEvent:
         "progress",
         "diagnostic_code",
         "occurred_at",
+        "activity_id",
     }
     if not isinstance(value, dict) or set(value) != keys:
         raise PublicTurnEventError()
@@ -241,6 +249,7 @@ def public_turn_event_payload(event: PublicTurnEvent) -> JsonObject:
         "progress": event.progress,
         "diagnostic_code": event.diagnostic_code,
         "occurred_at": event.occurred_at,
+        "activity_id": event.activity_id,
     }
 
 
