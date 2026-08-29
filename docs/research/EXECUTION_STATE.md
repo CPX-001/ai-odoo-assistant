@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 12
+State format: 13
 Updated: 2026-08-29
 Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
 Accepted P5.1 implementation lineage through: `f7f924ce944db86e896745fef83ea2fb6fd6583a`
@@ -9,6 +9,7 @@ P5.2 implementation/harness lineage through: `b1e49d97fce5506a2c9bb19b3a9ce1303f
 Accepted P5.2 validation/harness lineage through: `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`
 P5.3 implementation/harness lineage through: `1803826a6516e2703497f0d14d74850082ad7665`
 P5.3 focused Odoo validation lineage through: `b7428d7804cdbea263ea78ad5b588398b02fe5be`
+P5.3 deterministic regression lineage through: `525318160ac0dac4984ef11e765a8b443b8c4a28`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
@@ -20,13 +21,13 @@ phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P5.3-stable-settings-snapshot
 active_slice_record: docs/research/P5.3_STABLE_SETTINGS_SNAPSHOT.md
-active_slice_state: LOCAL_VALIDATION_REQUIRED
-current_gate_type: HARD_DETERMINISTIC_REGRESSION
-blocking_validations: P5.3-DETERMINISTIC-REGRESSION, P5-REAL-SETTINGS-SNAPSHOT
+active_slice_state: REAL_ENV_VALIDATION_REQUIRED
+current_gate_type: HARD_REAL_ENV
+blocking_validations: P5-REAL-SETTINGS-SNAPSHOT, P5.3-FULL-ADDON-REGRESSION
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3
 acceptance_evidence: docs/research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md
-latest_validation_evidence: docs/research/evidence/phase5/2026-08-29/P5.3-FOCUSED-ODOO-b7428d7.md
-next_slice: P5.3-deterministic-regression
+latest_validation_evidence: docs/research/evidence/phase5/2026-08-29/P5.3-DETERMINISTIC-REGRESSION-5253181.md
+next_slice: P5.3-real-settings-snapshot
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
@@ -34,8 +35,8 @@ Phases 0 through 4 are complete. The ordered P2 -> P3 -> P4 real Odoo/browser/pr
 chain passed on one linear code lineage. P5.1 production code and its deterministic, Odoo and real
 browser/provider acceptance are complete. P5.2 scheduler capacity, causal ordering, fairness,
 release wake-up, diagnostics and real two-cron behavior are accepted. P5.3 is implemented in small
-contract/test/version slices and its focused Odoo snapshot gate passed. Its bounded deterministic
-regression and formal real product-path gate remain pending.
+contract/test/version slices; its focused Odoo snapshot gate and bounded deterministic regression
+passed. Its formal real product-path gate and full-addon regression boundary remain pending.
 
 ---
 
@@ -277,7 +278,7 @@ P5-REAL-BACKPRESSURE           | PASS | no over-admission at capacity 1; wake 1,
 
 Evidence: `evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
 
-## P5.3 Stable settings snapshot — LOCAL_VALIDATION_REQUIRED
+## P5.3 Stable settings snapshot — REAL_ENV_VALIDATION_REQUIRED
 
 Implementation/validation records:
 
@@ -292,6 +293,8 @@ Implemented in deliberately small checkpoints:
 P5.3a versioned immutable settings snapshot | b46b72e
 P5.3b focused Odoo test harness              | 186eed0
 P5.3c addon version checkpoint               | 1803826
+P5.3d runtime-consumption regression harness | c47ce71
+P5.3e approval same-turn regression harness  | 7a0be46
 ```
 
 New normal turns derive a host-owned `execution_settings_payload` from the already resolved
@@ -312,9 +315,17 @@ P5.3-ODOO-SETTINGS-SNAPSHOT | HARD | PASS | 2 tests, 0 failures/errors | b7428d7
 
 Evidence: `evidence/phase5/2026-08-29/P5.3-FOCUSED-ODOO-b7428d7.md`.
 
-No repair was required. P5.3 validation now continues as a separate bounded deterministic regression
-slice, followed by the formal `P5-REAL-SETTINGS-SNAPSHOT` gate. P5.4 remains blocked until all P5.3
-acceptance gates pass.
+Executed bounded deterministic regression:
+
+```text
+P5.3-DETERMINISTIC-REGRESSION | HARD | PASS | 6 tests, 0 failures/errors | 5253181
+```
+
+Evidence: `evidence/phase5/2026-08-29/P5.3-DETERMINISTIC-REGRESSION-5253181.md`.
+
+No project repair was required. P5.3 validation now continues with the formal
+`P5-REAL-SETTINGS-SNAPSHOT` gate. The full-addon regression boundary also remains required before
+P5.3 acceptance and P5.4 consumption.
 
 ---
 
@@ -323,7 +334,7 @@ acceptance gates pass.
 These limitations define the remaining Phase 5 and later work:
 
 - background scopes are currently web-client memory; durable reconnect/continuity is expanded later in P5;
-- P5.3 stable settings snapshot passed its focused Odoo gate but still awaits bounded regression and formal real product-path validation; P5.4 is blocked;
+- P5.3 stable settings snapshot passed its focused and bounded deterministic gates but still awaits formal real product-path validation and full-addon regression; P5.4 is blocked;
 - post-effect verified actions still need provider continuation/natural synthesis (P5.5);
 - conversation provider context is smaller than the target durable `ConversationContextManager` model (P5.6);
 - one canonical effect proposal/step is supported; multi-step effects are P6;
@@ -352,9 +363,9 @@ These limitations define the remaining Phase 5 and later work:
 
 # Exact next action
 
-Run the separate bounded deterministic P5.3 regression slice from `P5.3_VALIDATION_RUNBOOK.md` against
-the exact current lineage. Cover turn enqueue/idempotency, user model/autonomy preferences, policy
-resolution, approval same-turn requeue/resume, and embedded-runtime consumption of persisted
-`reasoning_model`/`policy_payload`. If it fails, repair only the smallest responsible layer and rerun
-the affected coverage. Do not start P5.4 or the formal real product-path gate until this regression
-slice passes.
+Run **P5-REAL-SETTINGS-SNAPSHOT** from `P5.3_VALIDATION_RUNBOOK.md` through the real Odoo browser
+product path on the exact current lineage. Prove unresolved Turn A retains snapshot/model/profile A
+after the user changes preferences, Turn B captures B, and approval/resume of A still consumes A's
+persisted settings. If it fails, repair only the smallest responsible layer and rerun affected
+deterministic coverage before repeating the real gate. Do not start P5.4; the full-addon regression
+boundary also remains required before P5.3 acceptance.

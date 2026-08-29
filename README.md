@@ -4,7 +4,7 @@
 
 The goal is not to bolt a chatbot onto Odoo. The goal is to make an assistant that can understand the real installation, inspect and query Odoo safely, propose controlled changes, explain what it is doing, and grow through reusable capabilities without turning the model into the security boundary.
 
-> **Current state (2026-08-29):** the embedded runtime, host-owned agent loop, safe effect lifecycle, public activity, failure UX and provisional answer streaming are established. Phase 5 is in progress. P5.1 turn-scoped multi-chat and P5.2 scheduler concurrency/backpressure are accepted; P5.3 stable settings snapshot is implemented, its focused Odoo gate passed, and bounded regression plus formal real validation remain pending. See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) and [`docs/research/EXECUTION_STATE.md`](docs/research/EXECUTION_STATE.md).
+> **Current state (2026-08-29):** the embedded runtime, host-owned agent loop, safe effect lifecycle, public activity, failure UX and provisional answer streaming are established. Phase 5 is in progress. P5.1 turn-scoped multi-chat and P5.2 scheduler concurrency/backpressure are accepted; P5.3 stable settings snapshot is implemented, its focused and bounded deterministic gates passed, and formal real validation plus full-addon regression remain pending. See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) and [`docs/research/EXECUTION_STATE.md`](docs/research/EXECUTION_STATE.md).
 
 ## What this project is
 
