@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="odoo_ai_assistant.AssistantActivityPreferences"
+       t-inherit="odoo_ai_assistant.AssistantPanel"
+       t-inherit-mode="extension">
+        <xpath expr="//div[@t-if='ui.accountOpen']" position="inside">
+            <div class="dropdown-divider"/>
+            <div class="small fw-semibold mb-2">Presentación de actividad</div>
+            <label class="small text-muted d-block mb-1" for="o_ai_activity_detail">Detalle</label>
+            <select id="o_ai_activity_detail" class="form-select form-select-sm mb-2"
+                t-att-disabled="state.activityPreferencesSaving"
+                t-on-change="changeActivityDetailLevel">
+                <option value="compact" t-att-selected="activityDetailLevel === 'compact'">Compacto</option>
+                <option value="normal" t-att-selected="activityDetailLevel === 'normal'">Normal</option>
+                <option value="detailed" t-att-selected="activityDetailLevel === 'detailed'">Detallado</option>
+                <option value="diagnostic" t-att-selected="activityDetailLevel === 'diagnostic'">Diagnóstico</option>
+            </select>
+            <label class="small text-muted d-block mb-1" for="o_ai_reasoning_summary">Resumen de razonamiento</label>
+            <select id="o_ai_reasoning_summary" class="form-select form-select-sm mb-2"
+                t-att-disabled="state.activityPreferencesSaving"
+                t-on-change="changeActivityReasoningSummary">
+                <option value="off" t-att-selected="activityReasoningSummaryLevel === 'off'">Desactivado</option>
+                <option value="concise" t-att-selected="activityReasoningSummaryLevel === 'concise'">Conciso</option>
+                <option value="detailed" t-att-selected="activityReasoningSummaryLevel === 'detailed'">Detallado</option>
+            </select>
+            <label class="form-check small mb-0">
+                <input type="checkbox" class="form-check-input"
+                    t-att-checked="semanticActivity.preferences.show_technical_names"
+                    t-att-disabled="state.activityPreferencesSaving"
+                    t-on-change="toggleActivityTechnicalNames"/>
+                <span class="form-check-label">Mostrar nombres técnicos</span>
+            </label>
+        </xpath>
+    </t>
+</templates>
