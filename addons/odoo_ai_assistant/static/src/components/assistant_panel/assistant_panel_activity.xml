@@ -14,6 +14,13 @@
                         <span class="text-break" t-esc="activitySummaryLabel"/>
                     </summary>
                     <div class="mt-2 d-flex flex-column gap-1">
+                        <div t-if="activityReasoningSummaryParts.length"
+                            class="small border-start ps-2 mb-1">
+                            <div class="fw-semibold text-body-secondary mb-1"
+                                t-esc="activityReasoningSummaryTitle"/>
+                            <div t-foreach="activityReasoningSummaryParts" t-as="part" t-key="part.key"
+                                class="text-muted text-break" t-esc="part.text"/>
+                        </div>
                         <div t-foreach="activityItems" t-as="item" t-key="item.key"
                             class="small text-muted d-flex gap-2 align-items-start">
                             <i t-if="item.status === 'running'" class="fa fa-circle-o-notch fa-spin mt-1" aria-hidden="true"/>
