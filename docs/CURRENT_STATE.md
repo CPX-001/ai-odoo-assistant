@@ -19,7 +19,7 @@ P5.8 semantic activity/reasoning/navigation UX is now **implemented but not acce
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.21.0` on the P5.8 implementation lineage.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.23.0` on the P5.8 implementation lineage.
 - Embedded runtime; browser talks to Odoo, not a sidecar.
 - Odoo/PostgreSQL own conversations, messages, turns, effect state, private working checkpoints and public/live presentation state.
 - Native `ir.cron` runs durable turns.

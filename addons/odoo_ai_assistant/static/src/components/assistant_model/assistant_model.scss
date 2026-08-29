@@ -7,11 +7,11 @@
 
     .o_ai_assistant_model_picker .o_ai_assistant_picker_button,
     .o_ai_assistant_reasoning_picker .o_ai_assistant_picker_button {
-        max-width: 9.5rem;
+        max-width: 4.5rem;
     }
 
     .o_ai_assistant_picker_caret {
-        font-size: 0.7rem;
+        font-size: 0.58rem;
         opacity: 0.65;
     }
 
@@ -30,21 +30,11 @@
     }
 }
 
-.o_ai_assistant_picker_menu {
-    width: 22rem;
-    min-width: 15rem;
-    max-width: calc(100vw - 2rem);
-}
-
-.o_ai_assistant_picker_submenu {
-    min-width: 17rem;
-}
-
 .o_ai_assistant_picker_status {
     display: flex;
     gap: 0.5rem;
     align-items: center;
-    padding: 0.75rem;
+    padding: 0.55rem;
 }
 
 .o_ai_assistant_picker_submenu_toggle {

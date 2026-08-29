@@ -8,6 +8,7 @@ const MODEL_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 const EFFORT_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const MODEL_CATALOG_TTL_MS = 5 * 60 * 1000;
 const VARIANT_ORDER = Object.freeze({ sol: 0, terra: 1, luna: 2 });
+const PICKER_REASONING_EFFORTS = new Set(["none", "minimal", "low", "medium", "high"]);
 
 export function compactModelLabel(value) {
     if (typeof value !== "string" || !value.trim()) {
@@ -74,6 +75,13 @@ export function groupModelOptions(models) {
             hasVariants: groupedVariants.length > 1,
         };
     });
+}
+
+export function pickerReasoningEfforts(options) {
+    if (!Array.isArray(options)) {
+        return [];
+    }
+    return options.filter((item) => PICKER_REASONING_EFFORTS.has(item?.effort));
 }
 
 export function normalizeModelPreferences(response) {

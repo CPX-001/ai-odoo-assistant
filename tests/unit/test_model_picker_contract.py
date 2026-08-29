@@ -6,6 +6,14 @@ PICKER = (
     ROOT
     / "addons/odoo_ai_assistant/static/src/components/assistant_model/assistant_model.xml"
 )
+AUTONOMY_PICKER = (
+    ROOT
+    / "addons/odoo_ai_assistant/static/src/components/assistant_autonomy/assistant_autonomy.xml"
+)
+COMPOSER_STYLES = (
+    ROOT
+    / "addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_composer.scss"
+)
 
 
 def _picker_dropdown(tree, container_class):
@@ -41,3 +49,26 @@ def test_failed_catalog_state_offers_a_retry_without_hiding_the_picker():
     assert "No se pudo cargar el catálogo de modelos." in source
     assert "No hay niveles de razonamiento disponibles para este modelo." in source
     assert tree.getroot() is not None
+
+
+def test_model_menu_uses_compact_tokens_without_selection_ticks_or_duplicate_arrows():
+    tree = ElementTree.parse(PICKER)
+    dropdown = _picker_dropdown(tree, "o_ai_assistant_model_picker")
+    source = ElementTree.tostring(dropdown, encoding="unicode")
+
+    assert "o_ai_assistant_picker_option_token" in source
+    assert "fa-check" not in source
+    assert "fa-angle-right" not in source
+
+
+def test_closed_preferences_use_one_compact_pill_row_with_full_accessible_titles():
+    model_source = PICKER.read_text(encoding="utf-8")
+    autonomy_source = AUTONOMY_PICKER.read_text(encoding="utf-8")
+    composer_source = COMPOSER_STYLES.read_text(encoding="utf-8")
+
+    assert 't-esc="reasoningModelPillLabel"' in model_source
+    assert 't-esc="reasoningEffortPillLabel"' in model_source
+    assert 't-esc="autonomyProfileLabel"' not in autonomy_source
+    assert "t-att-title=\"'Autonomía: ' + autonomyProfileLabel\"" in autonomy_source
+    assert '"model reasoning autonomy send"' in composer_source
+    assert "justify-self: end" in composer_source

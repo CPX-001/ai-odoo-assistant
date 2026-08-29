@@ -5,6 +5,7 @@ import {
     compactModelLabel,
     groupModelOptions,
     normalizeModelPreferences,
+    pickerReasoningEfforts,
 } from "@odoo_ai_assistant/services/assistant_model_service";
 
 const EFFORTS = Object.freeze([
@@ -66,6 +67,14 @@ test("model response preserves provider reasoning metadata", () => {
     expect(normalized.selectedReasoningEffort).toBe("max");
     expect(normalized.models[0].default_reasoning_effort).toBe("medium");
     expect(normalized.models[0].supported_reasoning_efforts).toHaveLength(3);
+});
+
+test("reasoning picker exposes only levels through high", () => {
+    expect(pickerReasoningEfforts(EFFORTS).map((item) => item.effort)).toEqual([
+        "none",
+        "medium",
+    ]);
+    expect(pickerReasoningEfforts(null)).toEqual([]);
 });
 
 test("GPT named variants render as one family and family alias does not duplicate Sol", () => {

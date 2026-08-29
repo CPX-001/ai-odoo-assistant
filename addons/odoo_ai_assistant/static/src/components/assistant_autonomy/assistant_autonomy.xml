@@ -4,16 +4,19 @@
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
         <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//button[@type='submit']" position="before">
             <div class="o_ai_assistant_autonomy_picker">
-                <Dropdown position="'top-end'" menuClass="'o_ai_assistant_picker_menu'"
+                <Dropdown position="'top-end'"
+                    menuClass="'o_ai_assistant_picker_menu o_ai_assistant_autonomy_menu'"
                     disabled="state.autonomyLoading or state.autonomySaving">
-                    <button type="button" class="o_ai_assistant_picker_button"
+                    <button type="button"
+                        class="o_ai_assistant_picker_button o_ai_assistant_picker_button_icon"
                         aria-label="Nivel de autonomía del Assistant"
                         t-att-title="'Autonomía: ' + autonomyProfileLabel">
                     <i t-if="state.autonomyLoading or state.autonomySaving"
                         class="fa fa-spinner fa-spin" aria-hidden="true"/>
                     <i t-else="" t-att-class="'fa ' + autonomyProfileIconClass"
                         aria-hidden="true"/>
-                    <span class="o_ai_assistant_picker_label" t-esc="autonomyProfileLabel"/>
+                    <i class="fa fa-angle-down o_ai_assistant_picker_caret"
+                        aria-hidden="true"/>
                     </button>
                     <t t-set-slot="content">
                     <div class="o_ai_assistant_picker_menu_title small text-muted">

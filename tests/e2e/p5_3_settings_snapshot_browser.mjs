@@ -31,6 +31,7 @@ const EFFORT_LABEL = Object.freeze({
     xhigh: "Muy alto",
     max: "Máximo",
 });
+const VISIBLE_EFFORTS = new Set(["none", "minimal", "low", "medium", "high"]);
 
 function required(name) {
     const value = process.env[name]?.trim();
@@ -328,7 +329,9 @@ async function changeReasoningEffortThroughUi(page) {
     assert.equal(preferences?.ok, true);
     const effectiveModel = preferences.selected_model || preferences.default_model;
     const model = preferences.models.find((item) => item.model === effectiveModel);
-    const efforts = model?.supported_reasoning_efforts || [];
+    const efforts = (model?.supported_reasoning_efforts || []).filter((item) =>
+        VISIBLE_EFFORTS.has(item.effort)
+    );
     if (!efforts.length) {
         return preferences.selected_reasoning_effort ?? null;
     }

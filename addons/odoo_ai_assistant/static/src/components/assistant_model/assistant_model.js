@@ -7,6 +7,7 @@ import {
     compactModelLabel,
     groupModelOptions,
     modelFamilyLabel,
+    pickerReasoningEfforts,
 } from "@odoo_ai_assistant/services/assistant_model_service";
 
 function reasoningEffortLabel(effort) {
@@ -29,8 +30,6 @@ function reasoningEffortDescription(effort, providerDescription = "") {
         low: _t("Razonamiento ligero para tareas sencillas."),
         medium: _t("Equilibrio entre calidad y velocidad."),
         high: _t("Más razonamiento para tareas complejas."),
-        xhigh: _t("Razonamiento muy profundo para problemas difíciles."),
-        max: _t("Máxima profundidad disponible para las tareas más exigentes."),
     };
     return descriptions[effort] || providerDescription;
 }
@@ -50,6 +49,20 @@ function variantDescription(option) {
         luna: _t("Rápido y económico"),
     };
     return descriptions[option?.variant] || option?.description || "";
+}
+
+function modelPillLabel(option, fallback = "") {
+    const variants = { sol: "S", terra: "T", luna: "L" };
+    if (variants[option?.variant]) {
+        return variants[option.variant];
+    }
+    const compact = compactModelLabel(option?.family || option?.display_name || fallback);
+    return compact.replace(/\s+mini$/i, "m").replace(/\s+/g, "").slice(0, 6) || "M";
+}
+
+function reasoningEffortPillLabel(effort) {
+    const labels = { none: "0", minimal: "1", low: "2", medium: "3", high: "4" };
+    return labels[effort] || "R";
 }
 
 patch(AssistantPanel.prototype, {
@@ -73,6 +86,10 @@ patch(AssistantPanel.prototype, {
             : compactModelLabel(this.reasoningModelLabel) || _t("Predeterminado");
     },
 
+    get reasoningModelPillLabel() {
+        return modelPillLabel(this.reasoningModelOption, this.state.defaultReasoningModel);
+    },
+
     get reasoningModelGroups() {
         return groupModelOptions(this.state.modelOptions);
     },
@@ -88,7 +105,7 @@ patch(AssistantPanel.prototype, {
 
     get reasoningEffortOptions() {
         const options = this.reasoningModelOption?.supported_reasoning_efforts;
-        return Array.isArray(options) ? options : [];
+        return pickerReasoningEfforts(options);
     },
 
     get defaultReasoningEffort() {
@@ -103,6 +120,12 @@ patch(AssistantPanel.prototype, {
 
     get reasoningEffortCompactLabel() {
         return reasoningEffortLabel(
+            this.state.selectedReasoningEffort || this.defaultReasoningEffort
+        );
+    },
+
+    get reasoningEffortPillLabel() {
+        return reasoningEffortPillLabel(
             this.state.selectedReasoningEffort || this.defaultReasoningEffort
         );
     },
@@ -129,12 +152,20 @@ patch(AssistantPanel.prototype, {
         return variantDescription(option);
     },
 
+    modelOptionPillLabel(option) {
+        return modelPillLabel(option);
+    },
+
     reasoningEffortOptionLabel(option) {
         return reasoningEffortLabel(option?.effort);
     },
 
     reasoningEffortOptionDescription(option) {
         return reasoningEffortDescription(option?.effort, option?.description || "");
+    },
+
+    reasoningEffortOptionPillLabel(option) {
+        return reasoningEffortPillLabel(option?.effort);
     },
 
     isReasoningModelSelected(option) {
