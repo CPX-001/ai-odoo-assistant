@@ -1,4 +1,5 @@
 from . import action_execution as action_execution
+from . import activity_preferences as activity_preferences
 from . import assistant_diagnostics as assistant_diagnostics
 from . import chat_policy as chat_policy
 from . import chat_preferences as chat_preferences
