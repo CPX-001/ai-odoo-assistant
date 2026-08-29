@@ -26,6 +26,8 @@ from .validation import validate_payload
 
 _PUBLIC_MODEL = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
 _PUBLIC_ACTIVITY_ID = re.compile(r"^activity:v1:[0-9a-f]{32}$")
+_MAX_PUBLIC_RECORD_REFS = 20
+_MAX_PUBLIC_DISPLAY_NAME = 160
 
 
 class CapabilityExecutor:
@@ -142,10 +144,11 @@ class CapabilityExecutor:
             max_bytes=definition.max_output_bytes,
             error_code="capability_output_invalid",
         )
+        completed_public = _public_result_payload(context, public, output)
         context.emit(
             "tool.completed",
             definition.title or definition.name,
-            public,
+            completed_public,
         )
         return CapabilityResult(
             data=output,
@@ -298,6 +301,50 @@ def _public_operation_payload(name, payload, *, activity_id=None):
     record_id = payload.get("record_id")
     if type(record_id) is int and record_id > 0:
         result["record_id"] = record_id
+    return result
+
+
+def _public_result_payload(context, public, output):
+    """Best-effort projection of already-readable record identities for semantic UI.
+
+    Only a result whose model matches the validated operation model is considered. Record IDs are
+    bounded, re-read under the same effective Odoo Environment and reduced to ``display_name``.
+    Any ambiguity/access failure simply removes the optional references; it can never affect the
+    authoritative capability result.
+    """
+
+    result = dict(public)
+    model = result.get("model")
+    if not isinstance(model, str) or output.get("model") != model:
+        return result
+    raw_records = output.get("records")
+    if not isinstance(raw_records, list):
+        return result
+    ids = []
+    for row in raw_records[:_MAX_PUBLIC_RECORD_REFS]:
+        if not isinstance(row, Mapping):
+            return result
+        record_id = row.get("id")
+        if type(record_id) is not int or record_id <= 0 or record_id in ids:
+            return result
+        ids.append(record_id)
+    if not ids:
+        return result
+    try:
+        records = context.env[model].browse(ids).exists()
+        if records.ids != ids:
+            return result
+        records.check_access("read")
+        names = []
+        for record in records:
+            name = " ".join(str(record.display_name or "").split())
+            if not name:
+                name = f"#{record.id}"
+            names.append(name[:_MAX_PUBLIC_DISPLAY_NAME])
+    except Exception:  # noqa: BLE001 - presentation projection never controls business success
+        return result
+    result["record_ids"] = ids
+    result["display_names"] = names
     return result
 
 
