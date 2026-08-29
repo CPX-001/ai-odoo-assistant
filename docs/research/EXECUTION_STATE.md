@@ -1,23 +1,36 @@
 # Stabilization execution state
 
-State format: 19
+State format: 20  
 Updated: 2026-08-29
-Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
-Accepted P5.1 implementation lineage through: `f7f924ce944db86e896745fef83ea2fb6fd6583a`
-P5.1 validation harness lineage through: `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`
-P5.2 implementation/harness lineage through: `b1e49d97fce5506a2c9bb19b3a9ce1303f7add9c`
-Accepted P5.2 validation/harness lineage through: `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`
-P5.3 implementation/harness lineage through: `1803826a6516e2703497f0d14d74850082ad7665`
-P5.3 focused Odoo validation lineage through: `b7428d7804cdbea263ea78ad5b588398b02fe5be`
-P5.3 deterministic regression lineage through: `525318160ac0dac4984ef11e765a8b443b8c4a28`
-Accepted P5.3 validation/harness lineage through: `32e836e7789ea72f3ba0d32fe6bdabbb092f5953`
-P5.4 implementation record: `docs/research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md`
-Accepted P5.4 validation/harness lineage through: `3e2b38d68fe172cd2cf92d7794159f73476ac23d`
-P5.5 implementation record: `docs/research/P5.5_POST_EFFECT_REASONING.md`
-P5.5 implementation/test lineage through: `c19eda29dd790e855d43127fb96cec4460c32d40`
-P5.5 complete acceptance harness: `tests/e2e/p5_5_acceptance_batch.py`
-Accepted P5.5 validation/harness lineage through: `8427c8849b1e1f3afa6337de1209a6027410c266`
-Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
+
+Accepted foundation/runtime lineage:
+
+```text
+P0-P4 through 8a4432dc9852eacc422b8c794b6613c75da702a9
+P5.1 accepted through f7f924ce944db86e896745fef83ea2fb6fd6583a
+P5.2 accepted through b4fbb034e113a41c26db77cb274f2b3b30f6eee3
+P5.3 accepted through 32e836e7789ea72f3ba0d32fe6bdabbb092f5953
+P5.4 accepted through 3e2b38d68fe172cd2cf92d7794159f73476ac23d
+P5.5 accepted through 8427c8849b1e1f3afa6337de1209a6027410c266
+```
+
+Current unaccepted P5.6 lineage:
+
+```text
+implementation: f141f1dd56b95c5eb3e372bc61a49f265772c657
+validation batch/harness: 29452d85e2c21f625fc38b5bda814524168be5f2
+implementation record: docs/research/P5.6_CONVERSATION_CONTEXT_MANAGER.md
+validation runbook: docs/research/P5.6_VALIDATION_RUNBOOK.md
+acceptance batch: tests/e2e/p5_6_acceptance_batch.py
+```
+
+Roadmaps:
+
+```text
+docs/research/FOUNDATION_STABILIZATION_PLAYBOOK.md
+docs/research/E2E_AGENT_LOOP_CONVERGENCE.md
+docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
+```
 
 ## Current cursor
 
@@ -26,27 +39,19 @@ phase: 5
 phase_name: natural non-blocking multi-chat product
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P5.5-post-effect-reasoning
-active_slice_record: docs/research/P5.5_POST_EFFECT_REASONING.md
-active_slice_state: COMPLETE
-current_gate_type: NONE
-blocking_validations: none
+active_slice: P5.6-conversation-context-manager
+active_slice_record: docs/research/P5.6_CONVERSATION_CONTEXT_MANAGER.md
+active_slice_state: LOCAL_VALIDATION_REQUIRED
+current_gate_type: HARD_LOCAL_AND_REAL
+blocking_validations: P5.6-ODOO-CONTEXT, P5.6-DETERMINISTIC-REGRESSION, P5.6-FULL-ADDON-REGRESSION, P5-REAL-CONTINUITY
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266
-acceptance_evidence: docs/research/evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md
-latest_validation_evidence: docs/research/evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md
-next_slice: P5.6-conversation-context-manager
-next_slice_state: READY_NOT_STARTED
+latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md
+next_action: execute the complete P5.6 acceptance batch and review the bounded real observation
+blocked_successor: P5.7-conversation-scoped-preferences
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
-Phases 0 through 4 are complete. The ordered P2 -> P3 -> P4 real Odoo/browser/provider acceptance
-chain passed on one linear code lineage. P5.1 production code and its deterministic, Odoo and real
-browser/provider acceptance are complete. P5.2 scheduler capacity, causal ordering, fairness,
-release wake-up, diagnostics and real two-cron behavior are accepted. P5.3 stable settings snapshot
-and all four of its focused, deterministic, full-addon and real browser gates are accepted. P5.4
-final activity/answer/failure UX and all three local plus four HARD real gates are accepted. P5.5
-post-effect reasoning passed its focused, deterministic, full-addon and HARD real provider/browser
-gates on one coherent lineage. P5.6 is ready for a later run but was not started here.
+P5.6 is one coherent implementation slice. The next boundary is validation, not another product micro-slice.
 
 ---
 
@@ -56,332 +61,183 @@ Reproducible baseline and timing/failure evidence are complete according to `PHA
 
 # Phase 1 — COMPLETE
 
-Provider boundary / host-owned iterative decision loop is complete.
-
-Retained real evidence:
+Provider boundary and host-owned iterative decision loop are accepted. Retained real evidence includes:
 
 ```text
-P1-REAL-VERSION  | PASS | 49bdac1f732acaaee3154ed60baffd675130991a | Codex 0.149.1
-P1-REAL-SOAK-100 | PASS | 49bdac1f732acaaee3154ed60baffd675130991a | 100/100 turns
-P1-REAL-TOOLCALL | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
-P1-REAL-CANCEL   | PASS | db6e5c12c53e9a99ad3a55f7472eb13f93855a06
+P1-REAL-VERSION  PASS
+P1-REAL-SOAK-100 PASS
+P1-REAL-TOOLCALL PASS
+P1-REAL-CANCEL   PASS
 ```
 
-ADR-019/current code own the active host loop.
-
----
+ADR-019/current code owns active orchestration.
 
 # Phase 2 — COMPLETE
 
-## P2.1 FailureEnvelope — COMPLETE
+Structured failure normalization, provider facts, terminal persistence and browser presentation are accepted.
 
-Bounded host contract:
-
-```text
-code
-category
-stage
-component
-retryability
-effect_state
-user_action
-safe_summary
-safe_details
-diagnostic_id
-provider_code
-```
-
-## P2.2 Provider normalization — COMPLETE
-
-Sanitized provider category/status/upstream facts survive without raw provider output becoming product state.
-
-## P2.3 Terminal persistence — COMPLETE and real validated
-
-Material repaired checkpoint:
+Representative accepted real gates:
 
 ```text
-8683ef6e3e8dd3820fe751f6e7726c9351fa7dfc
+P2-REAL-AUTH      PASS
+P2-REAL-ACL       PASS
+P2-REAL-TIMEOUT   PASS
+P2-REAL-TOOLFAIL  PASS
+P2-REAL-RECOVERY  PASS
 ```
-
-Recorded validation:
-
-```text
-addon install/update                PASS
-focused failure persistence          3 tests / 0 failed
-turn queue suite                      9 tests / 0 failed
-full addon battery                    95 tests / 0 failed/errors
-HOOT @odoo_ai_assistant               78 passed
-unit tests                            201 passed
-repository tests                      344 passed + 36 explicit skips
-```
-
-Evidence:
-
-```text
-docs/research/evidence/phase2/2026-08-28/P2.3-ODOO-VALIDATION-8683ef6.md
-```
-
-## P2.4 Browser failure presentation — COMPLETE
-
-```text
-P2-REAL-AUTH      | HARD | PASS | ba4ba00
-P2-REAL-ACL       | HARD | PASS | ba4ba00
-P2-REAL-TIMEOUT   | HARD | PASS | ba4ba00
-P2-REAL-TOOLFAIL  | HARD | PASS | ba4ba00
-P2-REAL-RECOVERY  | HARD | PASS | ba4ba00
-```
-
-The browser presentation/effect semantics were observed on the supported real product path. See
-`evidence/phase4/2026-08-28/P2-P4-REAL-ACCEPTANCE.md`.
-
----
 
 # Phase 3 — COMPLETE
 
-Current runtime contains:
-
-- production closed `PublicTurnEvent` projection;
-- trusted capability lifecycle -> public activity mapping;
-- independent `odoo.ai.turn.live.event` persistence;
-- separate short cursor/transaction that does not commit the worker business transaction;
-- live row design that avoids an FK lock against the mutable worker turn;
-- authenticated `/odoo_ai/v1/turn/live` route;
-- browser live cursor consumer;
-- public activity panel/history;
-- focused Odoo/deterministic/browser gate tooling.
-
-Important invariant: public live persistence never authorizes a capability or commits business effects merely to make UX progress visible.
+Public activity uses bounded host-owned projections and independent live persistence. Raw provider/private reasoning is not public activity.
 
 ```text
-P3-REAL-ACTIVITY-READ    | HARD | PASS | ba4ba00
-P3-REAL-ACTIVITY-ACTION  | HARD | PASS | ba4ba00
-P3-REAL-LIVE-VISIBILITY  | HARD | PASS | ba4ba00
-P3-REAL-REDACTION        | HARD | PASS | ba4ba00
+P3-REAL-ACTIVITY-READ    PASS
+P3-REAL-ACTIVITY-ACTION  PASS
+P3-REAL-LIVE-VISIBILITY  PASS
+P3-REAL-REDACTION        PASS
 ```
-
----
 
 # Phase 4 — COMPLETE
 
-Current runtime contains:
-
-- `StructuredFinalAnswerDeltaExtractor`;
-- `StreamingCodexDecisionEngine` installed at the existing provider seam;
-- Codex `item/agentMessage/delta` handling;
-- provisional `answer.delta` live persistence;
-- separate browser `activity` and `answer` channels;
-- final authoritative response reconciliation;
-- P4 browser gate tooling/runbook.
-
-Provisional answer text is non-authoritative. The final validated `NextDecision` remains authority and streaming cannot authorize an effect.
+Structured provisional answer streaming is accepted while final validated `NextDecision` remains authority.
 
 ```text
-P4-REAL-FIRST-DELTA      | HARD | PASS | 8a4432d
-P4-REAL-FINAL-PARITY     | HARD | PASS | 8a4432d
-P4-REAL-CANCEL-STREAM    | HARD | PASS | 8a4432d
-P4-REAL-UTF8-FRAGMENT    | HARD | PASS | 8a4432d
+P4-REAL-FIRST-DELTA    PASS
+P4-REAL-FINAL-PARITY   PASS
+P4-REAL-CANCEL-STREAM  PASS
+P4-REAL-UTF8-FRAGMENT  PASS
 ```
-
----
 
 # Phase 5 — IN_PROGRESS
 
-The product direction is documented in:
-
-```text
-docs/PRODUCT_VISION.md
-docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-```
+Product direction: `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`.
 
 ## P5.1 Turn-scoped frontend/background state — COMPLETE
 
-Implementation record: `docs/research/P5.1_TURN_SCOPED_FRONTEND_STATE.md`.
-
-Accepted validation:
-
-```text
-P5.1-HOOT-TURN-SCOPES           | PASS | 95 tests / 370 assertions
-P5.1-P2-P4-REGRESSION           | PASS | P2 five, P3 representative two, P4 representative two
-P5.1-BROWSER-MULTICHAT          | PASS
-P5.1-BROWSER-SETTINGS-SNAPSHOT  | PASS
-P5.1-BROWSER-REOPEN             | PASS
-```
+Accepted behavior includes independent conversation scopes, non-blocking navigation/new chat, close/reopen without restart and model/autonomy controls not globally locked by another running turn.
 
 Evidence: `evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md`.
 
 ## P5.2 Scheduler concurrency/backpressure — COMPLETE
 
-Implementation records:
+Accepted implementation includes bounded two-slot scheduling, same-conversation causality, cross-conversation concurrency, fairness, queue backpressure, wake-up and diagnostics.
 
 ```text
-docs/research/P5.2A_SCHEDULER_CAPACITY_CAUSALITY.md
-docs/research/P5.2_SCHEDULER_IMPLEMENTATION.md
-docs/research/P5.2_VALIDATION_RUNBOOK.md
-```
-
-Accepted validation:
-
-```text
-P5.2-FOCUSED-ODOO              | PASS | 29 tests, 0 failures/errors
-P5.2-FULL-ADDON-REGRESSION     | PASS | 123 tests, 0 failures/errors
-P5.2-HOOT-REGRESSION           | PASS | 95 tests / 370 assertions
-P5.1-BROWSER-MULTICHAT         | PASS
-P5.1-BROWSER-REOPEN            | PASS
-P5-REAL-MULTICHAT              | PASS | peak active 2 at capacity 2
-P5-REAL-CONVERSATION-ORDERING  | PASS | successor queued, then running after release
-P5-REAL-BACKPRESSURE           | PASS | no over-admission at capacity 1; wake 1,674 ms
+P5-REAL-MULTICHAT              PASS
+P5-REAL-CONVERSATION-ORDERING PASS
+P5-REAL-BACKPRESSURE           PASS
 ```
 
 Evidence: `evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
 
 ## P5.3 Stable settings snapshot — COMPLETE
 
-Implementation/validation records:
+Per-turn model/policy/autonomy selectors are versioned and immutable for that turn; revocable ACL/capability/provider facts remain dynamic.
 
 ```text
-docs/research/P5.3_STABLE_SETTINGS_SNAPSHOT.md
-docs/research/P5.3_VALIDATION_RUNBOOK.md
-```
-
-Accepted validation:
-
-```text
-P5.3-ODOO-SETTINGS-SNAPSHOT     | HARD | PASS | 2 tests, 0 failures/errors | b7428d7
-P5.3-DETERMINISTIC-REGRESSION   | HARD | PASS | 6 tests, 0 failures/errors | 5253181
-P5.3-FULL-ADDON-REGRESSION      | HARD | PASS | 126 tests, 0 failures/errors | 32e836e
-P5-REAL-SETTINGS-SNAPSHOT       | HARD | PASS after evidence review | 32e836e
+P5.3-ODOO-SETTINGS-SNAPSHOT    PASS
+P5.3-DETERMINISTIC-REGRESSION  PASS
+P5.3-FULL-ADDON-REGRESSION     PASS
+P5-REAL-SETTINGS-SNAPSHOT      PASS
 ```
 
 Evidence: `evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md`.
 
 ## P5.4 Final activity/answer/failure UX — COMPLETE
 
-Implementation records:
+One authoritative final Assistant message per turn, public activity separated from prose, explicit approval/failure/recovery, and no fake thinking bubble when real activity exists.
 
 ```text
-docs/research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md
-docs/research/P5.4_VALIDATION_RUNBOOK.md
-```
-
-The P5.4 implementation deliberately stays at the existing frontend boundaries. It adds:
-
-- an idempotent per-turn final-answer reconciliation contract so one authoritative turn result maps to one local final Assistant message;
-- a closed product-facing final presentation projection for running/approval/failure/recovery/completed states;
-- a late scoped-service patch that reconciles final answers without creating global conversation state;
-- a neutral `Preparando respuesta…` status when no public activity or answer delta exists, instead of a fake Assistant prose bubble;
-- settled public activity after completion, with the spinner shown only while the turn is actually running;
-- explicit terminal failure/action-failure alerts while preserving bounded retry/recovery guidance;
-- focused HOOT contract coverage;
-- real Chromium basic-chat and approval runners plus a machine-readable P5.4 real-gate manifest.
-
-No backend authority, capability policy, write semantics or P5.5 post-effect continuation is changed by this slice.
-
-Accepted local gates on `3e2b38d`:
-
-```text
-P5.4-DETERMINISTIC-FINAL-UX   | HARD | PASS | 222 unit tests + 19 JS contract assertions
-P5.4-FULL-ADDON-REGRESSION    | HARD | PASS | 126 tests, 0 failures/errors
-P5.4-HOOT-REGRESSION          | HARD | PASS | 101 tests / 392 assertions
-```
-
-Accepted HARD real gates on the same content lineage:
-
-```text
-P5-REAL-CHAT-BASIC      | HARD | PASS
-P5-REAL-ERROR-UX        | HARD | PASS
-P5-REAL-APPROVAL-UX     | HARD | PASS | reject + approve, fixture restored
-P5-REAL-RECOVERY-UX     | HARD | PASS
+P5-REAL-CHAT-BASIC    PASS
+P5-REAL-ERROR-UX      PASS
+P5-REAL-APPROVAL-UX   PASS
+P5-REAL-RECOVERY-UX   PASS
 ```
 
 Evidence: `evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`.
 
 ## P5.5 Post-effect reasoning — COMPLETE
 
-Implementation/validation records:
+Verified effect receipt is appended before provider continuation. Post-effect reasoning receives no PLAN catalog and cannot repeat the completed effect.
 
 ```text
-docs/research/P5.5_POST_EFFECT_REASONING.md
-docs/research/P5.5_VALIDATION_RUNBOOK.md
+P5.5-ODOO-POST-EFFECT          PASS
+P5.5-DETERMINISTIC-REGRESSION PASS
+P5.5-FULL-ADDON-REGRESSION    PASS
+P5-REAL-POST-EFFECT            PASS
 ```
 
-Current implementation:
+Evidence: `evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md`.
 
-- appends a bounded authoritative `verified_effect_receipt` with result + verification context after plan verification;
-- resumes the existing host-owned decision loop for natural final synthesis;
-- exposes REASONING capabilities but no PLAN catalog after the effect;
-- rejects a repeated `PlanStepProposal` through the normal host correction path;
-- preserves the completed verified browser plan while replacing fixed host completion prose with provider-produced final prose;
-- normalizes provider failures after verification as `effect_state=confirmed`, never as effect-safe blind retries;
-- covers oversized-receipt compaction and missing-receipt rejection in focused Odoo tests;
-- includes a real Chromium gate that requires a durable post-receipt `final_answer` and forbids a second executable plan proposal;
-- packages focused, deterministic, full-addon and real checks into one acceptance command.
+## P5.6 ConversationContextManager — LOCAL_VALIDATION_REQUIRED
 
-Executed acceptance command:
-
-```bash
-python tests/e2e/p5_5_acceptance_batch.py \
-  --summary-out /tmp/p5_5_acceptance.json
-```
-
-Accepted validation on `8427c88`:
+Implementation is present on `main` and deliberately covers the whole P5.6 context contract in one slice:
 
 ```text
-P5.5-ODOO-POST-EFFECT          | HARD | PASS | 6 tests, 0 failures/errors
-P5.5-DETERMINISTIC-REGRESSION | HARD | PASS | 227 unit tests + 19 JS assertions
-P5.5-FULL-ADDON-REGRESSION    | HARD | PASS | 132 tests, 0 failures/errors
-P5-REAL-POST-EFFECT            | HARD | PASS after evidence review
-supplemental HOOT regression  |      | PASS | 102 tests / 396 assertions
+versioned immutable per-turn conversation context checkpoint
+recent raw messages ordered by causal predecessor turns
+bounded rolling structured summary
+active Odoo model/record references
+relevant verified-effect references
+reserved bounded evidence references
+bounded session settings with captured Odoo-language fallback
+provider-seam serialization <= 8,000 chars
 ```
 
-The real gate found and drove repair of duplicate proposal/final Assistant messages on approved
-turns. Completion now reuses the durable turn message and the browser reconciles the approval
-projection into one authoritative final message. Evidence:
-`evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md`.
+Full Odoo messages/turns remain history authority. Context is derived data and never grants authorization.
 
-P5.6 is `READY_NOT_STARTED`.
+The implementation fixes the Phase-5 ordering hazard where Turn B can be queued before Turn A's Assistant reply is persisted: provider context is now constructed from predecessor turn identity/order, not raw message creation order. Current and future same-conversation turns are excluded.
+
+Prepared validation is intentionally grouped:
+
+```text
+P5.6-ODOO-CONTEXT
+  -> P5.6-DETERMINISTIC-REGRESSION
+  -> P5.6-FULL-ADDON-REGRESSION
+  -> P5-REAL-CONTINUITY
+  -> bounded evidence review
+```
+
+No P5.6 PASS is claimed yet because this GitHub-only implementation run cannot execute the disposable Odoo/Codex/Chromium environment.
 
 ---
 
-# Current known product limitations recorded for future phases
+# Current known limitations after P5.6 implementation
 
-These limitations define the remaining Phase 5 and later work:
-
-- background scopes are currently web-client memory; durable reconnect/continuity is expanded later in P5;
-- post-effect provider continuation is implemented and accepted by P5.5 validation;
-- conversation provider context is smaller than the target durable `ConversationContextManager` model (P5.6);
-- one canonical effect proposal/step is supported; multi-step effects are P6;
-- no external `CapabilityProvider`/Skill/ContextProvider/EvidenceProvider contract exists yet;
-- no general Evidence/RAG/source/log provider exists in the active embedded capability package;
-- no Developer/Operator privileged host-operation boundary exists;
-- no staged large-import workflow exists.
+- P5.6 has not yet crossed its executable acceptance boundary.
+- Conversation-scoped preference mutations are P5.7; P5.6 only carries the bounded session-settings slot/fallback.
+- One canonical effect step remains the P5 limit; multi-step effects are P6.
+- No external `CapabilityProvider` / Skill / ContextProvider / EvidenceProvider contract yet; those are later phases.
+- No general embedded RAG/Evidence provider yet.
+- No privileged Developer/Operator host-operation boundary yet.
+- No staged large-import workflow yet.
 
 ---
 
 # Invariants carried forward
 
-- Odoo remains persistence/operational authority.
-- Business capabilities execute under effective user with `su=False`.
+- Odoo remains persistence and operational authority.
+- Business capabilities run under the effective user with `su=False`.
 - `CapabilityDefinition` remains atomic executable authority.
-- Provider facts are advisory/bounded; host owns effect certainty.
+- Provider facts/context are advisory bounded data; host owns effect certainty.
 - Durable write barrier and recovery semantics remain authoritative.
-- Raw provider output/private reasoning is not public activity.
-- No parallel tool authority registry is introduced.
-- P5 target concurrency is per-turn/per-conversation, not a global UI lock.
-- Model/autonomy/profile changes after a turn is queued do not mutate that running turn's captured authority/settings.
-- P5.3 freezes execution selectors, not revocable Odoo authorization or dynamic capability guards.
-- P5.4 presentation state cannot authorize or repeat an effect; the final validated turn remains answer authority.
-- P5.5 post-effect continuation has no PLAN authority and cannot repeat a completed effect.
+- Raw provider output/private reasoning is never public activity.
+- No parallel tool-authority registry is introduced.
+- One active causal turn per conversation; independent conversations may run concurrently within scheduler capacity.
+- Turn settings snapshots are immutable but revocable Odoo authorization stays dynamic.
+- P5.5 post-effect continuation has no PLAN authority.
+- P5.6 context snapshots are derived from Odoo history and cannot authorize tools/effects.
 - No GitHub Actions are used for roadmap validation under current instructions.
 
 ---
 
 # Exact next action
 
-In a later run, reconstruct the cursor and prepare the smallest P5.6
-`ConversationContextManager` implementation slice from the current code and playbook. P5.6 is
-eligible but was not implemented as part of P5.5 acceptance.
+Run the complete prepared P5.6 batch on a clean checkout of current `main`:
 
-Do not stop manually after a green focused gate. The batch should continue through deterministic,
-full-addon and real post-effect validation unless a genuine failure blocks it. If every gate succeeds,
-review the sanitized observation, record exact-SHA evidence, mark P5.5 `COMPLETE`, and continue directly
-into P5.6. If any gate fails, repair the smallest responsible layer and rerun the affected chain.
+```bash
+python tests/e2e/p5_6_acceptance_batch.py \
+  --summary-out /tmp/p5_6_acceptance.json
+```
+
+Do **not** stop manually after a green focused gate. Continue through deterministic, full-addon and real continuity checks unless a genuine failure blocks the chain. If all executable gates succeed, review the sanitized observation, record exact-SHA evidence, mark P5.6 `COMPLETE`, and continue directly into P5.7.
