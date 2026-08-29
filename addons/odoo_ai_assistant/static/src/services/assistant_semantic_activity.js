@@ -208,7 +208,10 @@ export function reduceSemanticActivity(events) {
         }
     }
 
-    return Object.freeze(ordered.slice(-100).map(freezeItem));
+    // Retention is bounded at the live-panel state layer (same 1024-event ceiling as the host
+    // live store). Keep the full retained window here so total elapsed time and early lifecycle
+    // correlation remain correct; rendering is bounded separately by presentation preferences.
+    return Object.freeze(ordered.map(freezeItem));
 }
 
 function visibleAtNormalDetail(item, preferences) {
