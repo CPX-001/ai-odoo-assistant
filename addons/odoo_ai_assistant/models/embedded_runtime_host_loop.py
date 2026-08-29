@@ -361,7 +361,9 @@ def _append_plan_prepared(working_items, prepared):
 
 
 def _append_verified_effect_receipt(working_items, plan):
-    steps = plan.get("steps") if isinstance(plan, dict) else None
+    if not isinstance(plan, dict):
+        raise EmbeddedRuntimeError("capability_plan_corrupt")
+    steps = plan.get("steps")
     if plan.get("state") != "completed" or not isinstance(steps, list) or not steps:
         raise EmbeddedRuntimeError("capability_plan_corrupt")
     receipt_steps = []
@@ -370,7 +372,11 @@ def _append_verified_effect_receipt(working_items, plan):
             raise EmbeddedRuntimeError("capability_plan_corrupt")
         result = step.get("result")
         verification = step.get("verification")
-        if step.get("state") != "completed" or not isinstance(result, dict) or not isinstance(verification, dict):
+        if (
+            step.get("state") != "completed"
+            or not isinstance(result, dict)
+            or not isinstance(verification, dict)
+        ):
             raise EmbeddedRuntimeError("capability_plan_corrupt")
         receipt_steps.append(
             {
@@ -390,7 +396,10 @@ def _append_verified_effect_receipt(working_items, plan):
     try:
         return append_working_item(working_items, "verified_effect_receipt", rich)
     except WorkingTranscriptError as error:
-        if error.code != "agent_working_item_too_large":
+        if error.code not in {
+            "agent_working_item_too_large",
+            "agent_working_transcript_too_large",
+        }:
             raise EmbeddedRuntimeError(error.code) from error
         compact = {
             "verified": True,
