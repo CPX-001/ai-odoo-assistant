@@ -73,23 +73,25 @@
                                 </t>
                             </Dropdown>
 
-                            <DropdownItem t-else="" t-foreach="modelGroup.models"
-                                t-as="modelOption" t-key="modelOption.model"
-                                class="'o_ai_assistant_picker_option'"
-                                onSelected="() => this.selectReasoningModel(modelOption.model)">
-                                <span class="o_ai_assistant_picker_option_icon">
-                                    <i class="fa fa-code" aria-hidden="true"/>
-                                </span>
-                                <span class="min-w-0 flex-grow-1">
-                                    <span class="d-block fw-semibold text-truncate"
-                                        t-esc="modelGroup.models.length === 1 ? modelGroup.label : modelVariantLabel(modelOption)"/>
-                                    <span t-if="modelVariantDescription(modelOption)"
-                                        class="d-block small text-muted text-truncate"
-                                        t-esc="modelVariantDescription(modelOption)"/>
-                                </span>
-                                <i t-if="isReasoningModelSelected(modelOption)"
-                                    class="fa fa-check" aria-hidden="true"/>
-                            </DropdownItem>
+                            <t t-else="">
+                                <DropdownItem t-foreach="modelGroup.models"
+                                    t-as="modelOption" t-key="modelOption.model"
+                                    class="'o_ai_assistant_picker_option'"
+                                    onSelected="() => this.selectReasoningModel(modelOption.model)">
+                                    <span class="o_ai_assistant_picker_option_icon">
+                                        <i class="fa fa-code" aria-hidden="true"/>
+                                    </span>
+                                    <span class="min-w-0 flex-grow-1">
+                                        <span class="d-block fw-semibold text-truncate"
+                                            t-esc="modelGroup.models.length === 1 ? modelGroup.label : modelVariantLabel(modelOption)"/>
+                                        <span t-if="modelVariantDescription(modelOption)"
+                                            class="d-block small text-muted text-truncate"
+                                            t-esc="modelVariantDescription(modelOption)"/>
+                                    </span>
+                                    <i t-if="isReasoningModelSelected(modelOption)"
+                                        class="fa fa-check" aria-hidden="true"/>
+                                </DropdownItem>
+                            </t>
                         </t>
                     </t>
                 </Dropdown>
@@ -119,10 +121,9 @@
                             </span>
                             <span class="min-w-0 flex-grow-1">
                                 <span class="d-block fw-semibold">Predeterminado</span>
-                                <span t-if="defaultReasoningEffort"
-                                    class="d-block small text-muted text-truncate">
-                                    <t t-esc="reasoningEffortOptionLabel({ effort: defaultReasoningEffort })"/>
-                                </span>
+                                <span t-if="defaultReasoningEffortLabel"
+                                    class="d-block small text-muted text-truncate"
+                                    t-esc="defaultReasoningEffortLabel"/>
                             </span>
                             <i t-if="!state.selectedReasoningEffort" class="fa fa-check"
                                 aria-hidden="true"/>
