@@ -34,6 +34,8 @@ _DIAGNOSTIC = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _INTERNAL_ACTIVITY = {
     "started": ("turn.started", "queue", "running"),
     "reasoning.started": ("provider.connecting", "provider", "running"),
+    "reasoning.completed": ("provider.connected", "provider", "completed"),
+    "reasoning.failed": ("turn.failed", "provider", "failed"),
     "tool.started": ("capability.started", "capability", "running"),
     "tool.completed": ("capability.completed", "capability", "completed"),
     "tool.failed": ("capability.failed", "capability", "failed"),
