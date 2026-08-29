@@ -81,25 +81,14 @@ class TestPhase3PublicActivityProjection(TransactionCase):
 
     def test_provider_reasoning_lifecycle_reuses_activity_id_and_terminates(self):
         turn_id, turn_uuid, user_id = self._committed_turn()
-        turn = self.env["odoo.ai.turn"].with_user(SUPERUSER_ID).browse(turn_id)
         activity_id = "activity:v1:0123456789abcdef0123456789abcdef"
-        events = self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID)
-        events.append_for_turn(
-            turn=turn,
-            event_type="reasoning.started",
-            title="Analizando petición",
-            payload={"activity_id": activity_id},
-        )
-        events.append_for_turn(
-            turn=turn,
-            event_type="reasoning.completed",
-            title="Respuesta preparada",
-            payload={"activity_id": activity_id},
-        )
-
-        public = self.env["odoo.ai.turn"].with_user(user_id).public_events_for_current_user(
-            turn_uuid,
-            after_sequence=0,
+        public = self._provider_lifecycle(
+            turn_id=turn_id,
+            turn_uuid=turn_uuid,
+            user_id=user_id,
+            activity_id=activity_id,
+            terminal_type="reasoning.completed",
+            terminal_title="Respuesta preparada",
         )
         lifecycle = [event for event in public["events"] if event["activity_id"] == activity_id]
         self.assertEqual(len(lifecycle), 2)
@@ -110,29 +99,52 @@ class TestPhase3PublicActivityProjection(TransactionCase):
 
     def test_provider_reasoning_failure_closes_same_activity(self):
         turn_id, turn_uuid, user_id = self._committed_turn()
-        turn = self.env["odoo.ai.turn"].with_user(SUPERUSER_ID).browse(turn_id)
         activity_id = "activity:v1:fedcba9876543210fedcba9876543210"
-        events = self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID)
-        events.append_for_turn(
-            turn=turn,
-            event_type="reasoning.started",
-            title="Analizando petición",
-            payload={"activity_id": activity_id},
-        )
-        events.append_for_turn(
-            turn=turn,
-            event_type="reasoning.failed",
-            title="Análisis no completado",
-            payload={"activity_id": activity_id},
-        )
-
-        public = self.env["odoo.ai.turn"].with_user(user_id).public_events_for_current_user(
-            turn_uuid,
-            after_sequence=0,
+        public = self._provider_lifecycle(
+            turn_id=turn_id,
+            turn_uuid=turn_uuid,
+            user_id=user_id,
+            activity_id=activity_id,
+            terminal_type="reasoning.failed",
+            terminal_title="Análisis no completado",
         )
         lifecycle = [event for event in public["events"] if event["activity_id"] == activity_id]
         self.assertEqual([event["status"] for event in lifecycle], ["running", "failed"])
         self.assertEqual(lifecycle[-1]["phase"], "provider")
+
+    def _provider_lifecycle(
+        self,
+        *,
+        turn_id,
+        turn_uuid,
+        user_id,
+        activity_id,
+        terminal_type,
+        terminal_title,
+    ):
+        dbname = self.env.cr.dbname
+        with Registry(dbname).cursor() as worker_cr:
+            worker = api.Environment(worker_cr, SUPERUSER_ID, {}, su=True)
+            turn = worker["odoo.ai.turn"].browse(turn_id)
+            events = worker["odoo.ai.turn.event"]
+            events.append_for_turn(
+                turn=turn,
+                event_type="reasoning.started",
+                title="Analizando petición",
+                payload={"activity_id": activity_id},
+            )
+            events.append_for_turn(
+                turn=turn,
+                event_type=terminal_type,
+                title=terminal_title,
+                payload={"activity_id": activity_id},
+            )
+            with Registry(dbname).cursor() as observer_cr:
+                observer = api.Environment(observer_cr, user_id, {}, su=False)
+                return observer["odoo.ai.turn"].public_events_for_current_user(
+                    turn_uuid,
+                    after_sequence=0,
+                )
 
     def test_second_cursor_observes_public_event_before_worker_commit(self):
         turn_id, turn_uuid, user_id = self._committed_turn()
