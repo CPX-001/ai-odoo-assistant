@@ -7,8 +7,7 @@
                 <Dropdown position="'top-end'" menuClass="'o_ai_assistant_picker_menu'"
                     disabled="state.modelLoading or state.modelSaving or !state.modelOptions.length">
                     <button type="button" class="o_ai_assistant_picker_button"
-                        aria-label="Modelo de Codex"
-                        t-att-title="'Modelo: ' + reasoningModelLabel">
+                        aria-label="Modelo de Codex" t-att-title="reasoningModelLabel">
                         <i t-if="state.modelLoading or state.modelSaving"
                             class="fa fa-spinner fa-spin" aria-hidden="true"/>
                         <i t-else="" class="fa fa-code" aria-hidden="true"/>
@@ -19,7 +18,7 @@
                     </button>
                     <t t-set-slot="content">
                         <div class="o_ai_assistant_picker_menu_title small text-muted">
-                            Modelo de Codex
+                            Modelo
                         </div>
                         <DropdownItem class="'o_ai_assistant_picker_option'"
                             onSelected="() => this.selectReasoningModel(null)">
@@ -28,26 +27,120 @@
                             </span>
                             <span class="min-w-0 flex-grow-1">
                                 <span class="d-block fw-semibold">Predeterminado</span>
-                                <span t-if="state.defaultReasoningModel"
+                                <span t-if="defaultReasoningModelLabel"
                                     class="d-block small text-muted text-truncate"
-                                    t-esc="state.defaultReasoningModel"/>
+                                    t-esc="defaultReasoningModelLabel"/>
                             </span>
                             <i t-if="!state.selectedReasoningModel" class="fa fa-check"
                                 aria-hidden="true"/>
                         </DropdownItem>
-                        <DropdownItem t-foreach="state.modelOptions" t-as="modelOption"
-                            t-key="modelOption.model" class="'o_ai_assistant_picker_option'"
-                            onSelected="() => this.selectReasoningModel(modelOption.model)">
+
+                        <t t-foreach="reasoningModelGroups" t-as="modelGroup"
+                            t-key="modelGroup.family">
+                            <Dropdown t-if="modelGroup.hasVariants" position="'right-start'"
+                                menuClass="'o_ai_assistant_picker_menu o_ai_assistant_picker_submenu'">
+                                <button type="button"
+                                    class="dropdown-item o_ai_assistant_picker_option o_ai_assistant_picker_submenu_toggle">
+                                    <span class="o_ai_assistant_picker_option_icon">
+                                        <i class="fa fa-code" aria-hidden="true"/>
+                                    </span>
+                                    <span class="min-w-0 flex-grow-1 fw-semibold text-truncate"
+                                        t-esc="modelGroup.label"/>
+                                    <i t-if="isReasoningFamilySelected(modelGroup)"
+                                        class="fa fa-check me-1" aria-hidden="true"/>
+                                    <i class="fa fa-angle-right" aria-hidden="true"/>
+                                </button>
+                                <t t-set-slot="content">
+                                    <div class="o_ai_assistant_picker_menu_title small text-muted"
+                                        t-esc="modelGroup.label"/>
+                                    <DropdownItem t-foreach="modelGroup.models"
+                                        t-as="modelOption" t-key="modelOption.model"
+                                        class="'o_ai_assistant_picker_option'"
+                                        onSelected="() => this.selectReasoningModel(modelOption.model)">
+                                        <span class="o_ai_assistant_picker_option_icon">
+                                            <i class="fa fa-circle-o" aria-hidden="true"/>
+                                        </span>
+                                        <span class="min-w-0 flex-grow-1">
+                                            <span class="d-block fw-semibold text-truncate"
+                                                t-esc="modelVariantLabel(modelOption)"/>
+                                            <span t-if="modelVariantDescription(modelOption)"
+                                                class="d-block small text-muted text-truncate"
+                                                t-esc="modelVariantDescription(modelOption)"/>
+                                        </span>
+                                        <i t-if="isReasoningModelSelected(modelOption)"
+                                            class="fa fa-check" aria-hidden="true"/>
+                                    </DropdownItem>
+                                </t>
+                            </Dropdown>
+
+                            <DropdownItem t-else="" t-foreach="modelGroup.models"
+                                t-as="modelOption" t-key="modelOption.model"
+                                class="'o_ai_assistant_picker_option'"
+                                onSelected="() => this.selectReasoningModel(modelOption.model)">
+                                <span class="o_ai_assistant_picker_option_icon">
+                                    <i class="fa fa-code" aria-hidden="true"/>
+                                </span>
+                                <span class="min-w-0 flex-grow-1">
+                                    <span class="d-block fw-semibold text-truncate"
+                                        t-esc="modelGroup.models.length === 1 ? modelGroup.label : modelVariantLabel(modelOption)"/>
+                                    <span t-if="modelVariantDescription(modelOption)"
+                                        class="d-block small text-muted text-truncate"
+                                        t-esc="modelVariantDescription(modelOption)"/>
+                                </span>
+                                <i t-if="isReasoningModelSelected(modelOption)"
+                                    class="fa fa-check" aria-hidden="true"/>
+                            </DropdownItem>
+                        </t>
+                    </t>
+                </Dropdown>
+            </div>
+
+            <div class="o_ai_assistant_reasoning_picker">
+                <Dropdown position="'top-end'" menuClass="'o_ai_assistant_picker_menu'"
+                    disabled="state.modelLoading or state.reasoningEffortSaving or !reasoningEffortOptions.length">
+                    <button type="button" class="o_ai_assistant_picker_button"
+                        aria-label="Nivel de razonamiento" t-att-title="reasoningEffortTitle">
+                        <i t-if="state.modelLoading or state.reasoningEffortSaving"
+                            class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                        <i t-else="" class="fa fa-lightbulb-o" aria-hidden="true"/>
+                        <span class="o_ai_assistant_picker_label"
+                            t-esc="reasoningEffortCompactLabel"/>
+                        <i class="fa fa-angle-down o_ai_assistant_picker_caret"
+                            aria-hidden="true"/>
+                    </button>
+                    <t t-set-slot="content">
+                        <div class="o_ai_assistant_picker_menu_title small text-muted">
+                            Nivel de razonamiento
+                        </div>
+                        <DropdownItem class="'o_ai_assistant_picker_option'"
+                            onSelected="() => this.selectReasoningEffort(null)">
                             <span class="o_ai_assistant_picker_option_icon">
-                                <i class="fa fa-code" aria-hidden="true"/>
+                                <i class="fa fa-magic" aria-hidden="true"/>
+                            </span>
+                            <span class="min-w-0 flex-grow-1">
+                                <span class="d-block fw-semibold">Predeterminado</span>
+                                <span t-if="defaultReasoningEffort"
+                                    class="d-block small text-muted text-truncate">
+                                    <t t-esc="reasoningEffortOptionLabel({ effort: defaultReasoningEffort })"/>
+                                </span>
+                            </span>
+                            <i t-if="!state.selectedReasoningEffort" class="fa fa-check"
+                                aria-hidden="true"/>
+                        </DropdownItem>
+                        <DropdownItem t-foreach="reasoningEffortOptions" t-as="effortOption"
+                            t-key="effortOption.effort" class="'o_ai_assistant_picker_option'"
+                            onSelected="() => this.selectReasoningEffort(effortOption.effort)">
+                            <span class="o_ai_assistant_picker_option_icon">
+                                <i class="fa fa-lightbulb-o" aria-hidden="true"/>
                             </span>
                             <span class="min-w-0 flex-grow-1">
                                 <span class="d-block fw-semibold text-truncate"
-                                    t-esc="modelOption.display_name"/>
-                                <span class="d-block small text-muted text-truncate"
-                                    t-esc="modelOption.model"/>
+                                    t-esc="reasoningEffortOptionLabel(effortOption)"/>
+                                <span t-if="reasoningEffortOptionDescription(effortOption)"
+                                    class="d-block small text-muted text-truncate"
+                                    t-esc="reasoningEffortOptionDescription(effortOption)"/>
                             </span>
-                            <i t-if="modelOption.model === state.selectedReasoningModel"
+                            <i t-if="effortOption.effort === state.selectedReasoningEffort"
                                 class="fa fa-check" aria-hidden="true"/>
                         </DropdownItem>
                     </t>
