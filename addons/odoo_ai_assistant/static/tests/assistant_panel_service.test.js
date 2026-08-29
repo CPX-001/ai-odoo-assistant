@@ -168,6 +168,33 @@ test("chat accepts generic capability preview metadata", () => {
     );
 });
 
+test("chat accepts a verified model-scoped receipt for a batch mutation", () => {
+    const step = capabilityStep("completed");
+    step.capability = "odoo.records.batch_mutate";
+    step.preview = {
+        operation: "create",
+        model: "sale.order",
+        count: 2,
+        rows: [
+            { partner_id: 31, client_order_ref: "TEST-001" },
+            { partner_id: 31, client_order_ref: "TEST-002" },
+        ],
+    };
+    step.receipt = {
+        error_code: null,
+        evidence_id: null,
+        outcome: "verified",
+        record_id: null,
+        record_model: "sale.order",
+    };
+
+    const normalized = normalizeChatResponse(chatResponse(agentPlan("completed", false, [step])));
+
+    expect(normalized.errorCode).toBe(null);
+    expect(normalized.result.plan.steps[0].receipt.record_id).toBe(null);
+    expect(normalized.result.plan.steps[0].receipt.record_model).toBe("sale.order");
+});
+
 test("chat sends through the Odoo-native turn queue", async () => {
     const panelState = state();
     const paths = [];

@@ -105,7 +105,8 @@ function validReceipt(receipt) {
             typeof receipt.outcome === "string" &&
             (receipt.error_code === null || typeof receipt.error_code === "string") &&
             (receipt.evidence_id === null || typeof receipt.evidence_id === "string") &&
-            ((receipt.record_id === null && receipt.record_model === null) ||
+            ((receipt.record_id === null &&
+                (receipt.record_model === null || typeof receipt.record_model === "string")) ||
                 (Number.isSafeInteger(receipt.record_id) &&
                     receipt.record_id > 0 &&
                     typeof receipt.record_model === "string")))

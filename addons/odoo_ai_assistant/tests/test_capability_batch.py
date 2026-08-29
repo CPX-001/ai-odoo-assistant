@@ -1,8 +1,10 @@
 import asyncio
+from types import SimpleNamespace
 
 from odoo import Command
 from odoo.tests.common import TransactionCase
 
+from ..models.embedded_runtime import _browser_capability_plan
 from ..runtime.agent import CapabilityPlanError, CapabilityPlanService, PlannedCapability
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
@@ -174,6 +176,23 @@ class TestCapabilityBatchMutations(TransactionCase):
         created = context.env["res.partner"].browse(record_ids).exists()
         self.assertEqual(created.mapped("name"), ["AI CREATED A", "AI CREATED B"])
         self.assertEqual(executed.payload["steps"][0]["verification"]["count"], 2)
+
+        browser_plan = _browser_capability_plan(
+            SimpleNamespace(
+                turn_uuid="batch-capability-browser-test",
+                input_message="Crear dos contactos",
+            ),
+            executed.payload,
+            {
+                "confirmation_mode": "always_confirm",
+                "max_auto_risk": "low",
+                "allow_synthetic_data": False,
+            },
+        )
+        receipt = browser_plan["steps"][0]["receipt"]
+        self.assertEqual(receipt["outcome"], "verified")
+        self.assertIsNone(receipt["record_id"])
+        self.assertEqual(receipt["record_model"], "res.partner")
 
     def test_batch_delete_requires_preview_and_verifies_absence(self):
         context, _registry, plans = self._runtime()
