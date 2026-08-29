@@ -53,9 +53,8 @@ Documentation should make lifecycle status obvious:
 - **Target / roadmap:** accepted product direction but not an implementation claim.
 - **Historical / retired:** kept for lineage/evidence only.
 
-This is especially important while Phase 5 is active. At the time of this README update, P0-P4,
-P5.1 and P5.2 are accepted; P5.3 stable settings snapshot passed its focused and bounded deterministic
-gates and now awaits the formal real product-path gate plus full-addon regression. The exact live cursor is always
+This is especially important while Phase 5 is active. At the time of this README update, P0-P4 and
+P5.1-P5.3 are accepted; P5.4 final activity/answer/failure UX is ready. The exact live cursor is always
 [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
 
 ## Documentation layers

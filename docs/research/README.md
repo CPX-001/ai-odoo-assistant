@@ -27,8 +27,8 @@ Research documents do not override:
 | `P5.2A_SCHEDULER_CAPACITY_CAUSALITY.md` | P5.2a implementation record for bounded capacity and causal claim eligibility. |
 | `P5.2_SCHEDULER_IMPLEMENTATION.md` | Current full P5.2 implementation record: capacity, ordering, fairness, wake-up, diagnostics and real-gate harness. |
 | `P5.2_VALIDATION_RUNBOOK.md` | Batched deterministic/regression/real-environment acceptance procedure for the complete P5.2 implementation. |
-| `P5.3_STABLE_SETTINGS_SNAPSHOT.md` | Current P5.3 implementation record for the versioned immutable per-turn settings snapshot. |
-| `P5.3_VALIDATION_RUNBOOK.md` | Split P5.3 validation sequence; focused and bounded deterministic gates passed, and the formal real product-path gate is next. |
+| `P5.3_STABLE_SETTINGS_SNAPSHOT.md` | Completed P5.3 implementation/acceptance record for the versioned immutable per-turn settings snapshot. |
+| `P5.3_VALIDATION_RUNBOOK.md` | Executed P5.3 focused, deterministic, full-addon and real browser acceptance procedure. |
 | `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed status record for P3 public activity. |
 | `PHASE4_ANSWER_STREAMING.md` | Formal completed status record for P4 answer streaming. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
@@ -48,7 +48,7 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS; P5.1 and P5.2 complete, P5.3 REAL_ENV_VALIDATION_REQUIRED
+P5 IN_PROGRESS; P5.1, P5.2 and P5.3 COMPLETE; P5.4 READY
 P6+ not eligible
 ```
 
@@ -65,11 +65,11 @@ a/b/c scope, including bounded capacity, causal ordering, anti-starvation fairne
 wake-up, aggregate diagnostics and the real browser gates. The accepted batch is recorded in
 `evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
 
-P5.3 now has a versioned host-owned turn settings snapshot, focused Odoo coverage and addon version
-checkpoint. `P5.3-ODOO-SETTINGS-SNAPSHOT` passed on `b7428d7` with 2 tests and no failures/errors;
-`P5.3-DETERMINISTIC-REGRESSION` passed on `5253181` with 6 tests and no failures/errors. The formal
-real settings-snapshot gate is next, and full-addon regression remains required. P5.4 stays blocked
-until all P5.3 acceptance gates pass.
+P5.3 has a versioned host-owned turn settings snapshot and is accepted. Its focused Odoo gate passed
+with 2 tests, bounded deterministic regression with 6 tests, full addon regression with 126 tests,
+and `P5-REAL-SETTINGS-SNAPSHOT` passed after review of the bounded real browser observation. The
+sanitized final record is `evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md`. P5.4 final
+activity/answer/failure UX is READY.
 
 ## Recursive execution rule
 

@@ -734,7 +734,7 @@ P2  structured failures                          COMPLETE
 P3  live public activity                         COMPLETE
 P4  real answer streaming                        COMPLETE
 
-P5  natural non-blocking multi-chat + continuity IN PROGRESS; P5.1/P5.2 COMPLETE, P5.3 READY
+P5  natural non-blocking multi-chat + continuity IN PROGRESS; P5.1/P5.2/P5.3 COMPLETE, P5.4 READY
 P6  TaskPlan / multi-step EffectPlan / EffectJournal
 P7  mini-framework + Assistant manifest
 P8  Evidence + source/runtime/log intelligence
@@ -747,4 +747,4 @@ P14 additional surfaces / automation / MCP
 P15 additional providers
 ```
 
-**Exact next action: define and execute P5.3 stable settings snapshot as one bounded slice.**
+**Exact next action: define P5.4 final activity/answer/failure UX as one bounded slice with explicit deterministic and real gates.**
