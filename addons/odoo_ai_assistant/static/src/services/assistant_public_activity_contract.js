@@ -61,6 +61,7 @@ const MODEL_RE = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
 const ACTIVITY_ID_RE = /^activity:v[1-9][0-9]*:[0-9a-f]{32}$/;
 const DIAGNOSTIC_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
 const OCCURRED_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
+const MAX_RESOURCE_RECORDS = 50;
 
 function exactKeys(value, expected) {
     return (
@@ -91,11 +92,11 @@ function normalizeResource(value) {
     }
     if (
         !Array.isArray(value.record_ids) ||
-        value.record_ids.length > 20 ||
+        value.record_ids.length > MAX_RESOURCE_RECORDS ||
         value.record_ids.some((recordId) => !Number.isSafeInteger(recordId) || recordId <= 0) ||
         new Set(value.record_ids).size !== value.record_ids.length ||
         !Array.isArray(value.display_names) ||
-        value.display_names.length > 20 ||
+        value.display_names.length > MAX_RESOURCE_RECORDS ||
         value.display_names.some((name) => !validLabel(name, 160)) ||
         (value.display_names.length && value.display_names.length !== value.record_ids.length) ||
         ((value.record_ids.length || value.display_names.length) && value.model === null)
