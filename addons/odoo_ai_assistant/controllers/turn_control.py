@@ -9,11 +9,21 @@ from ..models.turn_control import TurnControlError
 
 class AssistantTurnControlController(http.Controller):
     @http.route("/odoo_ai/v1/turn/redirect", type="json", auth="user", methods=["POST"])
-    def redirect_turn(self, turn_id=None, message=None, **unexpected):
+    def redirect_turn(
+        self,
+        turn_id=None,
+        message=None,
+        client_intervention_id=None,
+        **unexpected,
+    ):
         if unexpected:
             return _error("invalid_context")
         try:
-            return request.env["odoo.ai.turn"].redirect_for_current_user(turn_id, message)
+            return request.env["odoo.ai.turn"].redirect_for_current_user(
+                turn_id,
+                message,
+                client_intervention_id=client_intervention_id,
+            )
         except AccessError:
             return _error("turn_not_found")
         except ValidationError:
