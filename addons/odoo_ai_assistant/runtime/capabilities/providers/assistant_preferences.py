@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 
 from odoo.exceptions import AccessError, ValidationError
 
@@ -21,6 +22,7 @@ from ..decorators import tool
 
 _AUTONOMY_PROFILES = ("inherit", "strict", "balanced", "autonomous", "full_access")
 _LANGUAGE_MODES = ("inherit", "automatic", "odoo", "fixed")
+_LANGUAGE_TAG = re.compile(r"^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{2,8}){0,3}$")
 
 _EMPTY_INPUT = {
     "type": "object",
@@ -279,7 +281,9 @@ def _language_arguments(arguments):
     normalized = language.strip()
     if mode != "fixed" and normalized:
         raise CapabilityError("invalid_context")
-    if mode == "fixed" and not normalized:
+    if mode == "fixed" and (
+        not normalized or _LANGUAGE_TAG.fullmatch(normalized) is None
+    ):
         raise CapabilityError("invalid_context")
     return {"mode": mode, "language": normalized}
 
