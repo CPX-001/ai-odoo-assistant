@@ -56,7 +56,7 @@ P3 COMPLETE
 P4 COMPLETE
 P5 IN_PROGRESS; P5.1-P5.6 COMPLETE; P5.7 IN_PROGRESS
   model/reasoning sub-slice ACCEPTED
-  conversation preference mutation IMPLEMENTED / P5.7-ODOO-CONVERSATION-PREFERENCES REQUIRED
+  conversation preference mutation LOCAL GATES PASS / REAL PRODUCT GATES REQUIRED
 P6+ not eligible
 ```
 
@@ -99,9 +99,13 @@ both required real browser settings gates on checkpoint `eb66e45`. The sanitized
 `evidence/phase5/2026-08-29/P5.7-MODEL-REASONING-ACCEPTANCE-eb66e45.md`.
 
 The remaining conversation preference implementation is now on `main`: explicit per-conversation
-autonomy and response-language mutations reuse the current capability/turn/context framework. It is
-not accepted yet. The next hard stop is `P5.7-ODOO-CONVERSATION-PREFERENCES`; broader regression and
-real product-path gates must wait for that focused Odoo result.
+autonomy and response-language mutations reuse the current capability/turn/context framework. Its
+focused Odoo gate, 229-unit/19-contract deterministic regression, 143-test full addon regression and
+104-test/409-assertion HOOT suite passed on the materially tested `a61bb28` tree. The sanitized
+record is `evidence/phase5/2026-08-29/P5.7-CONVERSATION-PREFERENCES-LOCAL-a61bb28.md`.
+
+P5.7 is not accepted yet. The Odoo-owned Codex session was not authenticated, so
+`P5-REAL-SESSION-POLICY` and `P5-REAL-LANGUAGE-PREFERENCE` remain hard blockers.
 
 ## Recursive execution rule
 

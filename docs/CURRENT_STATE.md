@@ -11,10 +11,14 @@ P5.4 accepted through 3e2b38d68fe172cd2cf92d7794159f73476ac23d
 P5.5 accepted through 8427c8849b1e1f3afa6337de1209a6027410c266
 P5.6 accepted through 720102f2a13af5240c779b07cc71ee65994a87b1
 P5.7 model/reasoning preference sub-slice accepted through eb66e45447c4d64e1ebbb5e8322bffa759c12773
-P5.7 conversation preference mutation implementation present; focused Odoo gate pending
+P5.7 conversation preference mutation local gates pass; real product gates pending
 ```
 
-P5.6 is formally accepted. P5.7 is in progress: the provider-backed model/reasoning preference sub-slice is accepted, and the explicit conversation-scoped mutation implementation is now present but not accepted until `P5.7-ODOO-CONVERSATION-PREFERENCES` passes. The exact live cursor is always `research/EXECUTION_STATE.md`.
+P5.6 is formally accepted. P5.7 is in progress: the provider-backed model/reasoning preference
+sub-slice is accepted, and the explicit conversation-scoped mutation implementation has passed its
+focused/local regression boundary. It remains unaccepted until `P5-REAL-SESSION-POLICY` and
+`P5-REAL-LANGUAGE-PREFERENCE` pass. The exact live cursor is always
+`research/EXECUTION_STATE.md`.
 
 ## 1. Product/deployment baseline
 
@@ -235,14 +239,15 @@ P5 IN_PROGRESS
   P5.6 COMPLETE
   P5.7 IN_PROGRESS
     model/reasoning sub-slice ACCEPTED
-    conversation preference mutation IMPLEMENTED / FOCUSED ODOO GATE REQUIRED
+    conversation preference mutation LOCAL GATES PASS / REAL PRODUCT GATES REQUIRED
 P6+ NOT ELIGIBLE
 ```
 
-Current blocking gate:
+Current blocking gates:
 
 ```text
-P5.7-ODOO-CONVERSATION-PREFERENCES
+P5-REAL-SESSION-POLICY
+P5-REAL-LANGUAGE-PREFERENCE
 ```
 
 Implementation/validation record:
@@ -251,4 +256,5 @@ Implementation/validation record:
 research/P5.7_CONVERSATION_SCOPED_PREFERENCES.md
 ```
 
-Do not begin P5.8 or broader P5.7 acceptance until this focused gate passes on a clean current SHA.
+Do not begin P5.8 until both real product-path gates pass on a materially unchanged P5.7
+implementation.

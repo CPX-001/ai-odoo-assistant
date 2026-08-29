@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 24
+State format: 25
 Updated: 2026-08-29
 
 Accepted foundation/runtime lineage:
@@ -45,18 +45,23 @@ phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P5.7-conversation-scoped-preferences
 active_slice_record: docs/research/P5.7_CONVERSATION_SCOPED_PREFERENCES.md
-active_slice_state: IMPLEMENTED_FOCUSED_VALIDATION_REQUIRED
+active_slice_state: REAL_ENV_VALIDATION_REQUIRED
 current_gate_type: HARD
-blocking_validations: P5.7-ODOO-CONVERSATION-PREFERENCES
+blocking_validations: P5-REAL-SESSION-POLICY, P5-REAL-LANGUAGE-PREFERENCE
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266 -> 720102f2a13af5240c779b07cc71ee65994a87b1 -> eb66e45447c4d64e1ebbb5e8322bffa759c12773
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.7-MODEL-REASONING-ACCEPTANCE-eb66e45.md
-next_action: run P5.7-ODOO-CONVERSATION-PREFERENCES on clean current main in a disposable Odoo 18 Community database; repair and rerun before any broader P5.7 validation or P5.8 work
+latest_executed_evidence: docs/research/evidence/phase5/2026-08-29/P5.7-CONVERSATION-PREFERENCES-LOCAL-a61bb28.md
+next_action: reconnect the provider-owned Codex account through the supported Odoo flow, then run and review P5-REAL-SESSION-POLICY and P5-REAL-LANGUAGE-PREFERENCE before P5.8 work
 planned_successor_after_p5.7: P5.8-semantic-activity-reasoning-navigation-ux
 planned_successor_record: docs/research/P5.8_SEMANTIC_ACTIVITY_UX.md
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
-P5.6 is accepted. P5.7 is in progress: its model-family/reasoning-effort sub-slice is accepted through `eb66e45`. The remaining conversation-scoped preference mutation implementation is now present on `main`, but it is deliberately stopped at its first focused Odoo validation boundary. P5.8 remains planned only after all P5.7 validation is accepted.
+P5.6 is accepted. P5.7 is in progress: its model-family/reasoning-effort sub-slice is accepted
+through `eb66e45`, and the remaining conversation-scoped preference mutation has passed its focused,
+deterministic, full-addon and HOOT gates on the materially tested `a61bb28` tree. P5.7 is now stopped
+at its two hard real product-path gates because the Odoo-owned Codex account is not authenticated.
+P5.8 remains planned only after all P5.7 validation is accepted.
 
 ---
 
@@ -214,7 +219,7 @@ P5-REAL-CONTINUITY            PASS
 
 Evidence: `evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md`.
 
-## P5.7 Conversation-scoped preferences — IN_PROGRESS / FOCUSED_GATE_REQUIRED
+## P5.7 Conversation-scoped preferences — IN_PROGRESS / REAL_ENV_VALIDATION_REQUIRED
 
 The model-family/model-variant/reasoning-effort preference sub-slice is accepted through `eb66e45`. Its immutable execution snapshot is format v2 and the exact explicit effort reaches all current App Server adapters.
 
@@ -244,13 +249,27 @@ preview / precondition / execute / verify for both mutations
 
 Implementation/validation record: `P5.7_CONVERSATION_SCOPED_PREFERENCES.md`.
 
-No new P5.7 validation is accepted yet. The immediate hard stop is:
+The conversation-mutation local validation passed on exact content checkpoint `a61bb28`:
 
 ```text
-P5.7-ODOO-CONVERSATION-PREFERENCES
+P5.7-ODOO-CONVERSATION-PREFERENCES PASS (5 tests / 7 executions)
+P5.7-DETERMINISTIC-REGRESSION      PASS (229 unit / 19 JS assertions)
+P5.7-FULL-ADDON-REGRESSION        PASS (143 tests / 197 executions)
+P5.7-HOOT-ADDON                   PASS (104 tests / 409 assertions)
 ```
 
-Only after that focused Odoo gate passes may the slice prepare/run broader deterministic, full-addon and real product-path gates such as `P5-REAL-SESSION-POLICY` and the multilingual conversation-isolation observation required by the response-language contract.
+Evidence: `evidence/phase5/2026-08-29/P5.7-CONVERSATION-PREFERENCES-LOCAL-a61bb28.md`.
+
+The remaining hard gates are:
+
+```text
+P5-REAL-SESSION-POLICY       REAL_ENV_VALIDATION_REQUIRED
+P5-REAL-LANGUAGE-PREFERENCE REAL_ENV_VALIDATION_REQUIRED
+```
+
+The attempted real-browser session reached the Odoo runtime account boundary, which correctly
+reported `authentication_error`; the provider-owned Odoo `data_dir` session was not authenticated.
+No provider-backed turn was claimed as executed.
 
 ## P5.8 Semantic activity/reasoning/navigation UX — PLANNED_AFTER_P5.7
 
@@ -262,10 +281,11 @@ It must remain separate from private/raw reasoning and from Phase-6 TaskPlan/eff
 
 ---
 
-# Current known limitations at the P5.7 focused validation boundary
+# Current known limitations at the P5.7 real validation boundary
 
-- The new explicit conversation preference mutation code has not yet passed `P5.7-ODOO-CONVERSATION-PREFERENCES`; do not treat it as accepted product behavior until the gate is recorded.
-- Broader P5.7 deterministic/full-addon/browser validation remains after the focused gate.
+- P5.7 conversation preference mutation has passed focused/local regression, but it is not complete
+  product behavior until `P5-REAL-SESSION-POLICY` and `P5-REAL-LANGUAGE-PREFERENCE` pass.
+- The Odoo-owned Codex account must be reconnected before those real browser gates can run.
 - Current public activity remains too close to raw capability lifecycle presentation; P5.8 is the planned semantic projection/UX repair.
 - One canonical effect step remains the P5 limit; multi-step effects are P6.
 - No external `CapabilityProvider` / Skill / ContextProvider / EvidenceProvider contract yet; those are later phases.
@@ -297,4 +317,7 @@ It must remain separate from private/raw reasoning and from Phase-6 TaskPlan/eff
 
 # Exact next action
 
-Run `P5.7-ODOO-CONVERSATION-PREFERENCES` against clean current `main` on a disposable Odoo 18 Community database using test selector `/odoo_ai_assistant:TestAssistantConversationPreferences`. If it fails, repair only the responsible P5.7 conversation-preference layer and rerun. Do not launch the broader regression or start P5.8 until this focused gate passes.
+Reconnect ChatGPT through the supported Odoo account flow without copying credentials into the
+database, prompts or repository. Then run and review `P5-REAL-SESSION-POLICY` and
+`P5-REAL-LANGUAGE-PREFERENCE` on a disposable Odoo 18 Community database. Do not start P5.8 until
+both observations pass on a materially unchanged P5.7 implementation.

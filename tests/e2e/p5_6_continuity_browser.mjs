@@ -57,11 +57,17 @@ async function login(page, { baseUrl, database, loginName, password }) {
         page.locator('button[type="submit"]').click(),
     ]);
     await page.goto(`${baseUrl}/web?db=${encodeURIComponent(database)}`);
+    const runtime = await jsonRpc(page, "/odoo_ai/v1/runtime-account", {});
+    assert.equal(
+        runtime?.state,
+        "authenticated",
+        `Odoo-owned Codex account is not authenticated: ${runtime?.state || "unknown"}`
+    );
     await openAssistant(page);
 }
 
 async function openAssistant(page) {
-    const open = page.getByRole("button", { name: "Abrir AI Assistant" });
+    const open = page.locator(".o_ai_assistant_systray button");
     const composer = page.locator("#o_ai_assistant_question");
     const history = page.locator(".o_ai_assistant_history");
     if (!(await composer.isVisible()) && !(await history.isVisible())) {
@@ -76,7 +82,7 @@ async function openAssistant(page) {
 
 async function openHistory(page) {
     if (await page.locator(".o_ai_assistant_history").count()) return;
-    const back = page.getByRole("button", { name: "Volver al historial" });
+    const back = page.locator(".o_ai_assistant_history_button");
     await back.waitFor({ state: "visible", timeout: 30_000 });
     await back.click();
     await page.locator(".o_ai_assistant_history").waitFor({ state: "visible", timeout: 30_000 });
@@ -112,7 +118,7 @@ async function submitTurn(page, prompt) {
             response.request().method() === "POST",
         { timeout: 60_000 }
     );
-    await page.getByRole("button", { name: "Enviar mensaje" }).click();
+    await page.locator(".o_ai_assistant_send_button").click();
     const envelope = await (await responsePromise).json();
     assert.ok(!envelope.error, JSON.stringify(envelope.error));
     assert.equal(envelope.result?.ok, true);
