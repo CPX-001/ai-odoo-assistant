@@ -37,7 +37,8 @@
       "id": "P5-REAL-APPROVAL-UX",
       "phase": 5,
       "slice": "P5.4",
-      "expected": "an awaiting-confirmation turn presents approval as an explicit state and approval/rejection controls remain bound to that turn"
+      "expected": "an awaiting-confirmation turn presents approval as an explicit state and approval/rejection controls remain bound to that turn",
+      "command": "node tests/e2e/p5_4_approval_browser.mjs --gate P5-REAL-APPROVAL-UX --decision reject"
     }
   ]
 }
