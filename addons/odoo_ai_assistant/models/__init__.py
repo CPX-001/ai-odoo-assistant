@@ -1,5 +1,4 @@
 from . import action_execution as action_execution
-from . import activity_preferences as activity_preferences
 from . import assistant_diagnostics as assistant_diagnostics
 from . import chat_policy as chat_policy
 from . import chat_preferences as chat_preferences
@@ -18,6 +17,7 @@ from . import turn_reasoning_summary as turn_reasoning_summary
 from . import turn_working_transcript as turn_working_transcript
 from . import embedded_runtime_host_loop as embedded_runtime_host_loop
 from . import user_preferences as user_preferences
+from . import activity_preferences as activity_preferences
 from . import public_references as public_references
 from . import reasoning_preferences as reasoning_preferences
 from . import conversation_context as conversation_context
