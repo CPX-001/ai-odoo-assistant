@@ -37,8 +37,8 @@ patch(AssistantPanel.prototype, {
 
     get composerActionLabel() {
         const labels = {
-            stop: _t("Detener procesamiento"),
-            redirect: _t("Enviar corrección"),
+            stop: _t("Detener respuesta"),
+            redirect: _t("Corregir instrucción"),
             send: _t("Enviar mensaje"),
             disabled: _t("Enviar mensaje"),
         };
@@ -68,8 +68,7 @@ patch(AssistantPanel.prototype, {
     },
 
     async submit() {
-        const draft = this.state.draft;
-        const question = draft.trim();
+        const question = this.state.draft.trim();
         if (
             !question ||
             this.state.decisionLoading ||
@@ -78,22 +77,42 @@ patch(AssistantPanel.prototype, {
         ) {
             return false;
         }
-        this.panel.setDraft("");
         let sent = false;
         try {
+            // Keep the correction visible while Odoo durably accepts it.  The draft is cleared only
+            // after a validated Odoo response, never merely because a network request was started.
             sent = await this.panel.submit(question);
         } catch {
             if (!this.state.errorCode) {
                 this.state.errorCode = "service_unavailable";
             }
         }
-        if (!sent) {
-            this.panel.setDraft(draft);
+        if (sent) {
+            this.panel.setDraft("");
         }
         return sent;
     },
 
-    async revertPerformedActions() {
-        return this.panel.revertLastAction();
+    requestRevertPerformedActions() {
+        if (!this.performedActions?.canRevert || this.state.reversionLoading) {
+            return false;
+        }
+        this.state.reversionConfirmationOpen = true;
+        return true;
+    },
+
+    cancelRevertPerformedActions() {
+        this.state.reversionConfirmationOpen = false;
+    },
+
+    async confirmRevertPerformedActions() {
+        if (!this.state.reversionConfirmationOpen) {
+            return false;
+        }
+        const reverted = await this.panel.revertLastAction();
+        if (reverted) {
+            this.state.reversionConfirmationOpen = false;
+        }
+        return reverted;
     },
 });
