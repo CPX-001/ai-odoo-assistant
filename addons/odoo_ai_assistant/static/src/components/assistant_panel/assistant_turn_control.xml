@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="odoo_ai_assistant.AssistantTurnControl"
+        t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
+        <xpath expr="//textarea[@id='o_ai_assistant_question']" position="attributes">
+            <attribute name="t-att-disabled">state.decisionLoading or recoveryPending or state.stopLoading</attribute>
+        </xpath>
+
+        <xpath expr="//button[contains(@class, 'o_ai_assistant_send_button')]" position="replace">
+            <button type="button" class="btn btn-primary o_ai_assistant_send_button"
+                t-att-aria-label="composerActionLabel" t-att-title="composerActionLabel"
+                t-att-disabled="composerActionDisabled" t-on-click="onComposerAction">
+                <i t-if="state.stopLoading" class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                <i t-elif="composerActionMode === 'stop'" class="fa fa-stop" aria-hidden="true"/>
+                <i t-else="" class="fa fa-paper-plane" aria-hidden="true"/>
+            </button>
+        </xpath>
+
+        <xpath expr="//section[@t-if='recoveryPending']" position="after">
+            <section t-if="performedActionsVisible"
+                class="o_ai_assistant_performed_actions border rounded p-3 mt-3" role="status">
+                <div class="d-flex align-items-start justify-content-between gap-2">
+                    <div>
+                        <div class="fw-semibold">
+                            <t t-if="performedActions.reverted">Cambios revertidos</t>
+                            <t t-else="">Cambios realizados</t>
+                        </div>
+                        <div t-if="interruptedAfterEffects" class="small text-muted mt-1">
+                            El procesamiento se detuvo, pero estas acciones ya se habían completado en Odoo.
+                        </div>
+                    </div>
+                    <i t-if="performedActions.reverted" class="fa fa-undo text-muted" aria-hidden="true"/>
+                    <i t-else="" class="fa fa-check-circle text-muted" aria-hidden="true"/>
+                </div>
+                <div class="d-flex flex-column gap-1 mt-2">
+                    <div t-foreach="performedActions.steps" t-as="step" t-key="step.step_id"
+                        class="small text-break">
+                        <i class="fa fa-check me-1 text-muted" aria-hidden="true"/>
+                        <span t-esc="step.title"/>
+                    </div>
+                </div>
+                <button t-if="performedActions.canRevert" type="button"
+                    class="btn btn-sm btn-outline-secondary mt-3"
+                    t-att-disabled="state.reversionLoading" t-on-click="revertPerformedActions">
+                    <i t-if="state.reversionLoading" class="fa fa-spinner fa-spin me-1" aria-hidden="true"/>
+                    <i t-else="" class="fa fa-undo me-1" aria-hidden="true"/>
+                    Revertir cambios
+                </button>
+                <div t-elif="performedActions.unsupported and !performedActions.reverted"
+                    class="small text-muted mt-2">
+                    Esta acción no tiene una reversión automática segura.
+                </div>
+            </section>
+
+            <div t-if="state.turnControlNotice" class="alert alert-warning mt-3 mb-0" role="status"
+                t-esc="state.turnControlNotice"/>
+        </xpath>
+    </t>
+</templates>
