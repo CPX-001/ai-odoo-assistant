@@ -1,5 +1,6 @@
 import { expect, test } from "@odoo/hoot";
 import {
+    normalizeActivityPresentationPreferences,
     reduceSemanticActivity,
     semanticActivityPresentation,
 } from "@odoo_ai_assistant/services/assistant_semantic_activity";
@@ -35,6 +36,7 @@ test("started and completed lifecycle rows reduce to one semantic item", () => {
     expect(items[0].status).toBe("completed");
     expect(items[0].first_sequence).toBe(1);
     expect(items[0].last_sequence).toBe(2);
+    expect(items[0].semantic_code).toBe("capability.use");
 });
 
 test("identical capabilities with different host activity ids remain separate", () => {
@@ -59,6 +61,7 @@ test("failure updates the same work item and reconnect replay is idempotent", ()
     expect(items).toHaveLength(1);
     expect(items[0].status).toBe("failed");
     expect(items[0].diagnostic_code).toBe("capability_timeout");
+    expect(items[0].semantic_code).toBe("activity.failed");
 });
 
 test("headline and completed step count ignore queue/finalization noise", () => {
@@ -81,6 +84,64 @@ test("headline and completed step count ignore queue/finalization noise", () => 
     ]);
 
     expect(presentation.step_count).toBe(1);
-    expect(presentation.headline.label).toBe("Consultando contactos");
+    expect(presentation.headline.semantic_code).toBe("capability.use");
     expect(presentation.items[0].status).toBe("completed");
+});
+
+test("sub-threshold verification stays diagnostic but is hidden from normal history", () => {
+    const events = [
+        event(1, {
+            activity_id: SECOND,
+            phase: "verification",
+            kind: "verification.started",
+            occurred_at: "2026-08-29T10:00:01.000000Z",
+        }),
+        event(2, {
+            activity_id: SECOND,
+            phase: "verification",
+            kind: "verification.completed",
+            status: "completed",
+            occurred_at: "2026-08-29T10:00:01.100000Z",
+        }),
+        event(3, { occurred_at: "2026-08-29T10:00:02.000000Z" }),
+    ];
+
+    const normal = semanticActivityPresentation(events, {
+        preferences: { detail_level: "normal", transient_threshold_ms: 1200 },
+    });
+    const diagnostic = semanticActivityPresentation(events, {
+        preferences: { detail_level: "diagnostic", transient_threshold_ms: 1200 },
+    });
+
+    expect(normal.items.some((item) => item.phase === "verification")).toBe(false);
+    expect(diagnostic.items.some((item) => item.phase === "verification")).toBe(true);
+    expect(normal.step_count).toBe(1);
+});
+
+test("compact renders only the latest semantic item while preserving semantic step count", () => {
+    const presentation = semanticActivityPresentation(
+        [event(1), event(2, { activity_id: SECOND, phase: "preview", kind: "preview.started" })],
+        { preferences: { detail_level: "compact" } }
+    );
+
+    expect(presentation.items).toHaveLength(1);
+    expect(presentation.items[0].activity_id).toBe(SECOND);
+    expect(presentation.step_count).toBe(2);
+});
+
+test("presentation preferences fail to bounded defaults", () => {
+    const normalized = normalizeActivityPresentationPreferences({
+        detail_level: "raw",
+        transient_threshold_ms: 99_999,
+        batch_page_size: 500,
+        reasoning_summary: "private",
+        limits: { max_rendered_activity_items: 1000, max_reasoning_summary_chars: 99999 },
+    });
+
+    expect(normalized.detail_level).toBe("normal");
+    expect(normalized.transient_threshold_ms).toBe(1200);
+    expect(normalized.batch_page_size).toBe(5);
+    expect(normalized.reasoning_summary).toBe("concise");
+    expect(normalized.limits.max_rendered_activity_items).toBe(100);
+    expect(normalized.limits.max_reasoning_summary_chars).toBe(8000);
 });
