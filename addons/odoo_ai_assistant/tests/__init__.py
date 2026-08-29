@@ -1,3 +1,4 @@
+from . import test_activity_preferences as test_activity_preferences
 from . import test_canonical_plan_host_loop as test_canonical_plan_host_loop
 from . import test_capability_action_revalidation as test_capability_action_revalidation
 from . import test_capability_actions as test_capability_actions
