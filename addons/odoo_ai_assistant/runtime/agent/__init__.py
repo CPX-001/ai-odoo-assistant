@@ -1,6 +1,7 @@
 """Embedded agent orchestration over the extension runtime."""
 
 from .plan import CapabilityPlanError, CapabilityPlanExecution, CapabilityPlanService
+from .post_effect import PostEffectDecisionEngine
 from .provider import ReasoningProvider
 from .service import (
     AgentReasoningResult,
@@ -23,6 +24,7 @@ __all__ = [
     "CapabilityPlanService",
     "NextDecisionEngine",
     "PlannedCapability",
+    "PostEffectDecisionEngine",
     "ReasoningEngine",
     "ReasoningProvider",
 ]
