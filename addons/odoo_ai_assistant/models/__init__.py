@@ -16,6 +16,7 @@ from . import turn_live_event as turn_live_event
 from . import turn_reasoning_summary as turn_reasoning_summary
 from . import turn_working_transcript as turn_working_transcript
 from . import embedded_runtime_host_loop as embedded_runtime_host_loop
+from . import turn_control as turn_control
 from . import user_preferences as user_preferences
 from . import activity_preferences as activity_preferences
 from . import public_references as public_references
