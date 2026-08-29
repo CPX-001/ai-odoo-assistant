@@ -1,7 +1,7 @@
 # Stabilization execution state
 
-State format: 27
-Updated: 2026-08-29
+State format: 28
+Updated: 2026-08-30
 
 Accepted foundation/runtime lineage:
 
@@ -43,7 +43,7 @@ blocking_validations: P5.8-DETERMINISTIC-REGRESSION, P5.8-FULL-ADDON-REGRESSION,
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266 -> 720102f2a13af5240c779b07cc71ee65994a87b1 -> eb66e45447c4d64e1ebbb5e8322bffa759c12773 -> 074a71c29a6a6109ae7412e7b1f9850c4449e379
 p5_8_implementation_checkpoint: bfc774dd0ad1992e71ab05f75c4897d088dc7fe5
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.7-REAL-ACCEPTANCE-074a71c.md
-latest_executed_evidence: docs/research/evidence/phase5/2026-08-29/P5.7-REAL-ACCEPTANCE-074a71c.md
+latest_executed_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-FOCUSED-AND-LANGUAGE-faf21f4.md
 next_action: pull exact current main into the disposable Odoo 18 validation environment and execute docs/research/P5.8_VALIDATION_RUNBOOK.md; process local/full-addon/HOOT results first, then the real semantic/reasoning/i18n/navigation/batch/reconnect gates; do not mark P5.8 COMPLETE or start P6 until the HARD gates are reviewed
 planned_successor_after_p5.8: Phase 6 bounded multi-step EffectPlan / TaskPlan work
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
@@ -94,7 +94,10 @@ Implementation details and the deliberate presenter simplification are recorded 
 
 Prepared deterministic/Odoo/HOOT tests cover correlation, repeated identical operations, provider completion/failure, transient filtering, replay, user preference isolation, reasoning-summary bounds/privacy, current ACL reference validation, generic field presentation, read/mutation result references and disclosure limits.
 
-**These tests have not been represented as executed in this run.** The environment available to this repository-editing session does not provide the disposable Odoo/Codex/Chromium execution path, and repository instructions prohibit substituting GitHub Actions. Therefore no P5.8 gate is marked PASS.
+The requested focused P5.8 selectors and the real response-language prompt-redirection gate were
+rerun on `faf21f4809cf04020e795a8b824b3197b56c4ace` and passed. Evidence is recorded in
+`evidence/phase5/2026-08-30/P5.8-FOCUSED-AND-LANGUAGE-faf21f4.md`. This bounded execution does not
+represent the remaining full P5.8 HARD chain as executed or accepted.
 
 ## Required P5.8 gate chain
 
