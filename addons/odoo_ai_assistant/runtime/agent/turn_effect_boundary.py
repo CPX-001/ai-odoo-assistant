@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 
-_PERSON = b"odoo-ai-effect-v1"
+_PERSON = b"odoo-ai-effect1"
 _SIGN_BIT = 1 << 63
 _UINT64 = 1 << 64
 
