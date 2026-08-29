@@ -94,7 +94,6 @@ class TestAssistantPublicReferences(TransactionCase):
                 "perm_unlink": False,
             }
         )
-        self.env.registry.clear_cache()
 
         after = resolver.resolve_public_references(
             [
