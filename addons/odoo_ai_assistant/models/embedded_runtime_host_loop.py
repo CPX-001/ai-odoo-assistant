@@ -16,6 +16,7 @@ from ..runtime.agent import (
 )
 from ..runtime.agent.interactive_codex import InteractiveCodexDecisionEngine
 from ..runtime.agent.provider_failure import FailureNormalizingDecisionEngine
+from ..runtime.agent.turn_effect_boundary import acquire_turn_effect_lock
 from ..runtime.agent.working_transcript import (
     WorkingTranscriptError,
     append_working_item,
@@ -242,6 +243,10 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 raise EmbeddedRuntimeError(error.code) from error
 
         def before_effect():
+            # Serialize the final control check against redirect/stop. The transaction-scoped
+            # advisory lock is released by _commit_plan_barrier's durable commit immediately
+            # before the first business effect executes.
+            acquire_turn_effect_lock(turn.env.cr, turn.turn_uuid)
             _ensure_turn_control_current(turn)
             _commit_plan_barrier(
                 turn,
