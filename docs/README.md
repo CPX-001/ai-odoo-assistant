@@ -18,6 +18,7 @@ If you only read three documents, read:
 | Add or change a capability | [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) | [`../addons/odoo_ai_assistant/runtime/capabilities/README.md`](../addons/odoo_ai_assistant/runtime/capabilities/README.md) |
 | Work on the agent/provider loop | [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md) | [`adr/ADR-019-host-owned-iterative-decision-loop.md`](adr/ADR-019-host-owned-iterative-decision-loop.md) |
 | Work on writes/actions | [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`adr/ADR-014-unified-host-authorized-agent.md`](adr/ADR-014-unified-host-authorized-agent.md) |
+| Work on semantic activity/reasoning UX | [`research/P5.8_SEMANTIC_ACTIVITY_UX.md`](research/P5.8_SEMANTIC_ACTIVITY_UX.md) | [`CHAT_PRODUCT_FLOW.md`](CHAT_PRODUCT_FLOW.md), current frontend/activity code |
 | Configure/deploy Odoo + Codex | [`DEPLOYMENT_CONFIG.md`](DEPLOYMENT_CONFIG.md) | [`codex/README.md`](codex/README.md) |
 | Understand query behavior | [`QUERY_CONTRACT.md`](QUERY_CONTRACT.md) | capability provider README |
 | Follow current roadmap execution | [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) | active playbook/slice referenced there |
@@ -64,6 +65,7 @@ P5.1-P5.6 are accepted; P5.7 is ready but not started. The exact live cursor is 
 - [`PRODUCT_VISION.md`](PRODUCT_VISION.md) — the intended user experience and product boundaries.
 - [`CURRENT_STATE.md`](CURRENT_STATE.md) — what is currently implemented, accepted or still missing.
 - [`CHAT_PRODUCT_FLOW.md`](CHAT_PRODUCT_FLOW.md) — chat-facing flow and interaction contracts where applicable.
+- [`research/P5.8_SEMANTIC_ACTIVITY_UX.md`](research/P5.8_SEMANTIC_ACTIVITY_UX.md) — target specification for semantic progress, readable reasoning summaries, typed Odoo/source references, configurable detail, batch disclosure and full Odoo-language localization. It is design guidance, not an implementation claim or active-cursor override.
 
 ### Architecture and subsystem contracts
 
