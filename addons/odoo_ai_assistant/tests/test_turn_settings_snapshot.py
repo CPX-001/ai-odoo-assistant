@@ -1,8 +1,13 @@
 from datetime import UTC, datetime
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from odoo import SUPERUSER_ID, Command
 from odoo.exceptions import ValidationError
 from odoo.tests.common import TransactionCase
+
+from ..models import embedded_runtime
 
 
 class TestAssistantTurnSettingsSnapshot(TransactionCase):
@@ -106,3 +111,33 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
             technical.execution_settings_snapshot()["reasoning_model"],
             "snapshot-model-fixed",
         )
+
+    def test_runtime_codex_settings_use_captured_turn_model(self):
+        env = self.env(user=self.user, su=False)
+        preference = env["odoo.ai.user.preference"]
+        preference.set_current_reasoning_model("snapshot-runtime-model-a")
+        turn = self._enqueue(
+            env,
+            request_id="request.settings.snapshot.0004",
+            message="Usa el modelo capturado",
+        )
+
+        preference.set_current_reasoning_model("snapshot-runtime-model-b")
+        turn.invalidate_recordset()
+        self.assertEqual(turn.reasoning_model, "snapshot-runtime-model-a")
+
+        detected = SimpleNamespace(
+            ready=True,
+            executable=Path("/opt/odoo-ai-test/bin/codex"),
+        )
+        runtime_paths = SimpleNamespace(
+            codex_home=Path("/tmp/odoo-ai-test-codex-home"),
+        )
+        with patch.object(embedded_runtime, "detect_codex", return_value=detected), patch.object(
+            embedded_runtime.RuntimePaths,
+            "from_odoo",
+            return_value=SimpleNamespace(ensure=lambda: runtime_paths),
+        ):
+            settings = env["odoo.ai.embedded.runtime"]._codex_settings(turn)
+
+        self.assertEqual(settings.model, "snapshot-runtime-model-a")
