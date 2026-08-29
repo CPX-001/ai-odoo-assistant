@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 16
+State format: 17
 Updated: 2026-08-29
 Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
 Accepted P5.1 implementation lineage through: `f7f924ce944db86e896745fef83ea2fb6fd6583a`
@@ -13,6 +13,8 @@ P5.3 deterministic regression lineage through: `525318160ac0dac4984ef11e765a8b44
 Accepted P5.3 validation/harness lineage through: `32e836e7789ea72f3ba0d32fe6bdabbb092f5953`
 P5.4 implementation record: `docs/research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md`
 Accepted P5.4 validation/harness lineage through: `3e2b38d68fe172cd2cf92d7794159f73476ac23d`
+P5.5 implementation record: `docs/research/P5.5_POST_EFFECT_REASONING.md`
+P5.5 implementation/test lineage through: `c19eda29dd790e855d43127fb96cec4460c32d40`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
@@ -22,16 +24,16 @@ phase: 5
 phase_name: natural non-blocking multi-chat product
 phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P5.4-final-activity-answer-failure-ux
-active_slice_record: docs/research/P5.4_FINAL_ACTIVITY_ANSWER_FAILURE_UX.md
-active_slice_state: COMPLETE
-current_gate_type: NONE
-blocking_validations: none
+active_slice: P5.5-post-effect-reasoning
+active_slice_record: docs/research/P5.5_POST_EFFECT_REASONING.md
+active_slice_state: LOCAL_VALIDATION_REQUIRED
+current_gate_type: HARD
+blocking_validations: P5.5-ODOO-POST-EFFECT
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d
 acceptance_evidence: docs/research/evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md
 latest_validation_evidence: docs/research/evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md
-next_slice: P5.5-post-effect-reasoning
-next_slice_state: READY_NOT_STARTED
+next_slice: P5.6-conversation-context-manager
+next_slice_state: BLOCKED
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
@@ -40,8 +42,9 @@ chain passed on one linear code lineage. P5.1 production code and its determinis
 browser/provider acceptance are complete. P5.2 scheduler capacity, causal ordering, fairness,
 release wake-up, diagnostics and real two-cron behavior are accepted. P5.3 stable settings snapshot
 and all four of its focused, deterministic, full-addon and real browser gates are accepted. P5.4
-final activity/answer/failure UX and all three local plus four HARD real gates are accepted. P5.5 is
-eligible for a later run but remains not started.
+final activity/answer/failure UX and all three local plus four HARD real gates are accepted. P5.5
+post-effect reasoning is implemented with focused Odoo coverage prepared, but no P5.5 validation has
+been executed in this GitHub-only run. The immediate HARD gate is `P5.5-ODOO-POST-EFFECT`.
 
 ---
 
@@ -290,7 +293,32 @@ P5-REAL-RECOVERY-UX     | HARD | PASS
 
 Evidence: `evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md`.
 
-P5.5 is now eligible, but it was not started or implemented in this run.
+## P5.5 Post-effect reasoning — LOCAL_VALIDATION_REQUIRED
+
+Implementation/validation records:
+
+```text
+docs/research/P5.5_POST_EFFECT_REASONING.md
+docs/research/P5.5_VALIDATION_RUNBOOK.md
+```
+
+Current implementation:
+
+- appends a bounded authoritative `verified_effect_receipt` with result + verification context after plan verification;
+- resumes the existing host-owned decision loop for natural final synthesis;
+- exposes REASONING capabilities but no PLAN catalog after the effect;
+- rejects a repeated `PlanStepProposal` through the normal host correction path;
+- preserves the completed verified browser plan while replacing fixed host completion prose with provider-produced final prose;
+- normalizes provider failures after verification as `effect_state=confirmed`, never as effect-safe blind retries;
+- adds focused deterministic Odoo coverage in `test_post_effect_reasoning.py`.
+
+No P5.5 test has been executed in this GitHub-only run. The immediate HARD gate is:
+
+```text
+P5.5-ODOO-POST-EFFECT
+```
+
+P5.6 remains blocked until P5.5 validation is processed in order.
 
 ---
 
@@ -299,7 +327,7 @@ P5.5 is now eligible, but it was not started or implemented in this run.
 These limitations define the remaining Phase 5 and later work:
 
 - background scopes are currently web-client memory; durable reconnect/continuity is expanded later in P5;
-- post-effect verified actions still need provider continuation/natural synthesis (P5.5);
+- post-effect provider continuation is implemented but not yet accepted by P5.5 validation;
 - conversation provider context is smaller than the target durable `ConversationContextManager` model (P5.6);
 - one canonical effect proposal/step is supported; multi-step effects are P6;
 - no external `CapabilityProvider`/Skill/ContextProvider/EvidenceProvider contract exists yet;
@@ -322,12 +350,19 @@ These limitations define the remaining Phase 5 and later work:
 - Model/autonomy/profile changes after a turn is queued do not mutate that running turn's captured authority/settings.
 - P5.3 freezes execution selectors, not revocable Odoo authorization or dynamic capability guards.
 - P5.4 presentation state cannot authorize or repeat an effect; the final validated turn remains answer authority.
+- P5.5 post-effect continuation has no PLAN authority and cannot repeat a completed effect.
 - No GitHub Actions are used for roadmap validation under current instructions.
 
 ---
 
 # Exact next action
 
-Stop at the accepted P5.4 boundary. The next eligible slice is P5.5 post-effect reasoning, but it is
-`READY_NOT_STARTED` and was deliberately not begun by this validation run. A later independent run
-must reconstruct its scope from the current playbook and add no implementation claim before doing so.
+Stop at the P5.5 implementation boundary and run only the immediate focused HARD gate described in
+`P5.5_VALIDATION_RUNBOOK.md`:
+
+```text
+P5.5-ODOO-POST-EFFECT
+```
+
+Do not mark P5.5 complete, run its later real gate, or start P5.6 until this focused Odoo gate has
+actual executable evidence. If it fails, repair the smallest responsible P5.5 layer and rerun it.
