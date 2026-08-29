@@ -1,0 +1,28 @@
+{
+  "format_version": 1,
+  "gates": [
+    {
+      "id": "P5-REAL-SETTINGS-SNAPSHOT",
+      "phase": 5,
+      "slice": "P5.3",
+      "preconditions": [
+        "P5.3-ODOO-SETTINGS-SNAPSHOT passed",
+        "P5.3-DETERMINISTIC-REGRESSION passed",
+        "P5.3 implementation installed on a disposable Odoo 18 database",
+        "Codex authenticated",
+        "Chromium/Playwright installed",
+        "Codex model catalog exposes at least one selectable model when the current selection is default"
+      ],
+      "user": "internal disposable test user with normal Assistant preferences",
+      "data": "two long read-only turns in separate conversations; no Odoo business mutation",
+      "injection": "change model and autonomy selectors through the real Assistant UI while Turn A is unresolved",
+      "action": "capture Turn A reasoning_model, policy_payload and execution_settings_payload; change selectors; prove A remains unchanged; enqueue Turn B; prove B captures the new model/profile/policy in snapshot format v1",
+      "backend_expected": "Turn A remains bound to its original persisted model/policy/versioned snapshot; Turn B captures the changed preferences; execution_settings_payload.policy equals the persisted policy_payload for each turn",
+      "browser_expected": "model/autonomy controls and new-chat remain usable while Turn A is unresolved",
+      "approval_resume": "same-turn approval/requeue retention is covered by the preceding deterministic P5.3 regression; the real browser fixture is deliberately read-only so approval is not applicable",
+      "redaction": "only bounded turn ids, model/profile names and snapshot format are emitted; policy payloads, prompts, answers, provider internals and credentials are not printed",
+      "cleanup": "restore original user model/autonomy preferences, cancel unresolved read-only turns and drop the disposable database/filestore after validation",
+      "command": "node tests/e2e/p5_3_settings_snapshot_browser.mjs --gate P5-REAL-SETTINGS-SNAPSHOT"
+    }
+  ]
+}
