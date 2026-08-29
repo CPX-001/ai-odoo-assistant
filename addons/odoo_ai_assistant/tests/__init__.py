@@ -1,6 +1,7 @@
 from . import test_canonical_plan_host_loop as test_canonical_plan_host_loop
 from . import test_capability_action_revalidation as test_capability_action_revalidation
 from . import test_capability_actions as test_capability_actions
+from . import test_capability_activity_correlation as test_capability_activity_correlation
 from . import test_capability_batch as test_capability_batch
 from . import test_capability_framework as test_capability_framework
 from . import test_chat_policy as test_chat_policy
