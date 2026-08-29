@@ -42,7 +42,7 @@ The browser never calls a separate Assistant Service and never owns provider cre
 
 ## 2. Submit is short and durable
 
-Submitting a message should remain a short Odoo request:
+Submitting a message remains a short Odoo request:
 
 1. validate caller/message/screen hint;
 2. locate/create owned conversation;
@@ -54,21 +54,17 @@ Submitting a message should remain a short Odoo request:
 
 Reasoning/provider work continues outside the submit request.
 
-This means browser navigation, closing the panel or a temporary polling failure must not cancel the server turn.
+This means browser navigation, closing the panel or a temporary polling failure does not cancel the server turn.
 
 ## 3. Current processing concurrency
 
-The current backend queue claims work with `FOR UPDATE SKIP LOCKED`, leases and stale recovery. Two cron records currently provide two bounded runner slots.
+The backend queue claims work with `FOR UPDATE SKIP LOCKED`, leases and stale recovery. Phase 5.2 accepted a bounded two-slot scheduling policy with same-conversation causal ordering, cross-conversation concurrency, backpressure and fairness behavior.
 
-This permits separate turns to be claimed concurrently at the backend, subject to actual Odoo cron/process capacity.
+The frontend/background ownership work from Phase 5.1 is also accepted: running state is scoped by turn/conversation rather than a single global chat lock, so one running conversation does not prevent normal work in another conversation.
 
-However, the current browser still has a panel-global `state.loading` concept. While the visible turn runs, it currently disables important controls including the composer, conversation selector and model/autonomy pickers.
+The capacity value itself is still a product/runtime policy rather than a permanent assumption. Future provider/worker/resource constraints may change the effective ceiling without changing the durable turn contract.
 
-Therefore current backend concurrency capability and current frontend multitasking capability are **not equivalent**.
-
-## 4. Target non-blocking chat behavior
-
-Phase 5 changes execution ownership from `panel is loading` to `turn/conversation has running work`.
+## 4. Accepted non-blocking chat behavior
 
 While Chat A runs:
 
@@ -84,7 +80,7 @@ Chat A: running ----------------------------------> terminal
 
 The current turn continues independently.
 
-The history/conversation list should expose background state so the user can see which chats are queued/running/awaiting approval/failed/recovery/completed.
+The history/conversation UI can expose compact background state so the user can distinguish queued/running/awaiting approval/failed/recovery/completed work.
 
 ## 5. Initial concurrency semantics
 
@@ -94,15 +90,15 @@ Multiple conversations may have active turns concurrently up to host/provider ca
 
 ### Inside one conversation
 
-Initial target: one active **causal** turn at a time.
+There is one active **causal** turn at a time.
 
-A second ordinary message in the same conversation must not race against an unresolved first turn and build context from a different future. It may be queued behind it or the UI may require explicit steering semantics later.
+A second ordinary message in the same conversation must not race against an unresolved first turn and build context from a different future. Same-conversation turns preserve predecessor ordering.
 
 Future `steer current turn` or conversation branching is separate product work and requires explicit contracts/tests.
 
 ## 6. Capacity and backpressure
 
-Concurrency must become configurable/observable rather than assuming two slots forever.
+Concurrency must remain configurable/observable rather than assuming two slots forever.
 
 Capacity policy should eventually include:
 
@@ -123,13 +119,13 @@ When capacity is full:
 - the product may show queue position/wait state when reliable;
 - no busy overlay/global disabled state is used as backpressure.
 
-OCA `queue_job` is a useful reference for channels/capacity/background recovery, but current native queue semantics are retained unless an ADR/evaluation justifies a dependency/replacement.
+OCA `queue_job` remains a useful reference for channels/capacity/background recovery, but current native queue semantics are retained unless an ADR/evaluation justifies a dependency/replacement.
 
 ## 7. Settings while a turn is running
 
 Turn-sensitive settings are snapshots, not live mutable references.
 
-For example current enqueue already stores the selected reasoning model and policy payload. The target applies the same rule to future technical profile/strategy/config versions.
+Phase 5.3 accepted this rule for model/policy/autonomy values required by a turn. The target applies the same principle to future technical profile/strategy/config versions.
 
 Therefore:
 
@@ -140,34 +136,27 @@ Turn A continues with X + Balanced
 future Turn B uses Y + Autonomous
 ```
 
-The user is free to open/change those selectors while A runs.
+The user is free to open/change selectors while A runs.
 
 Approval/rejection is not a normal setting edit; it is an explicit transition bound to A's prepared effect and may resume A.
 
+Phase 5.7 adds conversation-scoped preference mutation as a later explicit host-owned capability; administrator/system ceilings remain authoritative.
+
 ## 8. Public activity
 
-Current `main` includes an independent public activity store/projection pending formal P3 acceptance.
+Phase 3 public activity is accepted. The current runtime has a closed bounded `PublicTurnEvent` contract and an independent browser-safe live store that is intentionally separate from the worker business transaction.
 
-Public activity is trusted host projection such as:
+That foundation solves durability, reconnect, redaction and visibility, but the current visible presentation is still too close to capability lifecycle events. A call can produce both `started` and `completed` rows with the same capability title, and repeated reads can therefore look like a technical event log.
 
-```text
-Consultando res.partner
-Leyendo esquema de sale.order
-Preparando cambio
-Esperando aprobación
-Ejecutando
-Verificando
-```
+Public activity remains trusted host projection and is **not** private provider reasoning. It must not expose prompts, raw arguments/results, credentials, stdout/stderr or chain-of-thought.
 
-It is not private provider reasoning and must not expose prompts, raw arguments/results, credentials, stdout/stderr or chain-of-thought.
-
-The independent live-event cursor is intentionally separate from the worker business transaction so progress can become visible before final commit without committing business effects early.
+The target semantic presentation is specified in [`research/P5.8_SEMANTIC_ACTIVITY_UX.md`](research/P5.8_SEMANTIC_ACTIVITY_UX.md): stable operation correlation, semantic work-item reduction, readable provider reasoning summaries only where safely supported, typed references, configurable detail and full Odoo-language localization.
 
 ## 9. Answer streaming
 
-Current `main` includes the P4 answer projection pending formal acceptance.
+Phase 4 structured provisional answer streaming is accepted.
 
-Codex `item/agentMessage/delta` is parsed to expose only the structured `final_answer.answer` text. Provisional output is not authority.
+Codex `item/agentMessage/delta` is parsed into the provisional answer channel. Provisional output is not authority; the final validated turn result reconciles it.
 
 Browser channels are conceptually:
 
@@ -178,15 +167,15 @@ turn.final
 turn.failure
 ```
 
-The final validated turn result remains authoritative and reconciles provisional answer text.
+Future semantic activity may add a higher-level projection/channel, but it must not make transport the authority contract.
 
 ## 10. Background turn observation
 
 The browser may detach from a turn and later resume from Odoo state.
 
-Target frontend state is keyed by turn/conversation rather than one global stream buffer.
+Frontend state is keyed by turn/conversation rather than one global stream buffer.
 
-The visible chat should consume live updates at normal cadence. Background chats may use lighter periodic refresh/badges to avoid multiplying polling cost indefinitely.
+The visible chat consumes live updates at normal cadence. Background chats may use lighter periodic refresh/badges to avoid multiplying polling cost indefinitely.
 
 A later Odoo bus/SSE transport may reduce polling overhead, but transport is not the durability contract.
 
@@ -208,32 +197,35 @@ model proposal
  -> receipt / recovery
 ```
 
-Current implementation supports one canonical effect step. The future product supports bounded multi-step `EffectPlan` while retaining the same host controls.
+Current implementation still supports one canonical effect step. The future product supports bounded multi-step `EffectPlan` while retaining the same host controls.
+
+Approval UX should stay actionable outside any reasoning/activity disclosure. A future semantic activity item or TaskPlan step can reference the approval, but the user must not need to expand progress history to approve/reject it.
 
 ## 12. Post-effect conversation
 
-Current implementation still finishes successful action execution with a host-produced completion answer.
+Phase 5.5 post-effect reasoning is accepted.
 
-Target behavior is:
+Current successful effect path is conceptually:
 
 ```text
-verify effect
- -> add verified receipt to private working context
- -> provider continues reasoning
- -> provider produces natural final answer
+execute
+ -> verify
+ -> append verified receipt to working context
+ -> provider continues without PLAN authority
+ -> natural final answer
 ```
 
-Example target response:
+Example product response:
 
 > He actualizado 239 de los 247 contactos. He dejado 8 sin tocar porque no había información suficiente para determinar el país. También he detectado 3 emails duplicados que convendría revisar.
 
-Verification is authoritative context, not automatically the end of the reasoning turn.
+Verification is authoritative context, not automatically the end of the reasoning turn. The post-effect continuation cannot repeat the completed effect.
 
 ## 13. Conversation context
 
-Messages are fully Odoo-persisted, but current reasoning context is intentionally bounded and currently relies heavily on recent message composition.
+Phase 5.6 `ConversationContextManager` is accepted.
 
-Target `ConversationContextManager` maintains:
+Complete Odoo messages/turns remain history authority while the provider receives a bounded derived context containing:
 
 ```text
 recent raw messages
@@ -241,10 +233,12 @@ rolling structured summary
 active records/entities/references
 previous evidence refs
 verified effect refs
-conversation-scoped settings
+conversation/session settings
 ```
 
-This supports natural follow-ups without making Codex threads the persistence authority.
+The checkpoint is versioned/immutable per turn and fixes same-conversation ordering hazards by deriving context from causal predecessor turns rather than raw message creation timing.
+
+P5.6 also carries a captured Odoo-language fallback in the bounded session settings. Future deterministic chat/activity text should reuse Odoo translation semantics rather than creating a separate language subsystem.
 
 ## 14. Error/recovery behavior
 
@@ -261,6 +255,8 @@ Structured distinctions must survive to the UI:
 
 A possible effect is never described as absent merely because provider/browser communication failed.
 
+Future partial-batch UX should preserve counts such as `28 completed / 2 failed` and allow evidence-driven follow-up diagnosis from safe receipts/diagnostic facts rather than raw provider internals.
+
 ## 15. Future context, RAG and files
 
 The chat should eventually be able to invoke the same host contracts for:
@@ -271,12 +267,76 @@ The chat should eventually be able to invoke the same host contracts for:
 - file ingestion into Knowledge;
 - imports/artifact workflows;
 - controlled host operations for Developer profiles;
-- web evidence.
+- web evidence;
+- image/file analysis where the provider profile supports it.
 
 The chat does not get a separate tool implementation for those features.
+
+The semantic activity system should describe these families distinctly (`consulting internal knowledge`, `inspecting current Odoo runtime`, `reviewing source/XML`, `searching logs`, `searching the web`, `analyzing image`, etc.) through provider-extensible descriptors rather than frontend hard-codes.
 
 ## 16. Additional surfaces
 
 MCP, automations, AI fields and context launchers may reuse the same runtime later. Each surface can have a different effective catalog/policy but cannot maintain an independent authority stack.
 
-See `PRODUCT_VISION.md`, `CAPABILITY_FRAMEWORK.md` and `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`.
+Typed Odoo/source references should also be reusable across surfaces so a response can safely link to a permitted record, list/action, view, configuration location, source symbol or external cited URL.
+
+See `PRODUCT_VISION.md`, `CAPABILITY_FRAMEWORK.md`, `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` and `research/P5.8_SEMANTIC_ACTIVITY_UX.md`.
+
+## 17. Target semantic activity and reasoning UX
+
+The next activity UX should distinguish four layers:
+
+```text
+private/raw reasoning                 never public
+readable provider reasoning summary   optional, bounded, advisory
+semantic host work items               normal user-facing progress
+technical lifecycle/trace             diagnostic detail
+```
+
+### Live compact line
+
+The collapsed line follows the latest meaningful visible step so a user can watch progress without expanding it:
+
+```text
+Razonando · Analizando la petición
+Razonando · Consultando contactos
+Razonando · Buscando "IVA intracomunitario 2026" en agenciatributaria.es
+Razonando · Creando presupuestos
+```
+
+### Expanded normal view
+
+Default detail is intentionally moderate: major reasoning/work steps plus relevant queries/actions, with equivalent child operations grouped and batch results progressively disclosed.
+
+### Completed view
+
+Completed activity auto-collapses to a discreet summary such as:
+
+```text
+Ha pensado durante 32 s · 7 pasos
+```
+
+The duration is total turn work time. Very short internal verification/housekeeping can remain in telemetry without appearing as a normal semantic step; initial target visibility threshold is around 1–1.5 seconds and configurable.
+
+### Detail profiles
+
+Presentation should support at least:
+
+```text
+compact
+normal       # default business user
+ detailed
+diagnostic  # developer/operator structural details, not private chain-of-thought
+```
+
+Normal mode favors human Odoo labels. Technical model/view/capability names can be enabled for developer/operator use.
+
+### References/navigation
+
+Records, models, views, actions, menus/settings and sources should use safe host-resolved typed references rather than model-authored raw URLs. This supports both inline result links and future questions such as `where is setting X?` with a direct Odoo navigation target.
+
+### Internationalization
+
+Every deterministic user-visible phrase must be translatable according to the effective/captured Odoo language. Protocol identity is a stable semantic code plus bounded arguments; localized strings are renderings, not persisted protocol truth.
+
+The complete target contract, external references, settings, generic unknown-model presenter design, batch limits, web/RAG/vision behavior and proposed acceptance gates are in `research/P5.8_SEMANTIC_ACTIVITY_UX.md`.
