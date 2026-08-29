@@ -1,7 +1,4 @@
-"""Dependency-light closed contracts for Phase 3 public Assistant activity.
-
-Production persistence integration remains blocked until the Phase 2 real gates pass.
-"""
+"""Dependency-light closed contracts for Phase 3 public Assistant activity."""
 
 from __future__ import annotations
 
@@ -62,7 +59,7 @@ _OCCURRED_AT_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$"
 )
 _MAX_LABEL = 240
-_MAX_RESOURCE_RECORDS = 20
+_MAX_RESOURCE_RECORDS = 50
 _MAX_DISPLAY_NAME = 160
 
 
@@ -180,7 +177,7 @@ class PublicTurnEvent:
 
 @dataclass(frozen=True, slots=True)
 class PublicCapabilityActivityDescriptor:
-    """Trusted installed-code labels prepared for later CapabilityDefinition wiring."""
+    """Trusted installed-code labels prepared for CapabilityDefinition wiring."""
 
     started_label: str
     completed_label: str
