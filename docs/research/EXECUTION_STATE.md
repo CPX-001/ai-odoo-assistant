@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 11
+State format: 12
 Updated: 2026-08-29
 Accepted foundation runtime lineage through: `8a4432dc9852eacc422b8c794b6613c75da702a9`  
 Accepted P5.1 implementation lineage through: `f7f924ce944db86e896745fef83ea2fb6fd6583a`
@@ -8,6 +8,7 @@ P5.1 validation harness lineage through: `c48534d3caec9b8a5301f840ca0f48c6aef4ca
 P5.2 implementation/harness lineage through: `b1e49d97fce5506a2c9bb19b3a9ce1303f7add9c`
 Accepted P5.2 validation/harness lineage through: `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`
 P5.3 implementation/harness lineage through: `1803826a6516e2703497f0d14d74850082ad7665`
+P5.3 focused Odoo validation lineage through: `b7428d7804cdbea263ea78ad5b588398b02fe5be`
 Roadmaps: `FOUNDATION_STABILIZATION_PLAYBOOK.md`, `E2E_AGENT_LOOP_CONVERGENCE.md`, `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`
 
 ## Current cursor
@@ -20,11 +21,12 @@ active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P5.3-stable-settings-snapshot
 active_slice_record: docs/research/P5.3_STABLE_SETTINGS_SNAPSHOT.md
 active_slice_state: LOCAL_VALIDATION_REQUIRED
-current_gate_type: HARD_DETERMINISTIC
-blocking_validations: P5.3-ODOO-SETTINGS-SNAPSHOT
+current_gate_type: HARD_DETERMINISTIC_REGRESSION
+blocking_validations: P5.3-DETERMINISTIC-REGRESSION, P5-REAL-SETTINGS-SNAPSHOT
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3
 acceptance_evidence: docs/research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md
-next_slice: NONE_UNTIL_P5.3_FOCUSED_ODOO
+latest_validation_evidence: docs/research/evidence/phase5/2026-08-29/P5.3-FOCUSED-ODOO-b7428d7.md
+next_slice: P5.3-deterministic-regression
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
@@ -32,7 +34,8 @@ Phases 0 through 4 are complete. The ordered P2 -> P3 -> P4 real Odoo/browser/pr
 chain passed on one linear code lineage. P5.1 production code and its deterministic, Odoo and real
 browser/provider acceptance are complete. P5.2 scheduler capacity, causal ordering, fairness,
 release wake-up, diagnostics and real two-cron behavior are accepted. P5.3 is implemented in small
-contract/test/version slices but is intentionally stopped at its first mandatory focused Odoo gate.
+contract/test/version slices and its focused Odoo snapshot gate passed. Its bounded deterministic
+regression and formal real product-path gate remain pending.
 
 ---
 
@@ -301,15 +304,17 @@ The P5.1 real browser evidence already demonstrated that A retained persisted mo
 captured changed preferences. That older evidence is supporting context only; it does not accept the
 new P5.3 contract or SHA.
 
-Mandatory next validation:
+Executed focused validation:
 
 ```text
-P5.3-ODOO-SETTINGS-SNAPSHOT | HARD | NOT RUN
+P5.3-ODOO-SETTINGS-SNAPSHOT | HARD | PASS | 2 tests, 0 failures/errors | b7428d7
 ```
 
-No P5.3 test is currently claimed PASS. P5.4 must not start until the focused gate above passes.
-After focused PASS, P5.3 validation should continue as a separate bounded regression/real-gate slice
-rather than one large test batch.
+Evidence: `evidence/phase5/2026-08-29/P5.3-FOCUSED-ODOO-b7428d7.md`.
+
+No repair was required. P5.3 validation now continues as a separate bounded deterministic regression
+slice, followed by the formal `P5-REAL-SETTINGS-SNAPSHOT` gate. P5.4 remains blocked until all P5.3
+acceptance gates pass.
 
 ---
 
@@ -318,7 +323,7 @@ rather than one large test batch.
 These limitations define the remaining Phase 5 and later work:
 
 - background scopes are currently web-client memory; durable reconnect/continuity is expanded later in P5;
-- P5.3 stable settings snapshot is implemented but awaiting its first mandatory focused Odoo gate; P5.4 is blocked;
+- P5.3 stable settings snapshot passed its focused Odoo gate but still awaits bounded regression and formal real product-path validation; P5.4 is blocked;
 - post-effect verified actions still need provider continuation/natural synthesis (P5.5);
 - conversation provider context is smaller than the target durable `ConversationContextManager` model (P5.6);
 - one canonical effect proposal/step is supported; multi-step effects are P6;
@@ -347,8 +352,9 @@ These limitations define the remaining Phase 5 and later work:
 
 # Exact next action
 
-Run **P5.3-ODOO-SETTINGS-SNAPSHOT** from `P5.3_VALIDATION_RUNBOOK.md` against the exact current
-P5.3 code lineage, executing `TestAssistantTurnSettingsSnapshot` after updating the addon on a real
-Odoo 18 Community test database. If it fails, repair only the smallest P5.3 layer and rerun that
-focused gate. Do not start P5.4 and do not batch the full P5.3 regression/real gates until this first
-mandatory deterministic contract passes.
+Run the separate bounded deterministic P5.3 regression slice from `P5.3_VALIDATION_RUNBOOK.md` against
+the exact current lineage. Cover turn enqueue/idempotency, user model/autonomy preferences, policy
+resolution, approval same-turn requeue/resume, and embedded-runtime consumption of persisted
+`reasoning_model`/`policy_payload`. If it fails, repair only the smallest responsible layer and rerun
+the affected coverage. Do not start P5.4 or the formal real product-path gate until this regression
+slice passes.

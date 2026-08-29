@@ -1,6 +1,6 @@
 # Current implementation state
 
-Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2 scheduler concurrency/backpressure is accepted through `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`. P5.3 stable settings snapshot is implemented through `1803826a6516e2703497f0d14d74850082ad7665` and is stopped at its first mandatory focused Odoo validation gate.
+Foundation runtime acceptance was revalidated on 28 August 2026 through `8a4432dc9852eacc422b8c794b6613c75da702a9`. P5.1 turn-scoped frontend behavior is accepted through `f7f924ce944db86e896745fef83ea2fb6fd6583a`; its reproducible validation harness is `c48534d3caec9b8a5301f840ca0f48c6aef4cacc`. P5.2 scheduler concurrency/backpressure is accepted through `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`. P5.3 stable settings snapshot is implemented through `1803826a6516e2703497f0d14d74850082ad7665`; its focused Odoo gate passed on `b7428d7804cdbea263ea78ad5b588398b02fe5be`, with bounded regression and formal real product-path validation still pending.
 
 This document distinguishes **implemented code** from **formal roadmap acceptance** and from the target in `PRODUCT_VISION.md`.
 
@@ -122,7 +122,7 @@ HOOT/P5.1 regressions and three real browser/provider gates passed on the conten
 `b4fbb034e113a41c26db77cb274f2b3b30f6eee3`. See `research/P5.2_SCHEDULER_IMPLEMENTATION.md` and
 `research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
 
-### P5.3 stable settings snapshot implemented, validation pending
+### P5.3 stable settings snapshot implemented, regression validation pending
 
 Normal newly enqueued turns now derive a versioned `execution_settings_payload` from the already host-resolved persisted settings. Snapshot v1 contains:
 
@@ -137,7 +137,7 @@ After capture, `reasoning_model`, `policy_payload` and `execution_settings_paylo
 
 The snapshot deliberately does not freeze revocable authorization or operational facts. User active state, company membership, ACL/record rules, capability guards/enablement and provider availability remain checked dynamically.
 
-P5.3 is not accepted yet. `TestAssistantTurnSettingsSnapshot` exists, but `P5.3-ODOO-SETTINGS-SNAPSHOT` has not been executed on the new lineage. See `research/P5.3_STABLE_SETTINGS_SNAPSHOT.md` and `research/P5.3_VALIDATION_RUNBOOK.md`.
+P5.3 is not accepted yet. `P5.3-ODOO-SETTINGS-SNAPSHOT` executed on the new lineage and passed with 2 tests and no failures/errors. Bounded deterministic regression and `P5-REAL-SETTINGS-SNAPSHOT` remain open. See `research/P5.3_STABLE_SETTINGS_SNAPSHOT.md`, `research/P5.3_VALIDATION_RUNBOOK.md` and `research/evidence/phase5/2026-08-29/P5.3-FOCUSED-ODOO-b7428d7.md`.
 
 ### P5.1 frontend state implemented and accepted
 
@@ -317,11 +317,12 @@ P2 five PASS
 
 The P5+ roadmap is `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`. P5.2 acceptance is recorded in
 `research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`. P5.3 implementation is recorded
-in `research/P5.3_STABLE_SETTINGS_SNAPSHOT.md`; it has not passed its new focused Odoo gate yet.
+in `research/P5.3_STABLE_SETTINGS_SNAPSHOT.md`; its focused Odoo gate passed on `b7428d7`, while
+bounded regression and formal real product-path validation remain pending.
 
 ## 14. Next action
 
-Run `P5.3-ODOO-SETTINGS-SNAPSHOT` from `research/P5.3_VALIDATION_RUNBOOK.md`, executing the focused
-`TestAssistantTurnSettingsSnapshot` after updating the addon on Odoo 18. Do not start P5.4 until this
-mandatory deterministic contract passes; larger P5.3 regression and real-browser validation remain a
-separate later slice.
+Run the bounded deterministic P5.3 regression slice from `research/P5.3_VALIDATION_RUNBOOK.md`,
+covering enqueue/idempotency, user model/autonomy preferences, policy resolution, approval same-turn
+resume and persisted runtime settings consumption. Do not start P5.4 or the formal real product-path
+gate until this separate regression slice passes.

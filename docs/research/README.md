@@ -28,7 +28,7 @@ Research documents do not override:
 | `P5.2_SCHEDULER_IMPLEMENTATION.md` | Current full P5.2 implementation record: capacity, ordering, fairness, wake-up, diagnostics and real-gate harness. |
 | `P5.2_VALIDATION_RUNBOOK.md` | Batched deterministic/regression/real-environment acceptance procedure for the complete P5.2 implementation. |
 | `P5.3_STABLE_SETTINGS_SNAPSHOT.md` | Current P5.3 implementation record for the versioned immutable per-turn settings snapshot. |
-| `P5.3_VALIDATION_RUNBOOK.md` | Split P5.3 validation sequence; current stop is the focused Odoo snapshot gate. |
+| `P5.3_VALIDATION_RUNBOOK.md` | Split P5.3 validation sequence; focused Odoo gate passed and bounded deterministic regression is next. |
 | `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed status record for P3 public activity. |
 | `PHASE4_ANSWER_STREAMING.md` | Formal completed status record for P4 answer streaming. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
@@ -66,9 +66,9 @@ wake-up, aggregate diagnostics and the real browser gates. The accepted batch is
 `evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
 
 P5.3 now has a versioned host-owned turn settings snapshot, focused Odoo coverage and addon version
-checkpoint. No P5.3 validation is claimed PASS yet. The next mandatory gate is
-`P5.3-ODOO-SETTINGS-SNAPSHOT`, after which regression and real settings-snapshot validation can be
-run as a separate slice. P5.4 remains blocked until the focused P5.3 contract passes.
+checkpoint. `P5.3-ODOO-SETTINGS-SNAPSHOT` passed on `b7428d7` with 2 tests and no failures/errors.
+Bounded deterministic regression is the next separate slice, followed by real settings-snapshot
+validation. P5.4 remains blocked until all P5.3 acceptance gates pass.
 
 ## Recursive execution rule
 
