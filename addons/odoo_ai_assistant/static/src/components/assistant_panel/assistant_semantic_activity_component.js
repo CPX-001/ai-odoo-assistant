@@ -70,6 +70,50 @@ function technicalSuffix(item, preferences) {
     return technical.length ? ` · ${technical.join(" · ")}` : "";
 }
 
+function activeReasoningScope(state) {
+    const scoped = state.turnScopes?.[state.activeTurnScopeKey];
+    if (scoped) {
+        return scoped;
+    }
+    return {
+        turnId: state.turnId || null,
+        reasoningSummaryTurnId: state.reasoningSummaryTurnId || null,
+        reasoningSummaryParts: state.reasoningSummaryParts || [],
+    };
+}
+
+function visibleReasoningParts(state, preferences) {
+    if (preferences?.reasoning_summary === "off") {
+        return [];
+    }
+    const scope = activeReasoningScope(state);
+    if (
+        !scope?.turnId ||
+        scope.reasoningSummaryTurnId !== scope.turnId ||
+        !Array.isArray(scope.reasoningSummaryParts)
+    ) {
+        return [];
+    }
+    const serverLimit = Number.isSafeInteger(preferences?.limits?.max_reasoning_summary_chars)
+        ? preferences.limits.max_reasoning_summary_chars
+        : 2000;
+    const maximum =
+        preferences.reasoning_summary === "concise" ? Math.min(serverLimit, 600) : serverLimit;
+    const result = [];
+    let remaining = Math.max(0, maximum);
+    for (const part of scope.reasoningSummaryParts) {
+        if (!remaining || typeof part?.text !== "string" || !part.text) {
+            continue;
+        }
+        const text = part.text.slice(0, remaining);
+        if (text) {
+            result.push({ key: part.key, text });
+            remaining -= text.length;
+        }
+    }
+    return result;
+}
+
 patch(AssistantPanel.prototype, {
     get semanticActivity() {
         return semanticActivityPresentation(this.state.activityEvents, {
@@ -88,6 +132,14 @@ patch(AssistantPanel.prototype, {
                     ? durationLabel(item.duration_ms)
                     : "",
         }));
+    },
+
+    get activityReasoningSummaryParts() {
+        return visibleReasoningParts(this.state, this.semanticActivity.preferences);
+    },
+
+    get activityReasoningSummaryTitle() {
+        return _t("Resumen del razonamiento");
     },
 
     get activitySummaryLabel() {
@@ -136,4 +188,4 @@ patch(AssistantPanel.prototype, {
     },
 });
 
-export { durationLabel, semanticLabel };
+export { durationLabel, semanticLabel, visibleReasoningParts };
