@@ -18,11 +18,11 @@ If you only read three documents, read:
 | Add or change a capability | [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) | [`../addons/odoo_ai_assistant/runtime/capabilities/README.md`](../addons/odoo_ai_assistant/runtime/capabilities/README.md) |
 | Work on the agent/provider loop | [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md) | [`adr/ADR-019-host-owned-iterative-decision-loop.md`](adr/ADR-019-host-owned-iterative-decision-loop.md) |
 | Work on writes/actions | [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`adr/ADR-014-unified-host-authorized-agent.md`](adr/ADR-014-unified-host-authorized-agent.md) |
-| Work on semantic activity/reasoning UX | [`research/P5.8_SEMANTIC_ACTIVITY_UX.md`](research/P5.8_SEMANTIC_ACTIVITY_UX.md) | [`CHAT_PRODUCT_FLOW.md`](CHAT_PRODUCT_FLOW.md), current frontend/activity code |
+| Work on semantic activity/reasoning UX | [`research/P5.8_IMPLEMENTATION.md`](research/P5.8_IMPLEMENTATION.md) | [`research/P5.8_SEMANTIC_ACTIVITY_UX.md`](research/P5.8_SEMANTIC_ACTIVITY_UX.md), [`research/P5.8_VALIDATION_RUNBOOK.md`](research/P5.8_VALIDATION_RUNBOOK.md) |
 | Configure/deploy Odoo + Codex | [`DEPLOYMENT_CONFIG.md`](DEPLOYMENT_CONFIG.md) | [`codex/README.md`](codex/README.md) |
 | Understand query behavior | [`QUERY_CONTRACT.md`](QUERY_CONTRACT.md) | capability provider README |
 | Follow current roadmap execution | [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) | active playbook/slice referenced there |
-| Validate in a real environment | [`research/REAL_ENV_VALIDATION_PROTOCOL.md`](research/REAL_ENV_VALIDATION_PROTOCOL.md) | relevant evidence folder |
+| Validate in a real environment | [`research/REAL_ENV_VALIDATION_PROTOCOL.md`](research/REAL_ENV_VALIDATION_PROTOCOL.md) | relevant validation runbook/evidence folder |
 | Understand why a major decision was made | [`adr/README.md`](adr/README.md) | the accepted ADR |
 | Explore historical design | [`HISTORICAL_DOCUMENTATION.md`](HISTORICAL_DOCUMENTATION.md) | archive/source-of-truth material |
 
@@ -37,7 +37,7 @@ flowchart TB
     HOST --> CAT[Effective capability catalog]
     CAT --> EXEC[CapabilityExecutor]
     EXEC --> ORM[Odoo ORM / bounded host service]
-    HOST --> LIVE[Sanitized activity + provisional answer]
+    HOST --> LIVE[Sanitized semantic activity + answer/reasoning presentation channels]
     LIVE --> UI
     HOST --> EFFECT[Preview → policy/approval → execute → verify]
     EFFECT --> ORM
@@ -54,18 +54,18 @@ Documentation should make lifecycle status obvious:
 - **Target / roadmap:** accepted product direction but not an implementation claim.
 - **Historical / retired:** kept for lineage/evidence only.
 
-This is especially important while Phase 5 is active. At the time of this README update, P0-P4 and
-P5.1-P5.7 are accepted through `074a71c`; P5.8 is eligible but not started. The exact live cursor is always
-[`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
+P0-P4 and P5.1-P5.7 are accepted through `074a71c`. P5.8 is implemented and currently `REAL_ENV_VALIDATION_REQUIRED`; it is not yet accepted and Phase 6 is not eligible. The exact live cursor is always [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
 
 ## Documentation layers
 
 ### Product and current state
 
-- [`PRODUCT_VISION.md`](PRODUCT_VISION.md) — the intended user experience and product boundaries.
+- [`PRODUCT_VISION.md`](PRODUCT_VISION.md) — intended user experience and product boundaries.
 - [`CURRENT_STATE.md`](CURRENT_STATE.md) — what is currently implemented, accepted or still missing.
 - [`CHAT_PRODUCT_FLOW.md`](CHAT_PRODUCT_FLOW.md) — chat-facing flow and interaction contracts where applicable.
-- [`research/P5.8_SEMANTIC_ACTIVITY_UX.md`](research/P5.8_SEMANTIC_ACTIVITY_UX.md) — target specification for semantic progress, readable reasoning summaries, typed Odoo/source references, configurable detail, batch disclosure and full Odoo-language localization. It is design guidance, not an implementation claim or active-cursor override.
+- [`research/P5.8_SEMANTIC_ACTIVITY_UX.md`](research/P5.8_SEMANTIC_ACTIVITY_UX.md) — the pre-implementation target/product specification for semantic progress, readable reasoning summaries, typed references, configurable detail, batch disclosure and Odoo-language localization.
+- [`research/P5.8_IMPLEMENTATION.md`](research/P5.8_IMPLEMENTATION.md) — what the current P5.8 code actually implements, including deliberate simplifications from the target design.
+- [`research/P5.8_VALIDATION_RUNBOOK.md`](research/P5.8_VALIDATION_RUNBOOK.md) — the required local/Odoo/HOOT/real gate chain before P5.8 can become COMPLETE.
 
 ### Architecture and subsystem contracts
 
@@ -81,7 +81,8 @@ P5.1-P5.7 are accepted through `074a71c`; P5.8 is eligible but not started. The 
 - [`DEPLOYMENT_CONFIG.md`](DEPLOYMENT_CONFIG.md)
 - [`codex/README.md`](codex/README.md)
 - [`codex/CODEX_AUTH.md`](codex/CODEX_AUTH.md)
-- [`DEPLOYMENT_CONFIG.md`](DEPLOYMENT_CONFIG.md) is the current deployment/configuration entry point; sidecar-era operations documents are historical.
+
+`DEPLOYMENT_CONFIG.md` is the current deployment/configuration entry point; sidecar-era operations documents are historical.
 
 ### Architecture decisions
 
