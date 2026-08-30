@@ -129,6 +129,39 @@ test("chat accepts a unified-agent response without exposing a category selector
     expect(normalized.result.plan.state).toBe("completed");
 });
 
+test("TaskPlan response is bounded progress without execution authority", () => {
+    const response = chatResponse();
+    response.task_plan = {
+        goal: "Actualizar dos contactos",
+        revision: 2,
+        steps: [
+            {
+                step_id: "inspect",
+                title: "Preparar cambios",
+                state: "completed",
+                depends_on: [],
+            },
+            {
+                step_id: "apply",
+                title: "Preparar acciones",
+                state: "in_progress",
+                depends_on: ["inspect"],
+            },
+        ],
+    };
+
+    const normalized = normalizeChatResponse(response);
+    expect(normalized.errorCode).toBe(null);
+    expect(normalized.result.task_plan.revision).toBe(2);
+
+    response.task_plan.steps[1].capability = "odoo.record.patch";
+    expect(normalizeChatResponse(response).result).toBe(null);
+
+    delete response.task_plan.steps[1].capability;
+    response.task_plan.steps[1].depends_on = ["future-step"];
+    expect(normalizeChatResponse(response).result).toBe(null);
+});
+
 test("runtime status requires ChatGPT setup until Codex is authenticated", async () => {
     const panelState = state();
     const status = {

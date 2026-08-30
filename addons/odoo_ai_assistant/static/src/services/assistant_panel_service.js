@@ -200,6 +200,54 @@ function validAgentPlan(plan) {
     );
 }
 
+function validTaskPlan(taskPlan) {
+    if (taskPlan === null || taskPlan === undefined) {
+        return true;
+    }
+    if (
+        !exactKeys(taskPlan, ["goal", "revision", "steps"]) ||
+        typeof taskPlan.goal !== "string" ||
+        taskPlan.goal.trim().length < 1 ||
+        taskPlan.goal.length > 1000 ||
+        taskPlan.goal.includes("\0") ||
+        !Number.isSafeInteger(taskPlan.revision) ||
+        taskPlan.revision < 1 ||
+        !Array.isArray(taskPlan.steps) ||
+        taskPlan.steps.length < 1 ||
+        taskPlan.steps.length > 12
+    ) {
+        return false;
+    }
+    const knownStepIds = new Set();
+    for (const step of taskPlan.steps) {
+        if (
+            !exactKeys(step, ["depends_on", "state", "step_id", "title"]) ||
+            typeof step.step_id !== "string" ||
+            step.step_id.length < 1 ||
+            step.step_id.length > 128 ||
+            knownStepIds.has(step.step_id) ||
+            typeof step.title !== "string" ||
+            step.title.trim().length < 1 ||
+            step.title.length > 512 ||
+            step.title.includes("\0") ||
+            !["pending", "in_progress", "completed", "blocked", "skipped"].includes(
+                step.state
+            ) ||
+            !Array.isArray(step.depends_on) ||
+            step.depends_on.length > 11 ||
+            new Set(step.depends_on).size !== step.depends_on.length ||
+            step.depends_on.some(
+                (dependency) =>
+                    typeof dependency !== "string" || !knownStepIds.has(dependency)
+            )
+        ) {
+            return false;
+        }
+        knownStepIds.add(step.step_id);
+    }
+    return true;
+}
+
 function validCitation(value) {
     return (
         value !== null &&
@@ -243,6 +291,7 @@ export function normalizeChatResponse(response) {
         citations.length <= 24 &&
         citations.every(validCitation) &&
         validAgentPlan(plan) &&
+        validTaskPlan(response.task_plan) &&
         (response.conversation_id === null ||
             response.conversation_id === undefined ||
             typeof response.conversation_id === "string")
