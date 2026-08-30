@@ -50,3 +50,4 @@ class TestAssistantChatPolicy(TransactionCase):
             )
             self.assertEqual(effective["max_tool_calls_per_turn"], 32)
             self.assertEqual(effective["max_write_steps_per_plan"], 12)
+            self.assertEqual(effective["max_effect_steps_per_plan"], 5)
