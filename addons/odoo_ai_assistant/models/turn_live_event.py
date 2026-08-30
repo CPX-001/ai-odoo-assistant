@@ -76,6 +76,7 @@ class AssistantTurnLiveEvent(models.Model):
     status = fields.Char(readonly=True, size=32)
     label = fields.Char(readonly=True, size=240)
     resource = fields.Json(readonly=True)
+    references = fields.Json(readonly=True)
     capability = fields.Char(readonly=True, size=128)
     activity_id = fields.Char(readonly=True, size=64, index=True)
     progress = fields.Integer(readonly=True)
@@ -107,6 +108,7 @@ class AssistantTurnLiveEvent(models.Model):
         status,
         label,
         resource=None,
+        references=None,
         capability=None,
         activity_id=None,
         progress=None,
@@ -121,6 +123,7 @@ class AssistantTurnLiveEvent(models.Model):
             status=status,
             label=label,
             resource=resource,
+            references=references or (),
             capability=capability,
             activity_id=activity_id,
             progress=progress,
@@ -145,6 +148,7 @@ class AssistantTurnLiveEvent(models.Model):
                 status=self.status,
                 label=self.label,
                 resource=self.resource or None,
+                references=tuple(self.references or ()),
                 capability=self.capability or None,
                 progress=self.progress if self.progress_set else None,
                 diagnostic_code=self.diagnostic_code or None,
@@ -217,13 +221,15 @@ class AssistantTurnEventLiveBridge(models.Model):
                 "progress",
                 "diagnostic_code",
             }
-            if set(payload) == expected:
-                payload = {**payload, "activity_id": None}
-            elif set(payload) != expected | {"activity_id"}:
+            optional = {"activity_id", "references"}
+            if not expected.issubset(payload) or set(payload) - expected - optional:
                 raise ValidationError("Invalid Assistant public-activity bridge")
+            normalized = dict(payload)
+            normalized.setdefault("activity_id", None)
+            normalized.setdefault("references", [])
             self.env["odoo.ai.turn.live.event"].append_activity_independent(
                 turn_id=turn.id,
-                **payload,
+                **normalized,
             )
             return self.browse()
 
@@ -322,12 +328,14 @@ def _public_projection(event_type, title, payload, diagnostic_code):
     code = diagnostic_code or data.get("code")
     if not isinstance(code, str) or _DIAGNOSTIC.fullmatch(code) is None:
         code = None
+    references = data.get("references") if isinstance(data.get("references"), list) else []
     return {
         "kind": kind,
         "phase": phase,
         "status": status,
         "label": title,
         "resource": _resource_from_payload(data),
+        "references": references,
         "capability": capability,
         "activity_id": activity_id,
         "progress": None,
@@ -377,6 +385,7 @@ def _append_activity(dbname, *, turn_id, **data):
                 "status": event.status,
                 "label": event.label,
                 "resource": event.resource or False,
+                "references": [dict(item) for item in event.references] or False,
                 "capability": event.capability or False,
                 "activity_id": event.activity_id or False,
                 "progress": event.progress if event.progress is not None else 0,
@@ -396,7 +405,7 @@ def _append_answer(dbname, *, turn_id, text):
         or not 1 <= len(text) <= _MAX_ANSWER_DELTA
         or "\x00" in text
     ):
-        raise ValidationError("Invalid Assistant answer delta")
+        raise ValidationError("Assistant answer delta budget exceeded") if len(text) > _MAX_ANSWER_DELTA else ValidationError("Invalid Assistant answer delta")
     with _live_cursor(dbname, turn_id) as (cr, env, binding, sequence):
         if binding["state"] != "running":
             raise ValidationError("Assistant answer delta requires a running turn")
@@ -421,6 +430,7 @@ def _append_answer(dbname, *, turn_id, text):
                 status="running",
                 label="Redactando respuesta",
                 resource=None,
+                references=(),
                 capability=None,
                 progress=None,
                 diagnostic_code=None,
@@ -437,6 +447,7 @@ def _append_answer(dbname, *, turn_id, text):
                     "status": started.status,
                     "label": started.label,
                     "resource": False,
+                    "references": False,
                     "capability": False,
                     "activity_id": False,
                     "progress": 0,
