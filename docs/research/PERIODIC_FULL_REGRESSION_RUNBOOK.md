@@ -61,6 +61,7 @@ python -m pytest -q \
   tests/e2e/test_next_decision_contract.py \
   tests/e2e/test_canonical_plan_proposal.py \
   tests/e2e/test_phase6_planning_contract.py \
+  tests/e2e/test_phase6_effect_recovery_contract.py \
   tests/e2e/test_e2e_decision_sequences.py
 node tests/js/failure_contract_test.mjs
 node tests/js/public_activity_contract_test.mjs
@@ -88,7 +89,7 @@ Update/install the exact candidate and execute the entire addon test tag:
   --stop-after-init --log-level=test
 ```
 
-This is intentionally the broad backend integration gate. It covers the accumulated Odoo model/runtime/capability/ACL/queue/effect/approval/recovery regressions rather than repeatedly rerunning the entire addon after each small change.
+This is intentionally the broad backend integration gate. It covers the accumulated Odoo model/runtime/capability/ACL/queue/effect/approval/recovery regressions rather than repeatedly rerunning the entire addon after each small change. It now includes the focused `TestAssistantEffectJournal` and format-v3 recovery-unit assertions committed with P6.4/P6.6.
 
 Gate ID:
 
@@ -132,23 +133,27 @@ reconnect/replay without duplicate final/activity state
 one contextual reference with fresh Odoo revalidation
 ```
 
-At the current Phase-6 checkpoint the accumulated real debt includes:
+Current accumulated Phase-6 real debt:
 
 ```text
 P6-REAL-MULTISTEP
 P6-REAL-LOOP-BOUNDS
-```
-
-When later P6 work lands, add the applicable implemented gates to the same periodic batch rather than forcing a new expensive environment run after every sub-part, for example:
-
-```text
-P6-REAL-REPLAN
 P6-REAL-EFFECT-ATOMICITY
 P6-REAL-SEGMENTED-RECOVERY
 P6-REAL-EFFECT-JOURNAL
 ```
 
+When P6.2 adaptive/deliberate/replan work lands, add `P6-REAL-REPLAN` to this same batch rather than forcing a separate expensive environment run.
+
 A gate is included only when the corresponding implementation exists and its scenario can honestly be exercised. Unimplemented gates remain roadmap work, not test failures.
+
+### Recovery-specific observations
+
+For `P6-REAL-EFFECT-ATOMICITY`, verify that a 2-5 step Odoo-local `odoo_atomic` recovery unit really rolls back together when a disposable injected failure occurs before transaction completion.
+
+For `P6-REAL-SEGMENTED-RECOVERY`, use a trusted disposable/test capability declaring a segmented or external recovery mode. Verify that a completed prior unit remains durably distinguishable, the in-flight unit is `rolled_back` or `uncertain` according to its mode, future units remain unexecuted, and restarting the worker never blindly replays the persisted in-flight unit.
+
+For `P6-REAL-EFFECT-JOURNAL`, inspect patch/create/delete journal entries through the owned-turn host surface. Verify retention/classification/target metadata, confirm raw before/after/receipt snapshots are not exposed through the normal user projection, and verify a supported compensation moves reversible rows to `reverted`. `reconstructable` must never be presented as a full undo guarantee.
 
 Gate ID for the consolidated real batch:
 
