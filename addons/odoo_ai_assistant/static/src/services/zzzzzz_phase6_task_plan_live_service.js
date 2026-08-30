@@ -95,15 +95,25 @@ export function selectVisibleTaskPlan(liveTaskPlan, finalTaskPlan) {
     if (live === undefined && final === undefined) {
         return null;
     }
+    let selected = null;
     if (live === undefined || live === null) {
-        return final === undefined ? null : final;
+        selected = final === undefined ? null : final;
+    } else if (final === undefined || final === null) {
+        selected = live;
+    } else {
+        // The final response is host-authoritative for equal revisions; a newer live revision wins
+        // only when it genuinely carries a later host-validated TaskPlan update.
+        selected = final.revision >= live.revision ? final : live;
     }
-    if (final === undefined || final === null) {
-        return live;
+    if (!selected) {
+        return null;
     }
-    // The final response is host-authoritative for equal revisions; a newer live revision wins
-    // only when it genuinely carries a later host-validated TaskPlan update.
-    return final.revision >= live.revision ? final : live;
+    // A one-step plan merely paraphrases the request and adds visual noise. Keep blocked work and
+    // structural replans visible because they communicate information the final prose may need to
+    // explain; otherwise require at least two meaningful steps.
+    const informativeSingleStep =
+        selected.revision_kind === "replan" || selected.steps[0]?.state === "blocked";
+    return selected.steps.length >= 2 || informativeSingleStep ? selected : null;
 }
 
 patch(assistantPanelService, {

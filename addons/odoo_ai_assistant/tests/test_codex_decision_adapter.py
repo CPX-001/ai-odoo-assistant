@@ -14,6 +14,7 @@ from ..runtime.agent.codex_decision import (
     _DECISION_INSTRUCTIONS,
     _codex_next_decision_schema,
     _decision_result,
+    _is_simple_social_message,
 )
 from ..runtime.agent.contracts import (
     FinalAnswer,
@@ -93,6 +94,22 @@ class TestCodexDecisionAdapter(BaseCase):
             self.assertNotIn("arguments", branch["properties"])
             self.assertIn("arguments_json", branch["required"])
 
+    def test_simple_social_message_allows_only_one_final_answer_decision(self):
+        self.assertTrue(_is_simple_social_message("hola"))
+        self.assertTrue(_is_simple_social_message("¡Buenos días!"))
+        self.assertTrue(_is_simple_social_message("hello, how are you?"))
+        self.assertFalse(_is_simple_social_message("hola, crea una factura"))
+        self.assertFalse(_is_simple_social_message("resume este contacto"))
+
+        alternatives = _codex_next_decision_schema(final_answer_only=True)["properties"][
+            "decision"
+        ]["anyOf"]
+        self.assertEqual(len(alternatives), 1)
+        self.assertEqual(
+            alternatives[0]["properties"]["kind"]["enum"],
+            ["final_answer"],
+        )
+
     def test_codex_instructions_keep_task_plan_non_authoritative_and_effect_steps_distinct(self):
         instructions = " ".join(_DECISION_INSTRUCTIONS.split())
         self.assertIn("user-visible TaskPlan", instructions)
@@ -100,6 +117,8 @@ class TestCodexDecisionAdapter(BaseCase):
         self.assertIn("one distinct plan_step_proposal at a time", instructions)
         self.assertIn("never repeat them", instructions)
         self.assertIn("verified_effect_receipt proves execution", instructions)
+        self.assertIn("Return final_answer immediately for greetings", instructions)
+        self.assertIn("Never create a TaskPlan merely to restate a one-step request", instructions)
 
     def test_wire_envelope_is_normalized_to_strict_next_decision(self):
         final = _decision_result(

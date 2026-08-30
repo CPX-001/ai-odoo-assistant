@@ -50,6 +50,12 @@ function taskPlan(revision, title, revisionKind = revision === 1 ? "initial" : "
                 state: revision > 1 ? "completed" : "in_progress",
                 depends_on: [],
             },
+            {
+                step_id: "answer",
+                title: "Responder",
+                state: revision > 1 ? "completed" : "pending",
+                depends_on: ["inspect"],
+            },
         ],
     };
 }
@@ -93,4 +99,18 @@ test("final TaskPlan wins an equal-revision race and legacy payloads remain read
     const normalized = normalizeLiveTaskPlan(legacy);
     expect(normalized.revision_kind).toBe("initial");
     expect(normalized.revision_summary).toBe("");
+});
+
+test("completed one-step plans stay hidden while blocked work remains informative", () => {
+    const trivial = taskPlan(1, "Responder al saludo");
+    trivial.steps = [
+        { step_id: "reply", title: "Saludar", state: "completed", depends_on: [] },
+    ];
+    expect(selectVisibleTaskPlan(null, trivial)).toBe(null);
+
+    const blocked = taskPlan(1, "Comprobar acceso");
+    blocked.steps = [
+        { step_id: "access", title: "Comprobar acceso", state: "blocked", depends_on: [] },
+    ];
+    expect(selectVisibleTaskPlan(null, blocked)?.steps[0].state).toBe("blocked");
 });

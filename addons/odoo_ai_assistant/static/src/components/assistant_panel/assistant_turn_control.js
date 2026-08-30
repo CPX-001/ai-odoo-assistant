@@ -33,6 +33,36 @@ export function composerActionLabel(mode) {
     return labels[mode] || labels.disabled;
 }
 
+export async function submitTurnControlMessage(component) {
+    const draft = component.state.draft;
+    const question = draft.trim();
+    if (
+        !question ||
+        component.state.decisionLoading ||
+        component.recoveryPending ||
+        component.state.stopLoading
+    ) {
+        return false;
+    }
+
+    // Clear immediately so a newly running turn exposes Stop instead of treating the submitted
+    // text as a pending redirect. Restore only when submission fails and the user has not typed a
+    // newer correction in the meantime.
+    component.panel.setDraft("");
+    let sent = false;
+    try {
+        sent = await component.panel.submit(question);
+    } catch {
+        if (!component.state.errorCode) {
+            component.state.errorCode = "service_unavailable";
+        }
+    }
+    if (!sent && !component.state.draft) {
+        component.panel.setDraft(draft);
+    }
+    return sent;
+}
+
 patch(AssistantPanel.prototype, {
     get composerActionMode() {
         return composerActionMode({
@@ -84,29 +114,7 @@ patch(AssistantPanel.prototype, {
     },
 
     async submit() {
-        const question = this.state.draft.trim();
-        if (
-            !question ||
-            this.state.decisionLoading ||
-            this.recoveryPending ||
-            this.state.stopLoading
-        ) {
-            return false;
-        }
-        let sent = false;
-        try {
-            // Keep the correction visible while Odoo durably accepts it.  The draft is cleared only
-            // after a validated Odoo response, never merely because a network request was started.
-            sent = await this.panel.submit(question);
-        } catch {
-            if (!this.state.errorCode) {
-                this.state.errorCode = "service_unavailable";
-            }
-        }
-        if (sent) {
-            this.panel.setDraft("");
-        }
-        return sent;
+        return submitTurnControlMessage(this);
     },
 
     requestRevertPerformedActions() {

@@ -4,6 +4,7 @@ import {
     composerActionLabel,
     composerTextareaIsDisabled,
     performedActionsState,
+    submitTurnControlMessage,
 } from "@odoo_ai_assistant/components/assistant_panel/assistant_turn_control";
 import {
     applyAcceptedStopState,
@@ -69,6 +70,78 @@ test("composer switches between disabled send stop and redirect", () => {
     expect(
         composerActionMode({ ...base, loading: true, draft: "corrección", stopLoading: true })
     ).toBe("disabled");
+});
+
+test("submitted text clears immediately so a running turn exposes Stop", async () => {
+    let finish;
+    const pendingResult = new Promise((resolve) => {
+        finish = resolve;
+    });
+    const state = {
+        draft: "hola",
+        loading: false,
+        decisionLoading: false,
+        stopLoading: false,
+        errorCode: null,
+    };
+    const component = {
+        state,
+        recoveryPending: false,
+        panel: {
+            setDraft(value) {
+                state.draft = value;
+            },
+            async submit(message) {
+                expect(message).toBe("hola");
+                state.loading = true;
+                return pendingResult;
+            },
+        },
+    };
+
+    const submitted = submitTurnControlMessage(component);
+    expect(state.draft).toBe("");
+    expect(
+        composerActionMode({
+            loading: state.loading,
+            draft: state.draft,
+            decisionLoading: false,
+            recoveryPending: false,
+            stopLoading: false,
+        })
+    ).toBe("stop");
+    finish(true);
+    expect(await submitted).toBe(true);
+});
+
+test("failed submission restores only the original untouched draft", async () => {
+    const state = {
+        draft: "mensaje original",
+        decisionLoading: false,
+        stopLoading: false,
+        errorCode: null,
+    };
+    const component = {
+        state,
+        recoveryPending: false,
+        panel: {
+            setDraft(value) {
+                state.draft = value;
+            },
+            async submit() {
+                return false;
+            },
+        },
+    };
+    expect(await submitTurnControlMessage(component)).toBe(false);
+    expect(state.draft).toBe("mensaje original");
+
+    component.panel.submit = async () => {
+        state.draft = "corrección nueva";
+        return false;
+    };
+    expect(await submitTurnControlMessage(component)).toBe(false);
+    expect(state.draft).toBe("corrección nueva");
 });
 
 test("textarea remains editable while processing and action labels are accessible", () => {

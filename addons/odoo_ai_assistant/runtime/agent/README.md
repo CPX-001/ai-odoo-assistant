@@ -149,6 +149,10 @@ Two projections remain separate:
 
 TaskPlan is a separate product-plan artifact. Phase 6 does not turn private reasoning into activity.
 
+Exact social messages such as a greeting, thanks, or farewell use a final-answer-only provider
+contract. They cannot create a TaskPlan or propose an effect. This fast path stays deliberately
+narrow: a greeting combined with a business request still enters the normal validated loop.
+
 ## Failure semantics
 
 Provider failures are normalized into bounded product state. Preserve useful category/status/retryability facts, but never make raw provider output the public failure contract.

@@ -51,3 +51,9 @@ When rendering an effect proposal, make the user understand:
 - verified outcome afterward.
 
 The server remains responsible for binding an approval to the actual proposal and revalidating before execution.
+
+## Composer turn control
+
+Submitting clears the visible draft before the network request starts, so an active turn immediately
+exposes the stop control. If submission fails, the original draft is restored only when the user has
+not already typed a replacement.

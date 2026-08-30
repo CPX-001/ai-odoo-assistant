@@ -83,6 +83,10 @@ Navigation references can render in streaming activity and as structured chips b
 
 The implementation remains validation-pending until `docs/research/EXECUTION_STATE.md` records the required P5.8 validation chain as accepted.
 
+Task-plan presentation suppresses ordinary one-step plans because they add latency-shaped noise to
+simple interactions. A blocked one-step plan and an explicit replan remain visible because both carry
+useful recovery information.
+
 ## Adding a service
 
 A frontend service should have a narrow responsibility and a corresponding HOOT test when state transitions matter.

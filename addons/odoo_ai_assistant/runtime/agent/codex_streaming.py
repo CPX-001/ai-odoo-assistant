@@ -11,15 +11,16 @@ import asyncio
 
 from .answer_stream import AnswerStreamError, StructuredFinalAnswerDeltaExtractor
 from .codex_decision import (
-    _DECISION_INSTRUCTIONS,
     _MAX_EVENTS,
     CodexAgentError,
     _best_effort_interrupt,
     _codex_next_decision_schema,
     _CodexClient,
     _decision_result,
+    _decision_instructions,
     _decision_terminal_error,
     _decision_turn_input,
+    _is_simple_social_message,
     _model_thread_options,
     _remaining,
     _thread_id,
@@ -70,6 +71,7 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
     ):
         if self._cancelled():
             raise CodexAgentError("agent_cancelled")
+        final_answer_only = _is_simple_social_message(message)
         turn_input = _decision_turn_input(
             message=message,
             conversation_summary=conversation_summary,
@@ -93,7 +95,7 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                     "runtimeWorkspaceRoots": [],
                     "sandbox": "read-only",
                     **_streaming_thread_options(self._settings),
-                    "baseInstructions": _DECISION_INSTRUCTIONS,
+                    "baseInstructions": _decision_instructions(final_answer_only),
                 },
                 timeout=_remaining(deadline),
             )
@@ -102,7 +104,9 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                 "turn/start",
                 {
                     "input": [{"type": "text", "text": turn_input}],
-                    "outputSchema": _codex_next_decision_schema(),
+                    "outputSchema": _codex_next_decision_schema(
+                        final_answer_only=final_answer_only
+                    ),
                     "threadId": thread_id,
                 },
                 timeout=_remaining(deadline),

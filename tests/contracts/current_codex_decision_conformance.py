@@ -62,7 +62,13 @@ class CurrentCodexDecisionConformanceAdapter:
 
     def _observe_turn_output_schema(self):
         checks = {
-            "output_schema_present": '"outputSchema": _codex_next_decision_schema()' in self._decision,
+            "output_schema_present": all(
+                token in self._decision
+                for token in (
+                    '"outputSchema": _codex_next_decision_schema(',
+                    "final_answer_only=final_answer_only",
+                )
+            ),
             "one_decision_envelope": '"properties": {"decision": {"anyOf": wire_alternatives}}' in self._decision,
         }
         return ("accepted" if all(checks.values()) else "rejected", checks)
