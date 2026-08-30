@@ -3,9 +3,10 @@ import asyncio
 from odoo import Command
 from odoo.tests.common import TransactionCase
 
-from ..runtime.agent.contracts import FinalAnswer, PlanStepProposal
+from ..runtime.agent.contracts import FinalAnswer, PlanStepProposal, TaskPlanUpdate
 from ..runtime.agent.plan import CapabilityPlanService
-from ..runtime.agent.service import AgentTurnService
+from ..runtime.agent.service import AgentTurnError, AgentTurnService
+from ..runtime.agent.task_plan import TaskPlan, TaskPlanStep
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -232,3 +233,104 @@ class TestCanonicalPlanHostLoop(TransactionCase):
         self.assertEqual(second.name, "CANONICAL PLAN B")
         self.assertEqual(len(executed.results), 2)
         self.assertTrue(all(step["verification"] for step in executed.payload["steps"]))
+
+    def test_task_plan_revision_is_durable_progress_separate_from_two_effect_steps(self):
+        context, registry, executor, _plans = self._runtime()
+        second = self.env["res.partner"].create({"name": "TASK PLAN SECOND"})
+        task_v1 = TaskPlanUpdate(
+            "task_plan_update",
+            TaskPlan(
+                goal="Actualizar los dos contactos",
+                revision=1,
+                steps=(
+                    TaskPlanStep("inspect", "Preparar cambios", "completed"),
+                    TaskPlanStep("apply", "Preparar acciones", "in_progress", ("inspect",)),
+                ),
+            ),
+        )
+        task_v2 = TaskPlanUpdate(
+            "task_plan_update",
+            TaskPlan(
+                goal="Actualizar los dos contactos",
+                revision=2,
+                steps=(
+                    TaskPlanStep("inspect", "Preparar cambios", "completed"),
+                    TaskPlanStep("apply", "Preparar acciones", "completed", ("inspect",)),
+                ),
+            ),
+        )
+        engine, service = self._service(
+            registry,
+            context,
+            executor,
+            task_v1,
+            PlanStepProposal(
+                "plan_step_proposal",
+                "patch-a",
+                "odoo.record.patch",
+                {
+                    "model": "res.partner",
+                    "record_id": self.target.id,
+                    "values": {"name": "TASK PLAN A"},
+                },
+                "Actualizar primer contacto",
+            ),
+            PlanStepProposal(
+                "plan_step_proposal",
+                "patch-b",
+                "odoo.record.patch",
+                {
+                    "model": "res.partner",
+                    "record_id": second.id,
+                    "values": {"name": "TASK PLAN B"},
+                },
+                "Actualizar segundo contacto",
+            ),
+            task_v2,
+            FinalAnswer("final_answer", "Plan preparado", "high"),
+        )
+
+        result = asyncio.run(service.run(message="Actualiza ambos contactos"))
+
+        self.assertEqual(engine.calls, 5)
+        self.assertEqual(len(result.plan), 2)
+        self.assertIsNotNone(result.task_plan)
+        self.assertEqual(result.task_plan.revision, 2)
+        self.assertEqual(result.task_plan.steps[-1].state, "completed")
+        task_items = [item for item in service.working_items if item.kind == "task_plan"]
+        self.assertEqual([item.data["revision"] for item in task_items], [1, 2])
+        self.assertTrue(all("capability" not in item.data for item in task_items))
+        self.target.invalidate_recordset(["name"])
+        second.invalidate_recordset(["name"])
+        self.assertEqual(self.target.name, "CANONICAL PLAN ORIGINAL")
+        self.assertEqual(second.name, "TASK PLAN SECOND")
+
+    def test_task_plan_revision_must_increment_exactly_once(self):
+        context, registry, executor, _plans = self._runtime()
+        engine, service = self._service(
+            registry,
+            context,
+            executor,
+            TaskPlanUpdate(
+                "task_plan_update",
+                TaskPlan(
+                    goal="Resolver",
+                    revision=1,
+                    steps=(TaskPlanStep("one", "Primero", "in_progress"),),
+                ),
+            ),
+            TaskPlanUpdate(
+                "task_plan_update",
+                TaskPlan(
+                    goal="Resolver",
+                    revision=3,
+                    steps=(TaskPlanStep("one", "Primero", "completed"),),
+                ),
+            ),
+        )
+
+        with self.assertRaises(AgentTurnError) as captured:
+            asyncio.run(service.run(message="Resuelve"))
+
+        self.assertEqual(captured.exception.code, "agent_task_plan_revision_invalid")
+        self.assertEqual(engine.calls, 2)
