@@ -20,7 +20,7 @@ class AgentBudgetError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class SafetyBudget:
-    max_effect_steps: int = 5
+    max_effect_steps: int = 1
     max_consecutive_failures: int = 3
 
 
@@ -93,9 +93,11 @@ class AgentBudgetSet:
 
 
 def resolve_agent_budgets(context) -> AgentBudgetSet:
-    """Resolve stable legacy policy plus optional host-owned P6 budget overrides.
+    """Resolve stable policy plus optional host-owned P6 budget overrides.
 
-    Provider adapters only receive the resulting remaining counters. They do not own limits.
+    Legacy/custom callers that do not opt into the P6 safety family remain single-step. The
+    product host explicitly enables up to five EffectPlan steps. Provider adapters only receive
+    the resulting remaining counters and never own these limits.
     """
 
     policy = context.metadata.get("capability_policy", {})
@@ -103,7 +105,7 @@ def resolve_agent_budgets(context) -> AgentBudgetSet:
         policy = {}
     overrides = context.metadata.get("agent_budgets", {})
     if not isinstance(overrides, dict):
-        overrides = {}
+        raise AgentBudgetError()
 
     exploration = _family(overrides, "exploration")
     safety = _family(overrides, "safety")
@@ -135,8 +137,11 @@ def resolve_agent_budgets(context) -> AgentBudgetSet:
     policy_write_steps = policy.get("max_write_steps_per_plan", _MAX_EFFECT_STEPS)
     if type(policy_write_steps) is not int or not 0 <= policy_write_steps <= 12:
         raise AgentBudgetError()
-    requested_effect_steps = safety.get("max_effect_steps", _MAX_EFFECT_STEPS)
-    requested_effect_steps = _bounded_int(requested_effect_steps, 1, _MAX_EFFECT_STEPS)
+    requested_effect_steps = _bounded_int(
+        safety.get("max_effect_steps", 1),
+        1,
+        _MAX_EFFECT_STEPS,
+    )
     effect_steps = min(requested_effect_steps, policy_write_steps)
 
     cost_provider = _bounded_int(
