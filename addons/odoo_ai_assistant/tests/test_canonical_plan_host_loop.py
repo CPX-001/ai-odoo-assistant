@@ -121,13 +121,30 @@ class TestCanonicalPlanHostLoop(TransactionCase):
         self.assertEqual(self.target.name, "CANONICAL PLAN ORIGINAL")
 
         prepared = asyncio.run(plans.prepare(result.plan))
-        self.assertEqual(prepared["format_version"], 2)
+        self.assertEqual(prepared["format_version"], 3)
         self.assertEqual(prepared["state"], "awaiting_confirmation")
         self.assertTrue(prepared["requires_confirmation"])
         self.assertEqual(prepared["steps"][0]["step_id"], "patch-1")
+        self.assertEqual(prepared["steps"][0]["recovery_mode"], "odoo_atomic")
+        self.assertEqual(prepared["steps"][0]["journal_classification"], "reversible")
+        self.assertEqual(
+            prepared["recovery_units"],
+            [
+                {
+                    "unit_id": "unit-1",
+                    "mode": "odoo_atomic",
+                    "step_ids": ["patch-1"],
+                    "state": "prepared",
+                }
+            ],
+        )
         self.assertEqual(
             prepared["steps"][0]["preview"]["changes"][0],
-            {"field": "name", "before": "CANONICAL PLAN ORIGINAL", "after": "CANONICAL PLAN UPDATED"},
+            {
+                "field": "name",
+                "before": "CANONICAL PLAN ORIGINAL",
+                "after": "CANONICAL PLAN UPDATED",
+            },
         )
         self.target.invalidate_recordset(["name"])
         self.assertEqual(self.target.name, "CANONICAL PLAN ORIGINAL")
@@ -146,6 +163,7 @@ class TestCanonicalPlanHostLoop(TransactionCase):
         self.target.invalidate_recordset(["name"])
         self.assertEqual(self.target.name, "CANONICAL PLAN UPDATED")
         self.assertEqual(executed.payload["state"], "completed")
+        self.assertEqual(executed.payload["recovery_units"][0]["state"], "completed")
         self.assertIsNotNone(executed.payload["steps"][0]["verification"])
 
     def test_create_proposal_does_not_create_before_approval_and_verifies_one_record(self):
@@ -168,6 +186,7 @@ class TestCanonicalPlanHostLoop(TransactionCase):
         result = asyncio.run(service.run(message="Crea un contacto"))
         self.assertEqual(context.env["res.partner"].search_count([("name", "=", marker)]), 0)
         prepared = asyncio.run(plans.prepare(result.plan))
+        self.assertEqual(prepared["steps"][0]["journal_classification"], "reconstructable")
         self.assertEqual(context.env["res.partner"].search_count([("name", "=", marker)]), 0)
         authorized = dict(prepared)
         authorized["state"] = "authorized"
@@ -178,7 +197,7 @@ class TestCanonicalPlanHostLoop(TransactionCase):
         self.assertEqual(executed.payload["state"], "completed")
         self.assertIsNotNone(executed.payload["steps"][0]["verification"])
 
-    def test_two_independent_patches_form_one_ordered_effect_plan(self):
+    def test_two_independent_patches_form_one_ordered_atomic_recovery_unit(self):
         context, registry, executor, plans = self._runtime()
         second = self.env["res.partner"].create({"name": "CANONICAL PLAN SECOND"})
         decisions = (
@@ -216,6 +235,15 @@ class TestCanonicalPlanHostLoop(TransactionCase):
         prepared = asyncio.run(plans.prepare(result.plan))
         self.assertEqual(len(prepared["steps"]), 2)
         self.assertEqual(prepared["steps"][1]["depends_on"], ["patch-a"])
+        self.assertEqual(len(prepared["recovery_units"]), 1)
+        self.assertEqual(prepared["recovery_units"][0]["mode"], "odoo_atomic")
+        self.assertEqual(
+            prepared["recovery_units"][0]["step_ids"],
+            ["patch-a", "patch-b"],
+        )
+        self.assertTrue(
+            all(step["journal_classification"] == "reversible" for step in prepared["steps"])
+        )
         authorized = dict(prepared)
         authorized["state"] = "authorized"
         barriers = []
