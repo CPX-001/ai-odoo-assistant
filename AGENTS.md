@@ -50,6 +50,20 @@ Tests and exit gates only count when they were actually executed in an environme
 
 **Do not use GitHub Actions for this roadmap. There are currently no GitHub runners/workers available for project execution or validation.** Do not add `.github/workflows` to advance phases, schedule continuation or satisfy gates. This restriction does not remove the requirement to test; it means tests must be run in the real/local execution environment that actually provides Odoo/Codex and any required browser/runtime dependencies.
 
+## Slice sizing rule
+
+Roadmap slices should be **as large as is coherently feasible**, not artificially minimized. Prefer one slice that completes one product/architecture behavior end-to-end — backend/runtime contract, frontend projection where applicable, tests, documentation and cleanup — when those pieces can be implemented and validated together.
+
+Split work only when a real boundary justifies it, for example:
+
+- a HARD gate must be executed before dependent design can safely continue;
+- a separate authority/security contract needs independent review;
+- the required execution environment is unavailable for only part of the work;
+- rollback/recovery risk makes a smaller checkpoint materially safer;
+- the combined scope is too large to understand, validate and hand off reliably in one run.
+
+Do **not** create separate roadmap slices merely because work touches different files, layers, tests or commits. Mechanical commit granularity from a tool/API does not define slice boundaries. Avoid chains of tiny slices that leave the intended product behavior only partially implemented while each local fragment appears finished.
+
 ## Change workflow
 
 For meaningful changes:
@@ -58,7 +72,7 @@ For meaningful changes:
 2. identify reusable runtime/capability infrastructure;
 3. consult relevant project research/external references when they reduce uncertainty;
 4. state invariants and failure modes;
-5. implement the smallest coherent change;
+5. implement the largest coherent slice that remains feasible to understand, validate and recover as one checkpoint;
 6. remove obsolete current-path code when appropriate;
 7. run deterministic tests and add agentic evals when model behavior is involved;
 8. update current documentation in the same change.
