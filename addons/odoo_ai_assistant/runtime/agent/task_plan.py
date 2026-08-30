@@ -50,6 +50,43 @@ class TaskPlan:
         }
 
 
+def task_plan_schema() -> dict[str, object]:
+    """Strict transport schema shared by every reasoning-provider adapter."""
+
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "goal": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "revision": {"type": "integer", "minimum": 1},
+            "steps": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": _MAX_TASK_STEPS,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "step_id": {"type": "string", "minLength": 1, "maxLength": 128},
+                        "title": {"type": "string", "minLength": 1, "maxLength": 512},
+                        "state": {
+                            "type": "string",
+                            "enum": sorted(_ALLOWED_STATES),
+                        },
+                        "depends_on": {
+                            "type": "array",
+                            "maxItems": _MAX_TASK_STEPS - 1,
+                            "items": {"type": "string", "minLength": 1, "maxLength": 128},
+                        },
+                    },
+                    "required": ["step_id", "title", "state", "depends_on"],
+                },
+            },
+        },
+        "required": ["goal", "revision", "steps"],
+    }
+
+
 def parse_task_plan(value: object) -> TaskPlan:
     if not isinstance(value, dict) or set(value) != {"goal", "revision", "steps"}:
         raise TaskPlanError()
