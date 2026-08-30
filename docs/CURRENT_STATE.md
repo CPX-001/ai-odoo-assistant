@@ -14,24 +14,24 @@ P5.7 complete through 074a71c29a6a6109ae7412e7b1f9850c4449e379
 P5.8 complete through 688f569d441a40a4637ad6a23f111e584e18c955
 ```
 
-Phase 5 is **COMPLETE**. Its final repaired candidate passed the complete automated and real P5.8 gate chain.
+Phase 5 is **COMPLETE**.
 
-Phase 6 is **IN PROGRESS**. The current P6.1/P6.3/P6.5 foundation passed its focused deterministic checkpoint; `P6-REAL-MULTISTEP` and `P6-REAL-LOOP-BOUNDS` remain required. See `research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md` and `research/EXECUTION_STATE.md`.
+Phase 6 is **IMPLEMENTED AS A CANDIDATE BUT NOT ACCEPTED**. All P6.1-P6.6 implementation areas now exist, while the accumulated full/real validation remains pending. Implementation progress must not be confused with a green Phase-6 acceptance gate.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.11.0.0` for the Phase-6 planning checkpoint.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.13.0.0`.
 - Embedded runtime; browser talks only to Odoo.
-- Odoo/PostgreSQL own conversations, messages, turns, policy/settings snapshots, working checkpoints, effects and browser-safe state.
+- Odoo/PostgreSQL own conversations, messages, immutable turn settings, working checkpoints, effects, recovery state, EffectJournal and browser-safe state.
 - Native `ir.cron` runs durable turns with bounded concurrency/backpressure.
 - Business authority is always the originating effective user with `su=False`.
 - Codex App Server is the current concrete reasoning provider using the host-configured primary session.
-- The core agent/runtime is intentionally provider-neutral so later providers can implement the same port.
+- Core planning/effect/recovery logic is provider-neutral so later providers can implement the same decision port.
 
 ## 2. Provider-neutral agent loop
 
-ADR-019/current code owns orchestration. The provider returns exactly one strict `NextDecision` per call:
+The provider returns one strict `NextDecision` at a time:
 
 ```text
 final_answer
@@ -40,21 +40,29 @@ reasoning_capability_call
 plan_step_proposal
 ```
 
-The host owns capability resolution, schema validation, budgets, policy, approval, effect execution, verification and recovery semantics. Provider content is untrusted data, never authority.
+The host owns capability resolution, schemas, budgets, TaskPlan rules, EffectPlan preparation, policy, approval, execution, verification and recovery semantics. Provider output is untrusted input, never execution authority.
 
-Codex-specific code is limited to provider transport concerns: App Server lifecycle, Structured Outputs translation, model/reasoning options, provider failures and steer/interrupt behavior.
+Codex-specific code remains below this boundary and owns transport details such as App Server lifecycle, Structured Outputs translation, model/reasoning settings, provider failures and steer/interrupt behavior.
 
-## 3. TaskPlan vs EffectPlan
+## 3. Planning modes and TaskPlan
 
-Phase 6 now separates product planning from executable effects.
+P6.2 adds a provider-neutral planning strategy with a per-user selector captured immutably per turn:
 
-### TaskPlan
+```text
+adaptive     default; begin directly and create/update TaskPlan when useful
+deliberate   Plan mode; require an initial TaskPlan before capability/effect work
+auto         host chooses adaptive vs deliberate from bounded structural complexity signals
+```
 
-A `TaskPlan` is user-visible structured progress:
+The selector is not an autonomy level. It cannot change ACLs, available capabilities, approval policy or execution authority.
+
+TaskPlan is user-visible progress only:
 
 ```text
 goal
 revision
+revision_kind: initial | progress | replan
+revision_summary
 1..12 steps
   step_id
   title
@@ -62,26 +70,21 @@ revision
   depends_on
 ```
 
-Properties:
+Rules:
 
-- no capability name or arguments;
-- no approval or execution authority;
+- no capability arguments/approval/execution authority;
 - no private chain-of-thought;
-- host reparses every revision;
-- first revision is `1`; later updates must be exactly `+1`;
-- durable in the private working transcript;
-- latest validated revision is projected to terminal/approval browser responses;
-- browser renders it separately from effect approval and explicitly says actions are authorized separately.
+- exact monotonic revisions;
+- `progress` cannot silently change the plan structure;
+- structural `replan` requires new host-observed evidence plus a short public revision summary;
+- live turn status exposes the latest validated TaskPlan separately from effect approval;
+- terminal/approval response retains the older accepted TaskPlan browser shape for compatibility.
 
-A TaskPlan update cannot clear a terminal policy/authority failure or reset a failing capability streak.
+Legacy persisted TaskPlans and execution-settings snapshot formats remain readable.
 
-The richer P6.2 adaptive/deliberate/auto strategy and dedicated running-turn live TaskPlan stream are not yet claimed.
+## 4. Bounded EffectPlan
 
-### EffectPlan
-
-The product host now allows up to **5** typed effect steps. Legacy/custom callers remain single-step unless they receive the Phase-6 policy opt-in.
-
-Each step retains:
+The product host supports up to **5** typed effect steps. Every step remains one `CapabilityDefinition` invocation with:
 
 ```text
 step_id / depends_on
@@ -90,110 +93,79 @@ validated arguments
 preview
 risk / effect / approval
 precondition + binding fingerprints
+recovery mode / recovery unit / journal classification
 result + verification
 semantic correlation keys
 ```
 
-Current provider proposals are accumulated in deterministic order; each later proposal depends on the previous one. No generic script/program replaces `CapabilityDefinition` steps.
+No generic program/script replaces typed capabilities.
 
-## 4. Current effect lifecycle
+Prepared EffectPlan format is now v3. Existing v1/v2 prepared data is conservatively readable/upgraded.
 
-For the current Odoo-local plan capabilities:
+## 5. Recovery units
+
+Host-derived recovery modes are:
 
 ```text
-provider proposes distinct typed steps
- -> host validates and accumulates
- -> prepare / preview every step
- -> policy / approval
- -> revalidate capability/version/binding/preconditions
- -> one durable write barrier for the current Odoo-local recovery unit
- -> execute each step with ExecutionAuthority.PLAN under effective user
- -> verify each step
- -> authoritative verified-effect receipt
- -> PLAN authority removed
- -> optional read-only post-effect reasoning / TaskPlan progress update
- -> natural final answer
+odoo_atomic
+  consecutive Odoo-local effects intentionally share one transaction/recovery unit
+
+segmented
+  a trusted capability explicitly requires a durable internal unit boundary
+
+external
+  non-transactional intent is persisted before execution; interrupted outcome can remain uncertain
 ```
 
-`CapabilityPlanService` uses plan format v2 and still accepts prepared format-v1 data for compatibility.
+Provider text cannot choose or upgrade recovery semantics.
 
-Existing P5.8 explicit HOST-only compensators work in reverse order over eligible completed plans. They are useful recovery infrastructure but do not replace the P6.4 segmented/external-effect design.
+At every new unit the host preflights binding/preconditions/policy, reacquires the effect lock, rechecks Stop/redirect state, checkpoints durable intent/state and avoids blindly replaying a persisted in-flight unit.
 
-No claim is made that future external/non-transactional effects are atomic.
+## 6. EffectJournal and compensation
 
-## 5. Budget families
+`odoo.ai.effect.journal` is Odoo-owned, bounded and short-lived:
 
-Agent resource limits are no longer one undifferentiated tool counter. The host resolves:
+```text
+turn/user/company binding
+capability/version/recovery-unit binding
+bounded before/after/receipt evidence
+7-day TTL + scheduled cleanup
+system-only raw table access
+owned-turn sanitized user projection
+classification:
+  reversible
+  reconstructable
+  irreversible
+  external_or_unknown
+```
+
+The journal is not a backup and `reconstructable` is not automatic undo.
+
+Existing P5.8 HOST-only compensators remain the safe reversion mechanism for supported reversible capabilities; successful compensation marks matching recent journal rows as reverted.
+
+## 7. Budget families
+
+The host resolves independent bounded families:
 
 ```text
 SafetyBudget
-  effect-step ceiling
-  consecutive-failure ceiling
-
 ExplorationBudget
-  provider decisions
-  capability calls
-
 CostBudget
-  provider-decision ceiling (initial enforceable proxy)
-
 LatencyBudget
-  provider-decision ceiling (initial enforceable proxy)
-
 ResponseBudget
-  transcript bytes
-  result bytes
 ```
 
-The effective provider-decision ceiling is the minimum applicable host ceiling. Remaining budget values are sent to the provider as bounded context only; enforcement remains host-side. `effect_steps` reports remaining capacity.
-
-Scheduler concurrency remains a separate Phase-5 resource concern.
-
-## 6. Capability framework
-
-`CapabilityDefinition` remains the atomic executable contract. Current core providers include:
-
-```text
-assistant_preferences
-odoo_query
-odoo_actions
-odoo_batch
-odoo_runtime
-odoo_navigation
-odoo_compensations (HOST-only inverses)
-odoo_unarchive
-```
-
-No unrestricted ORM methods, SQL, Python, filesystem, shell or sudo authority is exposed to the model.
-
-Future Skills/CapabilityProvider/ContextProvider/EvidenceProvider work should extend this framework rather than introduce a parallel tool runtime.
-
-## 7. Conversation/settings/live UX retained from Phase 5
-
-Accepted Phase-5 behavior remains authoritative:
-
-- per-conversation frontend turn scopes;
-- concurrent independent chats within capacity;
-- one active causal turn per conversation;
-- immutable per-turn model/reasoning/policy/context snapshots;
-- durable reconnect/replay;
-- separate public activity, readable reasoning summary and answer-delta channels;
-- semantic business-facing activity grouping rather than a raw tool lifecycle dump;
-- interactive stop and same-turn correction/redirect;
-- approval supersession on correction;
-- contextual Odoo navigation references with fresh revalidation;
-- one authoritative final Assistant message;
-- verified-receipt post-effect continuation;
-- explicit safe compensation for supported reversible operations.
-
-Raw provider reasoning/private chain-of-thought is never a public activity surface.
+Remaining values sent to a provider are context only. Enforcement remains host-side.
 
 ## 8. Provider abstraction
 
-The intended provider seam is:
+The active seam is:
 
 ```text
 Odoo host / AgentTurnService
+          |
+          v
+ PlanningDecisionEngine
           |
           v
    NextDecisionEngine
@@ -202,38 +174,25 @@ Odoo host / AgentTurnService
   adapter adapter adapter
 ```
 
-Core logic that must remain provider-neutral includes:
+Provider-neutral core includes:
 
 ```text
-TaskPlan / EffectPlan
-capabilities
-budgets
-ACL/policy/approval
-write barrier
+planning strategy / TaskPlan / EffectPlan
+capabilities and budgets
+ACL / policy / approval
+write barrier / recovery units
 execution / verification
-working transcript
-failure/recovery certainty
+working transcript / EffectJournal
+failure certainty
 ```
 
-Provider adapters may specialize wire schemas, streaming, authentication/session transport, model knobs and provider-specific error mapping.
+Provider adapters may specialize transport schemas, streaming, authentication/session transport, model knobs and provider-specific error mapping.
 
-## 9. Retrieval/RAG and technical operations
+## 9. Capability framework
 
-There is still no general embedded Evidence/RAG provider. Later retrieval should combine live Odoo/runtime/schema/configuration, source/XML, logs, company knowledge/files, lexical/semantic retrieval and web evidence according to question type.
+`CapabilityDefinition` remains the atomic executable contract. No unrestricted ORM method, SQL, Python, filesystem, shell or sudo authority is exposed to the model.
 
-Not currently exposed as generic reasoning authority:
-
-```text
-module install/update
-odoo.conf modification
-service/process restart
-PostgreSQL administration
-source-code modification
-generic command execution
-general arbitrary network access
-```
-
-Later privileged technical operations require explicit high-level capabilities and a privilege-boundary design.
+Future Skill/CapabilityProvider/ContextProvider/EvidenceProvider work should extend this framework instead of creating a second tool runtime.
 
 ## 10. Validation state
 
@@ -243,9 +202,24 @@ Accepted P5.8 evidence remains:
 research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
 ```
 
-The current Phase-6 implementation contains new deterministic tests for TaskPlan, multi-step EffectPlan, budget separation and Codex wire translation, but these have **not yet been recorded as executed on the final candidate**.
+The earlier P6.1/P6.3/P6.5 focused deterministic checkpoint was recorded at:
 
-No P6 HARD real gate is currently recorded PASS.
+```text
+research/evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md
+```
+
+Later P6.2/P6.4/P6.6 code and tests are committed but their expensive final regression/real paths have not been executed in this environment.
+
+Accumulated Phase-6 real validation debt is:
+
+```text
+P6-REAL-MULTISTEP
+P6-REAL-REPLAN
+P6-REAL-EFFECT-ATOMICITY
+P6-REAL-SEGMENTED-RECOVERY
+P6-REAL-LOOP-BOUNDS
+P6-REAL-EFFECT-JOURNAL
+```
 
 Formal cursor:
 
@@ -256,13 +230,14 @@ P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
 P5 COMPLETE
-P6 IN_PROGRESS
-  P6.1 TaskPlan vs EffectPlan            REAL ENV VALIDATION REQUIRED
-  P6.2 adaptive/deliberate modes         NOT STARTED
-  P6.3 bounded multi-step EffectPlan     REAL ENV VALIDATION REQUIRED
-  P6.4 atomic vs segmented effects       NOT STARTED
-  P6.5 separate budgets                  REAL ENV VALIDATION REQUIRED
-  P6.6 EffectJournal                     NOT STARTED
+P6 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+  P6.1 TaskPlan vs EffectPlan            IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+  P6.2 adaptive/deliberate/replan        IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+  P6.3 bounded multi-step EffectPlan     IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+  P6.4 atomic vs segmented effects       IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+  P6.5 separate budgets                  IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+  P6.6 EffectJournal                     IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+P7+ NOT_ELIGIBLE
 ```
 
-The next meaningful boundary is the named `P6-REAL-MULTISTEP` and `P6-REAL-LOOP-BOUNDS` chain before building segmented recovery/journaling on assumptions that have not been exercised with the real provider path.
+`research/PERIODIC_FULL_REGRESSION_RUNBOOK.md` is the canonical next acceptance step. Phase 7 should not begin until one exact Phase-6 candidate passes the applicable periodic full regression and real-product gates.
