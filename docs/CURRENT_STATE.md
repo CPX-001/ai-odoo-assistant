@@ -16,7 +16,7 @@ P5.8 complete through 688f569d441a40a4637ad6a23f111e584e18c955
 
 Phase 5 is **COMPLETE**. Its final repaired candidate passed the complete automated and real P5.8 gate chain.
 
-Phase 6 is **IN PROGRESS**. The current P6.1/P6.3/P6.5 foundation is an implementation candidate on `main`; its new tests/gates have not yet been recorded as executed. See `research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md` and `research/EXECUTION_STATE.md`.
+Phase 6 is **IN PROGRESS**. The current P6.1/P6.3/P6.5 foundation passed its focused deterministic checkpoint; `P6-REAL-MULTISTEP` and `P6-REAL-LOOP-BOUNDS` remain required. See `research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md` and `research/EXECUTION_STATE.md`.
 
 ## 1. Product/deployment baseline
 
@@ -257,12 +257,12 @@ P3 COMPLETE
 P4 COMPLETE
 P5 COMPLETE
 P6 IN_PROGRESS
-  P6.1 TaskPlan vs EffectPlan            IMPLEMENTED CANDIDATE
+  P6.1 TaskPlan vs EffectPlan            REAL ENV VALIDATION REQUIRED
   P6.2 adaptive/deliberate modes         NOT STARTED
-  P6.3 bounded multi-step EffectPlan     IMPLEMENTED CANDIDATE
+  P6.3 bounded multi-step EffectPlan     REAL ENV VALIDATION REQUIRED
   P6.4 atomic vs segmented effects       NOT STARTED
-  P6.5 separate budgets                  FOUNDATION IMPLEMENTED CANDIDATE
+  P6.5 separate budgets                  REAL ENV VALIDATION REQUIRED
   P6.6 EffectJournal                     NOT STARTED
 ```
 
-The next meaningful boundary is validation of the combined P6.1/P6.3/P6.5 checkpoint before building segmented recovery/journaling on assumptions that have not been exercised in Odoo/Codex.
+The next meaningful boundary is the named `P6-REAL-MULTISTEP` and `P6-REAL-LOOP-BOUNDS` chain before building segmented recovery/journaling on assumptions that have not been exercised with the real provider path.

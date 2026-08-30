@@ -279,3 +279,20 @@ Before adding a subsystem:
 5. borrow tested Odoo patterns where useful without adding dependencies by reflex.
 
 Useful references include OCA `queue_job` for bounded background concurrency, OCA `ai_tool` for reusable UI/tool declaration, and Apexive for provider/Knowledge/domain-tool breadth. They are implementation references, not authority replacements.
+
+## 16. Validation architecture
+
+The repository uses risk-based incremental validation. The default validation unit is the changed or still-unvalidated contract plus its direct boundaries, not the entire historical test inventory.
+
+```text
+changed contract
+ -> focused unit/contract tests
+ -> directly affected Odoo or browser boundary
+ -> explicitly named HARD/real gate
+```
+
+A complete dependency-light, addon, HOOT/browser or repository regression is a separate high-cost gate. It runs only when the user explicitly requests it or an authoritative current execution record/runbook explicitly requires it. Pulling changes, reaching the end of a work session, passing focused tests, preparing a commit or publishing a checkpoint does not by itself trigger a full regression.
+
+Ambiguous phrases such as "relevant tests", "appropriate regression" or "validate before handoff" mean focused risk-based coverage. They must not be interpreted as authorization to run every suite. Broader testing is justified only by an observed failure or a concrete cross-cutting blast radius, and that expansion must be reported with its reason.
+
+This keeps acceptance evidence attributable to the changed behavior and prevents repeated unrelated test cost from growing with repository history. It does not weaken an explicitly declared HARD gate: required but unavailable tests remain validation debt rather than inferred PASS.

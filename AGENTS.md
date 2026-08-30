@@ -50,6 +50,17 @@ Tests and exit gates only count when they were actually executed in an environme
 
 **Do not use GitHub Actions for this roadmap. There are currently no GitHub runners/workers available for project execution or validation.** Do not add `.github/workflows` to advance phases, schedule continuation or satisfy gates. This restriction does not remove the requirement to test; it means tests must be run in the real/local execution environment that actually provides Odoo/Codex and any required browser/runtime dependencies.
 
+### Test-scope rule
+
+Validation is **incremental by default**. Run the smallest set of tests that proves the changed or currently unvalidated contract, including its direct integration boundaries and any explicitly named HARD gates.
+
+Do **not** run the full dependency-light, addon, HOOT/browser or repository regression suite merely because a pull, implementation slice, focused test run or final handoff occurred. A full regression is authorized only when:
+
+1. the user explicitly requests it; or
+2. the current authoritative execution state, active slice record or validation runbook explicitly names that full regression as a required gate.
+
+Wording such as "test as appropriate", "validate the change", "if focused tests pass" or "run relevant tests" does not implicitly authorize a full regression. Expand beyond focused tests only for a concrete failure whose root cause or blast radius requires it, and state that reason. Record unexecuted broad suites honestly; do not spend runtime/tokens rerunning already-green unrelated coverage by default.
+
 ## Slice sizing rule
 
 Roadmap slices should be **as large as is coherently feasible**, not artificially minimized. Prefer one slice that completes one product/architecture behavior end-to-end — backend/runtime contract, frontend projection where applicable, tests, documentation and cleanup — when those pieces can be implemented and validated together.

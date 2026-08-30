@@ -64,9 +64,9 @@ Current formal state:
 ```text
 P0-P5 COMPLETE
 P6 IN_PROGRESS
-  P6.1 TaskPlan vs EffectPlan        IMPLEMENTED_CANDIDATE
-  P6.3 bounded multi-step EffectPlan IMPLEMENTED_CANDIDATE
-  P6.5 separate budgets              FOUNDATION_IMPLEMENTED_CANDIDATE
+  P6.1 TaskPlan vs EffectPlan        REAL_ENV_VALIDATION_REQUIRED
+  P6.3 bounded multi-step EffectPlan REAL_ENV_VALIDATION_REQUIRED
+  P6.5 separate budgets              REAL_ENV_VALIDATION_REQUIRED
 ```
 
 No P6 HARD real gate is recorded PASS yet. The exact live cursor is always [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).

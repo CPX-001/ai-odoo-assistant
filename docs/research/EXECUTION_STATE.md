@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 35  
+State format: 36
 Updated: 2026-08-30
 
 Accepted lineage:
@@ -28,13 +28,13 @@ phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P6-planning-bounded-effectplan-budgets
 active_slice_record: docs/research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md
-active_slice_state: IMPLEMENTED_CANDIDATE
-current_gate_type: CHECKPOINT_VALIDATION_PENDING
+active_slice_state: REAL_ENV_VALIDATION_REQUIRED
+current_gate_type: HARD
 blocking_work: none
-blocking_validation: combined P6.1/P6.3/P6.5 deterministic checkpoint
+blocking_validation: P6-REAL-MULTISTEP, P6-REAL-LOOP-BOUNDS
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
-latest_executed_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
-next_action: validate the combined P6 planning/multistep/budget candidate before P6.4/P6.6
+latest_executed_evidence: docs/research/evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md
+next_action: execute P6-REAL-MULTISTEP and P6-REAL-LOOP-BOUNDS on the materially unchanged candidate before P6.4/P6.6
 ```
 
 No P6 HARD real gate is recorded PASS yet.
@@ -49,11 +49,11 @@ P3 COMPLETE
 P4 COMPLETE
 P5 COMPLETE
 P6 IN_PROGRESS
-  P6.1 TaskPlan vs EffectPlan        IMPLEMENTED_CANDIDATE
+  P6.1 TaskPlan vs EffectPlan        REAL_ENV_VALIDATION_REQUIRED
   P6.2 adaptive/deliberate modes     NOT_STARTED
-  P6.3 multi-step EffectPlan         IMPLEMENTED_CANDIDATE
+  P6.3 multi-step EffectPlan         REAL_ENV_VALIDATION_REQUIRED
   P6.4 atomic vs segmented effects   NOT_STARTED
-  P6.5 separate budgets              FOUNDATION_IMPLEMENTED_CANDIDATE
+  P6.5 separate budgets              REAL_ENV_VALIDATION_REQUIRED
   P6.6 EffectJournal                 NOT_STARTED
 P7+ NOT_ELIGIBLE
 ```
@@ -125,11 +125,11 @@ never claim execution before verified_effect_receipt
 
 Core TaskPlan/EffectPlan/budget/authority logic remains outside Codex.
 
-## Validation required for this checkpoint
+## Deterministic checkpoint result
 
-The implementation has added/updated deterministic coverage, but the final candidate has not yet been recorded as executed.
+The focused deterministic checkpoint passed on `1d6dc695f7fbb26a8d2bef578902d8ce2ebf56b9`. See `docs/research/evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md`.
 
-Run as one meaningful checkpoint rather than per-commit micro-gates:
+Executed as one focused checkpoint:
 
 ```text
 1. dependency-light Phase-6 + NextDecision + canonical EffectPlan tests
@@ -138,11 +138,13 @@ Run as one meaningful checkpoint rather than per-commit micro-gates:
    - TestCodexDecisionAdapter
    - TestPostEffectReasoning
    - relevant capability action/revalidation/compensation tests
-3. if focused tests pass, addon regression appropriate to the changed runtime/frontend surface
-4. browser/HOOT/static validation for the TaskPlan template and existing P5 live/approval UX
+3. directly affected addon tests not already covered by the focused classes
+4. focused browser/HOOT/static validation for the TaskPlan template and its touched P5 live/approval integration points
 ```
 
-If deterministic validation is green, the real gates attributable to this checkpoint are:
+This checkpoint does not require a full addon, HOOT/browser or repository regression. Broad regression runs require an explicit user request or a later authoritative gate that names the full suite.
+
+The remaining real gates attributable to this checkpoint are:
 
 ```text
 P6-REAL-MULTISTEP
@@ -191,4 +193,4 @@ Existing P5.8 compensation remains reusable but is not the EffectJournal.
 
 ## Exact stop rule
 
-Do not begin P6.4 segmented recovery or P6.6 EffectJournal on top of this candidate until the combined P6.1/P6.3/P6.5 deterministic checkpoint is green. A failed validation creates repair work inside this same coherent slice.
+Do not begin P6.4 segmented recovery or P6.6 EffectJournal until `P6-REAL-MULTISTEP` and `P6-REAL-LOOP-BOUNDS` are reviewed green. A failed HARD gate creates repair work inside this same coherent slice.

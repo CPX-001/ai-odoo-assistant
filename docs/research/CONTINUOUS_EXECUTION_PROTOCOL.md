@@ -231,7 +231,9 @@ Similarly, `RAG is not implemented now` does not mean retrieval is unimportant; 
 
 ### Step 7 — validate what is available
 
-Run relevant A/B/C checks. Run D when environment permits. Record exact commands/results, including tests not run.
+Run focused A/B/C checks for the changed or still-unvalidated contract and its direct boundaries. Run D when an applicable named gate and environment permit. Record exact commands/results, including tests not run.
+
+Validation is incremental by default. Do not escalate a focused run into the full dependency-light, addon, HOOT/browser or repository regression suite unless the user explicitly requests it or the current authoritative execution state, active slice record or runbook explicitly requires that full suite. Generic wording such as "relevant", "appropriate", "after focused tests" or "before handoff" is not a full-regression gate. An observed failure may justify broader diagnosis, but record the concrete reason before expanding scope.
 
 ### Step 8 — update state/evidence/docs
 

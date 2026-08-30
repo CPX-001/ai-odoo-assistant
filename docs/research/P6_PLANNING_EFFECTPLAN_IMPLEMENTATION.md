@@ -1,7 +1,7 @@
 # Phase 6 planning / bounded EffectPlan implementation
 
 Date: 2026-08-30  
-Status: **IMPLEMENTED CANDIDATE — VALIDATION PENDING**  
+Status: **FOCUSED DETERMINISTIC CHECKPOINT GREEN — REAL VALIDATION REQUIRED**
 Scope: P6.1 + P6.3 + P6.5 foundation, with the smallest useful TaskPlan presentation layer  
 Prerequisite: accepted P5.8 lineage through `688f569d441a40a4637ad6a23f111e584e18c955`
 
@@ -218,11 +218,11 @@ Coverage now includes contracts for:
 - Codex Structured Outputs four-way decision translation;
 - Codex instructions that forbid duplicate effect proposals and false execution claims.
 
-These tests must still be executed on the final candidate. Presence of tests is not PASS evidence.
+The focused deterministic checkpoint passed on `1d6dc695f7fbb26a8d2bef578902d8ce2ebf56b9`. Evidence: `evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md`.
 
 ## 10. Validation boundary / next work
 
-Before treating this P6.1/P6.3/P6.5 checkpoint as stable enough to build segmented recovery/journaling on top, run a meaningful checkpoint validation rather than testing every individual commit.
+The meaningful focused checkpoint below is green. P6.4/P6.6 remain blocked by the two named real gates, not by a full regression suite.
 
 Minimum candidate validation should include:
 
@@ -233,8 +233,10 @@ focused Odoo tests:
   test_codex_decision_adapter
   test_post_effect_reasoning
   relevant capability action/revalidation/compensation tests
-then the appropriate addon regression if the focused tests pass
+then only directly affected addon/browser tests not already covered above
 ```
+
+This checkpoint does not require a full addon, HOOT/browser or repository regression. Under the repository test-scope rule, those broad suites run only if the user explicitly requests them or a later authoritative gate names them explicitly.
 
 After deterministic validation is green, run the real gates that this checkpoint can honestly exercise:
 
