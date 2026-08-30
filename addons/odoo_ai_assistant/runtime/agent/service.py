@@ -265,11 +265,17 @@ class AgentTurnService:
 
         while provider_decisions < budgets.provider_decision_limit:
             self._ensure_not_cancelled()
+            effect_steps = (
+                len(_proposed_plan(self._working_items))
+                if self._allow_plan_proposals
+                else 0
+            )
             remaining = budgets.remaining(
                 provider_decisions=provider_decisions,
                 capability_calls=capability_calls,
                 consecutive_failures=consecutive_failures,
                 transcript_bytes=working_transcript_bytes(self._working_items),
+                effect_steps=effect_steps,
             )
             decision_counted = False
             try:
