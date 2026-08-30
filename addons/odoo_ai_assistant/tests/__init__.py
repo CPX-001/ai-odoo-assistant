@@ -33,6 +33,7 @@ from . import test_runtime_account as test_runtime_account
 from . import test_runtime_account_gate as test_runtime_account_gate
 from . import test_turn_control as test_turn_control
 from . import test_turn_failure as test_turn_failure
+from . import test_turn_interventions as test_turn_interventions
 from . import test_turn_queue as test_turn_queue
 from . import test_turn_scheduler as test_turn_scheduler
 from . import test_turn_scheduler_fairness as test_turn_scheduler_fairness
