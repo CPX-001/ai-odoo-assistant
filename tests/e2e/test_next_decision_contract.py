@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
-import importlib.util
 import pathlib
 import sys
+import types
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-CONTRACT = ROOT / "addons/odoo_ai_assistant/runtime/agent/contracts.py"
-CODEX_DECISION = ROOT / "addons/odoo_ai_assistant/runtime/agent/codex_decision.py"
-SERVICE = ROOT / "addons/odoo_ai_assistant/runtime/agent/service.py"
+ADDON = ROOT / "addons" / "odoo_ai_assistant"
+CODEX_DECISION = ADDON / "runtime" / "agent" / "codex_decision.py"
+SERVICE = ADDON / "runtime" / "agent" / "service.py"
 
-spec = importlib.util.spec_from_file_location("e2e_next_decision_contract", CONTRACT)
-module = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = module
-spec.loader.exec_module(module)
+for package_name, package_path in (
+    ("_next_decision_fixture", ADDON),
+    ("_next_decision_fixture.runtime", ADDON / "runtime"),
+    ("_next_decision_fixture.runtime.agent", ADDON / "runtime" / "agent"),
+):
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(package_path)]
+    sys.modules[package_name] = package
+
+from _next_decision_fixture.runtime.agent import contracts as module  # noqa: E402
 
 
 class TestNextDecisionContract(unittest.TestCase):
@@ -25,6 +31,26 @@ class TestNextDecisionContract(unittest.TestCase):
                 {"kind": "final_answer", "answer": "Hola", "confidence": "high"}
             ),
             module.FinalAnswer,
+        )
+        self.assertIsInstance(
+            module.parse_next_decision(
+                {
+                    "kind": "task_plan_update",
+                    "task_plan": {
+                        "goal": "Resolver la petición",
+                        "revision": 1,
+                        "steps": [
+                            {
+                                "step_id": "inspect",
+                                "title": "Inspeccionar contexto",
+                                "state": "in_progress",
+                                "depends_on": [],
+                            }
+                        ],
+                    },
+                }
+            ),
+            module.TaskPlanUpdate,
         )
         self.assertIsInstance(
             module.parse_next_decision(
@@ -55,6 +81,21 @@ class TestNextDecisionContract(unittest.TestCase):
             {"kind": "final_answer", "answer": "x", "confidence": "high", "call_id": "x"},
             {"kind": "unknown"},
             {
+                "kind": "task_plan_update",
+                "task_plan": {
+                    "goal": "x",
+                    "revision": 0,
+                    "steps": [
+                        {
+                            "step_id": "one",
+                            "title": "Uno",
+                            "state": "pending",
+                            "depends_on": [],
+                        }
+                    ],
+                },
+            },
+            {
                 "kind": "reasoning_capability_call",
                 "call_id": "bad id",
                 "capability": "odoo.query_records",
@@ -77,12 +118,17 @@ class TestNextDecisionContract(unittest.TestCase):
             with self.assertRaises(module.NextDecisionError):
                 module.parse_next_decision(value)
 
-    def test_schema_has_three_disjoint_branches(self):
+    def test_schema_has_four_disjoint_branches(self):
         schema = module.next_decision_schema()
-        self.assertEqual(len(schema["oneOf"]), 3)
+        self.assertEqual(len(schema["oneOf"]), 4)
         self.assertEqual(
             {branch["properties"]["kind"]["const"] for branch in schema["oneOf"]},
-            {"final_answer", "reasoning_capability_call", "plan_step_proposal"},
+            {
+                "final_answer",
+                "task_plan_update",
+                "reasoning_capability_call",
+                "plan_step_proposal",
+            },
         )
 
     def test_codex_decision_route_is_tool_free_and_host_revalidates(self):
@@ -93,6 +139,7 @@ class TestNextDecisionContract(unittest.TestCase):
         self.assertNotIn("executor.execute", source)
         self.assertIn("return validate_next_decision(", source)
         self.assertIn("decision = validate_next_decision(", host)
+        self.assertIn("TaskPlan is progress data only", host)
 
 
 if __name__ == "__main__":
