@@ -19,6 +19,7 @@ Research documents do not override:
 | `EXECUTION_STATE.md` | Current cursor, blockers, validation debt and exact next action. |
 | `CONTINUOUS_EXECUTION_PROTOCOL.md` | Restartable multi-run execution and validation rules. |
 | `REAL_ENV_VALIDATION_PROTOCOL.md` | Named acceptance checks requiring real Odoo/browser/provider paths. |
+| `PERIODIC_FULL_REGRESSION_RUNBOOK.md` | Canonical expensive full regression: deterministic + complete addon + complete HOOT + accumulated real gates in one periodic batch. |
 | `FOUNDATION_STABILIZATION_PLAYBOOK.md` | P0-P4 foundation path and historical rationale. |
 | `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` | P5+ gated product roadmap. |
 | `P5.1_TURN_SCOPED_FRONTEND_STATE.md` / `P5.1_VALIDATION_RUNBOOK.md` | Accepted per-conversation frontend-state slice and gates. |
@@ -48,11 +49,11 @@ P3 COMPLETE
 P4 COMPLETE
 P5 COMPLETE
 P6 IN_PROGRESS
-  P6.1 IMPLEMENTED_CANDIDATE
+  P6.1 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.2 NOT_STARTED
-  P6.3 IMPLEMENTED_CANDIDATE
+  P6.3 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.4 NOT_STARTED
-  P6.5 FOUNDATION_IMPLEMENTED_CANDIDATE
+  P6.5 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.6 NOT_STARTED
 P7+ NOT_ELIGIBLE
 ```
@@ -87,7 +88,7 @@ P6.5 separate budget families
 
 The implementation is provider-neutral at the host boundary. Codex is the current concrete adapter because it is the configured provider, but TaskPlan/EffectPlan/budget/authority semantics do not live in Codex code.
 
-The candidate must now be validated as one coherent checkpoint before P6.4/P6.6. No P6 real gate is PASS merely because code/tests exist.
+The focused deterministic checkpoint is green. `P6-REAL-MULTISTEP` and `P6-REAL-LOOP-BOUNDS` remain explicit validation debt and will be batched into the next periodic full regression. Continued P6 implementation is allowed while that debt is carried honestly; no P6 real gate becomes PASS merely because code/tests exist.
 
 ## Recursive execution rule
 
@@ -102,7 +103,8 @@ inspect current main
  -> otherwise select the largest eligible coherent change
  -> inspect current code/ADRs/tests
  -> implement
- -> run available validation
+ -> run focused available validation
+ -> accumulate broad/real debt for the periodic full regression when appropriate
  -> update evidence/state/docs
  -> publish coherent checkpoint
 ```
@@ -120,7 +122,7 @@ agentic/product evals
 real Odoo/browser/provider acceptance
 ```
 
-Hard gates block dependent contracts. Soft debt is allowed only when explicitly classified by the execution protocol.
+Focused validation is the default during development. The complete dependency-light/addon/HOOT/real-product battery is intentionally periodic and is defined in `PERIODIC_FULL_REGRESSION_RUNBOOK.md`. Unexecuted gates remain validation debt, not inferred PASS.
 
 ## External implementation references
 
