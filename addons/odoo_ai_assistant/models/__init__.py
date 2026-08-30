@@ -11,6 +11,7 @@ from . import turn_event as turn_event
 from . import turn_queue as turn_queue
 from . import turn_settings_snapshot as turn_settings_snapshot
 from . import turn_failure as turn_failure
+from . import effect_journal as effect_journal
 from . import turn_scheduler as turn_scheduler
 from . import turn_live_event as turn_live_event
 from . import turn_reasoning_summary as turn_reasoning_summary
