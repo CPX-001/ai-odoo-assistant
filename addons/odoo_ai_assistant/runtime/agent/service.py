@@ -28,9 +28,11 @@ from .contracts import (
     NextDecision,
     PlanStepProposal,
     ReasoningCapabilityCall,
+    TaskPlanUpdate,
     decision_payload,
 )
 from .decision_validation import NextDecisionValidationError, validate_next_decision
+from .task_plan import TaskPlan, TaskPlanError, parse_task_plan
 from .working_transcript import (
     WorkingItem,
     WorkingTranscriptError,
@@ -70,6 +72,7 @@ class AgentTurnResult:
     answer: str
     confidence: str
     plan: tuple[PlannedCapability, ...]
+    task_plan: TaskPlan | None = None
 
 
 class ReasoningEngine(Protocol):
@@ -134,9 +137,9 @@ _TERMINAL_CALL_ERRORS = frozenset(
 class AgentTurnService:
     """Run one turn from authoritative CapabilityRegistry views.
 
-    Provider adapters remain intentionally thin. The service owns plan accumulation, budgets,
-    validation and orchestration so future providers can implement ``NextDecisionEngine`` without
-    duplicating Odoo authority or effect semantics.
+    Provider adapters remain intentionally thin. The service owns task/effect-plan accumulation,
+    budgets, validation and orchestration so future providers can implement ``NextDecisionEngine``
+    without duplicating Odoo authority or effect semantics.
     """
 
     def __init__(
@@ -331,7 +334,18 @@ class AgentTurnService:
                 await self._persist()
                 proposed = _proposed_plan(self._working_items) if self._allow_plan_proposals else ()
                 plan = self._validate_plan(proposed, planning) if proposed else ()
-                return AgentTurnResult(answer=answer, confidence=decision.confidence, plan=plan)
+                return AgentTurnResult(
+                    answer=answer,
+                    confidence=decision.confidence,
+                    plan=plan,
+                    task_plan=_latest_task_plan(self._working_items),
+                )
+
+            if isinstance(decision, TaskPlanUpdate):
+                await self._record_task_plan(decision.task_plan)
+                consecutive_failures = 0
+                terminal_error = False
+                continue
 
             if isinstance(decision, PlanStepProposal):
                 await self._record_decision(decision)
@@ -379,6 +393,7 @@ class AgentTurnService:
                         answer="He preparado la acción solicitada para revisión.",
                         confidence="high",
                         plan=plan,
+                        task_plan=_latest_task_plan(self._working_items),
                     )
                 continue
 
@@ -484,6 +499,26 @@ class AgentTurnService:
 
         raise AgentTurnError("agent_provider_decision_budget_exceeded")
 
+    async def _record_task_plan(self, plan: TaskPlan) -> None:
+        previous = _latest_task_plan(self._working_items)
+        expected_revision = 1 if previous is None else previous.revision + 1
+        if plan.revision != expected_revision:
+            raise AgentTurnError("agent_task_plan_revision_invalid")
+        self._working_items = append_working_item(
+            self._working_items,
+            "task_plan",
+            plan.payload(),
+        )
+        await self._persist()
+        self._context.emit(
+            "task_plan.updated",
+            "Plan de trabajo actualizado",
+            {
+                "revision": plan.revision,
+                "step_count": len(plan.steps),
+            },
+        )
+
     async def _record_rejected_decision(
         self,
         decision: ReasoningCapabilityCall | PlanStepProposal,
@@ -564,6 +599,7 @@ class AgentTurnService:
             answer=_validated_answer(answer, confidence),
             confidence=confidence,
             plan=plan,
+            task_plan=_latest_task_plan(self._working_items),
         )
 
     async def _close_interrupted_calls(self) -> None:
@@ -674,6 +710,17 @@ def _validated_answer(answer: object, confidence: object) -> str:
     return answer.strip()
 
 
+def _latest_task_plan(items: tuple[WorkingItem, ...]) -> TaskPlan | None:
+    for item in reversed(items):
+        if item.kind != "task_plan":
+            continue
+        try:
+            return parse_task_plan(dict(item.data))
+        except TaskPlanError as error:
+            raise AgentTurnError(error.code) from error
+    return None
+
+
 def _proposed_plan(items: tuple[WorkingItem, ...]) -> tuple[PlannedCapability, ...]:
     proposed = [item for item in items if item.kind == "plan_step_proposed"]
     result: list[PlannedCapability] = []
@@ -704,7 +751,10 @@ def _proposed_plan(items: tuple[WorkingItem, ...]) -> tuple[PlannedCapability, .
 
 
 def _provider_decisions_used(items: tuple[WorkingItem, ...]) -> int:
-    return sum(item.kind in {"assistant_decision", "final_answer"} for item in items)
+    return sum(
+        item.kind in {"assistant_decision", "task_plan", "final_answer"}
+        for item in items
+    )
 
 
 def _capability_calls_used(items: tuple[WorkingItem, ...]) -> int:
@@ -721,7 +771,7 @@ def _trailing_failure_count(items: tuple[WorkingItem, ...]) -> int:
         if item.kind == "capability_error":
             count += 1
             continue
-        if item.kind == "capability_result":
+        if item.kind in {"capability_result", "task_plan"}:
             return 0
         if item.kind in {"assistant_decision", "capability_call", "plan_step_proposed"}:
             continue
@@ -731,7 +781,7 @@ def _trailing_failure_count(items: tuple[WorkingItem, ...]) -> int:
 
 def _terminal_error_pending(items: tuple[WorkingItem, ...]) -> bool:
     for item in reversed(items):
-        if item.kind == "capability_result":
+        if item.kind in {"capability_result", "task_plan"}:
             return False
         if item.kind == "capability_error":
             return item.data.get("code") in _TERMINAL_CALL_ERRORS
