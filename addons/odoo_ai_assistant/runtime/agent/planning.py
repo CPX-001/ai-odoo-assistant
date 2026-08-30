@@ -175,7 +175,19 @@ class PlanningDecisionEngine:
         if not isinstance(working_items, tuple):
             working_items = tuple(working_items)
         strategy = planning_strategy_from_context(context)
-        decision = await self._provider.next_decision(**kwargs)
+
+        # Project the host-selected strategy as bounded provider context without persisting it as
+        # transcript content. Any provider can consume the same hint; it does not grant authority.
+        provider_kwargs = dict(kwargs)
+        provider_kwargs["working_items"] = (
+            *working_items,
+            {
+                "kind": "host_planning_strategy",
+                "source": "host",
+                "data": strategy.payload(),
+            },
+        )
+        decision = await self._provider.next_decision(**provider_kwargs)
 
         _index, current_plan = _latest_task_plan(working_items)
         if (
