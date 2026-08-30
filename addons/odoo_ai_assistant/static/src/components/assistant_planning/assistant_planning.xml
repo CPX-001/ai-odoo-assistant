@@ -2,7 +2,7 @@
 <templates xml:space="preserve">
     <t t-name="odoo_ai_assistant.AssistantPanelPlanningPicker"
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
-        <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//button[@type='submit']" position="before">
+        <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//button[contains(@class, 'o_ai_assistant_send_button')]" position="before">
             <div class="o_ai_assistant_planning_picker">
                 <Dropdown position="'top-end'"
                     menuClass="'o_ai_assistant_picker_menu o_ai_assistant_planning_menu'"
