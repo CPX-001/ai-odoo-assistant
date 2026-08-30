@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 _ALLOWED_STATES = frozenset({"pending", "in_progress", "completed", "blocked", "skipped"})
+_ALLOWED_REVISION_KINDS = frozenset({"initial", "progress", "replan"})
 _MAX_TASK_STEPS = 12
 
 
@@ -28,16 +29,27 @@ class TaskPlan:
 
     A TaskPlan may describe investigation or resolution work, but it never names an execution
     authority and cannot be passed to CapabilityExecutor. Effects require a separate EffectPlan.
+
+    ``revision_kind`` separates ordinary progress from a structural replan. Empty kind remains a
+    compatibility convenience for internal callers and is normalized from the revision number.
     """
 
     goal: str
     revision: int
     steps: tuple[TaskPlanStep, ...]
+    revision_kind: str = ""
+    revision_summary: str = ""
+
+    @property
+    def effective_revision_kind(self) -> str:
+        return self.revision_kind or ("initial" if self.revision == 1 else "progress")
 
     def payload(self) -> dict[str, object]:
         return {
             "goal": self.goal,
             "revision": self.revision,
+            "revision_kind": self.effective_revision_kind,
+            "revision_summary": self.revision_summary,
             "steps": [
                 {
                     "step_id": step.step_id,
@@ -51,7 +63,7 @@ class TaskPlan:
 
 
 def task_plan_schema() -> dict[str, object]:
-    """Strict transport schema shared by every reasoning-provider adapter."""
+    """Strict current transport schema shared by every reasoning-provider adapter."""
 
     return {
         "type": "object",
@@ -59,6 +71,11 @@ def task_plan_schema() -> dict[str, object]:
         "properties": {
             "goal": {"type": "string", "minLength": 1, "maxLength": 1000},
             "revision": {"type": "integer", "minimum": 1},
+            "revision_kind": {
+                "type": "string",
+                "enum": sorted(_ALLOWED_REVISION_KINDS),
+            },
+            "revision_summary": {"type": "string", "maxLength": 512},
             "steps": {
                 "type": "array",
                 "minItems": 1,
@@ -83,26 +100,52 @@ def task_plan_schema() -> dict[str, object]:
                 },
             },
         },
-        "required": ["goal", "revision", "steps"],
+        "required": ["goal", "revision", "revision_kind", "revision_summary", "steps"],
     }
 
 
 def parse_task_plan(value: object) -> TaskPlan:
-    if not isinstance(value, dict) or set(value) != {"goal", "revision", "steps"}:
+    if not isinstance(value, dict):
         raise TaskPlanError()
+    legacy_keys = {"goal", "revision", "steps"}
+    current_keys = legacy_keys | {"revision_kind", "revision_summary"}
+    if set(value) == legacy_keys:
+        legacy = True
+    elif set(value) == current_keys:
+        legacy = False
+    else:
+        raise TaskPlanError()
+
     goal = value.get("goal")
     revision = value.get("revision")
     raw_steps = value.get("steps")
+    revision_kind = (
+        ("initial" if revision == 1 else "progress")
+        if legacy
+        else value.get("revision_kind")
+    )
+    revision_summary = "" if legacy else value.get("revision_summary")
     if (
         not isinstance(goal, str)
         or not 1 <= len(goal.strip()) <= 1_000
         or "\x00" in goal
         or type(revision) is not int
         or revision < 1
+        or revision_kind not in _ALLOWED_REVISION_KINDS
+        or not isinstance(revision_summary, str)
+        or len(revision_summary.strip()) > 512
+        or "\x00" in revision_summary
         or not isinstance(raw_steps, list)
         or not 1 <= len(raw_steps) <= _MAX_TASK_STEPS
     ):
         raise TaskPlanError()
+    if revision == 1 and revision_kind != "initial":
+        raise TaskPlanError("agent_task_plan_revision_invalid")
+    if revision > 1 and revision_kind == "initial":
+        raise TaskPlanError("agent_task_plan_revision_invalid")
+    if revision_kind == "replan" and not revision_summary.strip():
+        raise TaskPlanError("agent_task_plan_replan_summary_required")
+
     steps: list[TaskPlanStep] = []
     known: set[str] = set()
     for raw in raw_steps:
@@ -139,4 +182,10 @@ def parse_task_plan(value: object) -> TaskPlan:
             )
         )
         known.add(step_id)
-    return TaskPlan(goal=" ".join(goal.split()), revision=revision, steps=tuple(steps))
+    return TaskPlan(
+        goal=" ".join(goal.split()),
+        revision=revision,
+        steps=tuple(steps),
+        revision_kind=revision_kind,
+        revision_summary=" ".join(revision_summary.split()),
+    )
