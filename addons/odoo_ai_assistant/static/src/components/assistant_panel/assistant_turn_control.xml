@@ -3,7 +3,7 @@
     <t t-name="odoo_ai_assistant.AssistantTurnControl"
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
         <xpath expr="//textarea[@id='o_ai_assistant_question']" position="attributes">
-            <attribute name="t-att-disabled">state.decisionLoading or recoveryPending or state.stopLoading</attribute>
+            <attribute name="t-att-disabled">composerTextareaDisabled</attribute>
         </xpath>
 
         <xpath expr="//button[contains(@class, 'o_ai_assistant_send_button')]" position="replace">
