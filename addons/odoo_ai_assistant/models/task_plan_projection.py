@@ -14,7 +14,11 @@ class EmbeddedAssistantTaskPlanProjection(models.AbstractModel):
 
     @api.model
     def run_turn(self, *, turn_id, lease_token):
-        """Add only the latest host-validated TaskPlan to the public turn response."""
+        """Add the latest host-validated TaskPlan to the terminal/approval response.
+
+        Terminal response shape stays backward-compatible with the already accepted browser response
+        contract. Running status may expose the newer revision metadata separately.
+        """
 
         response = super().run_turn(turn_id=turn_id, lease_token=lease_token)
         if not isinstance(response, dict):
@@ -23,7 +27,7 @@ class EmbeddedAssistantTaskPlanProjection(models.AbstractModel):
         turn = self.env["odoo.ai.turn"].browse(turn_id).exists()
         if not turn:
             raise EmbeddedRuntimeError("agent_turn_lease_lost")
-        task_plan = _latest_task_plan_payload(turn)
+        task_plan = _latest_task_plan_payload(turn, include_revision_metadata=False)
         enriched = {**response, "task_plan": task_plan}
 
         turn.invalidate_recordset(["state", "result_payload"])
@@ -49,11 +53,11 @@ class AssistantTurnTaskPlanStatusProjection(models.Model):
 
         self.ensure_one()
         response = super().browser_status(after_sequence=after_sequence)
-        response["task_plan"] = _latest_task_plan_payload(self)
+        response["task_plan"] = _latest_task_plan_payload(self, include_revision_metadata=True)
         return response
 
 
-def _latest_task_plan_payload(turn):
+def _latest_task_plan_payload(turn, *, include_revision_metadata):
     try:
         items = turn._working_items_from_turn(turn)
     except WorkingTranscriptError as error:
@@ -62,7 +66,14 @@ def _latest_task_plan_payload(turn):
         if item.kind != "task_plan":
             continue
         try:
-            return parse_task_plan(dict(item.data)).payload()
+            payload = parse_task_plan(dict(item.data)).payload()
         except TaskPlanError as error:
             raise EmbeddedRuntimeError(error.code) from error
+        if include_revision_metadata:
+            return payload
+        return {
+            "goal": payload["goal"],
+            "revision": payload["revision"],
+            "steps": payload["steps"],
+        }
     return None
