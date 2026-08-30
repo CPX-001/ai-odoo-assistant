@@ -1,8 +1,4 @@
-"""E2E-4 contract checks for one canonical stage-only PLAN proposal.
-
-The executable TransactionCase coverage lives in the addon test suite. This file is a
-dependency-light source/contract gate that can run outside an Odoo checkout.
-"""
+"""Dependency-light contract checks for provider-neutral bounded EffectPlan behavior."""
 
 from __future__ import annotations
 
@@ -16,6 +12,7 @@ CONTRACT = ROOT / "addons/odoo_ai_assistant/runtime/agent/contracts.py"
 SERVICE = ROOT / "addons/odoo_ai_assistant/runtime/agent/service.py"
 OVERLAY = ROOT / "addons/odoo_ai_assistant/models/embedded_runtime_host_loop.py"
 PLAN = ROOT / "addons/odoo_ai_assistant/runtime/agent/plan.py"
+BUDGETS = ROOT / "addons/odoo_ai_assistant/runtime/agent/budgets.py"
 
 spec = importlib.util.spec_from_file_location("e2e4_contracts", CONTRACT)
 contracts = importlib.util.module_from_spec(spec)
@@ -24,7 +21,7 @@ spec.loader.exec_module(contracts)
 
 
 class TestCanonicalPlanProposal(unittest.TestCase):
-    def test_plan_proposal_is_one_strict_decision_branch(self):
+    def test_plan_step_remains_one_strict_provider_neutral_decision_branch(self):
         decision = contracts.parse_next_decision(
             {
                 "kind": "plan_step_proposal",
@@ -42,14 +39,23 @@ class TestCanonicalPlanProposal(unittest.TestCase):
         self.assertEqual(decision.call_id, "plan-1")
         self.assertEqual(decision.capability, "odoo.record.patch")
 
-    def test_active_host_loop_enables_plan_proposals_without_provider_tool_execution(self):
+    def test_host_accumulates_plan_steps_without_provider_execution_authority(self):
         source = OVERLAY.read_text(encoding="utf-8")
         service = SERVICE.read_text(encoding="utf-8")
         self.assertIn("allow_plan_proposals=True", source)
         self.assertIn("prepared = asyncio.run(plans.prepare(result.plan))", source)
         self.assertIn("_append_plan_prepared(service.working_items, prepared)", source)
         self.assertIn('"plan_step_proposed"', service)
+        self.assertIn("continue", service[service.index("if isinstance(decision, PlanStepProposal):"):])
         self.assertNotIn("ExecutionAuthority.PLAN", service)
+
+    def test_effect_plan_is_typed_bounded_and_dependency_ordered(self):
+        source = PLAN.read_text(encoding="utf-8")
+        self.assertIn("_MAX_EFFECT_STEPS = 5", source)
+        self.assertIn('"step_id": requested.step_id', source)
+        self.assertIn('"depends_on": list(requested.depends_on)', source)
+        self.assertIn("capability_plan_dependency_unsatisfied", source)
+        self.assertNotIn("script", source.lower())
 
     def test_plan_preparation_uses_existing_capability_plan_service(self):
         source = PLAN.read_text(encoding="utf-8")
@@ -78,8 +84,21 @@ class TestCanonicalPlanProposal(unittest.TestCase):
         self.assertIn('"capability_plan_payload": completed', source)
         self.assertIn('"working_items_payload": transcript_payload(receipt_items)', source)
         self.assertIn('"verified": True', source)
-        tail = source[source.index("receipt_items = append_working_item("):]
+        tail = source[source.index("receipt_items = _append_verified_effect_receipt("):]
         self.assertNotIn(".commit()", tail)
+
+    def test_budget_families_are_provider_neutral_and_separate(self):
+        source = BUDGETS.read_text(encoding="utf-8")
+        for name in (
+            "SafetyBudget",
+            "ExplorationBudget",
+            "CostBudget",
+            "LatencyBudget",
+            "ResponseBudget",
+        ):
+            self.assertIn(f"class {name}", source)
+        self.assertNotIn("Codex", source)
+        self.assertIn('"effect_steps"', source)
 
 
 if __name__ == "__main__":
