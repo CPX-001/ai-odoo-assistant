@@ -11,8 +11,9 @@ ADRs capture decisions that intentionally constrain the current architecture. Th
 | ADR-016 | accepted | Embedded Odoo runtime, Odoo-native persistence/cron queue, ephemeral Codex provider; retire operational sidecar. |
 | ADR-017 | accepted | Addon Capability Framework with `CapabilityDefinition` as the atomic executable contract. |
 | ADR-018 | superseded by ADR-020 | Installation-scoped provider credentials plus database-scoped non-secret Codex activation. |
-| ADR-019 | accepted | Odoo-owned iterative `NextDecision` loop, private durable working transcript and one canonical stage-only PLAN proposal. |
+| ADR-019 | accepted, partially superseded by ADR-021 | Odoo-owned iterative `NextDecision` loop and private durable working transcript; its exact three-branch/one-PLAN-step limit is superseded. |
 | ADR-020 | accepted | One host-configured primary Codex session is consumed automatically by the Odoo installation; Odoo keeps per-user business authority isolated. |
+| ADR-021 | accepted | Provider-neutral TaskPlan + bounded multi-step EffectPlan, host-owned recovery units and short-TTL EffectJournal. |
 
 `ADR-000-template.md` is only the template.
 
