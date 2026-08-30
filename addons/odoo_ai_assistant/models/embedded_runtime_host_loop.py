@@ -15,6 +15,7 @@ from ..runtime.agent import (
     PostEffectDecisionEngine,
 )
 from ..runtime.agent.interactive_codex import InteractiveCodexDecisionEngine
+from ..runtime.agent.planning import PlanningDecisionEngine
 from ..runtime.agent.provider_failure import FailureNormalizingDecisionEngine
 from ..runtime.agent.turn_effect_boundary import acquire_turn_effect_lock
 from ..runtime.agent.working_transcript import (
@@ -40,7 +41,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
 
     @api.model
     def run_turn(self, *, turn_id, lease_token):
-        """Run ADR-019 under the originating effective Odoo user."""
+        """Run the provider-neutral host loop under the originating effective Odoo user."""
 
         if self.env.su:
             raise AccessError("Assistant embedded runtime cannot run in superuser mode")
@@ -60,6 +61,8 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
         registry = discover_capabilities()
         resolver = CapabilityConfigResolver.from_env(self.env)
         enablement = resolver.enablement_overrides(registry.definitions)
+        settings_snapshot = turn.execution_settings_snapshot() or {}
+        planning_strategy = settings_snapshot.get("planning_strategy")
         dbname = self.env.cr.dbname
 
         def event_sink(event_type, title, payload):
@@ -70,6 +73,12 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 payload=dict(payload),
             )
 
+        metadata = {
+            "capability_enabled": enablement,
+            "capability_policy": policy_snapshot,
+        }
+        if isinstance(planning_strategy, dict):
+            metadata["planning_strategy"] = dict(planning_strategy)
         context = CapabilityContext(
             env=self.env,
             turn_id=turn.turn_uuid,
@@ -78,10 +87,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             ),
             screen=turn.screen_payload or {},
             event_sink=event_sink,
-            metadata={
-                "capability_enabled": enablement,
-                "capability_policy": policy_snapshot,
-            },
+            metadata=metadata,
         )
         executor = CapabilityExecutor(
             registry,
@@ -134,13 +140,15 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             except RuntimeError as error:
                 raise EmbeddedRuntimeError(str(error)) from error
 
-        decision_engine = FailureNormalizingDecisionEngine(
-            InteractiveCodexDecisionEngine(
-                settings,
-                cancellation_requested=cancellation_requested,
-            ),
-            component="codex",
-            effect_state="none",
+        decision_engine = PlanningDecisionEngine(
+            FailureNormalizingDecisionEngine(
+                InteractiveCodexDecisionEngine(
+                    settings,
+                    cancellation_requested=cancellation_requested,
+                ),
+                component="codex",
+                effect_state="none",
+            )
         )
         service = AgentTurnService(
             registry=registry,
@@ -303,14 +311,16 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             except RuntimeError as error:
                 raise EmbeddedRuntimeError(str(error)) from error
 
-        decision_engine = PostEffectDecisionEngine(
-            FailureNormalizingDecisionEngine(
-                InteractiveCodexDecisionEngine(
-                    self._codex_settings(turn),
-                    cancellation_requested=cancellation_requested,
-                ),
-                component="codex",
-                effect_state="confirmed",
+        decision_engine = PlanningDecisionEngine(
+            PostEffectDecisionEngine(
+                FailureNormalizingDecisionEngine(
+                    InteractiveCodexDecisionEngine(
+                        self._codex_settings(turn),
+                        cancellation_requested=cancellation_requested,
+                    ),
+                    component="codex",
+                    effect_state="confirmed",
+                )
             )
         )
         service = AgentTurnService(
