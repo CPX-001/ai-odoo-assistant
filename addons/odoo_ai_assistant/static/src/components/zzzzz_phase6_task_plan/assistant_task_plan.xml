@@ -4,21 +4,26 @@
        t-inherit="odoo_ai_assistant.AssistantPanel"
        t-inherit-mode="extension">
         <xpath expr="//section[hasclass('o_ai_assistant_confirmation')]" position="before">
-            <section t-if="state.result and state.result.task_plan"
+            <t t-set="visibleTaskPlan" t-value="state.liveTaskPlan || state.result?.task_plan"/>
+            <section t-if="visibleTaskPlan"
                 class="o_ai_assistant_task_plan border rounded p-3 mt-3 bg-light-subtle"
                 aria-label="Plan de trabajo">
                 <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
                     <div class="min-w-0">
                         <div class="fw-semibold">Plan de trabajo</div>
                         <div class="small text-muted text-break"
-                            t-esc="state.result.task_plan.goal"/>
+                            t-esc="visibleTaskPlan.goal"/>
                     </div>
                     <span class="badge text-bg-light border text-secondary">
-                        v<t t-esc="state.result.task_plan.revision"/>
+                        v<t t-esc="visibleTaskPlan.revision"/>
                     </span>
                 </div>
+                <div t-if="visibleTaskPlan.revision_kind === 'replan' and visibleTaskPlan.revision_summary"
+                    class="small border-start ps-2 mb-2 text-muted">
+                    Plan actualizado: <t t-esc="visibleTaskPlan.revision_summary"/>
+                </div>
                 <div class="d-flex flex-column gap-1">
-                    <div t-foreach="state.result.task_plan.steps" t-as="taskStep"
+                    <div t-foreach="visibleTaskPlan.steps" t-as="taskStep"
                         t-key="taskStep.step_id"
                         class="d-flex align-items-start gap-2 small">
                         <span class="pt-1" aria-hidden="true">
