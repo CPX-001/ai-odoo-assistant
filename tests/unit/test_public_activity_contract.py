@@ -25,6 +25,7 @@ def event(sequence=1, **overrides):
             "record_ids": [7],
             "display_names": ["S0007"],
         },
+        "references": [],
         "capability": "odoo.query_records",
         "progress": None,
         "diagnostic_code": None,
@@ -51,6 +52,25 @@ def test_fifty_record_resource_is_bounded_and_valid():
         )
     )
     assert parsed.resource["record_ids"] == record_ids
+
+
+def test_contextual_navigation_references_are_closed_and_bounded():
+    reference = {
+        "kind": "odoo_setting",
+        "label": "Impuestos",
+        "description": "Abrir configuración de impuestos",
+        "model": "res.config.settings",
+        "action_id": 71,
+        "setting_field": "tax_calculation_rounding_method",
+    }
+    parsed = module.parse_public_turn_event(event(references=[reference]))
+    assert parsed.references == (reference,)
+    try:
+        module.parse_public_turn_event(event(references=[{**reference, "route": "/web#unsafe"}]))
+    except module.PublicTurnEventError:
+        pass
+    else:
+        raise AssertionError("arbitrary navigation route accepted")
 
 
 def test_private_reasoning_extra_payload_and_bad_activity_id_fail_closed():
