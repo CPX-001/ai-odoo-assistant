@@ -21,19 +21,35 @@ export function normalizeLiveTaskPlan(value) {
     if (value === null || value === undefined) {
         return null;
     }
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        return undefined;
+    }
+    const legacyKeys = ["goal", "revision", "steps"];
+    const currentKeys = ["goal", "revision", "revision_kind", "revision_summary", "steps"];
+    const legacy = exactKeys(value, legacyKeys);
+    if (!legacy && !exactKeys(value, currentKeys)) {
+        return undefined;
+    }
+    const revisionKind = legacy
+        ? value.revision === 1
+            ? "initial"
+            : "progress"
+        : value.revision_kind;
+    const revisionSummary = legacy ? "" : value.revision_summary;
     if (
-        !exactKeys(value, ["goal", "revision", "revision_kind", "revision_summary", "steps"]) ||
         typeof value.goal !== "string" ||
         !value.goal.trim() ||
         value.goal.length > 1000 ||
         value.goal.includes("\0") ||
         !Number.isSafeInteger(value.revision) ||
         value.revision < 1 ||
-        !REVISION_KINDS.has(value.revision_kind) ||
-        typeof value.revision_summary !== "string" ||
-        value.revision_summary.length > 512 ||
-        value.revision_summary.includes("\0") ||
-        (value.revision_kind === "replan" && !value.revision_summary.trim()) ||
+        !REVISION_KINDS.has(revisionKind) ||
+        typeof revisionSummary !== "string" ||
+        revisionSummary.length > 512 ||
+        revisionSummary.includes("\0") ||
+        (value.revision === 1 && revisionKind !== "initial") ||
+        (value.revision > 1 && revisionKind === "initial") ||
+        (revisionKind === "replan" && !revisionSummary.trim()) ||
         !Array.isArray(value.steps) ||
         value.steps.length < 1 ||
         value.steps.length > 12
@@ -67,10 +83,27 @@ export function normalizeLiveTaskPlan(value) {
     return Object.freeze({
         goal: value.goal.trim(),
         revision: value.revision,
-        revision_kind: value.revision_kind,
-        revision_summary: value.revision_summary.trim(),
+        revision_kind: revisionKind,
+        revision_summary: revisionSummary.trim(),
         steps: Object.freeze(steps),
     });
+}
+
+export function selectVisibleTaskPlan(liveTaskPlan, finalTaskPlan) {
+    const live = normalizeLiveTaskPlan(liveTaskPlan);
+    const final = normalizeLiveTaskPlan(finalTaskPlan);
+    if (live === undefined && final === undefined) {
+        return null;
+    }
+    if (live === undefined || live === null) {
+        return final === undefined ? null : final;
+    }
+    if (final === undefined || final === null) {
+        return live;
+    }
+    // The final response is host-authoritative for equal revisions; a newer live revision wins
+    // only when it genuinely carries a later host-validated TaskPlan update.
+    return final.revision >= live.revision ? final : live;
 }
 
 patch(assistantPanelService, {
@@ -135,7 +168,15 @@ patch(assistantPanelService, {
             state.liveTaskPlan = null;
             const pending = baseSubmit(message);
             void Promise.resolve().then(() => pollWhileActive());
-            return pending;
+            const submitted = await pending;
+            // Close the completion race with one final authoritative status read. A TaskPlan revision
+            // persisted immediately before turn completion must not be hidden by the last live poll.
+            try {
+                await refreshTaskPlan();
+            } catch {
+                // Presentation-only refresh; the already validated terminal response stays authoritative.
+            }
+            return submitted;
         };
 
         panel.open = () => {

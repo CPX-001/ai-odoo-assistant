@@ -204,14 +204,32 @@ function validTaskPlan(taskPlan) {
     if (taskPlan === null || taskPlan === undefined) {
         return true;
     }
+    const legacyKeys = ["goal", "revision", "steps"];
+    const currentKeys = ["goal", "revision", "revision_kind", "revision_summary", "steps"];
+    const legacy = exactKeys(taskPlan, legacyKeys);
+    if (!legacy && !exactKeys(taskPlan, currentKeys)) {
+        return false;
+    }
+    const revisionKind = legacy
+        ? taskPlan.revision === 1
+            ? "initial"
+            : "progress"
+        : taskPlan.revision_kind;
+    const revisionSummary = legacy ? "" : taskPlan.revision_summary;
     if (
-        !exactKeys(taskPlan, ["goal", "revision", "steps"]) ||
         typeof taskPlan.goal !== "string" ||
         taskPlan.goal.trim().length < 1 ||
         taskPlan.goal.length > 1000 ||
         taskPlan.goal.includes("\0") ||
         !Number.isSafeInteger(taskPlan.revision) ||
         taskPlan.revision < 1 ||
+        !["initial", "progress", "replan"].includes(revisionKind) ||
+        typeof revisionSummary !== "string" ||
+        revisionSummary.length > 512 ||
+        revisionSummary.includes("\0") ||
+        (taskPlan.revision === 1 && revisionKind !== "initial") ||
+        (taskPlan.revision > 1 && revisionKind === "initial") ||
+        (revisionKind === "replan" && !revisionSummary.trim()) ||
         !Array.isArray(taskPlan.steps) ||
         taskPlan.steps.length < 1 ||
         taskPlan.steps.length > 12

@@ -4,7 +4,6 @@
        t-inherit="odoo_ai_assistant.AssistantPanel"
        t-inherit-mode="extension">
         <xpath expr="//section[hasclass('o_ai_assistant_confirmation')]" position="before">
-            <t t-set="visibleTaskPlan" t-value="state.liveTaskPlan || state.result?.task_plan"/>
             <section t-if="visibleTaskPlan"
                 class="o_ai_assistant_task_plan border rounded p-3 mt-3 bg-light-subtle"
                 aria-label="Plan de trabajo">
