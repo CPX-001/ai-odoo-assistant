@@ -12,16 +12,17 @@ P5.5 accepted through 8427c8849b1e1f3afa6337de1209a6027410c266
 P5.6 accepted through 720102f2a13af5240c779b07cc71ee65994a87b1
 P5.7 model/reasoning preference sub-slice accepted through eb66e45447c4d64e1ebbb5e8322bffa759c12773
 P5.7 complete through 074a71c29a6a6109ae7412e7b1f9850c4449e379
+P5.8 complete through 688f569d441a40a4637ad6a23f111e584e18c955
 ```
 
-P5.8 is **partially implemented and currently IN_PROGRESS**. Interactive turn control, safe compensation, contextual navigation, semantic correlation/presentation infrastructure and readable-summary channels exist, but product review found that normal semantic activity is still too close to a technical capability lifecycle log for complex turns. That semantic work-item gap must be repaired before P5.8 enters final real-environment acceptance.
+P5.8 is **COMPLETE**. Normal activity is now a host-correlated semantic work log rather than a capability lifecycle dump; the complete repaired-candidate automated and real gate chain passed on `688f569d441a40a4637ad6a23f111e584e18c955`.
 
 The authoritative cursor is `research/EXECUTION_STATE.md`; implementation detail is in `research/P5.8_IMPLEMENTATION.md`; product target is `research/P5.8_SEMANTIC_ACTIVITY_UX.md`; required repair/validation is in `research/P5.8_VALIDATION_RUNBOOK.md` and `research/P5.8_CODEX_TEST_HANDOFF.md`.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.24.0` on the current P5.8 lineage.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.25.0` on the accepted P5.8 lineage.
 - Embedded runtime; browser talks only to Odoo, not a sidecar/provider service.
 - Odoo/PostgreSQL own conversations, messages, turns, effect state, interventions, private working checkpoints and browser-safe live/presentation state.
 - Native `ir.cron` runs durable turns.
@@ -248,7 +249,7 @@ P5.8-FULL-ADDON-REGRESSION    PASS (182 selected tests)
 P5.8-HOOT-ADDON               PASS (139 tests)
 ```
 
-That evidence remains valid for the tested checkpoint, but the tests were not strong enough to reject the now-observed normal-mode technical lifecycle dump. A semantic-work-item repair is therefore required and the affected automated gates must be rerun on the repaired SHA.
+The repaired candidate `688f569d441a40a4637ad6a23f111e584e18c955` subsequently passed 246 dependency-light tests, 182 selected Odoo tests and 145 HOOT tests/564 assertions, followed by every required real P5.8 gate. See `research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md`.
 
 Formal roadmap state:
 
@@ -266,32 +267,8 @@ P5 IN_PROGRESS
   P5.5 COMPLETE
   P5.6 COMPLETE
   P5.7 COMPLETE
-  P5.8 IN_PROGRESS
-P6+ NOT ELIGIBLE
+  P5.8 COMPLETE
+P6 ELIGIBLE / NOT STARTED
 ```
 
-Required P5.8 order now:
-
-```text
-semantic work-item repair
-P5.8-DETERMINISTIC-REGRESSION on repaired SHA
-P5.8-FULL-ADDON-REGRESSION on repaired SHA
-P5.8-HOOT-ADDON on repaired SHA
-P5-REAL-SEMANTIC-ACTIVITY
-P5-REAL-ACTIVITY-DEDUPE
-P5-REAL-REASONING-SUMMARY
-P5-REAL-ACTIVITY-I18N
-P5-REAL-BATCH-DISCLOSURE
-P5-REAL-ACTIVITY-RECONNECT
-P5-REAL-NAVIGATION-REFS
-P5-REAL-NAVIGATION-VIEW-MENU-SETTING
-P5-REAL-FINAL-ANSWER-REFERENCES
-P5-REAL-TURN-STOP
-P5-REAL-TURN-INTERVENTIONS
-P5-REAL-TURN-EFFECT-BOUNDARY-RACE
-P5-REAL-COMPENSATION
-```
-
-The stronger `P5-REAL-SEMANTIC-ACTIVITY` gate explicitly fails a normal-mode chronological capability dump, duplicate lifecycle rows, repeated raw tool titles, generic phase-only activity without meaningful operation context, invented progress or private reasoning.
-
-Only a reviewed green repaired-candidate chain makes Phase 6 eligible.
+The stronger real semantic gate passed with explicit host-owned grouping, independent-call preservation, grounded progress/results and Odoo-localized headline codes. Phase 6 is now eligible; it was not started here.

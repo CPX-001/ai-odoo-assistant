@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 33
+State format: 34
 Updated: 2026-08-30
 
 Accepted foundation/runtime lineage:
@@ -15,11 +15,10 @@ P5.5 accepted through 8427c8849b1e1f3afa6337de1209a6027410c266
 P5.6 accepted through 720102f2a13af5240c779b07cc71ee65994a87b1
 P5.7 model/reasoning preference sub-slice accepted through eb66e45447c4d64e1ebbb5e8322bffa759c12773
 P5.7 complete through 074a71c29a6a6109ae7412e7b1f9850c4449e379
+P5.8 complete through 688f569d441a40a4637ad6a23f111e584e18c955
 ```
 
-P5.8 is **not accepted**. Acceptance lineage still stops at P5.7.
-
-The previous P5.8 candidate reached green automated gates, but a product review of real visible activity exposed a remaining implementation gap against `P5.8_SEMANTIC_ACTIVITY_UX.md`: normal-mode activity can still resemble a raw technical capability lifecycle log rather than coherent semantic work items. That is now an explicit P5.8 blocker.
+P5.8 is **accepted and COMPLETE**. The repaired candidate passed the complete automated and real-environment chain, including the strengthened semantic-activity gate.
 
 Roadmaps / active records:
 
@@ -42,15 +41,15 @@ phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P5.8-semantic-activity-interactive-control-navigation-compensation
 active_slice_record: docs/research/P5.8_IMPLEMENTATION.md
-active_slice_state: IN_PROGRESS
-current_gate_type: HARD
-blocking_work: repair P5.8 semantic work-item projection so normal activity is coherent and does not expose a capability lifecycle dump
-blocking_validations_after_repair: P5.8-DETERMINISTIC-REGRESSION, P5.8-FULL-ADDON-REGRESSION, P5.8-HOOT-ADDON, P5-REAL-SEMANTIC-ACTIVITY, P5-REAL-ACTIVITY-DEDUPE, P5-REAL-REASONING-SUMMARY, P5-REAL-ACTIVITY-I18N, P5-REAL-BATCH-DISCLOSURE, P5-REAL-ACTIVITY-RECONNECT, P5-REAL-NAVIGATION-REFS, P5-REAL-NAVIGATION-VIEW-MENU-SETTING, P5-REAL-FINAL-ANSWER-REFERENCES, P5-REAL-TURN-STOP, P5-REAL-TURN-INTERVENTIONS, P5-REAL-TURN-EFFECT-BOUNDARY-RACE, P5-REAL-COMPENSATION
+active_slice_state: COMPLETE
+current_gate_type: NONE
+blocking_work: none
+blocking_validations_after_repair: none
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266 -> 720102f2a13af5240c779b07cc71ee65994a87b1 -> eb66e45447c4d64e1ebbb5e8322bffa759c12773 -> 074a71c29a6a6109ae7412e7b1f9850c4449e379
 p5_8_last_green_automated_candidate: 0b0ac2d2c8fb25523c2e6e9c3808d3c702cede80
-latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.7-REAL-ACCEPTANCE-074a71c.md
-latest_executed_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-AUTOMATED-GATES-0b0ac2d.md
-next_action: execute one coherent P5.8 semantic-work-item repair across backend/runtime projection, frontend presentation, tests and docs; then rerun the complete automated P5.8 battery on the repaired candidate; only after it is green execute the full real gate chain from P5.8_VALIDATION_RUNBOOK.md
+latest_accepted_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
+latest_executed_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
+next_action: begin Phase 6 only under a separate explicit execution scope
 planned_successor_after_p5.8: Phase 6 bounded multi-step EffectPlan / TaskPlan work
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
@@ -73,8 +72,8 @@ P5 IN_PROGRESS
   P5.5 COMPLETE
   P5.6 COMPLETE
   P5.7 COMPLETE
-  P5.8 IN_PROGRESS
-P6+ NOT ELIGIBLE
+  P5.8 COMPLETE
+P6 ELIGIBLE / NOT STARTED
 ```
 
 ## P5.8 state by subsystem
@@ -94,13 +93,13 @@ separate bounded readable-reasoning-summary channel
 raw item/reasoning/textDelta never projected
 ```
 
-Known blocker:
+Resolved semantic repair:
 
 ```text
-normal mode still lacks sufficiently rich host-owned semantic work-item grouping/context
-raw CapabilityDefinition titles can still dominate complex activity
-related operations are not yet represented through explicit semantic parent/group structure
-batch progress/result summaries are not yet a general grounded semantic contract
+explicit host-owned semantic grouping/context is carried end to end
+normal mode uses localized business headlines rather than capability titles
+independent operations remain independent unless the host supplies correlation
+progress/result summaries are emitted only from host-known facts
 ```
 
 The observed technical activity dump for a request such as `¿puedes crear 200 presupuestos demo?` is explicitly a P5.8 failure. `P5-REAL-SEMANTIC-ACTIVITY` must reject that behavior.
