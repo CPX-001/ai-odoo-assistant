@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="odoo_ai_assistant.AssistantTaskPlan"
+       t-inherit="odoo_ai_assistant.AssistantPanel"
+       t-inherit-mode="extension">
+        <xpath expr="//section[hasclass('o_ai_assistant_confirmation')]" position="before">
+            <section t-if="state.result and state.result.task_plan"
+                class="o_ai_assistant_task_plan border rounded p-3 mt-3 bg-light-subtle"
+                aria-label="Plan de trabajo">
+                <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                    <div class="min-w-0">
+                        <div class="fw-semibold">Plan de trabajo</div>
+                        <div class="small text-muted text-break"
+                            t-esc="state.result.task_plan.goal"/>
+                    </div>
+                    <span class="badge text-bg-light border text-secondary">
+                        v<t t-esc="state.result.task_plan.revision"/>
+                    </span>
+                </div>
+                <div class="d-flex flex-column gap-1">
+                    <div t-foreach="state.result.task_plan.steps" t-as="taskStep"
+                        t-key="taskStep.step_id"
+                        class="d-flex align-items-start gap-2 small">
+                        <span class="pt-1" aria-hidden="true">
+                            <i t-if="taskStep.state === 'completed'" class="fa fa-check-circle"/>
+                            <i t-elif="taskStep.state === 'in_progress'" class="fa fa-circle-o-notch fa-spin"/>
+                            <i t-elif="taskStep.state === 'blocked'" class="fa fa-exclamation-circle"/>
+                            <i t-elif="taskStep.state === 'skipped'" class="fa fa-minus-circle"/>
+                            <i t-else="" class="fa fa-circle-o"/>
+                        </span>
+                        <div class="min-w-0 flex-grow-1">
+                            <div class="text-break" t-esc="taskStep.title"/>
+                            <div class="text-muted">
+                                <t t-if="taskStep.state === 'completed'">Completado</t>
+                                <t t-elif="taskStep.state === 'in_progress'">En curso</t>
+                                <t t-elif="taskStep.state === 'blocked'">Bloqueado</t>
+                                <t t-elif="taskStep.state === 'skipped'">Omitido</t>
+                                <t t-else="">Pendiente</t>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="small text-muted mt-2">
+                    Este plan describe el progreso; las acciones en Odoo se validan y autorizan por separado.
+                </div>
+            </section>
+        </xpath>
+    </t>
+</templates>
