@@ -8,7 +8,6 @@ executes only REASONING capabilities directly. PLAN proposals remain stage-only.
 from __future__ import annotations
 
 import inspect
-import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -23,6 +22,7 @@ from ..capabilities import (
     JsonValue,
 )
 from ..capabilities.validation import validate_payload
+from .budgets import resolve_agent_budgets
 from .contracts import (
     FinalAnswer,
     NextDecision,
@@ -32,8 +32,6 @@ from .contracts import (
 )
 from .decision_validation import NextDecisionValidationError, validate_next_decision
 from .working_transcript import (
-    MAX_RESULT_BYTES,
-    MAX_TRANSCRIPT_BYTES,
     WorkingItem,
     WorkingTranscriptError,
     append_working_item,
@@ -56,6 +54,8 @@ class PlannedCapability:
     capability: str
     arguments: dict[str, JsonValue]
     summary: str
+    step_id: str = ""
+    depends_on: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,14 +106,6 @@ PersistWorkingItems = Callable[
     None | Awaitable[None],
 ]
 
-_DEFAULT_MAX_PROVIDER_DECISIONS = 12
-_DEFAULT_MAX_CAPABILITY_CALLS = 8
-_DEFAULT_MAX_CONSECUTIVE_CORRECTABLE_FAILURES = 3
-_MAX_PROVIDER_DECISIONS = 32
-_MAX_CAPABILITY_CALLS = 32
-_MAX_CONSECUTIVE_CORRECTABLE_FAILURES = 8
-
-# These failures are safe to expose privately to the next provider decision and may be repaired.
 _CORRECTABLE_ERRORS = frozenset(
     {
         "agent_capability_arguments_invalid",
@@ -129,8 +121,6 @@ _CORRECTABLE_ERRORS = frozenset(
     }
 )
 
-# Authority/ACL failures may be explained by one final provider answer but must not trigger
-# another capability execution in the same turn.
 _TERMINAL_CALL_ERRORS = frozenset(
     {
         "access_denied",
@@ -144,9 +134,9 @@ _TERMINAL_CALL_ERRORS = frozenset(
 class AgentTurnService:
     """Run one turn from authoritative CapabilityRegistry views.
 
-    New product composition passes ``decision_engine`` plus durable working items. The
-    legacy ``reasoning_engine`` path is retained only as a bounded rollback seam until
-    the convergence is fully validated in the real environment.
+    Provider adapters remain intentionally thin. The service owns plan accumulation, budgets,
+    validation and orchestration so future providers can implement ``NextDecisionEngine`` without
+    duplicating Odoo authority or effect semantics.
     """
 
     def __init__(
@@ -258,9 +248,9 @@ class AgentTurnService:
         engine = self._decision_engine
         if engine is None:
             raise AgentTurnError("agent_reasoning_engine_invalid")
-        budgets = _loop_budgets(self._context)
+        budgets = resolve_agent_budgets(self._context)
         await self._ensure_user_input(message)
-        resumed = self._resume_terminal()
+        resumed = self._resume_terminal(planning)
         if resumed is not None:
             return resumed
         await self._close_interrupted_calls()
@@ -270,20 +260,14 @@ class AgentTurnService:
         consecutive_failures = _trailing_failure_count(self._working_items)
         terminal_error = _terminal_error_pending(self._working_items)
 
-        while provider_decisions < budgets["max_provider_decisions"]:
+        while provider_decisions < budgets.provider_decision_limit:
             self._ensure_not_cancelled()
-            remaining = {
-                "provider_decisions": budgets["max_provider_decisions"] - provider_decisions,
-                "capability_calls": budgets["max_capability_calls"] - capability_calls,
-                "correctable_failures": (
-                    budgets["max_consecutive_correctable_failures"] - consecutive_failures
-                ),
-                "transcript_bytes": max(
-                    0,
-                    MAX_TRANSCRIPT_BYTES - working_transcript_bytes(self._working_items),
-                ),
-                "result_bytes": MAX_RESULT_BYTES,
-            }
+            remaining = budgets.remaining(
+                provider_decisions=provider_decisions,
+                capability_calls=capability_calls,
+                consecutive_failures=consecutive_failures,
+                transcript_bytes=working_transcript_bytes(self._working_items),
+            )
             decision_counted = False
             try:
                 decision = await engine.next_decision(
@@ -292,9 +276,7 @@ class AgentTurnService:
                     context=self._context,
                     reasoning_capabilities=reasoning,
                     planning_capabilities=planning,
-                    working_items=tuple(
-                        item.payload() for item in self._working_items
-                    ),
+                    working_items=tuple(item.payload() for item in self._working_items),
                     remaining_budgets=remaining,
                 )
                 provider_decisions += 1
@@ -312,11 +294,11 @@ class AgentTurnService:
                     raise AgentTurnError(error.code) from error
                 if isinstance(rejected, ReasoningCapabilityCall):
                     capability_calls += 1
-                    if capability_calls > budgets["max_capability_calls"]:
+                    if capability_calls > budgets.exploration.max_capability_calls:
                         raise AgentTurnError("agent_capability_call_budget_exceeded") from error
                 await self._record_rejected_decision(rejected, error.code)
                 consecutive_failures += 1
-                if consecutive_failures > budgets["max_consecutive_correctable_failures"]:
+                if consecutive_failures > budgets.safety.max_consecutive_failures:
                     raise AgentTurnError("agent_correctable_failure_budget_exceeded") from error
                 continue
             except (AgentTurnError, CapabilityError):
@@ -338,7 +320,9 @@ class AgentTurnService:
                     {"answer": answer, "confidence": decision.confidence},
                 )
                 await self._persist()
-                return AgentTurnResult(answer=answer, confidence=decision.confidence, plan=())
+                proposed = _proposed_plan(self._working_items)
+                plan = self._validate_plan(proposed, planning) if proposed else ()
+                return AgentTurnResult(answer=answer, confidence=decision.confidence, plan=plan)
 
             if isinstance(decision, PlanStepProposal):
                 await self._record_decision(decision)
@@ -354,6 +338,19 @@ class AgentTurnService:
                     )
                     await self._persist()
                     raise AgentTurnError("agent_plan_proposal_not_enabled")
+                current = _proposed_plan(self._working_items)
+                if len(current) >= budgets.safety.max_effect_steps:
+                    self._working_items = append_working_item(
+                        self._working_items,
+                        "capability_error",
+                        {
+                            "call_id": decision.call_id,
+                            "capability": decision.capability,
+                            "code": "agent_plan_limit_exceeded",
+                        },
+                    )
+                    await self._persist()
+                    raise AgentTurnError("agent_plan_limit_exceeded")
                 self._working_items = append_working_item(
                     self._working_items,
                     "plan_step_proposed",
@@ -365,23 +362,15 @@ class AgentTurnService:
                     },
                 )
                 await self._persist()
-                return AgentTurnResult(
-                    answer="He preparado la acción solicitada para revisión.",
-                    confidence="high",
-                    plan=(
-                        PlannedCapability(
-                            capability=decision.capability,
-                            arguments=dict(decision.arguments),
-                            summary=decision.user_summary,
-                        ),
-                    ),
-                )
+                consecutive_failures = 0
+                terminal_error = False
+                continue
 
             if not isinstance(decision, ReasoningCapabilityCall):
                 raise AgentTurnError("agent_next_decision_invalid")
 
             capability_calls += 1
-            if capability_calls > budgets["max_capability_calls"]:
+            if capability_calls > budgets.exploration.max_capability_calls:
                 raise AgentTurnError("agent_capability_call_budget_exceeded")
 
             if _definition_call_count(self._working_items, decision.capability) >= _definition_max_calls(
@@ -400,7 +389,7 @@ class AgentTurnService:
                 )
                 await self._persist()
                 consecutive_failures += 1
-                if consecutive_failures > budgets["max_consecutive_correctable_failures"]:
+                if consecutive_failures > budgets.safety.max_consecutive_failures:
                     raise AgentTurnError("agent_correctable_failure_budget_exceeded")
                 continue
 
@@ -441,7 +430,7 @@ class AgentTurnService:
                 consecutive_failures += 1
                 if (
                     error.code not in _CORRECTABLE_ERRORS
-                    or consecutive_failures > budgets["max_consecutive_correctable_failures"]
+                    or consecutive_failures > budgets.safety.max_consecutive_failures
                 ):
                     raise AgentTurnError(error.code) from error
                 continue
@@ -470,7 +459,7 @@ class AgentTurnService:
                 )
                 await self._persist()
                 consecutive_failures += 1
-                if consecutive_failures > budgets["max_consecutive_correctable_failures"]:
+                if consecutive_failures > budgets.safety.max_consecutive_failures:
                     raise AgentTurnError("agent_correctable_failure_budget_exceeded")
                 continue
             await self._persist()
@@ -540,44 +529,26 @@ class AgentTurnService:
         )
         await self._persist()
 
-    def _resume_terminal(self) -> AgentTurnResult | None:
+    def _resume_terminal(
+        self,
+        planning: tuple[CapabilityDefinition, ...],
+    ) -> AgentTurnResult | None:
         if not self._working_items:
             return None
         last = self._working_items[-1]
-        if last.kind == "final_answer":
-            answer = last.data.get("answer")
-            confidence = last.data.get("confidence")
-            if not isinstance(answer, str) or not isinstance(confidence, str):
-                raise AgentTurnError("agent_working_transcript_invalid")
-            return AgentTurnResult(
-                answer=_validated_answer(answer, confidence),
-                confidence=confidence,
-                plan=(),
-            )
-        if last.kind == "plan_step_proposed":
-            if not self._allow_plan_proposals:
-                raise AgentTurnError("agent_plan_proposal_not_enabled")
-            capability = last.data.get("capability")
-            arguments = last.data.get("arguments")
-            summary = last.data.get("user_summary")
-            if (
-                not isinstance(capability, str)
-                or not isinstance(arguments, dict)
-                or not isinstance(summary, str)
-            ):
-                raise AgentTurnError("agent_working_transcript_invalid")
-            return AgentTurnResult(
-                answer="He preparado la acción solicitada para revisión.",
-                confidence="high",
-                plan=(
-                    PlannedCapability(
-                        capability=capability,
-                        arguments=dict(arguments),
-                        summary=summary,
-                    ),
-                ),
-            )
-        return None
+        if last.kind != "final_answer":
+            return None
+        answer = last.data.get("answer")
+        confidence = last.data.get("confidence")
+        if not isinstance(answer, str) or not isinstance(confidence, str):
+            raise AgentTurnError("agent_working_transcript_invalid")
+        proposed = _proposed_plan(self._working_items)
+        plan = self._validate_plan(proposed, planning) if proposed else ()
+        return AgentTurnResult(
+            answer=_validated_answer(answer, confidence),
+            confidence=confidence,
+            plan=plan,
+        )
 
     async def _close_interrupted_calls(self) -> None:
         pending = _pending_decisions(self._working_items)
@@ -602,7 +573,6 @@ class AgentTurnService:
             await self._persist()
 
     async def _persist(self) -> None:
-        # Validate and bound before crossing the persistence boundary.
         transcript_payload(self._working_items)
         if self._persist_working_items is None:
             return
@@ -627,15 +597,13 @@ class AgentTurnService:
         plan: tuple[PlannedCapability, ...],
         planning: tuple[CapabilityDefinition, ...],
     ) -> tuple[PlannedCapability, ...]:
-        policy = self._context.metadata.get("capability_policy", {})
-        maximum = policy.get("max_write_steps_per_plan", 12)
-        if type(maximum) is not int or not 0 <= maximum <= 12:
-            raise AgentTurnError("agent_policy_invalid")
-        if not isinstance(plan, tuple) or len(plan) > maximum:
+        budgets = resolve_agent_budgets(self._context)
+        if not isinstance(plan, tuple) or len(plan) > budgets.safety.max_effect_steps:
             raise AgentTurnError("agent_plan_limit_exceeded")
         allowed = {definition.name: definition for definition in planning}
         normalized: list[PlannedCapability] = []
-        for step in plan:
+        seen_step_ids: set[str] = set()
+        for position, step in enumerate(plan):
             if not isinstance(step, PlannedCapability):
                 raise AgentTurnError("agent_plan_invalid")
             definition = allowed.get(step.capability)
@@ -648,6 +616,14 @@ class AgentTurnService:
                 or "\x00" in step.summary
             ):
                 raise AgentTurnError("agent_plan_invalid")
+            step_id = step.step_id or f"step-{position + 1}"
+            if not isinstance(step_id, str) or not step_id or len(step_id) > 256:
+                raise AgentTurnError("agent_plan_invalid")
+            depends_on = tuple(step.depends_on)
+            if any(dep not in seen_step_ids for dep in depends_on):
+                raise AgentTurnError("agent_plan_dependency_invalid")
+            if step_id in seen_step_ids:
+                raise AgentTurnError("agent_plan_dependency_invalid")
             validate_payload(
                 step.arguments,
                 definition.input_schema,
@@ -659,8 +635,11 @@ class AgentTurnService:
                     capability=definition.name,
                     arguments=dict(step.arguments),
                     summary=" ".join(step.summary.split()),
+                    step_id=step_id,
+                    depends_on=depends_on,
                 )
             )
+            seen_step_ids.add(step_id)
         return tuple(normalized)
 
 
@@ -676,38 +655,37 @@ def _validated_answer(answer: object, confidence: object) -> str:
     return answer.strip()
 
 
-def _loop_budgets(context: CapabilityContext) -> dict[str, int]:
-    policy = context.metadata.get("capability_policy", {})
-    if not isinstance(policy, dict):
-        policy = {}
-    values = {
-        "max_provider_decisions": policy.get(
-            "max_provider_decisions", _DEFAULT_MAX_PROVIDER_DECISIONS
-        ),
-        "max_capability_calls": policy.get(
-            "max_capability_calls", _DEFAULT_MAX_CAPABILITY_CALLS
-        ),
-        "max_consecutive_correctable_failures": policy.get(
-            "max_consecutive_correctable_failures",
-            _DEFAULT_MAX_CONSECUTIVE_CORRECTABLE_FAILURES,
-        ),
-    }
-    limits = {
-        "max_provider_decisions": _MAX_PROVIDER_DECISIONS,
-        "max_capability_calls": _MAX_CAPABILITY_CALLS,
-        "max_consecutive_correctable_failures": _MAX_CONSECUTIVE_CORRECTABLE_FAILURES,
-    }
-    for key, value in values.items():
-        if type(value) is not int or not 1 <= value <= limits[key]:
-            raise AgentTurnError("agent_policy_invalid")
-    return values
+def _proposed_plan(items: tuple[WorkingItem, ...]) -> tuple[PlannedCapability, ...]:
+    proposed = [item for item in items if item.kind == "plan_step_proposed"]
+    result: list[PlannedCapability] = []
+    previous_step_id: str | None = None
+    for item in proposed:
+        call_id = item.data.get("call_id")
+        capability = item.data.get("capability")
+        arguments = item.data.get("arguments")
+        summary = item.data.get("user_summary")
+        if (
+            not isinstance(call_id, str)
+            or not isinstance(capability, str)
+            or not isinstance(arguments, dict)
+            or not isinstance(summary, str)
+        ):
+            raise AgentTurnError("agent_working_transcript_invalid")
+        result.append(
+            PlannedCapability(
+                capability=capability,
+                arguments=dict(arguments),
+                summary=summary,
+                step_id=call_id,
+                depends_on=((previous_step_id,) if previous_step_id is not None else ()),
+            )
+        )
+        previous_step_id = call_id
+    return tuple(result)
 
 
 def _provider_decisions_used(items: tuple[WorkingItem, ...]) -> int:
-    return sum(
-        item.kind in {"assistant_decision", "final_answer"}
-        for item in items
-    )
+    return sum(item.kind in {"assistant_decision", "final_answer"} for item in items)
 
 
 def _capability_calls_used(items: tuple[WorkingItem, ...]) -> int:
@@ -726,7 +704,7 @@ def _trailing_failure_count(items: tuple[WorkingItem, ...]) -> int:
             continue
         if item.kind == "capability_result":
             return 0
-        if item.kind in {"assistant_decision", "capability_call"}:
+        if item.kind in {"assistant_decision", "capability_call", "plan_step_proposed"}:
             continue
         break
     return count
