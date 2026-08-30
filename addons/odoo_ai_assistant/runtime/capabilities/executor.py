@@ -25,9 +25,14 @@ from .registry import CapabilityRegistry
 from .validation import validate_payload
 
 _PUBLIC_MODEL = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
+_PUBLIC_FIELD = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _PUBLIC_ACTIVITY_ID = re.compile(r"^activity:v1:[0-9a-f]{32}$")
 _MAX_PUBLIC_RECORD_REFS = 50
 _MAX_PUBLIC_DISPLAY_NAME = 160
+_MAX_PUBLIC_NAV_REFS = 12
+_PUBLIC_NAV_KINDS = frozenset(
+    {"odoo_model", "odoo_action", "odoo_view", "odoo_menu", "odoo_setting"}
+)
 
 
 class CapabilityExecutor:
@@ -284,13 +289,7 @@ def _new_activity_id():
 
 
 def _public_operation_payload(name, payload, *, activity_id=None):
-    """Project only schema-validated non-secret resource identifiers into host activity.
-
-    The capability name and title come from trusted installed ``CapabilityDefinition`` code.
-    ``model``/``record_id`` are copied only after the input schema has validated the payload;
-    arbitrary arguments, filters, values, tool results and display names never cross this seam.
-    ``activity_id`` is host-generated correlation metadata and never originates from model arguments.
-    """
+    """Project only schema-validated non-secret resource identifiers into host activity."""
 
     result = {"capability": name}
     if isinstance(activity_id, str) and _PUBLIC_ACTIVITY_ID.fullmatch(activity_id):
@@ -305,14 +304,19 @@ def _public_operation_payload(name, payload, *, activity_id=None):
 
 
 def _public_result_payload(context, public, output):
-    """Project bounded result identities only after output-schema validation.
+    """Project bounded identities only after output-schema validation.
 
-    The optional projection is still re-read under the same effective Odoo user before display
-    names are attached. It never changes capability success and never grants navigation authority;
-    the browser revalidates a typed reference again immediately before opening it.
+    Navigation references are projected only from the installed ``odoo.resolve_navigation``
+    capability result.  Their identifiers are therefore host-resolved output, never model-supplied
+    authority.  Record identities retain the existing same-user display-name re-read.
     """
 
     result = dict(public)
+    if result.get("capability") == "odoo.resolve_navigation":
+        references = _public_navigation_references(output.get("references"))
+        if references is not None:
+            result["references"] = references
+
     operation_model = result.get("model")
     output_model = output.get("model")
     if isinstance(output_model, str) and _PUBLIC_MODEL.fullmatch(output_model):
@@ -361,6 +365,74 @@ def _public_result_payload(context, public, output):
         return result
     result["record_ids"] = ids
     result["display_names"] = names
+    return result
+
+
+def _public_navigation_references(value):
+    if not isinstance(value, list) or len(value) > _MAX_PUBLIC_NAV_REFS:
+        return None
+    result = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            return None
+        kind = item.get("kind")
+        label = item.get("label")
+        description = item.get("description")
+        if (
+            kind not in _PUBLIC_NAV_KINDS
+            or not isinstance(label, str)
+            or not 1 <= len(" ".join(label.split())) <= 160
+            or not isinstance(description, str)
+            or len(" ".join(description.split())) > 240
+        ):
+            return None
+        expected = {
+            "odoo_model": {"kind", "label", "description", "model"},
+            "odoo_action": {"kind", "label", "description", "model", "action_id"},
+            "odoo_view": {"kind", "label", "description", "model", "view_id"},
+            "odoo_menu": {
+                "kind",
+                "label",
+                "description",
+                "model",
+                "action_id",
+                "menu_id",
+            },
+            "odoo_setting": {
+                "kind",
+                "label",
+                "description",
+                "model",
+                "action_id",
+                "setting_field",
+            },
+        }[kind]
+        if set(item) != expected:
+            return None
+        model = item.get("model")
+        if not isinstance(model, str) or _PUBLIC_MODEL.fullmatch(model) is None:
+            return None
+        normalized = {
+            "kind": kind,
+            "label": " ".join(label.split()),
+            "description": " ".join(description.split()),
+            "model": model,
+        }
+        for key in ("action_id", "view_id", "menu_id"):
+            if key not in item:
+                continue
+            identifier = item.get(key)
+            if type(identifier) is not int or identifier <= 0:
+                return None
+            normalized[key] = identifier
+        if "setting_field" in item:
+            field = item.get("setting_field")
+            if not isinstance(field, str) or _PUBLIC_FIELD.fullmatch(field) is None:
+                return None
+            normalized["setting_field"] = field
+        if kind == "odoo_setting" and model != "res.config.settings":
+            return None
+        result.append(normalized)
     return result
 
 
