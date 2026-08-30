@@ -2,7 +2,11 @@
 
 Use this template when a roadmap item is large or important enough to need its own durable execution record.
 
-A slice is a coherent change that can be implemented, validated as far as the current environment permits, documented and checkpointed without leaving `main` half-migrated.
+A slice is the **largest coherent change that remains feasible to implement, validate as far as the current environment permits, document and recover safely without leaving `main` half-migrated**.
+
+Do not create a roadmap slice merely because work crosses files, backend/frontend layers, tests or commits. One product behavior should normally remain one slice across those layers. Split only at a genuine gate, authority/security boundary, execution-environment boundary, rollback-risk boundary or when the combined scope can no longer be reviewed and validated coherently.
+
+Mechanical commit granularity is not slice granularity.
 
 ---
 
@@ -23,6 +27,8 @@ What concrete product/engineering behavior changes when this slice is complete?
 ## Why this slice exists
 
 Describe the current observed problem and why it belongs in this slice rather than another layer.
+
+Also explain why this scope is the largest coherent feasible unit. If nearby backend/frontend/tests/docs belong to the same product behavior, include them rather than creating follow-up micro-slices.
 
 ## Prerequisites
 
@@ -91,11 +97,11 @@ List concrete ways the slice could regress behavior, including compatibility/res
 
 ## Implementation scope
 
-What may be changed in this slice.
+What may be changed in this slice. Prefer the complete vertical behavior: runtime/backend contract, frontend presentation where applicable, tests, docs and cleanup.
 
 ## Explicitly out of scope
 
-What must not be pulled into this slice merely because it is nearby.
+What must not be pulled into this slice because it is a genuinely different product/authority contract or blocked by a real prerequisite. Do not use this section to defer pieces required for the stated objective merely to keep the slice artificially small.
 
 ## Deterministic validation
 
@@ -143,6 +149,8 @@ A slice may carry unresolved debt only within the limits in `CONTINUOUS_EXECUTIO
 A slice is `COMPLETE` only when its mandatory implementation, tests, required real validation for completion, documentation and cleanup are done.
 
 If code is ready but live validation is pending, use `REAL_ENV_VALIDATION_REQUIRED`, not `COMPLETE`.
+
+Do not mark a slice complete when the stated product behavior is knowingly only partially implemented and the remainder was deferred solely to create another small slice.
 
 ## Documentation/cleanup
 
