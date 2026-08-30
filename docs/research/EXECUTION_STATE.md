@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 38
+State format: 39
 Updated: 2026-08-30
 
 Accepted lineage:
@@ -17,29 +17,29 @@ P5.7 through 074a71c29a6a6109ae7412e7b1f9850c4449e379
 P5.8 through 688f569d441a40a4637ad6a23f111e584e18c955
 ```
 
-P5 is **COMPLETE**. P5.8 passed its complete repaired-candidate automated and real-environment acceptance chain.
+P5 is **COMPLETE** and remains the latest fully accepted phase.
 
 ## Current cursor
 
 ```text
 phase: 6
 phase_name: deep task planning, multi-step effects and recent effect journal
-phase_state: IN_PROGRESS
+phase_state: IMPLEMENTED_PENDING_PERIODIC_VALIDATION
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P6-effect-recovery-journal
-active_slice_record: docs/research/P6_EFFECT_RECOVERY_JOURNAL_IMPLEMENTATION.md
+active_slice: P6-final-implementation-candidate
+active_slice_record: docs/research/P6_ADAPTIVE_PLANNING_IMPLEMENTATION.md
 active_slice_state: IMPLEMENTED_PENDING_PERIODIC_VALIDATION
-current_gate_type: PERIODIC_VALIDATION_DEBT
+current_gate_type: PERIODIC_FULL_REGRESSION
 blocking_work: none
-blocking_validation: none for continued implementation
-pending_periodic_validation: P6-REAL-MULTISTEP, P6-REAL-LOOP-BOUNDS, P6-REAL-EFFECT-ATOMICITY, P6-REAL-SEGMENTED-RECOVERY, P6-REAL-EFFECT-JOURNAL
+blocking_validation: Phase 6 acceptance / Phase 7 eligibility
+pending_periodic_validation: P6-REAL-MULTISTEP, P6-REAL-REPLAN, P6-REAL-EFFECT-ATOMICITY, P6-REAL-SEGMENTED-RECOVERY, P6-REAL-LOOP-BOUNDS, P6-REAL-EFFECT-JOURNAL
 periodic_regression_runbook: docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
 latest_executed_evidence: docs/research/evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md
-next_action: implement the coherent P6.2 adaptive/deliberate planning + replan block while keeping accumulated broad/real validation for the next periodic full regression
+next_action: run one consolidated periodic full regression against the exact current Phase-6 candidate; repair focused failures if any; only then accept Phase 6 and unlock Phase 7
 ```
 
-No P6 HARD real gate is recorded PASS yet. Expensive real/browser/full-addon validation is accumulated and executed periodically instead of after every implementation block.
+No unexecuted P6 HARD gate is PASS. All implementation areas are present; the remaining blocker is now one meaningful acceptance checkpoint rather than another implementation micro-slice.
 
 ## Phase summary
 
@@ -50,9 +50,9 @@ P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
 P5 COMPLETE
-P6 IN_PROGRESS
+P6 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.1 TaskPlan vs EffectPlan        IMPLEMENTED_PENDING_PERIODIC_VALIDATION
-  P6.2 adaptive/deliberate modes     NOT_STARTED
+  P6.2 adaptive/deliberate/replan    IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.3 multi-step EffectPlan         IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.4 atomic vs segmented effects   IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.5 separate budgets              IMPLEMENTED_PENDING_PERIODIC_VALIDATION
@@ -60,79 +60,55 @@ P6 IN_PROGRESS
 P7+ NOT_ELIGIBLE
 ```
 
-## Current P6 implementation candidate
+## Current Phase-6 implementation candidate
 
-### Provider-neutral TaskPlan
+### P6.1 / P6.2 — visible planning without authority
 
 Implemented:
 
 ```text
-fourth neutral NextDecision branch: task_plan_update
-closed TaskPlan schema/parser
-1..12 bounded user-visible progress steps
-strict monotonic revisions: 1 then exactly +1
-TaskPlan durable in private working transcript
-latest validated TaskPlan projected to approval/final browser response
-compact Assistant TaskPlan presentation
-TaskPlan contains no capability/args/approval/authority
-TaskPlan revisions cannot reset capability failure/terminal-error safety state
+provider-neutral task_plan_update NextDecision branch
+TaskPlan 1..12 bounded public steps
+planning modes: adaptive | deliberate | auto
+planning mode captured immutably per turn
+host-derived auto complexity score from structural request/screen signals only
+PlanningDecisionEngine above provider adapters
+deliberate mode requires initial TaskPlan before capability/effect requests
+TaskPlan revision_kind: initial | progress | replan
+progress cannot mutate plan structure
+structural replan requires new host-observed evidence
+replan carries short public revision_summary
+live running-turn TaskPlan projection without capability args/private reasoning
 ```
 
-The TaskPlan is not chain-of-thought and is not executable.
+Planning mode is not autonomy and cannot change ACL, capability availability, approval or execution authority.
 
-### Bounded EffectPlan
+### P6.3 — bounded EffectPlan
 
-Implemented candidate:
+Implemented:
 
 ```text
-product host opts into max 5 effect steps
-legacy/custom callers remain single-step without opt-in
-one provider proposal per NextDecision
-host accumulates distinct typed proposals
-ordered dependency chain
-format-v3 prepared steps with step_id + depends_on + recovery metadata
-per-step capability/version/args/preview/preconditions/risk/approval/binding
-per-step execute + verify under effective user
-format-v1/v2 prepared-plan compatibility
-post-effect PLAN authority still removed
+max 5 typed effect steps
+host accumulation and dependency ordering
+format-v3 prepared plan
+per-step version/arguments/preview/preconditions/risk/approval/binding
+format-v1/v2 execution compatibility
+post-effect PLAN authority removed
 ```
 
-No generic script or provider-side execution authority was added.
+### P6.4 — recovery units
 
-### Recovery units
-
-Implemented candidate:
+Implemented:
 
 ```text
-odoo_atomic  -> consecutive Odoo-local steps share one transaction/recovery unit
-segmented    -> trusted capability metadata requests a durable internal unit boundary
-external     -> intent is durable before non-transactional execution
+odoo_atomic
+segmented
+external
 ```
 
-The host preflights a unit before its checkpoint, reacquires the effect lock at every new unit,
-rechecks Stop/redirect, persists unit state and commits completed non-final units. An already durable
-`executing` unit is never blindly replayed. Internal in-flight units can be distinguished as rolled
-back after worker transaction failure; external in-flight units remain uncertain.
+Recovery mode is trusted host/capability metadata, not provider authority. Units are preflighted, durably checkpointed where required, Stop/redirect is rechecked at each new boundary, and a persisted in-flight unit is not blindly replayed.
 
-### EffectJournal
-
-Implemented candidate:
-
-```text
-Odoo-owned odoo.ai.effect.journal
-turn/user/company + capability/version binding
-recovery unit/mode + classification/state
-bounded before/after/receipt evidence
-7-day TTL + daily bounded cleanup
-system-only direct table access
-owned-turn sanitized user projection
-reversible / reconstructable / irreversible / external_or_unknown
-P5.8 compensation marks reversible journal rows reverted
-```
-
-The journal is not a backup and `reconstructable` is not presented as automatic undo.
-
-### Budget families
+### P6.5 — separate budget families
 
 Implemented foundation:
 
@@ -144,84 +120,76 @@ LatencyBudget
 ResponseBudget
 ```
 
-The host enforces effective ceilings. Remaining values are provider context only. Remaining effect capacity is reported rather than the initial maximum.
+Remaining counters are provider context only; host enforcement remains authoritative.
 
-### Provider boundary
+### P6.6 — EffectJournal
 
-Codex remains the current concrete provider. Core TaskPlan/EffectPlan/recovery/journal/budget/authority logic remains outside Codex. `ADR-021` records the provider-neutral planning/recovery boundary.
+Implemented:
+
+```text
+Odoo-owned recent effect journal
+bounded before/after/receipt evidence
+recovery unit/state binding
+7-day TTL + bounded cron cleanup
+system-only raw records + owned-turn sanitized projection
+reversible / reconstructable / irreversible / external_or_unknown
+verified P5.8 compensation marks matching rows reverted
+```
+
+The journal is not a backup and does not turn reconstructable effects into automatic undo.
+
+## Provider boundary
+
+Codex is still the concrete configured provider, but it does not own the Phase-6 logic. The neutral path is:
+
+```text
+Odoo host
+ -> PlanningDecisionEngine
+ -> NextDecisionEngine provider port
+ -> Codex adapter today / other adapters later
+```
+
+TaskPlan, EffectPlan, budgets, ACL/policy, approval, recovery units, EffectJournal, execution and verification stay above provider adapters.
 
 ## Validation state
 
-The earlier P6.1/P6.3/P6.5 focused deterministic checkpoint passed on `1d6dc695f7fbb26a8d2bef578902d8ce2ebf56b9`. See `docs/research/evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md`.
-
-P6.4/P6.6 implementation and focused tests are now committed, including:
+Recorded focused checkpoint already green for the earlier P6.1/P6.3/P6.5 foundation:
 
 ```text
-tests/e2e/test_phase6_effect_recovery_contract.py
-addons/odoo_ai_assistant/tests/test_effect_journal.py
-updated TestCanonicalPlanHostLoop format-v3/recovery assertions
+docs/research/evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md
 ```
 
-Their expensive addon/HOOT/real execution has not been run in this ChatGPT/GitHub environment and is intentionally carried as periodic validation debt. Do not infer PASS from committed tests.
+Later P6.2/P6.4/P6.6 tests are committed but have not been executed in this GitHub-only environment. They include dependency-light contracts, Odoo TransactionCases and frontend HOOT coverage.
 
-Accumulated real validation debt:
+Accumulated periodic real debt:
 
 ```text
 P6-REAL-MULTISTEP
-P6-REAL-LOOP-BOUNDS
+P6-REAL-REPLAN
 P6-REAL-EFFECT-ATOMICITY
 P6-REAL-SEGMENTED-RECOVERY
+P6-REAL-LOOP-BOUNDS
 P6-REAL-EFFECT-JOURNAL
 ```
 
-## Remaining coherent Phase-6 work
-
-### P6.2 adaptive/deliberate planning + replan
-
-Still to implement:
-
-```text
-adaptive default planning strategy
-deliberate/Plan strategy
-bounded host-owned mode selection/override
-TaskPlan revision behavior when new evidence invalidates an assumption
-P6-REAL-REPLAN scenario and tests
-```
-
-This is the next coherent implementation block. It remains provider-neutral; provider adapters may receive strategy hints but do not own mode authority or TaskPlan execution semantics.
-
-## Periodic validation policy
-
-Implementation may continue across coherent P6 blocks while broad/real validation debt accumulates. This does not turn unexecuted gates into PASS and does not permit Phase 6 to be called COMPLETE.
-
-The periodic full regression batches:
-
-```text
-full current dependency-light/static regression
-complete Odoo addon regression
-complete @odoo_ai_assistant HOOT suite
-permanent high-value real-product smoke scenarios
-all applicable named real gates accumulated since the previous accepted full checkpoint
-```
-
-If implementation exposes a concrete authority/recovery ambiguity where continuing would make later validation meaningless or unsafe, that specific uncertainty can still become an immediate blocking gate. Ordinary broad regression cost alone is not such a blocker.
+The expensive current-product validation must now be run once according to `PERIODIC_FULL_REGRESSION_RUNBOOK.md`, against one exact candidate SHA.
 
 ## Invariants carried forward
 
 - Odoo remains persistence and operational authority.
-- Business operations execute with the effective user and `su=False`.
+- Business operations execute under the effective user with `su=False`.
 - `CapabilityDefinition` remains atomic executable authority.
-- Provider text/TaskPlan/context never grants execution authority.
+- Planning strategy and TaskPlan never grant effect authority.
 - No arbitrary SQL/Python/shell/sudo/unrestricted ORM is exposed.
-- P5.5 preview/approval/barrier/verify/post-effect certainty remains authoritative.
-- Recovery-unit mode/classification is host-derived, never model authority.
+- Policy/approval/preconditions/write-barrier/verification remain host-owned.
+- Recovery-unit mode/classification is host-derived.
 - Persisted in-flight effects are never blindly retried.
-- Stop/redirect cannot bypass effect policy or stale-decision checks.
-- Raw/private provider reasoning is never browser activity or EffectJournal content.
-- Provider-specific adapters stay below the neutral agent contract.
-- No GitHub Actions are used while repository policy says runners are unavailable.
-- Roadmap blocks are the largest coherent feasible product change; commit count does not define slice count.
+- Stop/redirect cannot bypass the effect boundary.
+- Raw/private provider reasoning never becomes TaskPlan/activity/journal content.
+- Provider-specific adapters remain below the neutral decision contract.
+- Broad/real validation is batched periodically rather than repeated after every implementation slice.
+- No GitHub Actions are used while repository policy says usable runners are unavailable.
 
 ## Exact stop rule
 
-Do not call any P6 subpart accepted or Phase 6 COMPLETE until its applicable periodic real/full regression evidence is green. Continued implementation of P6.2 is allowed while the explicit validation debt above remains pending, unless a new concrete authority/recovery uncertainty is discovered that makes further design unsafe.
+Do not begin Phase 7 and do not call Phase 6 COMPLETE until the applicable periodic full regression and named Phase-6 real gates are green against the same final candidate lineage. If that batch fails, repair the concrete underlying contract with focused tests, then rerun only the affected broad stage before the final acceptance rerun as defined by the periodic runbook.
