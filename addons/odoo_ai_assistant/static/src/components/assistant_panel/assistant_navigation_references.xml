@@ -7,7 +7,7 @@
                 class="o_ai_assistant_final_references d-flex flex-wrap gap-2 pt-1"
                 role="group" aria-label="Enlaces de Odoo relacionados con la respuesta">
                 <button t-foreach="finalNavigationReferences" t-as="reference"
-                    t-key="reference.kind + ':' + (reference.action_id || reference.view_id || reference.menu_id || reference.model || reference.setting_field)"
+                    t-key="activityReferenceKey(reference)"
                     type="button" class="btn btn-sm btn-outline-secondary rounded-pill"
                     t-att-title="reference.description || finalReferenceLabel(reference)"
                     t-att-aria-label="finalReferenceLabel(reference)"
