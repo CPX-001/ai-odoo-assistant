@@ -14,13 +14,7 @@ class EmbeddedAssistantTaskPlanProjection(models.AbstractModel):
 
     @api.model
     def run_turn(self, *, turn_id, lease_token):
-        """Add only the latest host-validated TaskPlan to the public turn response.
-
-        The projection runs above the provider-specific adapter and cannot execute capabilities.
-        During an approval wait the enriched response is persisted so reconnect/history paths see
-        the same TaskPlan. Running-turn live TaskPlan projection is deliberately left to the
-        deliberate-mode UX work instead of overloading the public activity contract here.
-        """
+        """Add only the latest host-validated TaskPlan to the public turn response."""
 
         response = super().run_turn(turn_id=turn_id, lease_token=lease_token)
         if not isinstance(response, dict):
@@ -41,6 +35,22 @@ class EmbeddedAssistantTaskPlanProjection(models.AbstractModel):
                 {"result_payload": {**stored, "task_plan": task_plan}}
             )
         return enriched
+
+
+class AssistantTurnTaskPlanStatusProjection(models.Model):
+    _inherit = "odoo.ai.turn"
+
+    def browser_status(self, *, after_sequence=0):
+        """Expose validated TaskPlan progress while a turn is still running.
+
+        This is public progress data only. Capability arguments, results and private reasoning remain in the
+        host working transcript and are never copied into this status projection.
+        """
+
+        self.ensure_one()
+        response = super().browser_status(after_sequence=after_sequence)
+        response["task_plan"] = _latest_task_plan_payload(self)
+        return response
 
 
 def _latest_task_plan_payload(turn):
