@@ -14,14 +14,14 @@ P5.7 model/reasoning preference sub-slice accepted through eb66e45447c4d64e1ebbb
 P5.7 complete through 074a71c29a6a6109ae7412e7b1f9850c4449e379
 ```
 
-P5.8 semantic activity/reasoning/navigation UX is now **implemented but not accepted**. Its exact cursor is `research/EXECUTION_STATE.md`; implementation detail is in `research/P5.8_IMPLEMENTATION.md` and validation requirements are in `research/P5.8_VALIDATION_RUNBOOK.md`.
+P5.8 semantic activity/reasoning, interactive turn control, safe compensation and contextual navigation are **implemented but not accepted**. The validation cursor is `research/EXECUTION_STATE.md`; implementation detail is in `research/P5.8_IMPLEMENTATION.md` and `research/P5.8_NAVIGATION_IMPLEMENTATION.md`; required validation is in `research/P5.8_VALIDATION_RUNBOOK.md`.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.23.0` on the P5.8 implementation lineage.
-- Embedded runtime; browser talks to Odoo, not a sidecar.
-- Odoo/PostgreSQL own conversations, messages, turns, effect state, private working checkpoints and public/live presentation state.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.24.0` on the current P5.8 implementation lineage.
+- Embedded runtime; browser talks only to Odoo, not a sidecar/provider service.
+- Odoo/PostgreSQL own conversations, messages, turns, effect state, interventions, private working checkpoints and browser-safe live/presentation state.
 - Native `ir.cron` runs durable turns.
 - Business authority is the originating effective user with `su=False`.
 - Primary provider is local Codex App Server using the host-configured primary session.
@@ -54,7 +54,7 @@ one canonical PlanStepProposal
  -> natural final answer
 ```
 
-Current effect limit remains one canonical step. Bounded multi-step `EffectPlan`/TaskPlan is Phase 6 work and must not be conflated with P5.8 semantic activity.
+Current effect limit remains one canonical step. Bounded multi-step `EffectPlan`/TaskPlan is Phase 6 work and must not be conflated with P5.8 activity or intervention sequencing.
 
 ## 3. Capability framework
 
@@ -66,7 +66,12 @@ odoo_query
 odoo_actions
 odoo_batch
 odoo_runtime
+odoo_navigation
+odoo_compensations (HOST-only inverses)
+odoo_unarchive
 ```
+
+`odoo.resolve_navigation` is a normal read-only reasoning capability. Compensators such as `odoo.record.patch.revert`, `odoo.record.archive.revert` and `odoo.record.unarchive.revert` are HOST-only definitions in the same registry and are never revealed as model-callable tools.
 
 No unrestricted ORM methods, SQL, Python, filesystem, shell or sudo authority is exposed to the model. External provider/Skill/Context/Evidence contracts remain later roadmap work.
 
@@ -78,74 +83,116 @@ P5.8 presentation preferences are per-user and explicitly non-authoritative. The
 
 ## 5. P5.8 semantic activity implementation
 
-The old public event-log feel now has a semantic projection layer above the accepted P3 live store.
+The accepted P3 live store now feeds a semantic presentation layer:
 
-### Correlation and lifecycle
+- host-generated `activity_id` correlates start/completion/failure for one operation;
+- repeated independent calls remain separate;
+- provider reasoning passes have their own correlation identity;
+- reconnect/replay reduction is idempotent by event sequence/activity identity;
+- compact/normal/detailed/diagnostic presentation profiles are supported;
+- deterministic wording uses Odoo localization semantics;
+- readable provider summaries use only bounded `summaryTextDelta`; raw/private reasoning is never projected.
 
-- capability lifecycle start/completion/failure shares a host-generated versioned `activity_id`;
-- identical independent calls get independent IDs;
-- initial provider reasoning and post-effect synthesis use distinct correlated IDs;
-- provider completion/failure closes its matching semantic work item;
-- reconnect/replay reduction is idempotent by sequence and activity identity.
+Capability/result references may appear as compact browser-safe chips without becoming business authority.
 
-### Presentation
+## 6. P5.8 interactive turn control
 
-Frontend projection supports:
+The browser now treats the active conversation/turn as the control boundary.
 
-```text
-compact
-normal (default)
-detailed
-diagnostic
-```
-
-The compact running header follows the latest meaningful semantic item. Completed activity collapses to total elapsed time plus semantic step count. Sub-threshold successful verification can be hidden from normal history while failures/approval remain visible. Technical names are hidden by default.
-
-Deterministic semantic text uses Odoo localization semantics; protocol identity is based on closed status/phase/activity facts rather than translated phrases.
-
-### Reasoning summaries
-
-Readable provider summaries are separate from both public activity and Assistant prose:
+Composer behavior is:
 
 ```text
-item/reasoning/summaryTextDelta -> bounded reasoning-summary live channel
-item/reasoning/textDelta        -> ignored / never projected
+no active turn + empty draft      -> disabled
+no active turn + text             -> Enviar mensaje
+processing + empty draft          -> Detener respuesta (square Stop icon)
+processing + text                 -> Corregir instrucción
+awaiting approval + text          -> Corregir instrucción / supersede old plan
 ```
 
-No private chain-of-thought is exposed. Providers without readable summary support fall back to semantic host activity without changing turn success.
+The textarea remains editable while ordinary reasoning is running.
 
-### Typed Odoo references
+Corrections are not second ordinary turns. `odoo.ai.turn.intervention` persists a bounded ordered sequence linked to the same turn/conversation/user/company with `client_intervention_id` duplicate protection. Count and byte budgets are enforced.
 
-Current grounded first-class kinds are:
+Runtime behavior is host-owned:
+
+```text
+persist intervention in Odoo first
+ -> queued: consume before first decision
+ -> running + live Codex subturn: best-effort turn/steer(expectedTurnId)
+ -> no steer / no live subturn: interrupt disposable subturn and restart next decision from durable Odoo state
+ -> re-check sequence before accepting provider decision / before effect barrier
+```
+
+Provider thread/turn IDs never reach the browser.
+
+If a correction arrives while an approval is pending, Odoo records `approval.rejected`, clears the executable old plan and requeues/resumes the same durable turn. The old plan cannot be silently approved or executed.
+
+Stop reuses durable Odoo cancellation. Only the active chat's turn UUID is cancelled; other conversation scopes continue. A partial answer already streamed is preserved as an Assistant message marked `Interrumpido`. Stop after an effect barrier does not claim rollback of already executed business effects.
+
+## 7. P5.8 safe compensation
+
+There is no database-wide or magical rollback. Compensation is an explicit host-side action after a verified reversible effect.
+
+Initially supported effect families are:
+
+```text
+odoo.record.patch
+odoo.record.archive
+odoo.record.unarchive
+```
+
+The original preview contains only the bounded prior values needed by the matching compensator. Before restoration the host:
+
+1. revalidates the current effective user's ACL/record rules;
+2. verifies the record still matches the previously verified post-effect value;
+3. refuses to overwrite later changes (`capability_compensation_precondition_changed`);
+4. executes the explicit HOST-only compensator;
+5. re-reads and verifies the restored value;
+6. only then marks reversion complete.
+
+The UI offers `Revertir cambios` only when the host declares a safe compensator and asks for explicit confirmation. Unavailable/conflicting/unauthorized reversions are reported without claiming success.
+
+## 8. P5.8 contextual navigation
+
+Supported public reference kinds are now:
 
 ```text
 odoo_record
 odoo_model
+odoo_action
+odoo_view
+odoo_menu
+odoo_setting
 ```
 
-Capability results may project bounded already-readable record identities after output-schema validation and effective-user re-read. Before navigation the browser sends only the typed descriptor back to Odoo; Odoo revalidates current model eligibility, existence and read access before returning a form/list navigation descriptor. Revoked or deleted targets fail closed.
+`odoo.resolve_navigation` accepts semantic query text, never authoritative concrete IDs. Odoo searches bounded current models/actions/views/visible menus/installed settings under the effective user.
 
-Unknown OCA/custom models receive a generic current-schema/access-driven summary using a bounded set of currently readable safe fields. The current implementation intentionally revalidates on every reference resolution instead of caching a provider-generated presentation spec, avoiding stale schema/ACL state and an extra provider dependency in browser navigation.
+Discovery is not navigation authority. Every click is sent back to `/odoo_ai/v1/public-references`, which revalidates exact reference shape, current existence, ACL/record rules, current menu/group visibility and current settings schema before returning a closed descriptor. The frontend builds an Odoo action only from that descriptor. Raw model-authored URLs/routes are never executed.
 
-### Progressive disclosure
+Navigation references are available both:
 
-Record details default to five rows. `show more` advances in bounded pages. `show remaining` is offered only below the configured hard render ceiling. Over-limit expansion is blocked only at the presentation layer and an Odoo model/list fallback remains available.
+- inside correlated semantic streaming activity;
+- as a structured `references` collection rendered below the final answer.
 
-## 6. Queue/concurrency/failure invariants
+A stale/revoked/deleted target fails closed with a discreet notice and never reaches `actionService`.
+
+Unknown OCA/custom business models still use generic current-schema/access-driven record/model presentation where eligible.
+
+## 9. Queue/concurrency/failure invariants
 
 Accepted P5.1-P5.5 behavior remains authoritative:
 
 - per-conversation frontend scopes;
 - one active causal turn per conversation;
 - cross-conversation concurrency within scheduler capacity;
-- bounded two-slot scheduling, fairness and backpressure;
+- bounded scheduler/backpressure/fairness;
 - explicit approval/failure/recovery surfaces;
 - one authoritative final Assistant message;
 - uncertain post-write outcomes are never blindly retried as effect-safe.
 
-P5.8 presentation failures are best-effort and cannot change business-effect success or authorization.
+P5.8 presentation or navigation failure cannot change business-effect success/authorization. Turn interventions cannot bypass capability validation/policy/approval/verification.
 
-## 7. Retrieval/RAG and technical operations
+## 10. Retrieval/RAG and technical operations
 
 There is still no general embedded Evidence/RAG provider. Later retrieval should combine current Odoo/runtime/schema/configuration, source/XML, logs, company knowledge/files, lexical/semantic retrieval and web evidence as appropriate.
 
@@ -163,7 +210,7 @@ general web search
 
 Later privileged technical operations require explicit capabilities and privilege-boundary validation.
 
-## 8. Formal roadmap state
+## 11. Formal roadmap state
 
 ```text
 P0 COMPLETE
@@ -183,7 +230,7 @@ P5 IN_PROGRESS
 P6+ NOT ELIGIBLE
 ```
 
-P5.8 prepared validation chain:
+P5.8 prepared validation chain includes:
 
 ```text
 P5.8-DETERMINISTIC-REGRESSION
@@ -193,9 +240,15 @@ P5-REAL-SEMANTIC-ACTIVITY
 P5-REAL-ACTIVITY-DEDUPE
 P5-REAL-REASONING-SUMMARY
 P5-REAL-ACTIVITY-I18N
-P5-REAL-NAVIGATION-REFS
 P5-REAL-BATCH-DISCLOSURE
 P5-REAL-ACTIVITY-RECONNECT
+P5-REAL-NAVIGATION-REFS
+P5-REAL-NAVIGATION-VIEW-MENU-SETTING
+P5-REAL-FINAL-ANSWER-REFERENCES
+P5-REAL-TURN-STOP
+P5-REAL-TURN-INTERVENTIONS
+P5-REAL-TURN-EFFECT-BOUNDARY-RACE
+P5-REAL-COMPENSATION
 ```
 
-None of those P5.8 gates is recorded PASS by the implementation-only run. Execute `research/P5.8_VALIDATION_RUNBOOK.md` on exact current `main`; a failed HARD gate remains P5.8 repair work, and only a reviewed green chain makes Phase 6 eligible.
+None of these new P5.8 gates is recorded PASS by this GitHub-only implementation run. Execute `research/P5.8_VALIDATION_RUNBOOK.md` on exact current `main`; a failed HARD gate remains P5.8 repair work, and only a reviewed green chain can make Phase 6 eligible.
