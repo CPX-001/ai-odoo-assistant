@@ -76,6 +76,28 @@ class BrowserChatController(http.Controller):
         ].set_chat_reasoning_effort_preference(effort)
 
     @http.route(
+        "/odoo_ai/v1/planning-mode",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def planning_mode(self, **unexpected):
+        if unexpected:
+            return _error("invalid_context")
+        return request.env["odoo.ai.user.preference"].planning_mode_preferences()
+
+    @http.route(
+        "/odoo_ai/v1/planning-mode-set",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def set_planning_mode(self, mode=None, **unexpected):
+        if unexpected:
+            return _error("invalid_context")
+        return request.env["odoo.ai.user.preference"].set_planning_mode_preference(mode)
+
+    @http.route(
         "/odoo_ai/v1/agent-autonomy",
         type="json",
         auth="user",
