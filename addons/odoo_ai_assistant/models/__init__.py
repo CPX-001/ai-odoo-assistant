@@ -20,6 +20,7 @@ from . import embedded_runtime_host_loop as embedded_runtime_host_loop
 from . import effect_recovery_runtime as effect_recovery_runtime
 from . import task_plan_projection as task_plan_projection
 from . import turn_control as turn_control
+from . import effect_journal_reversion as effect_journal_reversion
 from . import turn_intervention as turn_intervention
 from . import turn_intervention_cleanup as turn_intervention_cleanup
 from . import turn_control_effect_boundary as turn_control_effect_boundary
