@@ -42,6 +42,13 @@ const STATUSES = new Set([
     "blocked",
     "cancelled",
 ]);
+const NAVIGATION_KINDS = new Set([
+    "odoo_model",
+    "odoo_action",
+    "odoo_view",
+    "odoo_menu",
+    "odoo_setting",
+]);
 const KEYS = [
     "sequence",
     "turn_id",
@@ -50,6 +57,7 @@ const KEYS = [
     "status",
     "label",
     "resource",
+    "references",
     "capability",
     "progress",
     "diagnostic_code",
@@ -58,10 +66,12 @@ const KEYS = [
 ];
 const TURN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 const MODEL_RE = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
+const FIELD_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 const ACTIVITY_ID_RE = /^activity:v[1-9][0-9]*:[0-9a-f]{32}$/;
 const DIAGNOSTIC_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
 const OCCURRED_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
 const MAX_RESOURCE_RECORDS = 50;
+const MAX_NAVIGATION_REFERENCES = 12;
 
 function exactKeys(value, expected) {
     return (
@@ -72,12 +82,12 @@ function exactKeys(value, expected) {
     );
 }
 
-function validLabel(value, maximum) {
+function validLabel(value, maximum, { allowEmpty = false } = {}) {
     if (typeof value !== "string" || value.includes("\u0000")) {
         return false;
     }
     const normalized = value.replace(/\s+/g, " ").trim();
-    return normalized.length >= 1 && normalized.length <= maximum;
+    return (allowEmpty || normalized.length >= 1) && normalized.length <= maximum;
 }
 
 function normalizeResource(value) {
@@ -112,11 +122,72 @@ function normalizeResource(value) {
     });
 }
 
+function normalizeNavigationReference(value) {
+    if (!value || typeof value !== "object" || !NAVIGATION_KINDS.has(value.kind)) {
+        return null;
+    }
+    if (!validLabel(value.label, 160) || !validLabel(value.description, 240, { allowEmpty: true })) {
+        return null;
+    }
+    const expected = {
+        odoo_model: ["kind", "label", "description", "model"],
+        odoo_action: ["kind", "label", "description", "model", "action_id"],
+        odoo_view: ["kind", "label", "description", "model", "view_id"],
+        odoo_menu: ["kind", "label", "description", "model", "action_id", "menu_id"],
+        odoo_setting: [
+            "kind",
+            "label",
+            "description",
+            "model",
+            "action_id",
+            "setting_field",
+        ],
+    }[value.kind];
+    if (!exactKeys(value, expected) || typeof value.model !== "string" || !MODEL_RE.test(value.model)) {
+        return null;
+    }
+    for (const key of ["action_id", "view_id", "menu_id"]) {
+        if (Object.hasOwn(value, key) && (!Number.isSafeInteger(value[key]) || value[key] <= 0)) {
+            return null;
+        }
+    }
+    if (
+        Object.hasOwn(value, "setting_field") &&
+        (typeof value.setting_field !== "string" || !FIELD_RE.test(value.setting_field))
+    ) {
+        return null;
+    }
+    if (value.kind === "odoo_setting" && value.model !== "res.config.settings") {
+        return null;
+    }
+    return Object.freeze({
+        ...value,
+        label: value.label.replace(/\s+/g, " ").trim(),
+        description: value.description.replace(/\s+/g, " ").trim(),
+    });
+}
+
+function normalizeReferences(value) {
+    if (!Array.isArray(value) || value.length > MAX_NAVIGATION_REFERENCES) {
+        return null;
+    }
+    const result = [];
+    for (const raw of value) {
+        const reference = normalizeNavigationReference(raw);
+        if (!reference) {
+            return null;
+        }
+        result.push(reference);
+    }
+    return Object.freeze(result);
+}
+
 export function normalizePublicTurnEvent(value) {
     if (!exactKeys(value, KEYS)) {
         return null;
     }
     const resource = normalizeResource(value.resource);
+    const references = normalizeReferences(value.references);
     if (
         !Number.isSafeInteger(value.sequence) ||
         value.sequence <= 0 ||
@@ -128,6 +199,7 @@ export function normalizePublicTurnEvent(value) {
         !STATUSES.has(value.status) ||
         !validLabel(value.label, 240) ||
         resource === undefined ||
+        references === null ||
         (value.capability !== null &&
             (typeof value.capability !== "string" || !MODEL_RE.test(value.capability))) ||
         (value.progress !== null &&
@@ -150,6 +222,7 @@ export function normalizePublicTurnEvent(value) {
         status: value.status,
         label: value.label.replace(/\s+/g, " ").trim(),
         resource,
+        references,
         capability: value.capability,
         progress: value.progress,
         diagnostic_code: value.diagnostic_code,
