@@ -13,7 +13,7 @@ import json
 from uuid import UUID
 
 from odoo import SUPERUSER_ID, api, fields, models
-from odoo.exceptions import AccessError, ValidationError
+from odoo.exceptions import ValidationError
 from odoo.modules.registry import Registry
 
 from ..runtime.agent.compensation import (

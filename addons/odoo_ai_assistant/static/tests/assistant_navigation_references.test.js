@@ -1,4 +1,5 @@
 import { expect, test } from "@odoo/hoot";
+import { patchTranslations } from "@web/../tests/web_test_helpers";
 import {
     finalAnswerReferences,
     finalReferenceActionLabel,
@@ -73,6 +74,7 @@ test("reference keys distinguish settings sharing one action and remain type sco
 });
 
 test("final navigation labels use understandable action wording", () => {
+    patchTranslations({});
     const parsed = references();
     expect(finalReferenceActionLabel(parsed[0])).toBe("Abrir Contactos");
     expect(finalReferenceActionLabel(parsed[2])).toBe("Ir a Contactos");

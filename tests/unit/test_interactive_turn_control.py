@@ -1,16 +1,32 @@
 import asyncio
+import importlib
+import sys
+import types
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
-from addons.odoo_ai_assistant.runtime.agent.codex import CodexAgentError
-from addons.odoo_ai_assistant.runtime.agent.interactive_codex import (
-    TurnControlSnapshot,
-    _InteractiveClientProxy,
-    _RedirectRequested,
-    _control_snapshot,
-    intervention_working_items,
+ADDON_ROOT = Path(__file__).resolve().parents[2] / "addons/odoo_ai_assistant"
+for package_name, package_path in (
+    ("addons.odoo_ai_assistant", ADDON_ROOT),
+    ("addons.odoo_ai_assistant.runtime", ADDON_ROOT / "runtime"),
+    ("addons.odoo_ai_assistant.runtime.agent", ADDON_ROOT / "runtime/agent"),
+):
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(package_path)]
+    sys.modules.setdefault(package_name, package)
+
+codex_module = importlib.import_module("addons.odoo_ai_assistant.runtime.agent.codex")
+control_module = importlib.import_module(
+    "addons.odoo_ai_assistant.runtime.agent.interactive_codex"
 )
+CodexAgentError = codex_module.CodexAgentError
+TurnControlSnapshot = control_module.TurnControlSnapshot
+_control_snapshot = control_module._control_snapshot
+_InteractiveClientProxy = control_module._InteractiveClientProxy
+_RedirectRequested = control_module._RedirectRequested
+intervention_working_items = control_module.intervention_working_items
 
 
 class _TurnModel:

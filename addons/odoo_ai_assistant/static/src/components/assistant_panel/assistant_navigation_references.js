@@ -14,12 +14,12 @@ export function finalAnswerReferences(result) {
 
 export function finalReferenceActionLabel(reference) {
     if (!reference?.label) {
-        return _t("Abrir en Odoo");
+        return String(_t("Abrir en Odoo"));
     }
     if (reference.kind === "odoo_menu") {
-        return _t("Ir a %s", reference.label);
+        return String(_t("Ir a %s", reference.label));
     }
-    return _t("Abrir %s", reference.label);
+    return String(_t("Abrir %s", reference.label));
 }
 
 export function referenceKey(reference) {

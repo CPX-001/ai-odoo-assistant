@@ -1,4 +1,5 @@
 import { expect, test } from "@odoo/hoot";
+import { patchTranslations } from "@web/../tests/web_test_helpers";
 import {
     composerActionLabel,
     composerTextareaIsDisabled,
@@ -40,6 +41,7 @@ test("composer switches between disabled send stop and redirect", () => {
 });
 
 test("textarea remains editable while processing and action labels are accessible", () => {
+    patchTranslations({});
     expect(
         composerTextareaIsDisabled({
             decisionLoading: false,

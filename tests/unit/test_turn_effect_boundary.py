@@ -1,7 +1,16 @@
-from addons.odoo_ai_assistant.runtime.agent.turn_effect_boundary import (
-    acquire_turn_effect_lock,
-    turn_effect_lock_key,
+import importlib.util
+from pathlib import Path
+
+MODULE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "addons/odoo_ai_assistant/runtime/agent/turn_effect_boundary.py"
 )
+SPEC = importlib.util.spec_from_file_location("turn_effect_boundary", MODULE_PATH)
+assert SPEC and SPEC.loader
+turn_effect_boundary = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(turn_effect_boundary)
+acquire_turn_effect_lock = turn_effect_boundary.acquire_turn_effect_lock
+turn_effect_lock_key = turn_effect_boundary.turn_effect_lock_key
 
 
 class _Cursor:

@@ -25,10 +25,10 @@ export function composerTextareaIsDisabled({ decisionLoading, recoveryPending, s
 
 export function composerActionLabel(mode) {
     const labels = {
-        stop: _t("Detener respuesta"),
-        redirect: _t("Corregir instrucción"),
-        send: _t("Enviar mensaje"),
-        disabled: _t("Enviar mensaje"),
+        stop: String(_t("Detener respuesta")),
+        redirect: String(_t("Corregir instrucción")),
+        send: String(_t("Enviar mensaje")),
+        disabled: String(_t("Enviar mensaje")),
     };
     return labels[mode] || labels.disabled;
 }
