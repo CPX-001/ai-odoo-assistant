@@ -32,16 +32,19 @@
                                 <span class="text-break flex-grow-1" t-esc="item.display_label"/>
                                 <small t-if="item.duration_label" class="text-nowrap" t-esc="item.duration_label"/>
                             </div>
-                            <div t-if="item.references.length" class="ms-4 mt-1 d-flex flex-column gap-1">
+                            <div t-if="item.references.length" class="ms-4 mt-1 d-flex flex-wrap gap-1">
                                 <button t-foreach="item.references" t-as="reference"
-                                    t-key="reference.model + ':' + reference.record_id"
-                                    type="button" class="btn btn-link btn-sm p-0 text-start align-self-start"
+                                    t-key="activityReferenceKey(reference)"
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary rounded-pill py-0 px-2 text-start"
+                                    t-att-title="reference.description || reference.label"
+                                    t-att-aria-label="reference.label"
                                     t-on-click="() => openActivityReference(reference)">
                                     <i class="fa fa-external-link me-1" aria-hidden="true"/>
                                     <t t-esc="reference.label"/>
                                 </button>
                                 <div t-if="item.reference_remaining_count"
-                                    class="d-flex flex-wrap gap-2 align-items-center">
+                                    class="d-flex flex-wrap gap-2 align-items-center w-100">
                                     <button t-if="item.can_show_more_references" type="button"
                                         class="btn btn-link btn-sm p-0"
                                         t-on-click="() => showMoreActivityReferences(item)">
