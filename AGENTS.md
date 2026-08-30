@@ -46,13 +46,13 @@ If push is unavailable or rejected, do **not** claim the result is available in 
 
 The active stabilization roadmap under `docs/research/` may be executed over multiple independent AI/Codex runs. When doing so, follow `docs/research/CONTINUOUS_EXECUTION_PROTOCOL.md` and reconstruct the next action from `docs/research/EXECUTION_STATE.md` rather than relying on chat memory.
 
-Tests and exit gates only count when they were actually executed in an environment capable of running them. If a slice requires real Odoo 18 + Codex behavior, use `docs/research/REAL_ENV_VALIDATION_PROTOCOL.md` and leave the slice at `REAL_ENV_VALIDATION_REQUIRED` until that evidence exists.
+Tests and exit gates only count when they were actually executed in an environment capable of running them. If a slice requires real Odoo 18 + Codex behavior, use `docs/research/REAL_ENV_VALIDATION_PROTOCOL.md` and leave the behavior pending validation until that evidence exists.
 
 **Do not use GitHub Actions for this roadmap. There are currently no GitHub runners/workers available for project execution or validation.** Do not add `.github/workflows` to advance phases, schedule continuation or satisfy gates. This restriction does not remove the requirement to test; it means tests must be run in the real/local execution environment that actually provides Odoo/Codex and any required browser/runtime dependencies.
 
 ### Test-scope rule
 
-Validation is **incremental by default**. Run the smallest set of tests that proves the changed or currently unvalidated contract, including its direct integration boundaries and any explicitly named HARD gates.
+Validation is **incremental by default**. Run the smallest set of tests that proves the changed or currently unvalidated contract, including its direct integration boundaries and any explicitly named immediate HARD gate.
 
 Do **not** run the full dependency-light, addon, HOOT/browser or repository regression suite merely because a pull, implementation slice, focused test run or final handoff occurred. A full regression is authorized only when:
 
@@ -60,6 +60,8 @@ Do **not** run the full dependency-light, addon, HOOT/browser or repository regr
 2. the current authoritative execution state, active slice record or validation runbook explicitly names that full regression as a required gate.
 
 Wording such as "test as appropriate", "validate the change", "if focused tests pass" or "run relevant tests" does not implicitly authorize a full regression. Expand beyond focused tests only for a concrete failure whose root cause or blast radius requires it, and state that reason. Record unexecuted broad suites honestly; do not spend runtime/tokens rerunning already-green unrelated coverage by default.
+
+The canonical expensive batch is `docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md`. When `EXECUTION_STATE.md` classifies broad/real checks as periodic validation debt, implementation may continue across coherent slices while that debt accumulates. This never converts an unexecuted gate into PASS and never permits claiming a phase complete without its applicable evidence. A concrete authority/recovery uncertainty may still justify an immediate targeted blocking gate.
 
 ## Slice sizing rule
 
@@ -85,7 +87,7 @@ For meaningful changes:
 4. state invariants and failure modes;
 5. implement the largest coherent slice that remains feasible to understand, validate and recover as one checkpoint;
 6. remove obsolete current-path code when appropriate;
-7. run deterministic tests and add agentic evals when model behavior is involved;
+7. run focused deterministic tests and add agentic evals when model behavior is involved;
 8. update current documentation in the same change.
 
 External projects are references for patterns, not architecture requirements.
