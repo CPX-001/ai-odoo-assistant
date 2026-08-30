@@ -117,13 +117,15 @@ patch(assistantPanelService, {
                     return;
                 }
                 const scope = activeScope();
-                if (!scope || !scope.loading || !scope.turnId) {
+                if (!scope || !scope.loading) {
                     return;
                 }
-                try {
-                    await refreshTaskPlan();
-                } catch {
-                    // Live TaskPlan is a presentation projection. Turn execution/status remains authoritative.
+                if (typeof scope.turnId === "string" && scope.turnId) {
+                    try {
+                        await refreshTaskPlan();
+                    } catch {
+                        // Live TaskPlan is a presentation projection. Turn execution/status remains authoritative.
+                    }
                 }
                 await new Promise((resolve) => setTimeout(resolve, POLL_DELAY_MS));
             }
