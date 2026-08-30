@@ -15,16 +15,12 @@ for package_name, package_path in (
     ("_p62_fixture", ADDON),
     ("_p62_fixture.runtime", ADDON / "runtime"),
     ("_p62_fixture.runtime.agent", ADDON / "runtime" / "agent"),
-    ("_p62_fixture.runtime.capabilities", ADDON / "runtime" / "capabilities"),
 ):
     package = types.ModuleType(package_name)
     package.__path__ = [str(package_path)]
     sys.modules[package_name] = package
 
-from _p62_fixture.runtime.agent.contracts import (  # noqa: E402
-    ReasoningCapabilityCall,
-    TaskPlanUpdate,
-)
+from _p62_fixture.runtime.agent.contracts import ReasoningCapabilityCall  # noqa: E402
 from _p62_fixture.runtime.agent.decision_validation import (  # noqa: E402
     NextDecisionValidationError,
 )
@@ -37,6 +33,7 @@ from _p62_fixture.runtime.agent.task_plan import (  # noqa: E402
     TaskPlan,
     TaskPlanStep,
     parse_task_plan,
+    task_plan_schema,
 )
 from _p62_fixture.runtime.capabilities.contracts import CapabilityContext  # noqa: E402
 
@@ -92,6 +89,19 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
         self.assertEqual(complex_request.effective_mode, "deliberate")
         self.assertGreaterEqual(complex_request.complexity_score, 4)
 
+    def test_current_task_plan_schema_exposes_public_revision_semantics(self):
+        schema = task_plan_schema()
+        self.assertEqual(
+            set(schema["required"]),
+            {"goal", "revision", "revision_kind", "revision_summary", "steps"},
+        )
+        self.assertNotIn("capability", schema["properties"])
+        self.assertNotIn("arguments", schema["properties"])
+        self.assertEqual(
+            set(schema["properties"]["revision_kind"]["enum"]),
+            {"initial", "progress", "replan"},
+        )
+
     def test_deliberate_requires_task_plan_before_first_capability_request(self):
         provider = _Provider(
             ReasoningCapabilityCall(
@@ -140,9 +150,7 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
             steps=(TaskPlanStep("inspect", "Inspeccionar", "in_progress"),),
             revision_kind="initial",
         )
-        working = (
-            {"kind": "task_plan", "data": initial.payload()},
-        )
+        working = ({"kind": "task_plan", "data": initial.payload()},)
         changed = TaskPlan(
             goal="Resolver",
             revision=2,
