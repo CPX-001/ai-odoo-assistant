@@ -95,9 +95,9 @@ class AgentBudgetSet:
 def resolve_agent_budgets(context) -> AgentBudgetSet:
     """Resolve stable policy plus optional host-owned P6 budget overrides.
 
-    Legacy/custom callers that do not opt into the P6 safety family remain single-step. The
-    product host explicitly enables up to five EffectPlan steps. Provider adapters only receive
-    the resulting remaining counters and never own these limits.
+    Legacy/custom callers that do not receive the normalized Odoo P6 policy remain single-step.
+    The product host opts into bounded multi-step through ``max_effect_steps_per_plan``. Provider
+    adapters only receive remaining counters and never own these limits.
     """
 
     policy = context.metadata.get("capability_policy", {})
@@ -138,7 +138,10 @@ def resolve_agent_budgets(context) -> AgentBudgetSet:
     if type(policy_write_steps) is not int or not 0 <= policy_write_steps <= 12:
         raise AgentBudgetError()
     requested_effect_steps = _bounded_int(
-        safety.get("max_effect_steps", 1),
+        safety.get(
+            "max_effect_steps",
+            policy.get("max_effect_steps_per_plan", 1),
+        ),
         1,
         _MAX_EFFECT_STEPS,
     )
