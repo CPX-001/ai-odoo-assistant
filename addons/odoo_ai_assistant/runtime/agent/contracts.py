@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass
 from typing import TypeAlias
 
+from .task_plan import TaskPlan, parse_task_plan, task_plan_schema
+
 JsonObject: TypeAlias = dict[str, object]
 
 _CAPABILITY_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
@@ -29,6 +31,12 @@ class FinalAnswer:
 
 
 @dataclass(frozen=True, slots=True)
+class TaskPlanUpdate:
+    kind: str
+    task_plan: TaskPlan
+
+
+@dataclass(frozen=True, slots=True)
 class ReasoningCapabilityCall:
     kind: str
     call_id: str
@@ -45,7 +53,9 @@ class PlanStepProposal:
     user_summary: str
 
 
-NextDecision: TypeAlias = FinalAnswer | ReasoningCapabilityCall | PlanStepProposal
+NextDecision: TypeAlias = (
+    FinalAnswer | TaskPlanUpdate | ReasoningCapabilityCall | PlanStepProposal
+)
 
 
 def parse_next_decision(value: object) -> NextDecision:
@@ -65,6 +75,15 @@ def parse_next_decision(value: object) -> NextDecision:
         ):
             raise NextDecisionError("agent_next_decision_invalid")
         return FinalAnswer(kind=kind, answer=answer.strip(), confidence=confidence)
+    if kind == "task_plan_update":
+        if set(value) != {"kind", "task_plan"}:
+            raise NextDecisionError("agent_next_decision_invalid")
+        try:
+            task_plan = parse_task_plan(value.get("task_plan"))
+        except Exception as error:
+            code = getattr(error, "code", "agent_task_plan_invalid")
+            raise NextDecisionError(code) from error
+        return TaskPlanUpdate(kind=kind, task_plan=task_plan)
     if kind == "reasoning_capability_call":
         if set(value) != {"kind", "call_id", "capability", "arguments"}:
             raise NextDecisionError("agent_next_decision_invalid")
@@ -97,6 +116,8 @@ def parse_next_decision(value: object) -> NextDecision:
 def decision_payload(decision: NextDecision) -> JsonObject:
     if isinstance(decision, FinalAnswer):
         return {"kind": decision.kind, "answer": decision.answer, "confidence": decision.confidence}
+    if isinstance(decision, TaskPlanUpdate):
+        return {"kind": decision.kind, "task_plan": decision.task_plan.payload()}
     if isinstance(decision, ReasoningCapabilityCall):
         return {
             "kind": decision.kind,
@@ -130,6 +151,15 @@ def next_decision_schema() -> JsonObject:
                     "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
                 },
                 "required": ["kind", "answer", "confidence"],
+            },
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "kind": {"const": "task_plan_update"},
+                    "task_plan": task_plan_schema(),
+                },
+                "required": ["kind", "task_plan"],
             },
             {
                 "type": "object",
