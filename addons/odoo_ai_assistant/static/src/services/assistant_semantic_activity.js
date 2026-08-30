@@ -89,6 +89,7 @@ function freezeItem(item) {
     return Object.freeze({
         ...item,
         resource: item.resource || null,
+        references: Object.freeze([...(item.references || [])]),
         semantic_code: semanticCode(item),
         duration_ms: itemDurationMs(item),
     });
@@ -184,6 +185,7 @@ export function reduceSemanticActivity(events) {
                 status: event.status,
                 label: event.label,
                 resource: event.resource || null,
+                references: [...(event.references || [])],
                 capability: event.capability || null,
                 progress: event.progress ?? null,
                 diagnostic_code: event.diagnostic_code || null,
@@ -200,6 +202,9 @@ export function reduceSemanticActivity(events) {
         existing.status = event.status;
         existing.label = event.label;
         existing.resource = event.resource || existing.resource || null;
+        if (Array.isArray(event.references) && event.references.length) {
+            existing.references = [...event.references];
+        }
         existing.capability = event.capability || existing.capability || null;
         existing.progress = event.progress ?? existing.progress ?? null;
         existing.diagnostic_code = event.diagnostic_code || existing.diagnostic_code || null;
@@ -208,9 +213,6 @@ export function reduceSemanticActivity(events) {
         }
     }
 
-    // Retention is bounded at the live-panel state layer (same 1024-event ceiling as the host
-    // live store). Keep the full retained window here so total elapsed time and early lifecycle
-    // correlation remain correct; rendering is bounded separately by presentation preferences.
     return Object.freeze(ordered.map(freezeItem));
 }
 
