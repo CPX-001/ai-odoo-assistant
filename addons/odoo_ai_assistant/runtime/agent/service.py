@@ -342,9 +342,10 @@ class AgentTurnService:
                 )
 
             if isinstance(decision, TaskPlanUpdate):
+                # TaskPlan is progress data only. It cannot erase a failing capability streak or
+                # clear a terminal authority/policy error, otherwise a provider could use harmless
+                # plan revisions to evade safety budgets.
                 await self._record_task_plan(decision.task_plan)
-                consecutive_failures = 0
-                terminal_error = False
                 continue
 
             if isinstance(decision, PlanStepProposal):
@@ -771,9 +772,14 @@ def _trailing_failure_count(items: tuple[WorkingItem, ...]) -> int:
         if item.kind == "capability_error":
             count += 1
             continue
-        if item.kind in {"capability_result", "task_plan"}:
+        if item.kind == "capability_result":
             return 0
-        if item.kind in {"assistant_decision", "capability_call", "plan_step_proposed"}:
+        if item.kind in {
+            "assistant_decision",
+            "capability_call",
+            "plan_step_proposed",
+            "task_plan",
+        }:
             continue
         break
     return count
@@ -781,7 +787,7 @@ def _trailing_failure_count(items: tuple[WorkingItem, ...]) -> int:
 
 def _terminal_error_pending(items: tuple[WorkingItem, ...]) -> bool:
     for item in reversed(items):
-        if item.kind in {"capability_result", "task_plan"}:
+        if item.kind == "capability_result":
             return False
         if item.kind == "capability_error":
             return item.data.get("code") in _TERMINAL_CALL_ERRORS
