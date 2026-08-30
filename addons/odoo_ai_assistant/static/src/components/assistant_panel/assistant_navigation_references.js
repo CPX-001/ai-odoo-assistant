@@ -26,15 +26,22 @@ export function referenceKey(reference) {
     if (!reference || typeof reference !== "object") {
         return "reference:invalid";
     }
-    const identity =
-        reference.record_id ||
-        reference.view_id ||
-        reference.menu_id ||
-        reference.action_id ||
-        reference.setting_field ||
-        reference.model ||
-        "unknown";
-    return `${reference.kind || "reference"}:${reference.model || ""}:${identity}`;
+    switch (reference.kind) {
+        case "odoo_record":
+            return `odoo_record:${reference.model || ""}:${reference.record_id || "unknown"}`;
+        case "odoo_model":
+            return `odoo_model:${reference.model || "unknown"}`;
+        case "odoo_action":
+            return `odoo_action:${reference.action_id || "unknown"}`;
+        case "odoo_view":
+            return `odoo_view:${reference.model || ""}:${reference.view_id || "unknown"}`;
+        case "odoo_menu":
+            return `odoo_menu:${reference.menu_id || "unknown"}`;
+        case "odoo_setting":
+            return `odoo_setting:${reference.action_id || ""}:${reference.setting_field || "unknown"}`;
+        default:
+            return `reference:${reference.model || ""}:unknown`;
+    }
 }
 
 patch(AssistantPanel.prototype, {
