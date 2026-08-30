@@ -1,5 +1,9 @@
 import { expect, test } from "@odoo/hoot";
-import { performedActionsState } from "@odoo_ai_assistant/components/assistant_panel/assistant_turn_control";
+import {
+    composerActionLabel,
+    composerTextareaIsDisabled,
+    performedActionsState,
+} from "@odoo_ai_assistant/components/assistant_panel/assistant_turn_control";
 import {
     composerActionMode,
     newClientInterventionId,
@@ -33,6 +37,26 @@ test("composer switches between disabled send stop and redirect", () => {
     expect(
         composerActionMode({ ...base, loading: true, draft: "corrección", stopLoading: true })
     ).toBe("disabled");
+});
+
+test("textarea remains editable while processing and action labels are accessible", () => {
+    expect(
+        composerTextareaIsDisabled({
+            decisionLoading: false,
+            recoveryPending: false,
+            stopLoading: false,
+        })
+    ).toBe(false);
+    expect(
+        composerTextareaIsDisabled({
+            decisionLoading: true,
+            recoveryPending: false,
+            stopLoading: false,
+        })
+    ).toBe(true);
+    expect(composerActionLabel("stop")).toBe("Detener respuesta");
+    expect(composerActionLabel("redirect")).toBe("Corregir instrucción");
+    expect(composerActionLabel("send")).toBe("Enviar mensaje");
 });
 
 test("client intervention ids are opaque bounded UI ids", () => {
