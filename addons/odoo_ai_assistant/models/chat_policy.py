@@ -13,6 +13,7 @@ _MODE_RANK = {"always_confirm": 0, "risk_based": 1, "protected_only": 2}
 _RISK_RANK = {"low": 0, "moderate": 1, "high": 2, "protected": 3}
 _PERMISSIVE_MODE = "protected_only"
 _PERMISSIVE_RISK = "protected"
+_P6_MAX_EFFECT_STEPS = 5
 _SYSTEM_LAYER = {
     "confirmation_mode": _PERMISSIVE_MODE,
     "max_auto_risk": _PERMISSIVE_RISK,
@@ -37,9 +38,6 @@ class AssistantChatPolicy(models.Model):
         default=lambda self: self.env.user,
     )
     conversation_id = fields.Char(required=True, index=True, size=36)
-    # Legacy fields are retained for upgrade compatibility. Confirmation autonomy is now
-    # controlled explicitly by the user's single autonomy profile instead of hidden
-    # conversation overrides.
     confirmation_mode = fields.Selection(
         selection=[
             ("always_confirm", "Always confirm"),
@@ -124,8 +122,6 @@ class AssistantChatPolicy(models.Model):
 
     @api.model
     def _administrator_layer(self):
-        # Administrator configuration may still disable synthetic/demo data globally, but
-        # it no longer silently lowers a user's visible autonomy selection.
         raw_synthetic = (
             self.env["ir.config_parameter"]._get_param(
                 "odoo_ai_assistant.agent_allow_synthetic_data"
@@ -140,12 +136,7 @@ class AssistantChatPolicy(models.Model):
 
 
 def resolve_capability_policy(snapshot):
-    """Resolve the stored chat-policy snapshot into one capability-policy input.
-
-    The policy layers remain the source of user/admin/conversation configuration. The
-    capability framework consumes only this normalized result and therefore does not
-    duplicate layer precedence or autonomy-profile rules.
-    """
+    """Resolve the stored chat-policy snapshot into one capability-policy input."""
 
     if not isinstance(snapshot, dict) or set(snapshot) != {
         "layers",
@@ -161,12 +152,10 @@ def resolve_capability_policy(snapshot):
     }:
         raise ValidationError("Invalid Assistant policy layers")
 
-    normalized = [_validated_layer(layers[name]) for name in (
-        "system_ceiling",
-        "administrator",
-        "user",
-        "conversation",
-    )]
+    normalized = [
+        _validated_layer(layers[name])
+        for name in ("system_ceiling", "administrator", "user", "conversation")
+    ]
     mode = min(
         (layer["confirmation_mode"] for layer in normalized),
         key=_MODE_RANK.__getitem__,
@@ -175,6 +164,7 @@ def resolve_capability_policy(snapshot):
         (layer["max_auto_risk"] for layer in normalized),
         key=_RISK_RANK.__getitem__,
     )
+    max_write_steps = min(layer["max_write_steps_per_plan"] for layer in normalized)
     return {
         "confirmation_mode": mode,
         "max_auto_risk": risk,
@@ -185,9 +175,11 @@ def resolve_capability_policy(snapshot):
         "max_tool_calls_per_turn": min(
             layer["max_tool_calls_per_turn"] for layer in normalized
         ),
-        "max_write_steps_per_plan": min(
-            layer["max_write_steps_per_plan"] for layer in normalized
-        ),
+        "max_write_steps_per_plan": max_write_steps,
+        # P6 separates the current product EffectPlan bound from the older broader policy
+        # ceiling. Custom/legacy AgentTurnService callers that do not carry this derived key
+        # remain single-step for compatibility; the real Odoo host opts into bounded multi-step.
+        "max_effect_steps_per_plan": min(_P6_MAX_EFFECT_STEPS, max_write_steps),
         "max_replans": min(layer["max_replans"] for layer in normalized),
         "max_consecutive_failures": min(
             layer["max_consecutive_failures"] for layer in normalized
