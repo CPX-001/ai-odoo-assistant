@@ -23,6 +23,11 @@ from _p6_fixture.runtime.agent.budgets import (  # noqa: E402
     AgentBudgetError,
     resolve_agent_budgets,
 )
+from _p6_fixture.runtime.agent.contracts import (  # noqa: E402
+    TaskPlanUpdate,
+    next_decision_schema,
+    parse_next_decision,
+)
 from _p6_fixture.runtime.agent.task_plan import (  # noqa: E402
     TaskPlanError,
     parse_task_plan,
@@ -73,6 +78,48 @@ class TestPhase6PlanningContract(unittest.TestCase):
         self.assertNotIn("capability", payload)
         self.assertNotIn("arguments", payload)
         self.assertNotIn("approval", payload)
+
+    def test_task_plan_is_one_provider_neutral_next_decision_branch(self):
+        decision = parse_next_decision(
+            {
+                "kind": "task_plan_update",
+                "task_plan": {
+                    "goal": "Resolver la petición",
+                    "revision": 1,
+                    "steps": [
+                        {
+                            "step_id": "inspect",
+                            "title": "Inspeccionar contexto",
+                            "state": "in_progress",
+                            "depends_on": [],
+                        }
+                    ],
+                },
+            }
+        )
+        self.assertIsInstance(decision, TaskPlanUpdate)
+        self.assertEqual(decision.task_plan.revision, 1)
+        schema = next_decision_schema()
+        alternatives = schema["oneOf"]
+        kinds = {alternative["properties"]["kind"]["const"] for alternative in alternatives}
+        self.assertEqual(
+            kinds,
+            {
+                "final_answer",
+                "task_plan_update",
+                "reasoning_capability_call",
+                "plan_step_proposal",
+            },
+        )
+        task_schema = next(
+            alternative
+            for alternative in alternatives
+            if alternative["properties"]["kind"]["const"] == "task_plan_update"
+        )["properties"]["task_plan"]
+        encoded = str(task_schema)
+        self.assertNotIn("capability", encoded)
+        self.assertNotIn("arguments", encoded)
+        self.assertNotIn("approval", encoded)
 
     def test_task_plan_rejects_forward_dependencies_and_unknown_states(self):
         bad = [
