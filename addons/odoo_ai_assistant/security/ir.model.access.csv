@@ -8,3 +8,4 @@ access_odoo_ai_message_internal,odoo.ai.message internal,model_odoo_ai_message,b
 access_odoo_ai_turn_internal,odoo.ai.turn internal,model_odoo_ai_turn,base.group_user,1,0,0,0
 access_odoo_ai_turn_event_internal,odoo.ai.turn.event internal,model_odoo_ai_turn_event,base.group_user,1,0,0,0
 access_odoo_ai_turn_live_event_internal,odoo.ai.turn.live.event internal,model_odoo_ai_turn_live_event,base.group_user,1,0,0,0
+access_odoo_ai_effect_journal_system,odoo.ai.effect.journal system,model_odoo_ai_effect_journal,base.group_system,1,0,0,0
