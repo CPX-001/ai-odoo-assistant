@@ -5,6 +5,7 @@ import { _t } from "@web/core/l10n/translation";
 import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
 import {
+    normalizeHostNavigationReferences,
     openPublicReference,
     referenceDisclosure,
     resourceModelReference,
@@ -127,6 +128,9 @@ patch(AssistantPanel.prototype, {
     setup() {
         super.setup(...arguments);
         this.semanticReferenceUi = useState({ visibleByKey: {} });
+        if (typeof this.state.publicReferenceNotice !== "string") {
+            this.state.publicReferenceNotice = "";
+        }
     },
 
     get semanticActivity() {
@@ -139,7 +143,9 @@ patch(AssistantPanel.prototype, {
     get activityItems() {
         const activity = this.semanticActivity;
         return activity.items.map((item) => {
-            const references = resourceReferences(item.resource);
+            const navigationReferences =
+                normalizeHostNavigationReferences(item.references || [], 12) || [];
+            const references = [...navigationReferences, ...resourceReferences(item.resource)];
             const disclosure = referenceDisclosure(references, {
                 pageSize: activity.preferences.batch_page_size,
                 visibleCount: this.semanticReferenceUi.visibleByKey[item.key] || null,
@@ -232,7 +238,11 @@ patch(AssistantPanel.prototype, {
     },
 
     async openActivityReference(reference) {
-        return openPublicReference(reference, { actionService: this.actionService });
+        const opened = await openPublicReference(reference, { actionService: this.actionService });
+        this.state.publicReferenceNotice = opened
+            ? ""
+            : _t("Este enlace ya no está disponible con tus permisos o contexto actuales.");
+        return opened;
     },
 
     async changeActivityDetailLevel(event) {
