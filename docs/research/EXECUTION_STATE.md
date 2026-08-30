@@ -37,7 +37,7 @@ periodic_regression_runbook: docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
 latest_executed_evidence: docs/research/evidence/regression/2026-08-30/FULL-REGRESSION-46b1093.md
 periodic_stage_status: A PASS; B PASS; C PASS; D BLOCKED (provider usageLimitExceeded before first decision)
-next_action: restore Codex provider capacity, run Stage D against product candidate 46b1093, repair any focused product failure, and only then accept Phase 6 and unlock Phase 7
+next_action: retry Stage D after the host-reported primary Codex reset at 2026-08-30T21:25+00:00 (or after an explicitly authorized usage reset), against product candidate 46b1093; only then accept Phase 6 and unlock Phase 7
 ```
 
 No unexecuted P6 HARD gate is PASS. Stages A-C of the periodic checkpoint are green on product
@@ -172,6 +172,8 @@ docs/research/evidence/regression/2026-08-30/FULL-REGRESSION-46b1093.md
 
 The real-product stage was attempted but the configured host session returned
 `usageLimitExceeded` before the first provider decision. It therefore remains BLOCKED, not PASS.
+A user-requested retry produced the same result; the normal settings projection reported the
+primary Codex window at 100% used with reset time `2026-08-30T21:25+00:00`.
 
 Accumulated periodic real debt:
 

@@ -136,6 +136,23 @@ The disposable business fixture was removed through Odoo after the blocked run. 
 capacity condition prevents honest observation of every real-provider gate; it is not counted as a
 product PASS or product FAIL.
 
+### User-requested Stage-D retry
+
+Stage D was retried after the user reported that capacity should be available. The host session
+still reported `ready` and authenticated, but the new durable turn again exhausted all three host
+attempts before the first provider decision with the same sanitized facts:
+
+```text
+category: provider_capacity
+provider code: usageLimitExceeded
+effect state: none
+write barrier: false
+```
+
+The normal Odoo settings projection then reported the primary Codex window at `100% used`, with
+reset time `2026-08-30T21:25+00:00`. The disposable retry fixture was removed through Odoo. This
+retry therefore leaves Stage D BLOCKED without changing any product gate result.
+
 ```text
 authenticated basic chat/read              BLOCKED — usageLimitExceeded
 ACL/unavailable capability fail-closed      BLOCKED — usageLimitExceeded
@@ -154,7 +171,8 @@ P6-REAL-EFFECT-JOURNAL                      BLOCKED — usageLimitExceeded
 
 ## Continuation rule
 
-Restore provider capacity without changing the candidate, then run Stage D on the exact
-`46b1093` product lineage. If Stage D exposes another product defect, repair it with focused tests
-and rerun the affected broad stages according to the periodic runbook. Only a fully green Stage D
-may turn this evidence into Phase-6 acceptance and unlock Phase 7.
+Restore provider capacity without changing the candidate (the currently reported primary-window
+reset is `2026-08-30T21:25+00:00`), then run Stage D on the exact `46b1093` product lineage. If
+Stage D exposes another product defect, repair it with focused tests and rerun the affected broad
+stages according to the periodic runbook. Only a fully green Stage D may turn this evidence into
+Phase-6 acceptance and unlock Phase 7.
