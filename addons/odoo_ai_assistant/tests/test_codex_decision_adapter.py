@@ -11,10 +11,15 @@ from ..runtime.agent.codex import (
 )
 from ..runtime.agent.codex_decision import (
     CodexDecisionEngine,
+    _DECISION_INSTRUCTIONS,
     _codex_next_decision_schema,
     _decision_result,
 )
-from ..runtime.agent.contracts import FinalAnswer, ReasoningCapabilityCall
+from ..runtime.agent.contracts import (
+    FinalAnswer,
+    ReasoningCapabilityCall,
+    TaskPlanUpdate,
+)
 
 
 class _EventClient:
@@ -48,13 +53,34 @@ class TestCodexDecisionAdapter(BaseCase):
         )
         self.assertEqual(_model_thread_options(defaulted), {})
 
-    def test_wire_schema_wraps_union_and_encodes_open_arguments(self):
+    def test_wire_schema_wraps_four_neutral_decisions_and_encodes_open_arguments(self):
         schema = _codex_next_decision_schema()
 
         self.assertEqual(schema["type"], "object")
         self.assertNotIn("oneOf", schema)
         alternatives = schema["properties"]["decision"]["anyOf"]
-        self.assertEqual(len(alternatives), 3)
+        self.assertEqual(len(alternatives), 4)
+        kinds = {
+            branch["properties"]["kind"]["enum"][0]
+            for branch in alternatives
+        }
+        self.assertEqual(
+            kinds,
+            {
+                "final_answer",
+                "task_plan_update",
+                "reasoning_capability_call",
+                "plan_step_proposal",
+            },
+        )
+        task_branch = next(
+            branch
+            for branch in alternatives
+            if branch["properties"]["kind"]["enum"][0] == "task_plan_update"
+        )
+        self.assertIn("task_plan", task_branch["properties"])
+        self.assertNotIn("arguments_json", task_branch["properties"])
+
         capability_branches = [
             branch
             for branch in alternatives
@@ -66,6 +92,14 @@ class TestCodexDecisionAdapter(BaseCase):
             self.assertIn("arguments_json", branch["properties"])
             self.assertNotIn("arguments", branch["properties"])
             self.assertIn("arguments_json", branch["required"])
+
+    def test_codex_instructions_keep_task_plan_non_authoritative_and_effect_steps_distinct(self):
+        instructions = " ".join(_DECISION_INSTRUCTIONS.split())
+        self.assertIn("user-visible TaskPlan", instructions)
+        self.assertIn("never grants execution authority", instructions)
+        self.assertIn("one distinct plan_step_proposal at a time", instructions)
+        self.assertIn("never repeat them", instructions)
+        self.assertIn("verified_effect_receipt proves execution", instructions)
 
     def test_wire_envelope_is_normalized_to_strict_next_decision(self):
         final = _decision_result(
@@ -79,6 +113,34 @@ class TestCodexDecisionAdapter(BaseCase):
                                     "kind": "final_answer",
                                     "answer": "Hola",
                                     "confidence": "high",
+                                }
+                            }
+                        ),
+                    }
+                ]
+            }
+        )
+        task_plan = _decision_result(
+            {
+                "items": [
+                    {
+                        "type": "agentMessage",
+                        "text": json.dumps(
+                            {
+                                "decision": {
+                                    "kind": "task_plan_update",
+                                    "task_plan": {
+                                        "goal": "Resolver la petición",
+                                        "revision": 1,
+                                        "steps": [
+                                            {
+                                                "step_id": "inspect",
+                                                "title": "Inspeccionar contexto",
+                                                "state": "in_progress",
+                                                "depends_on": [],
+                                            }
+                                        ],
+                                    },
                                 }
                             }
                         ),
@@ -107,6 +169,9 @@ class TestCodexDecisionAdapter(BaseCase):
         )
 
         self.assertEqual(final, FinalAnswer("final_answer", "Hola", "high"))
+        self.assertIsInstance(task_plan, TaskPlanUpdate)
+        self.assertEqual(task_plan.task_plan.revision, 1)
+        self.assertEqual(task_plan.task_plan.steps[0].step_id, "inspect")
         self.assertEqual(
             call,
             ReasoningCapabilityCall(
