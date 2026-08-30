@@ -2,22 +2,28 @@
 
 from __future__ import annotations
 
-import importlib.util
 import pathlib
 import sys
+import types
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-CONTRACT = ROOT / "addons/odoo_ai_assistant/runtime/agent/contracts.py"
-SERVICE = ROOT / "addons/odoo_ai_assistant/runtime/agent/service.py"
-OVERLAY = ROOT / "addons/odoo_ai_assistant/models/embedded_runtime_host_loop.py"
-PLAN = ROOT / "addons/odoo_ai_assistant/runtime/agent/plan.py"
-BUDGETS = ROOT / "addons/odoo_ai_assistant/runtime/agent/budgets.py"
+ADDON = ROOT / "addons" / "odoo_ai_assistant"
+SERVICE = ADDON / "runtime" / "agent" / "service.py"
+OVERLAY = ADDON / "models" / "embedded_runtime_host_loop.py"
+PLAN = ADDON / "runtime" / "agent" / "plan.py"
+BUDGETS = ADDON / "runtime" / "agent" / "budgets.py"
 
-spec = importlib.util.spec_from_file_location("e2e4_contracts", CONTRACT)
-contracts = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = contracts
-spec.loader.exec_module(contracts)
+for package_name, package_path in (
+    ("_effect_plan_fixture", ADDON),
+    ("_effect_plan_fixture.runtime", ADDON / "runtime"),
+    ("_effect_plan_fixture.runtime.agent", ADDON / "runtime" / "agent"),
+):
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(package_path)]
+    sys.modules[package_name] = package
+
+from _effect_plan_fixture.runtime.agent import contracts  # noqa: E402
 
 
 class TestCanonicalPlanProposal(unittest.TestCase):
@@ -38,6 +44,30 @@ class TestCanonicalPlanProposal(unittest.TestCase):
         self.assertIsInstance(decision, contracts.PlanStepProposal)
         self.assertEqual(decision.call_id, "plan-1")
         self.assertEqual(decision.capability, "odoo.record.patch")
+
+    def test_task_plan_and_effect_plan_are_separate_neutral_contracts(self):
+        decision = contracts.parse_next_decision(
+            {
+                "kind": "task_plan_update",
+                "task_plan": {
+                    "goal": "Resolver",
+                    "revision": 1,
+                    "steps": [
+                        {
+                            "step_id": "inspect",
+                            "title": "Inspeccionar",
+                            "state": "in_progress",
+                            "depends_on": [],
+                        }
+                    ],
+                },
+            }
+        )
+        self.assertIsInstance(decision, contracts.TaskPlanUpdate)
+        payload = decision.task_plan.payload()
+        self.assertNotIn("capability", payload)
+        self.assertNotIn("arguments", payload)
+        self.assertNotIn("approval", payload)
 
     def test_host_accumulates_plan_steps_without_provider_execution_authority(self):
         source = OVERLAY.read_text(encoding="utf-8")
