@@ -14,12 +14,14 @@ P5.7 model/reasoning preference sub-slice accepted through eb66e45447c4d64e1ebbb
 P5.7 complete through 074a71c29a6a6109ae7412e7b1f9850c4449e379
 ```
 
-P5.8 semantic activity/reasoning, interactive turn control, safe compensation and contextual navigation are **implemented but not accepted**. The validation cursor is `research/EXECUTION_STATE.md`; implementation detail is in `research/P5.8_IMPLEMENTATION.md` and `research/P5.8_NAVIGATION_IMPLEMENTATION.md`; required validation is in `research/P5.8_VALIDATION_RUNBOOK.md`.
+P5.8 is **partially implemented and currently IN_PROGRESS**. Interactive turn control, safe compensation, contextual navigation, semantic correlation/presentation infrastructure and readable-summary channels exist, but product review found that normal semantic activity is still too close to a technical capability lifecycle log for complex turns. That semantic work-item gap must be repaired before P5.8 enters final real-environment acceptance.
+
+The authoritative cursor is `research/EXECUTION_STATE.md`; implementation detail is in `research/P5.8_IMPLEMENTATION.md`; product target is `research/P5.8_SEMANTIC_ACTIVITY_UX.md`; required repair/validation is in `research/P5.8_VALIDATION_RUNBOOK.md` and `research/P5.8_CODEX_TEST_HANDOFF.md`.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.24.0` on the current P5.8 implementation lineage.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.10.24.0` on the current P5.8 lineage.
 - Embedded runtime; browser talks only to Odoo, not a sidecar/provider service.
 - Odoo/PostgreSQL own conversations, messages, turns, effect state, interventions, private working checkpoints and browser-safe live/presentation state.
 - Native `ir.cron` runs durable turns.
@@ -81,7 +83,7 @@ P5.6 immutable per-turn conversation context and P5.7 conversation/model/reasoni
 
 P5.8 presentation preferences are per-user and explicitly non-authoritative. They can change visible activity detail, technical-name display, transient filtering, reasoning-summary display and progressive-disclosure page size without changing business policy or an already captured turn's execution authority.
 
-## 5. P5.8 semantic activity implementation
+## 5. P5.8 semantic activity — foundation present, richer work items still missing
 
 The accepted P3 live store now feeds a semantic presentation layer:
 
@@ -91,13 +93,39 @@ The accepted P3 live store now feeds a semantic presentation layer:
 - reconnect/replay reduction is idempotent by event sequence/activity identity;
 - compact/normal/detailed/diagnostic presentation profiles are supported;
 - deterministic wording uses Odoo localization semantics;
-- readable provider summaries use only bounded `summaryTextDelta`; raw/private reasoning is never projected.
+- readable provider summaries use only bounded `summaryTextDelta`; raw/private reasoning is never projected;
+- capability/result references may appear as compact browser-safe chips without becoming business authority.
 
-Capability/result references may appear as compact browser-safe chips without becoming business authority.
+This infrastructure does **not yet fully satisfy** `P5.8_SEMANTIC_ACTIVITY_UX.md`. In complex turns, normal mode can still expose or be dominated by capability lifecycle titles such as:
+
+```text
+Inspect Odoo write schema · sale.order
+Inspect Odoo query schema · res.partner
+Query Odoo records · res.partner
+Mutate multiple Odoo records · sale.order
+```
+
+The intended P5.8 behavior is a small coherent set of host-grounded semantic work items, for example conceptually:
+
+```text
+Analizando la petición
+Preparando 200 presupuestos demo
+  Consultando clientes existentes
+Creando presupuestos
+  <grounded progress when known>
+Verificando resultados
+  <grounded verified result summary>
+```
+
+The repair must introduce enough host-owned semantic grouping/context — e.g. semantic parent/group keys, operation/category, translated headline code + bounded args, grounded progress/result summaries — or an equivalent simpler contract. It must not group by string equality or let model prose fabricate progress.
+
+Diagnostic mode may retain technical detail. Normal mode must not be a capability lifecycle dump.
+
+This gap belongs to P5.8. It is not deferred to Phase 6 TaskPlan.
 
 ## 6. P5.8 interactive turn control
 
-The browser now treats the active conversation/turn as the control boundary.
+The browser treats the active conversation/turn as the control boundary.
 
 Composer behavior is:
 
@@ -154,7 +182,7 @@ The UI offers `Revertir cambios` only when the host declares a safe compensator 
 
 ## 8. P5.8 contextual navigation
 
-Supported public reference kinds are now:
+Supported public reference kinds are:
 
 ```text
 odoo_record
@@ -171,7 +199,7 @@ Discovery is not navigation authority. Every click is sent back to `/odoo_ai/v1/
 
 Navigation references are available both:
 
-- inside correlated semantic streaming activity;
+- inside correlated streaming activity;
 - as a structured `references` collection rendered below the final answer.
 
 A stale/revoked/deleted target fails closed with a discreet notice and never reaches `actionService`.
@@ -190,7 +218,7 @@ Accepted P5.1-P5.5 behavior remains authoritative:
 - one authoritative final Assistant message;
 - uncertain post-write outcomes are never blindly retried as effect-safe.
 
-P5.8 presentation or navigation failure cannot change business-effect success/authorization. Turn interventions cannot bypass capability validation/policy/approval/verification.
+P5.8 presentation/navigation failure cannot change business-effect success/authorization. Turn interventions cannot bypass capability validation/policy/approval/verification.
 
 ## 10. Retrieval/RAG and technical operations
 
@@ -210,7 +238,19 @@ general web search
 
 Later privileged technical operations require explicit capabilities and privilege-boundary validation.
 
-## 11. Formal roadmap state
+## 11. Executed P5.8 validation and current roadmap state
+
+Historical automated P5.8 evidence exists for checkpoint `0b0ac2d2c8fb25523c2e6e9c3808d3c702cede80`:
+
+```text
+P5.8-DETERMINISTIC-REGRESSION  PASS (242 dependency-light tests plus JS/static checks)
+P5.8-FULL-ADDON-REGRESSION    PASS (182 selected tests)
+P5.8-HOOT-ADDON               PASS (139 tests)
+```
+
+That evidence remains valid for the tested checkpoint, but the tests were not strong enough to reject the now-observed normal-mode technical lifecycle dump. A semantic-work-item repair is therefore required and the affected automated gates must be rerun on the repaired SHA.
+
+Formal roadmap state:
 
 ```text
 P0 COMPLETE
@@ -226,16 +266,17 @@ P5 IN_PROGRESS
   P5.5 COMPLETE
   P5.6 COMPLETE
   P5.7 COMPLETE
-  P5.8 REAL_ENV_VALIDATION_REQUIRED
+  P5.8 IN_PROGRESS
 P6+ NOT ELIGIBLE
 ```
 
-P5.8 prepared validation chain includes:
+Required P5.8 order now:
 
 ```text
-P5.8-DETERMINISTIC-REGRESSION
-P5.8-FULL-ADDON-REGRESSION
-P5.8-HOOT-ADDON
+semantic work-item repair
+P5.8-DETERMINISTIC-REGRESSION on repaired SHA
+P5.8-FULL-ADDON-REGRESSION on repaired SHA
+P5.8-HOOT-ADDON on repaired SHA
 P5-REAL-SEMANTIC-ACTIVITY
 P5-REAL-ACTIVITY-DEDUPE
 P5-REAL-REASONING-SUMMARY
@@ -251,4 +292,6 @@ P5-REAL-TURN-EFFECT-BOUNDARY-RACE
 P5-REAL-COMPENSATION
 ```
 
-None of these new P5.8 gates is recorded PASS by this GitHub-only implementation run. Execute `research/P5.8_VALIDATION_RUNBOOK.md` on exact current `main`; a failed HARD gate remains P5.8 repair work, and only a reviewed green chain can make Phase 6 eligible.
+The stronger `P5-REAL-SEMANTIC-ACTIVITY` gate explicitly fails a normal-mode chronological capability dump, duplicate lifecycle rows, repeated raw tool titles, generic phase-only activity without meaningful operation context, invented progress or private reasoning.
+
+Only a reviewed green repaired-candidate chain makes Phase 6 eligible.
