@@ -130,11 +130,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
 
         def persist(items):
             try:
-                persist_working_transcript(
-                    turn,
-                    lease_token,
-                    items,
-                )
+                persist_working_transcript(turn, lease_token, items)
             except RuntimeError as error:
                 raise EmbeddedRuntimeError(str(error)) from error
 
@@ -173,6 +169,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 )
             )
             _ensure_turn_control_current(turn)
+            turn._capture_public_navigation_references(service.working_items)
         except Exception:
             event_sink(
                 "reasoning.failed",
@@ -343,6 +340,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 conversation_summary=self._conversation_summary(turn),
             )
             _ensure_turn_control_current(turn)
+            turn._capture_public_navigation_references(service.working_items)
         except Exception:
             context.emit(
                 "reasoning.failed",
