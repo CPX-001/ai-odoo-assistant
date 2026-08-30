@@ -22,6 +22,7 @@ function activity(sequence = 1) {
         status: "running",
         label: "Query Odoo records",
         resource: { model: "res.partner", record_ids: [], display_names: [] },
+        references: [],
         capability: "odoo.query_records",
         progress: null,
         diagnostic_code: null,
