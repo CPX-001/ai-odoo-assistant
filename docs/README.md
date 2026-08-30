@@ -15,14 +15,15 @@ If you only read three documents, read:
 | Understand the project from outside development | [`../README.md`](../README.md) | [`PRODUCT_VISION.md`](PRODUCT_VISION.md), component READMEs |
 | Know what actually works today | [`CURRENT_STATE.md`](CURRENT_STATE.md) | [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) |
 | Understand the runtime | [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md) |
+| Work on TaskPlan / multi-step effects | [`research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md`](research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md) | [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md), active P6 cursor |
 | Add or change a capability | [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) | [`../addons/odoo_ai_assistant/runtime/capabilities/README.md`](../addons/odoo_ai_assistant/runtime/capabilities/README.md) |
 | Work on the agent/provider loop | [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md) | [`adr/ADR-019-host-owned-iterative-decision-loop.md`](adr/ADR-019-host-owned-iterative-decision-loop.md) |
 | Work on writes/actions | [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`adr/ADR-014-unified-host-authorized-agent.md`](adr/ADR-014-unified-host-authorized-agent.md) |
-| Work on semantic activity/reasoning UX | [`research/P5.8_IMPLEMENTATION.md`](research/P5.8_IMPLEMENTATION.md) | [`research/P5.8_SEMANTIC_ACTIVITY_UX.md`](research/P5.8_SEMANTIC_ACTIVITY_UX.md), [`research/P5.8_VALIDATION_RUNBOOK.md`](research/P5.8_VALIDATION_RUNBOOK.md) |
+| Understand accepted semantic activity/control UX | [`research/P5.8_IMPLEMENTATION.md`](research/P5.8_IMPLEMENTATION.md) | [`research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md`](research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md) |
 | Configure/deploy Odoo + Codex | [`DEPLOYMENT_CONFIG.md`](DEPLOYMENT_CONFIG.md) | [`codex/README.md`](codex/README.md) |
 | Understand query behavior | [`QUERY_CONTRACT.md`](QUERY_CONTRACT.md) | capability provider README |
-| Follow current roadmap execution | [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) | active playbook/slice referenced there |
-| Validate in a real environment | [`research/REAL_ENV_VALIDATION_PROTOCOL.md`](research/REAL_ENV_VALIDATION_PROTOCOL.md) | relevant validation runbook/evidence folder |
+| Follow current roadmap execution | [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) | active record referenced there |
+| Validate in a real environment | [`research/REAL_ENV_VALIDATION_PROTOCOL.md`](research/REAL_ENV_VALIDATION_PROTOCOL.md) | relevant runbook/evidence folder |
 | Understand why a major decision was made | [`adr/README.md`](adr/README.md) | the accepted ADR |
 | Explore historical design | [`HISTORICAL_DOCUMENTATION.md`](HISTORICAL_DOCUMENTATION.md) | archive/source-of-truth material |
 
@@ -32,29 +33,43 @@ If you only read three documents, read:
 flowchart TB
     UI[Web client / future surfaces] --> INV[Invocation + screen/user context]
     INV --> TURN[Odoo conversation + durable turn]
-    TURN --> HOST[Host-owned agent loop]
-    HOST <--> MODEL[Reasoning provider]
+    TURN --> HOST[Provider-neutral host agent loop]
+    HOST <--> MODEL[Current provider adapter: Codex]
+    HOST --> TASK[TaskPlan: visible progress, no authority]
     HOST --> CAT[Effective capability catalog]
     CAT --> EXEC[CapabilityExecutor]
     EXEC --> ORM[Odoo ORM / bounded host service]
-    HOST --> LIVE[Sanitized semantic activity + answer/reasoning presentation channels]
-    LIVE --> UI
-    HOST --> EFFECT[Preview → policy/approval → execute → verify]
+    HOST --> EFFECT[Typed EffectPlan → preview → policy/approval → execute → verify]
     EFFECT --> ORM
+    HOST --> LIVE[Semantic activity + answer/reasoning presentation]
+    TASK --> UI
+    LIVE --> UI
 ```
 
-Today this is an embedded Odoo runtime using Codex as the product reasoning provider. General RAG, first-class Skills/Bundles, external `CapabilityProvider`, MCP, automations/AI fields and governed memory are later layers, not current claims.
+Today this is an embedded Odoo runtime using Codex as the concrete reasoning provider. The core `NextDecisionEngine`, TaskPlan/EffectPlan semantics, capability framework, budgets and effect authority are provider-neutral.
+
+General RAG, first-class Skills/Bundles, external `CapabilityProvider`, MCP, automations/AI fields, multiple production provider adapters and governed memory are later layers, not current claims.
 
 ## Current vs target notation
 
 Documentation should make lifecycle status obvious:
 
 - **Current / implemented:** code exists in the supported runtime.
-- **Implemented, validation pending:** code is in `main` but a required acceptance gate is still open.
+- **Implemented candidate / validation pending:** code is on `main` but the required checkpoint/acceptance gate is still open.
 - **Target / roadmap:** accepted product direction but not an implementation claim.
 - **Historical / retired:** kept for lineage/evidence only.
 
-P0-P4 and P5.1-P5.7 are accepted through `074a71c`. P5.8 is implemented and currently `REAL_ENV_VALIDATION_REQUIRED`; it is not yet accepted and Phase 6 is not eligible. The exact live cursor is always [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
+Current formal state:
+
+```text
+P0-P5 COMPLETE
+P6 IN_PROGRESS
+  P6.1 TaskPlan vs EffectPlan        IMPLEMENTED_CANDIDATE
+  P6.3 bounded multi-step EffectPlan IMPLEMENTED_CANDIDATE
+  P6.5 separate budgets              FOUNDATION_IMPLEMENTED_CANDIDATE
+```
+
+No P6 HARD real gate is recorded PASS yet. The exact live cursor is always [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
 
 ## Documentation layers
 
@@ -62,15 +77,14 @@ P0-P4 and P5.1-P5.7 are accepted through `074a71c`. P5.8 is implemented and curr
 
 - [`PRODUCT_VISION.md`](PRODUCT_VISION.md) — intended user experience and product boundaries.
 - [`CURRENT_STATE.md`](CURRENT_STATE.md) — what is currently implemented, accepted or still missing.
-- [`CHAT_PRODUCT_FLOW.md`](CHAT_PRODUCT_FLOW.md) — chat-facing flow and interaction contracts where applicable.
-- [`research/P5.8_SEMANTIC_ACTIVITY_UX.md`](research/P5.8_SEMANTIC_ACTIVITY_UX.md) — the pre-implementation target/product specification for semantic progress, readable reasoning summaries, typed references, configurable detail, batch disclosure and Odoo-language localization.
-- [`research/P5.8_IMPLEMENTATION.md`](research/P5.8_IMPLEMENTATION.md) — what the current P5.8 code actually implements, including deliberate simplifications from the target design.
-- [`research/P5.8_VALIDATION_RUNBOOK.md`](research/P5.8_VALIDATION_RUNBOOK.md) — the required local/Odoo/HOOT/real gate chain before P5.8 can become COMPLETE.
+- [`CHAT_PRODUCT_FLOW.md`](CHAT_PRODUCT_FLOW.md) — chat-facing flow and interaction contracts.
+- [`research/P5.8_IMPLEMENTATION.md`](research/P5.8_IMPLEMENTATION.md) — accepted semantic activity/control/navigation/compensation implementation record.
+- [`research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md`](research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md) — current TaskPlan/multi-step/budget implementation candidate and validation boundary.
 
 ### Architecture and subsystem contracts
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — current system architecture.
-- [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md) — agent runtime details.
+- [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md) — active agent/runtime contract.
 - [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) — atomic capabilities, registry, executor and target extension model.
 - [`QUERY_CONTRACT.md`](QUERY_CONTRACT.md) — bounded query semantics.
 - [`KNOWLEDGE_INDEX.md`](KNOWLEDGE_INDEX.md) — knowledge/index direction; check `CURRENT_STATE.md` before treating it as active runtime.
@@ -86,40 +100,38 @@ P0-P4 and P5.1-P5.7 are accepted through `074a71c`. P5.8 is implemented and curr
 
 ### Architecture decisions
 
-[`adr/`](adr/) contains accepted decisions. The most important current foundation is:
+[`adr/`](adr/) contains accepted decisions. Important current foundation:
 
 ```text
 ADR-016  Embedded Odoo runtime / one operational application
-ADR-017  CapabilityDefinition as the atomic capability contract
+ADR-017  CapabilityDefinition as atomic capability contract
 ADR-018  Superseded database-scoped Codex activation
 ADR-019  Host-owned iterative decision loop
 ADR-020  Host primary Codex session shared by the installation
 ```
 
-An ADR explains a decision and its trade-offs; it does not replace the current code if implementation later evolves under a newer accepted ADR.
+An ADR explains a decision and trade-offs; current code may evolve under the same invariant or a newer accepted ADR.
 
 ### Research, roadmap and evidence
 
-[`research/`](research/) contains execution playbooks, phase/slice records and named acceptance evidence. These files are intentionally more procedural than the user-facing architecture docs.
+[`research/`](research/) contains execution playbooks, phase records and named acceptance evidence. These files are intentionally more procedural than the current architecture docs.
 
-Always use [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) as the active roadmap cursor rather than assuming a phase from an older playbook.
+Always use [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) as the active roadmap cursor rather than inferring phase state from an older playbook.
 
 ## Component READMEs
 
-The addon is documented locally so a contributor can understand one area without reverse-engineering the whole repository.
-
 ```text
 addons/odoo_ai_assistant/
-├── README.md                    addon overview / lifecycle
-├── controllers/README.md        HTTP/RPC boundary
-├── models/README.md             durable Odoo state
-├── services/README.md           small application services
-├── runtime/README.md            embedded AI runtime
-│   ├── agent/README.md          host-owned reasoning loop
-│   └── capabilities/README.md   capability host
-│       ├── adapters/README.md   provider/transport projections
-│       └── providers/README.md  current executable capabilities
-├── static/src/README.md         frontend architecture
+├── README.md
+├── controllers/README.md
+├── models/README.md
+├── services/README.md
+├── runtime/README.md
+│   ├── agent/README.md
+│   └── capabilities/README.md
+│       ├── adapters/README.md
+│       └── providers/README.md
+├── static/src/README.md
 │   ├── components/README.md
 │   └── services/README.md
 ├── security/README.md
@@ -132,10 +144,10 @@ addons/odoo_ai_assistant/
 
 ## Source of truth
 
-When two sources disagree, normally prefer:
+When sources disagree, normally prefer:
 
 1. current code and accepted ADRs;
-2. `CURRENT_STATE.md`, `ARCHITECTURE.md` and subsystem contracts;
+2. `CURRENT_STATE.md`, `ARCHITECTURE.md` and current subsystem contracts;
 3. current tests and named real-environment evidence;
 4. active research/playbooks;
 5. dated reports and Project reference documents;
@@ -143,16 +155,16 @@ When two sources disagree, normally prefer:
 
 External projects and research are design references, not requirements.
 
-## How to keep the docs useful
+## Keeping docs useful
 
 When changing a subsystem:
 
-- update the **nearest component README** if its responsibility, entry point or extension method changed;
-- update `CURRENT_STATE.md` when the project can or cannot do something materially different;
-- update `ARCHITECTURE.md` when a cross-component boundary changes;
-- add/update an ADR when authority, deployment, persistence or a major architecture invariant changes;
-- update `research/EXECUTION_STATE.md` only as part of the governed roadmap/validation process;
+- update the nearest component README if its responsibility or extension boundary changed;
+- update `CURRENT_STATE.md` when the product can or cannot do something materially different;
+- update `ARCHITECTURE.md` for cross-component boundary changes;
+- add/update an ADR when authority, deployment, persistence or a major invariant changes;
+- update `research/EXECUTION_STATE.md` as part of governed roadmap/validation work;
 - do not rewrite history to make an old report look current;
-- mark target behavior as target until the relevant tests/real gates are accepted.
+- mark target behavior as target until its tests/real gates are accepted.
 
-The aim is for a new reader to answer four questions quickly: **what is this piece for, how does it connect, how do I extend/replace it, and what must never be bypassed?**
+A new reader should be able to answer quickly: **what is this piece for, how does it connect, how do I extend/replace it, and what must never be bypassed?**
