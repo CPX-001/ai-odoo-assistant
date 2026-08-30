@@ -1,4 +1,4 @@
-"""Dependency-light closed contracts for Phase 3 public Assistant activity."""
+"""Dependency-light closed contracts for Phase 3/P5.8 public Assistant activity."""
 
 from __future__ import annotations
 
@@ -52,6 +52,7 @@ PUBLIC_EVENT_STATUSES = frozenset(
 
 _TURN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$")
 _MODEL_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
+_FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _CAPABILITY_RE = _MODEL_RE
 _ACTIVITY_ID_RE = re.compile(r"^activity:v[1-9][0-9]*:[0-9a-f]{32}$")
 _DIAGNOSTIC_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
@@ -61,6 +62,10 @@ _OCCURRED_AT_RE = re.compile(
 _MAX_LABEL = 240
 _MAX_RESOURCE_RECORDS = 50
 _MAX_DISPLAY_NAME = 160
+_MAX_NAVIGATION_REFERENCES = 12
+_NAVIGATION_KINDS = frozenset(
+    {"odoo_model", "odoo_action", "odoo_view", "odoo_menu", "odoo_setting"}
+)
 
 
 class PublicTurnEventError(RuntimeError):
@@ -69,11 +74,11 @@ class PublicTurnEventError(RuntimeError):
         self.code = code
 
 
-def _one_line(value: object, *, maximum: int) -> str:
+def _one_line(value: object, *, maximum: int, allow_empty: bool = False) -> str:
     if not isinstance(value, str):
         raise PublicTurnEventError()
     normalized = " ".join(value.split())
-    if not 1 <= len(normalized) <= maximum or "\x00" in normalized:
+    if (not normalized and not allow_empty) or len(normalized) > maximum or "\x00" in normalized:
         raise PublicTurnEventError()
     return normalized
 
@@ -121,6 +126,74 @@ def _resource(value: object) -> JsonObject | None:
     }
 
 
+def _navigation_reference(value: object) -> JsonObject:
+    if not isinstance(value, dict):
+        raise PublicTurnEventError()
+    kind = value.get("kind")
+    if kind not in _NAVIGATION_KINDS:
+        raise PublicTurnEventError()
+    label = _one_line(value.get("label"), maximum=160)
+    description = _one_line(value.get("description"), maximum=240, allow_empty=True)
+    if kind == "odoo_model":
+        expected = {"kind", "label", "description", "model"}
+    elif kind == "odoo_action":
+        expected = {"kind", "label", "description", "model", "action_id"}
+    elif kind == "odoo_view":
+        expected = {"kind", "label", "description", "model", "view_id"}
+    elif kind == "odoo_menu":
+        expected = {
+            "kind",
+            "label",
+            "description",
+            "model",
+            "action_id",
+            "menu_id",
+        }
+    else:
+        expected = {
+            "kind",
+            "label",
+            "description",
+            "model",
+            "action_id",
+            "setting_field",
+        }
+    if set(value) != expected:
+        raise PublicTurnEventError()
+    model = value.get("model")
+    if not isinstance(model, str) or _MODEL_RE.fullmatch(model) is None:
+        raise PublicTurnEventError()
+    result: JsonObject = {
+        "kind": kind,
+        "label": label,
+        "description": description,
+        "model": model,
+    }
+    for key in ("action_id", "view_id", "menu_id"):
+        if key not in value:
+            continue
+        item = value.get(key)
+        if type(item) is not int or item <= 0:
+            raise PublicTurnEventError()
+        result[key] = item
+    if "setting_field" in value:
+        field = value.get("setting_field")
+        if not isinstance(field, str) or _FIELD_RE.fullmatch(field) is None:
+            raise PublicTurnEventError()
+        result["setting_field"] = field
+    if kind == "odoo_setting" and model != "res.config.settings":
+        raise PublicTurnEventError()
+    return result
+
+
+def _references(value: object) -> tuple[JsonObject, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)) or len(value) > _MAX_NAVIGATION_REFERENCES:
+        raise PublicTurnEventError()
+    return tuple(_navigation_reference(item) for item in value)
+
+
 @dataclass(frozen=True, slots=True)
 class PublicTurnEvent:
     sequence: int
@@ -135,6 +208,7 @@ class PublicTurnEvent:
     diagnostic_code: str | None
     occurred_at: str
     activity_id: str | None = None
+    references: tuple[JsonObject, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.sequence) is not int or self.sequence <= 0:
@@ -149,6 +223,7 @@ class PublicTurnEvent:
             raise PublicTurnEventError()
         object.__setattr__(self, "label", _one_line(self.label, maximum=_MAX_LABEL))
         object.__setattr__(self, "resource", _resource(self.resource))
+        object.__setattr__(self, "references", _references(self.references))
         if self.capability is not None and (
             not isinstance(self.capability, str)
             or _CAPABILITY_RE.fullmatch(self.capability) is None
@@ -215,6 +290,7 @@ def parse_public_turn_event(value: object) -> PublicTurnEvent:
         "diagnostic_code",
         "occurred_at",
         "activity_id",
+        "references",
     }
     if not isinstance(value, dict) or set(value) != keys:
         raise PublicTurnEventError()
@@ -247,6 +323,7 @@ def public_turn_event_payload(event: PublicTurnEvent) -> JsonObject:
         "diagnostic_code": event.diagnostic_code,
         "occurred_at": event.occurred_at,
         "activity_id": event.activity_id,
+        "references": [dict(item) for item in event.references],
     }
 
 
