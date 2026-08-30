@@ -78,7 +78,9 @@ Rules:
 - `progress` cannot silently change the plan structure;
 - structural `replan` requires new host-observed evidence plus a short public revision summary;
 - live turn status exposes the latest validated TaskPlan separately from effect approval;
-- terminal/approval response retains the older accepted TaskPlan browser shape for compatibility.
+- terminal/approval responses accept both legacy and current TaskPlan payloads;
+- browser reconciliation chooses the newest validated revision and lets the authoritative final response win an equal-revision race;
+- one final status refresh closes the completion edge where the last TaskPlan revision is persisted immediately before terminal state.
 
 Legacy persisted TaskPlans and execution-settings snapshot formats remain readable.
 
@@ -208,7 +210,7 @@ The earlier P6.1/P6.3/P6.5 focused deterministic checkpoint was recorded at:
 research/evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md
 ```
 
-Later P6.2/P6.4/P6.6 code and tests are committed but their expensive final regression/real paths have not been executed in this environment.
+Later P6.2/P6.4/P6.6 code and tests are committed but their expensive final regression/real paths have not been executed in this environment. The final TaskPlan terminal/live reconciliation fix also has committed HOOT coverage (`phase6_task_plan_final_contract.test.js`) but is not claimed executed.
 
 Accumulated Phase-6 real validation debt is:
 

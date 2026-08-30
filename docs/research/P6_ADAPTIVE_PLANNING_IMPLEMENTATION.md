@@ -125,7 +125,7 @@ This does not make TaskPlan executable. The normal capability catalog, validatio
 
 A direct final answer is still allowed so the host does not force fake planning for a response that genuinely needs no capability/effect work.
 
-## 7. Live TaskPlan UX
+## 7. Live and terminal TaskPlan UX
 
 The browser now has a planning picker beside the existing composer controls:
 
@@ -137,7 +137,7 @@ Auto
 
 The running turn status projects only the latest validated TaskPlan. The frontend polls this bounded public projection while the active turn runs and renders the plan separately from effect approval.
 
-For a structural replan the running view can show:
+For a structural replan the view can show:
 
 ```text
 Plan actualizado: <revision_summary>
@@ -145,7 +145,7 @@ Plan actualizado: <revision_summary>
 
 No capability arguments/results, prompts or private provider reasoning are exposed through this path.
 
-Terminal/approval TaskPlan responses retain the previously accepted browser shape for compatibility; richer revision metadata is a live status projection.
+Terminal/approval responses accept both legacy TaskPlan payloads and the current `revision_kind` / `revision_summary` contract. The UI normalizes both forms and reconciles live vs terminal state by revision: the newer revision wins, while the authoritative final response wins an equal-revision race. A final status refresh closes the case where the last TaskPlan revision is persisted immediately before turn completion.
 
 ## 8. Coverage committed
 
@@ -156,9 +156,10 @@ tests/e2e/test_phase6_adaptive_planning_contract.py
 addons/odoo_ai_assistant/tests/test_planning_preferences.py
 addons/odoo_ai_assistant/tests/test_turn_settings_snapshot.py
 addons/odoo_ai_assistant/static/tests/assistant_planning_service.test.js
+addons/odoo_ai_assistant/static/tests/phase6_task_plan_final_contract.test.js
 ```
 
-The contracts cover adaptive/deliberate/auto selection, no authority escalation, deliberate TaskPlan requirement, progress-vs-replan structure, evidence-required structural replan, legacy TaskPlan compatibility, immutable turn snapshot and bounded live browser replan data.
+The contracts cover adaptive/deliberate/auto selection, no authority escalation, deliberate TaskPlan requirement, progress-vs-replan structure, evidence-required structural replan, legacy TaskPlan compatibility, immutable turn snapshot, bounded live browser replan data and terminal/live revision reconciliation.
 
 These committed tests are not evidence of execution by themselves.
 

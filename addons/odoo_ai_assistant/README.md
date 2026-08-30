@@ -7,9 +7,9 @@ The manifest is the authoritative source for the current addon version, dependen
 ## What the addon owns
 
 - the browser-facing Assistant product;
-- conversations, turns, events, approvals/effect state and preferences in Odoo models;
+- conversations, turns, events, approvals/effect state, EffectJournal and preferences in Odoo models;
 - durable background execution through Odoo cron;
-- the host-owned agent loop;
+- the host-owned agent loop and planning strategy;
 - the capability registry/executor;
 - Codex process/account lifecycle;
 - Settings/Diagnostics integration;
@@ -64,7 +64,7 @@ flowchart TB
 
 ### 1. Browser submits
 
-The frontend sends a short request to Odoo with the message, conversation identity and bounded screen context. Odoo authenticates the user and persists a durable turn.
+The frontend sends a short request to Odoo with the message, conversation identity and bounded screen context. Odoo authenticates the user and persists a durable turn plus immutable turn settings.
 
 ### 2. Odoo schedules
 
@@ -72,19 +72,19 @@ The turn is queued and native cron work is triggered. HTTP is no longer tied to 
 
 ### 3. Host-owned agent loop runs
 
-The worker reconstructs the effective Odoo user/company context, the current capability catalog and the provider settings captured for the turn. The reasoning provider returns one untrusted `NextDecision` at a time.
+The worker reconstructs the effective Odoo user/company context, current capability catalog, captured planning strategy and provider settings. The reasoning provider returns one untrusted `NextDecision` at a time.
 
-### 4. Capabilities are resolved by the host
+### 4. Planning and capabilities stay separate
 
-A requested read or action is resolved from the effective `CapabilityRegistry`, validated and executed through `CapabilityExecutor`. Business operations use the effective Odoo environment and `su=False`.
+A TaskPlan may expose bounded user-visible progress and evidence-driven replans, but it carries no execution authority. Requested reads/actions are resolved from the effective `CapabilityRegistry`, validated and executed through the appropriate host path. Business operations use the effective Odoo environment and `su=False`.
 
 ### 5. Effects use a separate safety lifecycle
 
-Effect proposals are prepared and previewed before policy/approval, then revalidated, executed and verified. Provider text never grants write authority.
+The product host may accumulate up to five typed effect steps. They are prepared and previewed before policy/approval, then revalidated, executed by host-derived recovery unit and verified. Provider text never grants write authority. Recent bounded effect evidence is recorded in the Odoo-owned EffectJournal.
 
 ### 6. UI observes durable/public state
 
-The browser polls short status/live endpoints. Public activity and provisional answer deltas are sanitized projections, separate from the private working transcript and final authoritative result.
+The browser polls short status/live endpoints. Public activity, live TaskPlan and provisional answer/reasoning deltas are sanitized projections, separate from the private working transcript and final authoritative result.
 
 ## Installation assumptions
 
@@ -122,8 +122,9 @@ Replacing Odoo persistence/authority or reintroducing an operational sidecar is 
 
 ## Current caveats
 
-- Phase 5.1 per-conversation frontend scopes are implemented but still require their acceptance gates.
-- One canonical effect proposal/step is supported; multi-step effect planning is later roadmap work.
+- Phase 5 is accepted; Phase 6 P6.1-P6.6 is implemented as a candidate but still awaits the consolidated periodic/full + named real-product validation batch.
+- EffectPlan is bounded to five typed steps; current recovery modes are `odoo_atomic`, `segmented` and `external`, all selected from trusted host/capability metadata rather than model text.
+- The EffectJournal is short-lived recovery/inspection evidence, not a backup or general audit warehouse.
 - General RAG/Knowledge and external capability providers are not yet active product subsystems.
 - `controllers/internal_tools.py` retains a bounded machine-authenticated inventory callback from earlier source-scanner lineage. It is not the normal product path and should not be copied for new browser/product features.
 

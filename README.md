@@ -4,7 +4,7 @@
 
 The goal is not to bolt a chatbot onto Odoo. The goal is to make an assistant that can understand the real installation, inspect and query Odoo safely, propose controlled changes, explain what it is doing, and grow through reusable capabilities without turning the model into the security boundary.
 
-> **Current state (2026-08-29):** the embedded runtime, host-owned agent loop, safe effect lifecycle, public activity, failure UX and provisional answer streaming are established. Phase 5 is in progress. P5.1 turn-scoped multi-chat, P5.2 scheduler concurrency/backpressure and P5.3 stable settings snapshot are accepted; P5.4 final activity/answer/failure UX is ready. See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) and [`docs/research/EXECUTION_STATE.md`](docs/research/EXECUTION_STATE.md).
+> **Current state (2026-08-30):** Phase 5 is fully accepted. Phase 6 is implemented as a candidate across P6.1-P6.6: provider-neutral TaskPlan planning modes/replans, bounded multi-step EffectPlan, recovery units, separate budget families and a short-lived EffectJournal. Phase 6 is **not accepted yet**; one consolidated periodic full regression plus the accumulated real-product gates remains the blocker before Phase 7. See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) and [`docs/research/EXECUTION_STATE.md`](docs/research/EXECUTION_STATE.md).
 
 ## What this project is
 
@@ -57,16 +57,18 @@ sequenceDiagram
     Odoo-->>Browser: turn_id
     Odoo->>Cron: Trigger queued work
     Cron->>Agent: Claim turn
-    loop Until final answer / effect proposal / failure
+    loop Until final answer / effect plan / failure
         Agent->>Model: Context + effective capabilities + working state
         Model-->>Agent: One NextDecision
-        alt Reasoning capability
+        alt TaskPlan update
+            Agent-->>Odoo: Persist bounded visible planning progress
+        else Reasoning capability
             Agent->>Cap: Validate + execute bounded call
             Cap-->>Agent: Typed result/error
         else Final answer
             Agent-->>Odoo: Persist final result
         else Effect proposal
-            Agent-->>Odoo: Prepare canonical plan
+            Agent-->>Odoo: Accumulate bounded typed EffectPlan step
         end
     end
     Odoo-->>Browser: Public progress / provisional answer / final state
@@ -80,27 +82,27 @@ Business changes follow a stronger lifecycle than normal read-only reasoning:
 
 ```mermaid
 flowchart LR
-    A[Model proposes effect] --> B[Resolve CapabilityDefinition]
-    B --> C[Prepare]
+    A[Model proposes typed effects] --> B[Resolve CapabilityDefinition]
+    B --> C[Prepare all bounded steps]
     C --> D[Preview + preconditions]
     D --> E[Policy]
     E --> F{Approval required?}
     F -->|yes| G[User approval bound to proposal]
     F -->|no| H[Revalidate]
     G --> H
-    H --> I[Durable write barrier]
+    H --> I[Recovery-unit checkpoint / write barrier]
     I --> J[Execute as effective user<br/>su=False]
-    J --> K[Verify]
-    K --> L[Receipt / recovery state]
+    J --> K[Verify each step]
+    K --> L[Receipt + EffectJournal / recovery state]
 ```
 
-A write that becomes ambiguous after the write barrier is **not automatically retried**. The runtime records effect certainty and recovery state instead of guessing.
+A write that becomes ambiguous after an execution checkpoint is **not automatically retried**. The runtime records effect certainty and recovery state instead of guessing.
 
 ## The capability model
 
 `CapabilityDefinition` is the atomic executable contract. A definition describes one operation: schemas, risk/effect metadata, availability constraints, budgets and the trusted handler.
 
-Current core providers:
+Current core providers include:
 
 | Provider | Purpose |
 |---|---|
@@ -108,6 +110,8 @@ Current core providers:
 | `odoo_actions` | explicit supported business effects |
 | `odoo_batch` | bounded collection/batch effects through the same authority path |
 | `odoo_runtime` | narrow runtime facts; not a shell/filesystem back door |
+| `odoo_navigation` | bounded contextual Odoo navigation references |
+| `odoo_compensations` / `odoo_unarchive` | HOST-only safe compensation support for eligible verified effects |
 
 The long-term composition model is deliberately layered **above** the atomic definition:
 
@@ -131,11 +135,11 @@ flowchart TB
 | Area | Current | Direction |
 |---|---|---|
 | Deployment | Embedded Odoo addon + ephemeral Codex | Keep Odoo as operational authority |
-| Agent loop | Host-owned iterative `NextDecision` loop | Richer planning/continuity without a rigid intent router |
-| Effects | One canonical effect proposal/step | Multi-step typed `EffectPlan` |
-| Frontend | Chat, history, public activity, answer streaming, accepted P5.1/P5.2 multi-chat scheduling and accepted P5.3 per-turn settings snapshot | Richer final UX and durable continuity |
+| Agent loop | Host-owned iterative `NextDecision` loop with TaskPlan strategy | Richer context/evidence and capability breadth without a rigid intent router |
+| Effects | Bounded typed EffectPlan up to 5 steps, host-derived recovery units, verification and short-lived EffectJournal | Validate the candidate and extend typed effect families/external recovery only behind explicit contracts |
+| Frontend | Durable multi-chat, activity/answer/reasoning projection, planning selector, live TaskPlan, approval/recovery/navigation UX | Continue product polish and future evidence/knowledge surfaces |
 | Capabilities | Core auto-discovered definitions inside this addon | Trusted addon providers + Skills/Bundles + progressive disclosure |
-| Context | Screen context + runtime Odoo context | Extensible per-model/context providers |
+| Context | Screen/conversation/runtime Odoo context with immutable turn settings | Extensible per-model/context providers |
 | Evidence/RAG | No general active RAG layer | Source/runtime/log/document/web evidence routed by type |
 | Knowledge | Not a complete product subsystem yet | Company knowledge + hybrid retrieval + provenance |
 | MCP/automations/AI fields | Not product surfaces yet | Thin consumers of the same capability/policy host |
@@ -173,7 +177,7 @@ The supported baseline is Odoo 18 Community.
 2. Update Apps and install **Odoo AI Assistant**.
 3. Ensure Odoo cron processing is enabled; long turns depend on native cron workers/threads.
 4. Open Odoo Settings and connect the Codex runtime account.
-5. Configure the assistant model/autonomy policy as appropriate.
+5. Configure the assistant model, reasoning effort, planning mode and autonomy policy as appropriate.
 6. Open the Assistant from the web client and submit a turn.
 
 The Codex executable is a host-level dependency. The addon discovers it from `PATH` or the configured override; it does not download or bundle the binary by default.

@@ -13,7 +13,7 @@ Odoo controllers/services
     |
     +--> conversation/message persistence
     +--> screen-context validation
-    +--> account/model/policy/settings snapshot
+    +--> account/model/reasoning/planning/policy settings snapshot
     v
 odoo.ai.turn (queued)
     |
@@ -23,14 +23,16 @@ native ir.cron + lease claim
     v
 AgentTurnService / host loop
     |
+    +--> immutable planning strategy
     +--> effective CapabilityRegistry
-    +--> Codex NextDecision
-    +--> host capability execution
+    +--> provider-neutral NextDecision (Codex today)
+    +--> TaskPlan progress / host capability execution
     +--> semantic live events / answer deltas
     v
-prepare / approval / execute / verify / failure/recovery
+EffectPlan prepare / approval / recovery-unit execute / verify
     |
     +--> authoritative turn result
+    +--> EffectJournal / recovery state
     +--> structured navigation references
     v
 OWL observes Odoo status + live cursor
@@ -45,7 +47,7 @@ Submitting a new ordinary message remains a short Odoo request:
 1. validate caller/message/screen hint;
 2. locate/create owned conversation;
 3. persist user message;
-4. snapshot turn-relevant model/policy/company/context settings;
+4. snapshot turn-relevant model/reasoning/planning/policy/company/context settings;
 5. create durable queued `odoo.ai.turn`;
 6. trigger available native runner slots;
 7. return durable turn/conversation identity and state.
@@ -146,30 +148,52 @@ Provisional answer text already shown to the user is retained as an Assistant me
 
 An accepted Stop prevents a stale later final response from becoming authoritative.
 
-Stop after a write barrier is not a rollback. Already verified effects remain visible as completed actions and only remaining reasoning/work can stop.
+Stop after an effect checkpoint is not a rollback. Already verified durable effects remain visible as completed actions and only remaining reasoning/work can stop. A later recovery unit rechecks Stop/redirect before it can start.
 
-## 8. Effect ordering, approval and verification
+## 8. TaskPlan, effect ordering, approval and verification
 
 Natural-language intent is never direct authorization.
 
+A TaskPlan is public progress only:
+
 ```text
-model proposal
- -> host prepare/preview/preconditions
- -> current policy
- -> approval if required
- -> revalidate
- -> final turn-control check
- -> write barrier
- -> execute
- -> verify
- -> authoritative receipt / recovery
+goal
+revision / revision_kind / revision_summary
+bounded steps with title/state/dependencies
 ```
 
-The write-barrier race with Stop/correction is serialized host-side. Valid outcomes are either control-before-effect or effect-before-late-control; not “accepted correction plus stale plan effect”.
+It cannot contain executable capability arguments or approval authority. Planning modes are `adaptive`, `deliberate` and `auto`; the resolved strategy is captured per turn. In deliberate mode, an initial TaskPlan is required before capability/effect requests. A structural replan requires new host-observed evidence.
 
-Current implementation still supports one canonical effect step. Bounded multi-step TaskPlan/EffectPlan remains later work.
+Effectful work uses a separate bounded typed EffectPlan:
 
-## 9. Safe compensation
+```text
+model proposes typed step(s), one NextDecision at a time
+ -> host validates each CapabilityDefinition + arguments
+ -> accumulate ordered EffectPlan (max 5)
+ -> prepare/preview/preconditions for every step
+ -> current policy
+ -> approval if required
+ -> revalidate version/binding/preconditions
+ -> final turn-control check for the recovery unit
+ -> durable checkpoint / write barrier
+ -> execute as effective user
+ -> verify each step
+ -> authoritative receipt + EffectJournal / recovery state
+```
+
+The race with Stop/correction is serialized host-side. Valid outcomes are control-before-effect or effect-before-late-control; not “accepted correction plus stale plan effect”.
+
+Recovery-unit mode is trusted host/capability metadata, not model text:
+
+```text
+odoo_atomic  Odoo-local steps sharing one transactional recovery unit
+segmented    durable internal unit boundary before a later unit
+external     non-transactional/external unit whose interrupted outcome may be uncertain
+```
+
+A persisted in-flight unit is never blindly replayed.
+
+## 9. Safe compensation and recent effect journal
 
 P5.8 adds explicit host-side compensation for selected verified reversible operations. It is not a PostgreSQL transaction rollback.
 
@@ -185,7 +209,9 @@ After a successful verified effect, the host can declare compensation `available
 
 Before restoring state, Odoo revalidates current write permission/record rules and verifies the record still matches the previously verified post-effect state. A later modification by another user causes a conflict and is not overwritten. Only after the inverse write is re-read and verified does the UI report `Cambios revertidos`.
 
-## 10. Semantic public activity
+Phase 6 adds a short-lived Odoo-owned EffectJournal with bounded recovery/inspection evidence and classification. It is not a backup or general audit warehouse. Supported compensation marks matching reversible journal rows reverted after verification.
+
+## 10. Semantic public activity and live TaskPlan
 
 P3 browser-safe live persistence remains the transport/durability base. P5.8 reduces trusted lifecycle events into semantic work items correlated by host-generated `activity_id`.
 
@@ -194,6 +220,7 @@ The UI distinguishes:
 ```text
 private/raw reasoning                 never public
 readable provider reasoning summary   optional, bounded, advisory
+TaskPlan                              bounded public planning/progress
 semantic host work items              normal user-facing progress
 technical lifecycle/trace             diagnostic detail
 ```
@@ -202,21 +229,24 @@ A compact live line follows the latest meaningful step. Completed activity colla
 
 Readable provider summaries accept bounded `summaryTextDelta`; raw reasoning `textDelta` never enters public state.
 
+Running status separately projects the latest validated TaskPlan. The UI chooses the newest valid revision and prefers the authoritative final response on equal revisions, so a stale final live poll cannot hide the terminal plan.
+
 ## 11. Answer streaming
 
 Structured provisional answer streaming remains separate from activity.
 
-Conceptual browser channels are:
+Conceptual browser channels/surfaces are:
 
 ```text
 activity.event
+TaskPlan status projection
 answer.delta
 reasoning.summary.delta
 turn.final
 turn.failure
 ```
 
-Provisional prose is not authority. The final validated Odoo turn result reconciles it.
+Provisional prose is not authority. The final validated Odoo turn result reconciles it. After verified effects, the host may allow read-only post-effect reasoning so the provider synthesizes the natural final answer without receiving another PLAN opportunity.
 
 ## 12. Contextual navigation is a separate contract
 
@@ -283,7 +313,7 @@ The same design keeps streaming activity compact while preserving access to usef
 
 ## 16. Settings while a turn runs
 
-Turn-sensitive execution settings remain snapshots. A turn queued with model/policy X continues with X even if the user changes selectors for future turns.
+Turn-sensitive execution settings remain snapshots. A turn queued with model/reasoning/planning/policy X continues with X even if the user changes selectors for future turns.
 
 Presentation preferences may change display without changing current turn authority.
 
@@ -305,7 +335,8 @@ Structured distinctions remain visible:
 - timeout/cancellation;
 - safe effect-free retry;
 - failed verified effect;
-- uncertain/partial post-barrier effect;
+- transactional rollback vs uncertain external in-flight effect;
+- completed segmented unit vs later failed/unexecuted unit;
 - stale/recovery state;
 - intervention conflict/limit/budget;
 - navigation reference unavailable;
@@ -319,6 +350,6 @@ The chat should eventually invoke the same host contracts for JIT installation c
 
 MCP, automations, AI fields and launchers may reuse the same capabilities later with different effective catalogs/policies, but not independent authority stacks.
 
-Future reference kinds may include source/document/web evidence only when those entities can be grounded and revalidated safely. P5.8 does not invent unsupported reference authority.
+Future reference kinds may include source/document/web evidence only when those entities can be grounded and revalidated safely.
 
-See `PRODUCT_VISION.md`, `CAPABILITY_FRAMEWORK.md`, `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`, `research/P5.8_IMPLEMENTATION.md`, `research/P5.8_NAVIGATION_IMPLEMENTATION.md` and `research/P5.8_VALIDATION_RUNBOOK.md`.
+See `PRODUCT_VISION.md`, `CAPABILITY_FRAMEWORK.md`, `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`, `research/P5.8_IMPLEMENTATION.md`, `research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md`, `research/P6_EFFECT_RECOVERY_JOURNAL_IMPLEMENTATION.md`, `research/P6_ADAPTIVE_PLANNING_IMPLEMENTATION.md` and `research/PERIODIC_FULL_REGRESSION_RUNBOOK.md`.
