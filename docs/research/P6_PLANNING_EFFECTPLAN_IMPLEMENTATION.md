@@ -1,7 +1,7 @@
 # Phase 6 planning / bounded EffectPlan implementation
 
 Date: 2026-08-30  
-Status: **FOCUSED DETERMINISTIC CHECKPOINT GREEN — REAL VALIDATION REQUIRED**
+Status: **FOCUSED DETERMINISTIC CHECKPOINT GREEN — PERIODIC REAL VALIDATION DEBT**
 Scope: P6.1 + P6.3 + P6.5 foundation, with the smallest useful TaskPlan presentation layer  
 Prerequisite: accepted P5.8 lineage through `688f569d441a40a4637ad6a23f111e584e18c955`
 
@@ -222,27 +222,32 @@ The focused deterministic checkpoint passed on `1d6dc695f7fbb26a8d2bef578902d8ce
 
 ## 10. Validation boundary / next work
 
-The meaningful focused checkpoint below is green. P6.4/P6.6 remain blocked by the two named real gates, not by a full regression suite.
+The focused checkpoint is green. Broad and real-environment validation is now intentionally batched through `PERIODIC_FULL_REGRESSION_RUNBOOK.md` rather than forcing a complete expensive environment run after every coherent implementation slice.
 
-Minimum candidate validation should include:
+Development-time validation remains focused:
 
 ```text
-dependency-light Phase-6/agent contract tests
-focused Odoo tests:
-  test_canonical_plan_host_loop
-  test_codex_decision_adapter
-  test_post_effect_reasoning
-  relevant capability action/revalidation/compensation tests
-then only directly affected addon/browser tests not already covered above
+dependency-light tests for changed agent/runtime contracts
+focused Odoo tests for directly affected models/capabilities/effects
+focused HOOT/static tests for touched browser contracts
 ```
 
-This checkpoint does not require a full addon, HOOT/browser or repository regression. Under the repository test-scope rule, those broad suites run only if the user explicitly requests them or a later authoritative gate names them explicitly.
-
-After deterministic validation is green, run the real gates that this checkpoint can honestly exercise:
+Current accumulated periodic real validation debt:
 
 ```text
 P6-REAL-MULTISTEP
 P6-REAL-LOOP-BOUNDS
 ```
 
-`P6-REAL-REPLAN`, `P6-REAL-EFFECT-ATOMICITY`, `P6-REAL-SEGMENTED-RECOVERY` and `P6-REAL-EFFECT-JOURNAL` remain tied to later P6 work unless the gate definition is explicitly narrowed by a newer accepted record.
+Those gates are still unexecuted and therefore not PASS. Their pending status no longer blocks continued implementation of P6.2/P6.4/P6.6 by itself; it blocks acceptance claims for the relevant behavior and must be included in the next periodic full regression.
+
+As later P6 work lands, add applicable gates to the same periodic batch:
+
+```text
+P6-REAL-REPLAN
+P6-REAL-EFFECT-ATOMICITY
+P6-REAL-SEGMENTED-RECOVERY
+P6-REAL-EFFECT-JOURNAL
+```
+
+If a concrete authority/recovery ambiguity appears where further implementation would be unsafe or make later evidence meaningless, that specific issue may still require an immediate targeted hard gate. Otherwise accumulate the expensive validation debt and validate the then-current candidate in one periodic batch.
