@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 31
+State format: 32
 Updated: 2026-08-30
 
 Accepted foundation/runtime lineage:
@@ -42,12 +42,12 @@ active_slice: P5.8-semantic-activity-interactive-control-navigation-compensation
 active_slice_record: docs/research/P5.8_IMPLEMENTATION.md
 active_slice_state: REAL_ENV_VALIDATION_REQUIRED
 current_gate_type: HARD
-blocking_validations: P5.8-DETERMINISTIC-REGRESSION, P5.8-FULL-ADDON-REGRESSION, P5.8-HOOT-ADDON, P5-REAL-SEMANTIC-ACTIVITY, P5-REAL-ACTIVITY-DEDUPE, P5-REAL-REASONING-SUMMARY, P5-REAL-ACTIVITY-I18N, P5-REAL-BATCH-DISCLOSURE, P5-REAL-ACTIVITY-RECONNECT, P5-REAL-NAVIGATION-REFS, P5-REAL-NAVIGATION-VIEW-MENU-SETTING, P5-REAL-FINAL-ANSWER-REFERENCES, P5-REAL-TURN-STOP, P5-REAL-TURN-INTERVENTIONS, P5-REAL-TURN-EFFECT-BOUNDARY-RACE, P5-REAL-COMPENSATION
+blocking_validations: P5-REAL-SEMANTIC-ACTIVITY, P5-REAL-ACTIVITY-DEDUPE, P5-REAL-REASONING-SUMMARY, P5-REAL-ACTIVITY-I18N, P5-REAL-BATCH-DISCLOSURE, P5-REAL-ACTIVITY-RECONNECT, P5-REAL-NAVIGATION-REFS, P5-REAL-NAVIGATION-VIEW-MENU-SETTING, P5-REAL-FINAL-ANSWER-REFERENCES, P5-REAL-TURN-STOP, P5-REAL-TURN-INTERVENTIONS, P5-REAL-TURN-EFFECT-BOUNDARY-RACE, P5-REAL-COMPENSATION
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266 -> 720102f2a13af5240c779b07cc71ee65994a87b1 -> eb66e45447c4d64e1ebbb5e8322bffa759c12773 -> 074a71c29a6a6109ae7412e7b1f9850c4449e379
-p5_8_candidate_lineage_reviewed_through: bb1f6b1931057a7ab500a9c83629b72369c34aa2
+p5_8_candidate_lineage_reviewed_through: 0b0ac2d2c8fb25523c2e6e9c3808d3c702cede80
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.7-REAL-ACCEPTANCE-074a71c.md
-latest_executed_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-FOCUSED-AND-LANGUAGE-faf21f4.md
-next_action: pull exact current main into the disposable Odoo 18 validation environment and execute docs/research/P5.8_CODEX_TEST_HANDOFF.md / P5.8_VALIDATION_RUNBOOK.md; run deterministic/unit, full-addon and complete HOOT gates first, then the full semantic/reasoning/i18n/batch/reconnect/navigation/final-reference/Stop/intervention/effect-boundary/compensation real chain; do not mark P5.8 COMPLETE or start P6 until every required HARD gate is reviewed
+latest_executed_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-AUTOMATED-GATES-0b0ac2d.md
+next_action: execute the remaining semantic/reasoning/i18n/batch/reconnect/navigation/final-reference/Stop/intervention/effect-boundary/compensation real chain from docs/research/P5.8_VALIDATION_RUNBOOK.md on the materially unchanged candidate; do not mark P5.8 COMPLETE or start P6 until every required HARD gate is reviewed
 planned_successor_after_p5.8: Phase 6 bounded multi-step EffectPlan / TaskPlan work
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
@@ -159,7 +159,7 @@ Committed deterministic/Odoo/HOOT tests now cover or extend:
 - late redirect rejection after write barrier;
 - patch compensation, later-change conflict refusal, archive/unarchive compensation and permission revalidation.
 
-These tests are **prepared, not claimed executed** on the current implementation lineage by this GitHub-only work.
+The complete automated battery was executed on `0b0ac2d2c8fb25523c2e6e9c3808d3c702cede80`: dependency-light tests passed 242/242, the full addon suite passed 182/182, and the complete addon HOOT suite passed 139/139. See `docs/research/evidence/phase5/2026-08-30/P5.8-AUTOMATED-GATES-0b0ac2d.md`.
 
 The earlier focused P5.8/language execution on `faf21f4809cf04020e795a8b824b3197b56c4ace` remains useful evidence but predates the current interactive-control/navigation/compensation implementation and is not acceptance evidence for the present candidate.
 
