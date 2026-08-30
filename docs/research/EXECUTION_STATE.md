@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 32
+State format: 33
 Updated: 2026-08-30
 
 Accepted foundation/runtime lineage:
@@ -17,7 +17,9 @@ P5.7 model/reasoning preference sub-slice accepted through eb66e45447c4d64e1ebbb
 P5.7 complete through 074a71c29a6a6109ae7412e7b1f9850c4449e379
 ```
 
-P5.8 implementation lineage is present on `main` but **not accepted**. Acceptance lineage therefore still stops at P5.7.
+P5.8 is **not accepted**. Acceptance lineage still stops at P5.7.
+
+The previous P5.8 candidate reached green automated gates, but a product review of real visible activity exposed a remaining implementation gap against `P5.8_SEMANTIC_ACTIVITY_UX.md`: normal-mode activity can still resemble a raw technical capability lifecycle log rather than coherent semantic work items. That is now an explicit P5.8 blocker.
 
 Roadmaps / active records:
 
@@ -40,19 +42,20 @@ phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P5.8-semantic-activity-interactive-control-navigation-compensation
 active_slice_record: docs/research/P5.8_IMPLEMENTATION.md
-active_slice_state: REAL_ENV_VALIDATION_REQUIRED
+active_slice_state: IN_PROGRESS
 current_gate_type: HARD
-blocking_validations: P5-REAL-SEMANTIC-ACTIVITY, P5-REAL-ACTIVITY-DEDUPE, P5-REAL-REASONING-SUMMARY, P5-REAL-ACTIVITY-I18N, P5-REAL-BATCH-DISCLOSURE, P5-REAL-ACTIVITY-RECONNECT, P5-REAL-NAVIGATION-REFS, P5-REAL-NAVIGATION-VIEW-MENU-SETTING, P5-REAL-FINAL-ANSWER-REFERENCES, P5-REAL-TURN-STOP, P5-REAL-TURN-INTERVENTIONS, P5-REAL-TURN-EFFECT-BOUNDARY-RACE, P5-REAL-COMPENSATION
+blocking_work: repair P5.8 semantic work-item projection so normal activity is coherent and does not expose a capability lifecycle dump
+blocking_validations_after_repair: P5.8-DETERMINISTIC-REGRESSION, P5.8-FULL-ADDON-REGRESSION, P5.8-HOOT-ADDON, P5-REAL-SEMANTIC-ACTIVITY, P5-REAL-ACTIVITY-DEDUPE, P5-REAL-REASONING-SUMMARY, P5-REAL-ACTIVITY-I18N, P5-REAL-BATCH-DISCLOSURE, P5-REAL-ACTIVITY-RECONNECT, P5-REAL-NAVIGATION-REFS, P5-REAL-NAVIGATION-VIEW-MENU-SETTING, P5-REAL-FINAL-ANSWER-REFERENCES, P5-REAL-TURN-STOP, P5-REAL-TURN-INTERVENTIONS, P5-REAL-TURN-EFFECT-BOUNDARY-RACE, P5-REAL-COMPENSATION
 accepted_runtime_lineage: ba4ba00f9a913854a21b571cbb4559105347cca2 -> 8a4432dc9852eacc422b8c794b6613c75da702a9 -> f7f924ce944db86e896745fef83ea2fb6fd6583a -> b4fbb034e113a41c26db77cb274f2b3b30f6eee3 -> 32e836e7789ea72f3ba0d32fe6bdabbb092f5953 -> 3e2b38d68fe172cd2cf92d7794159f73476ac23d -> 8427c8849b1e1f3afa6337de1209a6027410c266 -> 720102f2a13af5240c779b07cc71ee65994a87b1 -> eb66e45447c4d64e1ebbb5e8322bffa759c12773 -> 074a71c29a6a6109ae7412e7b1f9850c4449e379
-p5_8_candidate_lineage_reviewed_through: 0b0ac2d2c8fb25523c2e6e9c3808d3c702cede80
+p5_8_last_green_automated_candidate: 0b0ac2d2c8fb25523c2e6e9c3808d3c702cede80
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-29/P5.7-REAL-ACCEPTANCE-074a71c.md
 latest_executed_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-AUTOMATED-GATES-0b0ac2d.md
-next_action: execute the remaining semantic/reasoning/i18n/batch/reconnect/navigation/final-reference/Stop/intervention/effect-boundary/compensation real chain from docs/research/P5.8_VALIDATION_RUNBOOK.md on the materially unchanged candidate; do not mark P5.8 COMPLETE or start P6 until every required HARD gate is reviewed
+next_action: execute one coherent P5.8 semantic-work-item repair across backend/runtime projection, frontend presentation, tests and docs; then rerun the complete automated P5.8 battery on the repaired candidate; only after it is green execute the full real gate chain from P5.8_VALIDATION_RUNBOOK.md
 planned_successor_after_p5.8: Phase 6 bounded multi-step EffectPlan / TaskPlan work
 next_product_playbook: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 ```
 
-`p5_8_candidate_lineage_reviewed_through` records the final code/test checkpoint prepared before this cursor-only update. Validation must always record the actual pulled `TESTED_SHA`; it must not assume that checkpoint is still HEAD.
+The previous automated PASS remains valid evidence for `0b0ac2d`; it is not transferable to a materially changed repaired candidate. The actual repaired SHA must be recorded and retested.
 
 ## Phase summary
 
@@ -70,28 +73,43 @@ P5 IN_PROGRESS
   P5.5 COMPLETE
   P5.6 COMPLETE
   P5.7 COMPLETE
-  P5.8 REAL_ENV_VALIDATION_REQUIRED
+  P5.8 IN_PROGRESS
 P6+ NOT ELIGIBLE
 ```
 
-## P5.8 implementation present
-
-Current P5.8 code extends the accepted P3 live stream/P5 host loop without changing business authority.
+## P5.8 state by subsystem
 
 ### Semantic activity / readable reasoning
 
+Implemented foundation:
+
 ```text
 host-owned activity_id lifecycle correlation
-semantic reducer/upsert + replay dedupe
+frontend reducer/upsert + replay dedupe
 compact changing live headline + completed duration/step count
-compact | normal | detailed | diagnostic presentation
+compact | normal | detailed | diagnostic presentation profiles
 bounded per-user presentation preferences
 Odoo-localized deterministic labels
-separate bounded readable reasoning-summary channel
+separate bounded readable-reasoning-summary channel
 raw item/reasoning/textDelta never projected
 ```
 
+Known blocker:
+
+```text
+normal mode still lacks sufficiently rich host-owned semantic work-item grouping/context
+raw CapabilityDefinition titles can still dominate complex activity
+related operations are not yet represented through explicit semantic parent/group structure
+batch progress/result summaries are not yet a general grounded semantic contract
+```
+
+The observed technical activity dump for a request such as `¿puedes crear 200 presupuestos demo?` is explicitly a P5.8 failure. `P5-REAL-SEMANTIC-ACTIVITY` must reject that behavior.
+
+This is not Phase 6 TaskPlan work. Phase 6 may add a separate task-plan surface, but P5.8 must already turn lifecycle facts into coherent normal-user semantic activity.
+
 ### Interactive turn control
+
+Current implementation includes:
 
 ```text
 odoo.ai.turn.intervention durable ordered correction rows
@@ -128,7 +146,7 @@ Streaming activity and final answers can carry closed structured references. Eve
 
 ### Safe compensation
 
-Explicit HOST-only compensators currently cover:
+Explicit HOST-only compensators cover:
 
 ```text
 odoo.record.patch       -> odoo.record.patch.revert
@@ -138,55 +156,44 @@ odoo.record.unarchive   -> odoo.record.unarchive.revert
 
 They reuse `CapabilityExecutor`, run business access under the effective user, require optimistic current-state match, restore only bounded captured prior state and verify the inverse before reversion is recorded complete. There is no generic PostgreSQL rollback.
 
-## Prepared automated coverage
+## Executed P5.8 automated evidence
 
-Committed deterministic/Odoo/HOOT tests now cover or extend:
-
-- semantic activity correlation/replay/transient filtering;
-- readable reasoning-summary shape/privacy;
-- live public activity with contextual references;
-- record/model/action/view/menu/setting closed reference contracts;
-- malformed/additional-key/deleted/revoked reference failure;
-- menu visibility and installed settings discovery;
-- browser revalidation before `actionService` and arbitrary-route rejection;
-- streaming and final structured navigation references;
-- composer idle/send/Stop/correct modes, processing textarea editability and accessibility labels;
-- durable intervention ordering, idempotency/conflict and ownership isolation;
-- explicit queued and running intervention persistence plus 16-item count limit;
-- approval supersession on the same turn;
-- current-chat Stop isolation and interrupted partial answer;
-- Codex `turn/steer(expectedTurnId)` and interrupt/restart fallback;
-- late redirect rejection after write barrier;
-- patch compensation, later-change conflict refusal, archive/unarchive compensation and permission revalidation.
-
-The complete automated battery was executed on `0b0ac2d2c8fb25523c2e6e9c3808d3c702cede80`: dependency-light tests passed 242/242, the full addon suite passed 182/182, and the complete addon HOOT suite passed 139/139. See `docs/research/evidence/phase5/2026-08-30/P5.8-AUTOMATED-GATES-0b0ac2d.md`.
-
-The earlier focused P5.8/language execution on `faf21f4809cf04020e795a8b824b3197b56c4ace` remains useful evidence but predates the current interactive-control/navigation/compensation implementation and is not acceptance evidence for the present candidate.
-
-## Required P5.8 gate chain
-
-Run `P5.8_CODEX_TEST_HANDOFF.md` and `P5.8_VALIDATION_RUNBOOK.md` on one coherent materially unchanged candidate:
+The complete automated battery was executed on `0b0ac2d2c8fb25523c2e6e9c3808d3c702cede80`:
 
 ```text
-P5.8-DETERMINISTIC-REGRESSION
-  -> P5.8-FULL-ADDON-REGRESSION
-  -> P5.8-HOOT-ADDON
-  -> P5-REAL-SEMANTIC-ACTIVITY
-  -> P5-REAL-ACTIVITY-DEDUPE
-  -> P5-REAL-REASONING-SUMMARY
-  -> P5-REAL-ACTIVITY-I18N
-  -> P5-REAL-BATCH-DISCLOSURE
-  -> P5-REAL-ACTIVITY-RECONNECT
-  -> P5-REAL-NAVIGATION-REFS
-  -> P5-REAL-NAVIGATION-VIEW-MENU-SETTING
-  -> P5-REAL-FINAL-ANSWER-REFERENCES
-  -> P5-REAL-TURN-STOP
-  -> P5-REAL-TURN-INTERVENTIONS
-  -> P5-REAL-TURN-EFFECT-BOUNDARY-RACE
-  -> P5-REAL-COMPENSATION
+P5.8-DETERMINISTIC-REGRESSION  PASS (242 dependency-light tests plus JS/static checks)
+P5.8-FULL-ADDON-REGRESSION    PASS (182 selected tests, 0 failures/errors)
+P5.8-HOOT-ADDON               PASS (139 tests)
 ```
 
-`P5-REAL-REASONING-SUMMARY` may record provider support as reviewed `UNSUPPORTED` only under the fallback rule in the validation runbook: semantic host activity must remain correct and no raw/private reasoning may reach browser state.
+See `docs/research/evidence/phase5/2026-08-30/P5.8-AUTOMATED-GATES-0b0ac2d.md`.
+
+Those gates correctly prove the contracts they tested. They did not contain a strong enough product assertion to reject the technical normal-mode lifecycle dump, so the semantic gap was not caught by them. The runbook now requires that regression coverage.
+
+The earlier focused P5.8/language execution on `faf21f4809cf04020e795a8b824b3197b56c4ace` remains useful evidence but explicitly did not accept the complete semantic/navigation/batch/reconnect chain.
+
+## Required P5.8 order now
+
+```text
+1. repair semantic work-item projection as one coherent P5.8 slice
+2. add regression coverage that rejects the technical lifecycle dump in normal mode
+3. rerun complete automated battery on repaired SHA
+4. P5-REAL-SEMANTIC-ACTIVITY
+5. P5-REAL-ACTIVITY-DEDUPE
+6. P5-REAL-REASONING-SUMMARY
+7. P5-REAL-ACTIVITY-I18N
+8. P5-REAL-BATCH-DISCLOSURE
+9. P5-REAL-ACTIVITY-RECONNECT
+10. P5-REAL-NAVIGATION-REFS
+11. P5-REAL-NAVIGATION-VIEW-MENU-SETTING
+12. P5-REAL-FINAL-ANSWER-REFERENCES
+13. P5-REAL-TURN-STOP
+14. P5-REAL-TURN-INTERVENTIONS
+15. P5-REAL-TURN-EFFECT-BOUNDARY-RACE
+16. P5-REAL-COMPENSATION
+```
+
+`P5-REAL-REASONING-SUMMARY` may record provider support as reviewed `UNSUPPORTED` only under the fallback rule in the validation runbook: semantic host activity must remain useful/correct and no raw/private reasoning may reach browser state.
 
 ## Invariants carried forward
 
@@ -205,7 +212,8 @@ P5.8-DETERMINISTIC-REGRESSION
 - P5.6/P5.7 turn settings/context remain immutable as already accepted.
 - One canonical effect step remains the P5 limit; bounded multi-step effects remain Phase 6.
 - No GitHub Actions are used for roadmap validation under current repository instructions.
+- Roadmap slices should be the largest coherent feasible product changes, not artificial micro-slices; commit/file granularity does not define slice boundaries.
 
 ## Exact stop rule
 
-P5.8 implementation is at the validation boundary. Do not start Phase 6 merely because code/tests/docs are present. A failed HARD gate creates a P5.8 repair slice. Only one reviewed green required chain makes P5.8 `COMPLETE` and Phase 6 eligible.
+Do not start Phase 6. P5.8 first needs the semantic-work-item implementation repair and the complete repaired-candidate HARD validation chain. A failed HARD gate creates repair work inside the same coherent P5.8 slice unless a genuine authority/environment boundary requires a split.
