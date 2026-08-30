@@ -10,6 +10,14 @@ from .budgets import (
     resolve_agent_budgets,
 )
 from .plan import CapabilityPlanError, CapabilityPlanExecution, CapabilityPlanService
+from .planning import (
+    PlanningDecisionEngine,
+    PlanningStrategy,
+    PlanningStrategyError,
+    measure_task_complexity,
+    resolve_planning_strategy,
+    validate_task_plan_transition,
+)
 from .post_effect import PostEffectDecisionEngine
 from .provider import ReasoningProvider
 from .service import (
@@ -38,6 +46,9 @@ __all__ = [
     "LatencyBudget",
     "NextDecisionEngine",
     "PlannedCapability",
+    "PlanningDecisionEngine",
+    "PlanningStrategy",
+    "PlanningStrategyError",
     "PostEffectDecisionEngine",
     "ReasoningEngine",
     "ReasoningProvider",
@@ -46,6 +57,9 @@ __all__ = [
     "TaskPlan",
     "TaskPlanError",
     "TaskPlanStep",
+    "measure_task_complexity",
     "parse_task_plan",
     "resolve_agent_budgets",
+    "resolve_planning_strategy",
+    "validate_task_plan_transition",
 ]
