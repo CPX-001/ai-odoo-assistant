@@ -1,4 +1,4 @@
-"""P5.3 immutable execution-settings snapshot for persisted Assistant turns."""
+"""Immutable execution-settings snapshot for persisted Assistant turns."""
 
 from __future__ import annotations
 
@@ -8,15 +8,22 @@ from copy import deepcopy
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
+from ..runtime.agent.planning import (
+    PlanningStrategyError,
+    parse_planning_strategy,
+    resolve_planning_strategy,
+)
 from .chat_policy import resolve_capability_policy
 
-_SETTINGS_FORMAT_VERSION = 2
+_SETTINGS_FORMAT_VERSION = 3
+_REASONING_SETTINGS_FORMAT_VERSION = 2
 _LEGACY_SETTINGS_FORMAT_VERSION = 1
 _BOUND_SETTINGS_FIELDS = frozenset(
     {"reasoning_model", "reasoning_effort", "policy_payload", "execution_settings_payload"}
 )
 _AUTONOMY_PROFILES = frozenset({"strict", "balanced", "autonomous", "full_access"})
 _EFFORT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+_PLANNING_MODES = frozenset({"adaptive", "deliberate", "auto"})
 
 
 class AssistantTurnSettingsSnapshot(models.Model):
@@ -26,29 +33,27 @@ class AssistantTurnSettingsSnapshot(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        """Capture product selectors from the already host-resolved turn inputs.
-
-        The queue resolves model and policy under the originating user before creating
-        the turn. Reasoning effort is read from the same user's Odoo-owned preference at
-        this creation boundary. P5.3 then binds those values into one versioned snapshot
-        without freezing dynamic ACL/record-rule/capability availability checks.
-        """
+        """Capture user selectors once while keeping live ACL/capability checks dynamic."""
 
         prepared = []
         for incoming in vals_list:
             values = dict(incoming)
-            # Callers cannot provide a parallel snapshot authority. When a normal queued
-            # turn carries a resolved policy, the host derives the snapshot itself.
+            # Callers cannot provide a parallel snapshot authority. A normal queued turn already
+            # carries host-resolved policy/model/screen/message inputs, so derive the rest here.
             values.pop("execution_settings_payload", None)
             policy = values.get("policy_payload")
             if isinstance(policy, dict) and policy:
                 if "reasoning_effort" not in values:
                     effort = _reasoning_effort_for_user(self.env, values.get("user_id"))
                     values["reasoning_effort"] = effort or False
+                planning_mode = _planning_mode_for_user(self.env, values.get("user_id"))
                 values["execution_settings_payload"] = _build_settings_snapshot(
                     reasoning_model=values.get("reasoning_model"),
                     reasoning_effort=values.get("reasoning_effort"),
                     policy=policy,
+                    planning_mode=planning_mode,
+                    message=values.get("input_message") or "",
+                    screen=values.get("screen_payload") or {},
                 )
             prepared.append(values)
         return super().create(prepared)
@@ -63,7 +68,7 @@ class AssistantTurnSettingsSnapshot(models.Model):
         return super().write(values)
 
     def execution_settings_snapshot(self):
-        """Return the validated versioned snapshot for diagnostics/tests/future consumers."""
+        """Return the validated versioned snapshot for runtime/diagnostics/tests."""
 
         self.ensure_one()
         snapshot = self.execution_settings_payload
@@ -72,28 +77,46 @@ class AssistantTurnSettingsSnapshot(models.Model):
         validated = _validate_settings_snapshot(snapshot)
         if validated["reasoning_model"] != (self.reasoning_model or None):
             raise ValidationError("Assistant turn settings snapshot does not match model")
-        if validated["format_version"] >= 2 and validated["reasoning_effort"] != (
-            self.reasoning_effort or None
-        ):
+        if validated["format_version"] >= _REASONING_SETTINGS_FORMAT_VERSION and validated[
+            "reasoning_effort"
+        ] != (self.reasoning_effort or None):
             raise ValidationError("Assistant turn settings snapshot does not match reasoning effort")
         if validated["policy"] != (self.policy_payload or {}):
             raise ValidationError("Assistant turn settings snapshot does not match policy")
         return validated
 
 
-def _build_settings_snapshot(*, reasoning_model, reasoning_effort, policy):
-    # Reuse the existing policy validator instead of creating a second policy schema.
+def _build_settings_snapshot(
+    *,
+    reasoning_model,
+    reasoning_effort,
+    policy,
+    planning_mode="adaptive",
+    message="",
+    screen=None,
+):
+    # Reuse existing validators; planning affects orchestration only and never policy/ACL authority.
     resolve_capability_policy(policy)
     effort = reasoning_effort or None
     if effort is not None and (
         not isinstance(effort, str) or _EFFORT_PATTERN.fullmatch(effort) is None
     ):
         raise ValidationError("Invalid Assistant turn reasoning effort")
+    try:
+        strategy = resolve_planning_strategy(
+            planning_mode,
+            message=message if isinstance(message, str) else "",
+            screen=screen if isinstance(screen, dict) else {},
+        )
+    except PlanningStrategyError as error:
+        raise ValidationError("Invalid Assistant planning strategy") from error
     return {
         "format_version": _SETTINGS_FORMAT_VERSION,
         "reasoning_model": reasoning_model or None,
         "reasoning_effort": effort,
         "autonomy_profile": _autonomy_profile_from_policy(policy),
+        "planning_mode": strategy.requested_mode,
+        "planning_strategy": strategy.payload(),
         "policy": deepcopy(policy),
     }
 
@@ -108,18 +131,28 @@ def _validate_settings_snapshot(value):
         "autonomy_profile",
         "policy",
     }
-    current_keys = legacy_keys | {"reasoning_effort"}
+    reasoning_keys = legacy_keys | {"reasoning_effort"}
+    current_keys = reasoning_keys | {"planning_mode", "planning_strategy"}
     if version == _LEGACY_SETTINGS_FORMAT_VERSION:
         if set(value) != legacy_keys:
             raise ValidationError("Invalid Assistant turn settings snapshot")
+    elif version == _REASONING_SETTINGS_FORMAT_VERSION:
+        if set(value) != reasoning_keys:
+            raise ValidationError("Invalid Assistant turn settings snapshot")
+        _validate_reasoning_effort(value.get("reasoning_effort"))
     elif version == _SETTINGS_FORMAT_VERSION:
         if set(value) != current_keys:
             raise ValidationError("Invalid Assistant turn settings snapshot")
-        effort = value.get("reasoning_effort")
-        if effort is not None and (
-            not isinstance(effort, str) or _EFFORT_PATTERN.fullmatch(effort) is None
-        ):
-            raise ValidationError("Invalid Assistant turn reasoning effort")
+        _validate_reasoning_effort(value.get("reasoning_effort"))
+        planning_mode = value.get("planning_mode")
+        if planning_mode not in _PLANNING_MODES:
+            raise ValidationError("Invalid Assistant turn planning mode")
+        try:
+            strategy = parse_planning_strategy(value.get("planning_strategy"))
+        except PlanningStrategyError as error:
+            raise ValidationError("Invalid Assistant turn planning strategy") from error
+        if strategy.requested_mode != planning_mode:
+            raise ValidationError("Assistant turn planning strategy does not match mode")
     else:
         raise ValidationError("Unsupported Assistant turn settings snapshot")
 
@@ -136,6 +169,13 @@ def _validate_settings_snapshot(value):
     return deepcopy(value)
 
 
+def _validate_reasoning_effort(effort):
+    if effort is not None and (
+        not isinstance(effort, str) or _EFFORT_PATTERN.fullmatch(effort) is None
+    ):
+        raise ValidationError("Invalid Assistant turn reasoning effort")
+
+
 def _reasoning_effort_for_user(env, user_id):
     if type(user_id) is not int or user_id <= 0:
         return None
@@ -144,6 +184,20 @@ def _reasoning_effort_for_user(env, user_id):
         return None
     preference = env["odoo.ai.user.preference"].with_user(user)
     return preference.current_reasoning_effort()
+
+
+def _planning_mode_for_user(env, user_id):
+    if type(user_id) is not int or user_id <= 0:
+        return "adaptive"
+    user = env["res.users"].browse(user_id).exists()
+    if not user:
+        return "adaptive"
+    preference = env["odoo.ai.user.preference"].with_user(user)
+    getter = getattr(preference, "current_planning_mode", None)
+    if not callable(getter):
+        return "adaptive"
+    mode = getter()
+    return mode if mode in _PLANNING_MODES else "adaptive"
 
 
 def _autonomy_profile_from_policy(policy):
