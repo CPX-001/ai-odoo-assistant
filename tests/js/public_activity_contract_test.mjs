@@ -17,6 +17,7 @@ const event = (sequence, overrides = {}) => ({
     status: "running",
     label: "Consultando sale.order",
     resource: { model: "sale.order", record_ids: [7], display_names: ["S0007"] },
+    references: [],
     capability: "odoo.query_records",
     progress: null,
     diagnostic_code: null,
@@ -53,9 +54,27 @@ assert.equal(
     ),
     null
 );
+const navigation = {
+    kind: "odoo_setting",
+    label: "Impuestos",
+    description: "Abrir configuración de impuestos",
+    model: "res.config.settings",
+    action_id: 71,
+    setting_field: "tax_calculation_rounding_method",
+};
+assert.equal(
+    contract.normalizePublicTurnEvent(event(1, { references: [navigation] })).references[0].kind,
+    "odoo_setting"
+);
+assert.equal(
+    contract.normalizePublicTurnEvent(
+        event(1, { references: [{ ...navigation, route: "/web#unsafe" }] })
+    ),
+    null
+);
 assert.deepEqual(
     contract.normalizePublicTurnEventBatch([event(4), event(5)], { afterSequence: 3 }).map((x) => x.sequence),
     [4, 5]
 );
 assert.equal(contract.normalizePublicTurnEventBatch([event(5), event(4)], { afterSequence: 3 }), null);
-console.log("public activity contract: 8 assertions passed");
+console.log("public activity contract: 10 assertions passed");
