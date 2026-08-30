@@ -400,12 +400,10 @@ def _append_activity(dbname, *, turn_id, **data):
 
 
 def _append_answer(dbname, *, turn_id, text):
-    if (
-        not isinstance(text, str)
-        or not 1 <= len(text) <= _MAX_ANSWER_DELTA
-        or "\x00" in text
-    ):
-        raise ValidationError("Assistant answer delta budget exceeded") if len(text) > _MAX_ANSWER_DELTA else ValidationError("Invalid Assistant answer delta")
+    if not isinstance(text, str) or "\x00" in text:
+        raise ValidationError("Invalid Assistant answer delta")
+    if not 1 <= len(text) <= _MAX_ANSWER_DELTA:
+        raise ValidationError("Assistant answer delta budget exceeded")
     with _live_cursor(dbname, turn_id) as (cr, env, binding, sequence):
         if binding["state"] != "running":
             raise ValidationError("Assistant answer delta requires a running turn")
