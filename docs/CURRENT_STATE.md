@@ -1,6 +1,6 @@
 # Current implementation state
 
-Current accepted product lineage on `main` remains:
+Current accepted lineage:
 
 ```text
 Foundation/P0-P4 accepted through 8a4432dc9852eacc422b8c794b6613c75da702a9
@@ -10,56 +10,146 @@ P5.3 accepted through 32e836e7789ea72f3ba0d32fe6bdabbb092f5953
 P5.4 accepted through 3e2b38d68fe172cd2cf92d7794159f73476ac23d
 P5.5 accepted through 8427c8849b1e1f3afa6337de1209a6027410c266
 P5.6 accepted through 720102f2a13af5240c779b07cc71ee65994a87b1
-P5.7 model/reasoning preference sub-slice accepted through eb66e45447c4d64e1ebbb5e8322bffa759c12773
 P5.7 complete through 074a71c29a6a6109ae7412e7b1f9850c4449e379
 P5.8 complete through 688f569d441a40a4637ad6a23f111e584e18c955
 ```
 
-P5.8 is **COMPLETE**. Normal activity is now a host-correlated semantic work log rather than a capability lifecycle dump; the complete repaired-candidate automated and real gate chain passed on `688f569d441a40a4637ad6a23f111e584e18c955`.
+Phase 5 is **COMPLETE**. Its final repaired candidate passed the complete automated and real P5.8 gate chain.
 
-The authoritative cursor is `research/EXECUTION_STATE.md`; implementation detail is in `research/P5.8_IMPLEMENTATION.md`; product target is `research/P5.8_SEMANTIC_ACTIVITY_UX.md`; required repair/validation is in `research/P5.8_VALIDATION_RUNBOOK.md` and `research/P5.8_CODEX_TEST_HANDOFF.md`.
+Phase 6 is **IN PROGRESS**. The current P6.1/P6.3/P6.5 foundation is an implementation candidate on `main`; its new tests/gates have not yet been recorded as executed. See `research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md` and `research/EXECUTION_STATE.md`.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.10.25.0` on the accepted P5.8 lineage.
-- Embedded runtime; browser talks only to Odoo, not a sidecar/provider service.
-- Odoo/PostgreSQL own conversations, messages, turns, effect state, interventions, private working checkpoints and browser-safe live/presentation state.
-- Native `ir.cron` runs durable turns.
-- Business authority is the originating effective user with `su=False`.
-- Primary provider is local Codex App Server using the host-configured primary session.
-- Product target remains one global general Assistant; see `PRODUCT_VISION.md`.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.11.0.0` for the Phase-6 planning checkpoint.
+- Embedded runtime; browser talks only to Odoo.
+- Odoo/PostgreSQL own conversations, messages, turns, policy/settings snapshots, working checkpoints, effects and browser-safe state.
+- Native `ir.cron` runs durable turns with bounded concurrency/backpressure.
+- Business authority is always the originating effective user with `su=False`.
+- Codex App Server is the current concrete reasoning provider using the host-configured primary session.
+- The core agent/runtime is intentionally provider-neutral so later providers can implement the same port.
 
-## 2. Host-owned agent loop and effects
+## 2. Provider-neutral agent loop
 
-ADR-019/current code owns orchestration. The provider returns one strict `NextDecision` per call:
+ADR-019/current code owns orchestration. The provider returns exactly one strict `NextDecision` per call:
 
 ```text
 final_answer
+task_plan_update
 reasoning_capability_call
 plan_step_proposal
 ```
 
-Odoo resolves capabilities, validates schemas/policy/authority and executes through the host-owned capability framework. Provider data is untrusted input, never authority.
+The host owns capability resolution, schema validation, budgets, policy, approval, effect execution, verification and recovery semantics. Provider content is untrusted data, never authority.
 
-Accepted P5.5 effect lifecycle remains:
+Codex-specific code is limited to provider transport concerns: App Server lifecycle, Structured Outputs translation, model/reasoning options, provider failures and steer/interrupt behavior.
+
+## 3. TaskPlan vs EffectPlan
+
+Phase 6 now separates product planning from executable effects.
+
+### TaskPlan
+
+A `TaskPlan` is user-visible structured progress:
 
 ```text
-one canonical PlanStepProposal
- -> prepare / preview / preconditions
+goal
+revision
+1..12 steps
+  step_id
+  title
+  state: pending | in_progress | completed | blocked | skipped
+  depends_on
+```
+
+Properties:
+
+- no capability name or arguments;
+- no approval or execution authority;
+- no private chain-of-thought;
+- host reparses every revision;
+- first revision is `1`; later updates must be exactly `+1`;
+- durable in the private working transcript;
+- latest validated revision is projected to terminal/approval browser responses;
+- browser renders it separately from effect approval and explicitly says actions are authorized separately.
+
+A TaskPlan update cannot clear a terminal policy/authority failure or reset a failing capability streak.
+
+The richer P6.2 adaptive/deliberate/auto strategy and dedicated running-turn live TaskPlan stream are not yet claimed.
+
+### EffectPlan
+
+The product host now allows up to **5** typed effect steps. Legacy/custom callers remain single-step unless they receive the Phase-6 policy opt-in.
+
+Each step retains:
+
+```text
+step_id / depends_on
+capability + version
+validated arguments
+preview
+risk / effect / approval
+precondition + binding fingerprints
+result + verification
+semantic correlation keys
+```
+
+Current provider proposals are accumulated in deterministic order; each later proposal depends on the previous one. No generic script/program replaces `CapabilityDefinition` steps.
+
+## 4. Current effect lifecycle
+
+For the current Odoo-local plan capabilities:
+
+```text
+provider proposes distinct typed steps
+ -> host validates and accumulates
+ -> prepare / preview every step
  -> policy / approval
- -> revalidate
- -> durable write barrier
- -> execute under effective user
- -> verify
+ -> revalidate capability/version/binding/preconditions
+ -> one durable write barrier for the current Odoo-local recovery unit
+ -> execute each step with ExecutionAuthority.PLAN under effective user
+ -> verify each step
  -> authoritative verified-effect receipt
- -> REASONING-only post-effect continuation
+ -> PLAN authority removed
+ -> optional read-only post-effect reasoning / TaskPlan progress update
  -> natural final answer
 ```
 
-Current effect limit remains one canonical step. Bounded multi-step `EffectPlan`/TaskPlan is Phase 6 work and must not be conflated with P5.8 activity or intervention sequencing.
+`CapabilityPlanService` uses plan format v2 and still accepts prepared format-v1 data for compatibility.
 
-## 3. Capability framework
+Existing P5.8 explicit HOST-only compensators work in reverse order over eligible completed plans. They are useful recovery infrastructure but do not replace the P6.4 segmented/external-effect design.
+
+No claim is made that future external/non-transactional effects are atomic.
+
+## 5. Budget families
+
+Agent resource limits are no longer one undifferentiated tool counter. The host resolves:
+
+```text
+SafetyBudget
+  effect-step ceiling
+  consecutive-failure ceiling
+
+ExplorationBudget
+  provider decisions
+  capability calls
+
+CostBudget
+  provider-decision ceiling (initial enforceable proxy)
+
+LatencyBudget
+  provider-decision ceiling (initial enforceable proxy)
+
+ResponseBudget
+  transcript bytes
+  result bytes
+```
+
+The effective provider-decision ceiling is the minimum applicable host ceiling. Remaining budget values are sent to the provider as bounded context only; enforcement remains host-side. `effect_steps` reports remaining capacity.
+
+Scheduler concurrency remains a separate Phase-5 resource concern.
+
+## 6. Capability framework
 
 `CapabilityDefinition` remains the atomic executable contract. Current core providers include:
 
@@ -74,158 +164,64 @@ odoo_compensations (HOST-only inverses)
 odoo_unarchive
 ```
 
-`odoo.resolve_navigation` is a normal read-only reasoning capability. Compensators such as `odoo.record.patch.revert`, `odoo.record.archive.revert` and `odoo.record.unarchive.revert` are HOST-only definitions in the same registry and are never revealed as model-callable tools.
+No unrestricted ORM methods, SQL, Python, filesystem, shell or sudo authority is exposed to the model.
 
-No unrestricted ORM methods, SQL, Python, filesystem, shell or sudo authority is exposed to the model. External provider/Skill/Context/Evidence contracts remain later roadmap work.
+Future Skills/CapabilityProvider/ContextProvider/EvidenceProvider work should extend this framework rather than introduce a parallel tool runtime.
 
-## 4. Conversation/context/settings
+## 7. Conversation/settings/live UX retained from Phase 5
 
-P5.6 immutable per-turn conversation context and P5.7 conversation/model/reasoning/language settings remain accepted. Current turns snapshot bounded execution settings and derived context while ACLs, record rules and capability availability remain dynamically revocable.
+Accepted Phase-5 behavior remains authoritative:
 
-P5.8 presentation preferences are per-user and explicitly non-authoritative. They can change visible activity detail, technical-name display, transient filtering, reasoning-summary display and progressive-disclosure page size without changing business policy or an already captured turn's execution authority.
-
-## 5. P5.8 semantic activity — foundation present, richer work items still missing
-
-The accepted P3 live store now feeds a semantic presentation layer:
-
-- host-generated `activity_id` correlates start/completion/failure for one operation;
-- repeated independent calls remain separate;
-- provider reasoning passes have their own correlation identity;
-- reconnect/replay reduction is idempotent by event sequence/activity identity;
-- compact/normal/detailed/diagnostic presentation profiles are supported;
-- deterministic wording uses Odoo localization semantics;
-- readable provider summaries use only bounded `summaryTextDelta`; raw/private reasoning is never projected;
-- capability/result references may appear as compact browser-safe chips without becoming business authority.
-
-This infrastructure does **not yet fully satisfy** `P5.8_SEMANTIC_ACTIVITY_UX.md`. In complex turns, normal mode can still expose or be dominated by capability lifecycle titles such as:
-
-```text
-Inspect Odoo write schema · sale.order
-Inspect Odoo query schema · res.partner
-Query Odoo records · res.partner
-Mutate multiple Odoo records · sale.order
-```
-
-The intended P5.8 behavior is a small coherent set of host-grounded semantic work items, for example conceptually:
-
-```text
-Analizando la petición
-Preparando 200 presupuestos demo
-  Consultando clientes existentes
-Creando presupuestos
-  <grounded progress when known>
-Verificando resultados
-  <grounded verified result summary>
-```
-
-The repair must introduce enough host-owned semantic grouping/context — e.g. semantic parent/group keys, operation/category, translated headline code + bounded args, grounded progress/result summaries — or an equivalent simpler contract. It must not group by string equality or let model prose fabricate progress.
-
-Diagnostic mode may retain technical detail. Normal mode must not be a capability lifecycle dump.
-
-This gap belongs to P5.8. It is not deferred to Phase 6 TaskPlan.
-
-## 6. P5.8 interactive turn control
-
-The browser treats the active conversation/turn as the control boundary.
-
-Composer behavior is:
-
-```text
-no active turn + empty draft      -> disabled
-no active turn + text             -> Enviar mensaje
-processing + empty draft          -> Detener respuesta (square Stop icon)
-processing + text                 -> Corregir instrucción
-awaiting approval + text          -> Corregir instrucción / supersede old plan
-```
-
-The textarea remains editable while ordinary reasoning is running.
-
-Corrections are not second ordinary turns. `odoo.ai.turn.intervention` persists a bounded ordered sequence linked to the same turn/conversation/user/company with `client_intervention_id` duplicate protection. Count and byte budgets are enforced.
-
-Runtime behavior is host-owned:
-
-```text
-persist intervention in Odoo first
- -> queued: consume before first decision
- -> running + live Codex subturn: best-effort turn/steer(expectedTurnId)
- -> no steer / no live subturn: interrupt disposable subturn and restart next decision from durable Odoo state
- -> re-check sequence before accepting provider decision / before effect barrier
-```
-
-Provider thread/turn IDs never reach the browser.
-
-If a correction arrives while an approval is pending, Odoo records `approval.rejected`, clears the executable old plan and requeues/resumes the same durable turn. The old plan cannot be silently approved or executed.
-
-Stop reuses durable Odoo cancellation. Only the active chat's turn UUID is cancelled; other conversation scopes continue. A partial answer already streamed is preserved as an Assistant message marked `Interrumpido`. Stop after an effect barrier does not claim rollback of already executed business effects.
-
-## 7. P5.8 safe compensation
-
-There is no database-wide or magical rollback. Compensation is an explicit host-side action after a verified reversible effect.
-
-Initially supported effect families are:
-
-```text
-odoo.record.patch
-odoo.record.archive
-odoo.record.unarchive
-```
-
-The original preview contains only the bounded prior values needed by the matching compensator. Before restoration the host:
-
-1. revalidates the current effective user's ACL/record rules;
-2. verifies the record still matches the previously verified post-effect value;
-3. refuses to overwrite later changes (`capability_compensation_precondition_changed`);
-4. executes the explicit HOST-only compensator;
-5. re-reads and verifies the restored value;
-6. only then marks reversion complete.
-
-The UI offers `Revertir cambios` only when the host declares a safe compensator and asks for explicit confirmation. Unavailable/conflicting/unauthorized reversions are reported without claiming success.
-
-## 8. P5.8 contextual navigation
-
-Supported public reference kinds are:
-
-```text
-odoo_record
-odoo_model
-odoo_action
-odoo_view
-odoo_menu
-odoo_setting
-```
-
-`odoo.resolve_navigation` accepts semantic query text, never authoritative concrete IDs. Odoo searches bounded current models/actions/views/visible menus/installed settings under the effective user.
-
-Discovery is not navigation authority. Every click is sent back to `/odoo_ai/v1/public-references`, which revalidates exact reference shape, current existence, ACL/record rules, current menu/group visibility and current settings schema before returning a closed descriptor. The frontend builds an Odoo action only from that descriptor. Raw model-authored URLs/routes are never executed.
-
-Navigation references are available both:
-
-- inside correlated streaming activity;
-- as a structured `references` collection rendered below the final answer.
-
-A stale/revoked/deleted target fails closed with a discreet notice and never reaches `actionService`.
-
-Unknown OCA/custom business models still use generic current-schema/access-driven record/model presentation where eligible.
-
-## 9. Queue/concurrency/failure invariants
-
-Accepted P5.1-P5.5 behavior remains authoritative:
-
-- per-conversation frontend scopes;
+- per-conversation frontend turn scopes;
+- concurrent independent chats within capacity;
 - one active causal turn per conversation;
-- cross-conversation concurrency within scheduler capacity;
-- bounded scheduler/backpressure/fairness;
-- explicit approval/failure/recovery surfaces;
+- immutable per-turn model/reasoning/policy/context snapshots;
+- durable reconnect/replay;
+- separate public activity, readable reasoning summary and answer-delta channels;
+- semantic business-facing activity grouping rather than a raw tool lifecycle dump;
+- interactive stop and same-turn correction/redirect;
+- approval supersession on correction;
+- contextual Odoo navigation references with fresh revalidation;
 - one authoritative final Assistant message;
-- uncertain post-write outcomes are never blindly retried as effect-safe.
+- verified-receipt post-effect continuation;
+- explicit safe compensation for supported reversible operations.
 
-P5.8 presentation/navigation failure cannot change business-effect success/authorization. Turn interventions cannot bypass capability validation/policy/approval/verification.
+Raw provider reasoning/private chain-of-thought is never a public activity surface.
 
-## 10. Retrieval/RAG and technical operations
+## 8. Provider abstraction
 
-There is still no general embedded Evidence/RAG provider. Later retrieval should combine current Odoo/runtime/schema/configuration, source/XML, logs, company knowledge/files, lexical/semantic retrieval and web evidence as appropriate.
+The intended provider seam is:
 
-Not currently exposed to reasoning:
+```text
+Odoo host / AgentTurnService
+          |
+          v
+   NextDecisionEngine
+      /    |     \
+   Codex  future  future
+  adapter adapter adapter
+```
+
+Core logic that must remain provider-neutral includes:
+
+```text
+TaskPlan / EffectPlan
+capabilities
+budgets
+ACL/policy/approval
+write barrier
+execution / verification
+working transcript
+failure/recovery certainty
+```
+
+Provider adapters may specialize wire schemas, streaming, authentication/session transport, model knobs and provider-specific error mapping.
+
+## 9. Retrieval/RAG and technical operations
+
+There is still no general embedded Evidence/RAG provider. Later retrieval should combine live Odoo/runtime/schema/configuration, source/XML, logs, company knowledge/files, lexical/semantic retrieval and web evidence according to question type.
+
+Not currently exposed as generic reasoning authority:
 
 ```text
 module install/update
@@ -234,24 +230,24 @@ service/process restart
 PostgreSQL administration
 source-code modification
 generic command execution
-general web search
+general arbitrary network access
 ```
 
-Later privileged technical operations require explicit capabilities and privilege-boundary validation.
+Later privileged technical operations require explicit high-level capabilities and a privilege-boundary design.
 
-## 11. Executed P5.8 validation and current roadmap state
+## 10. Validation state
 
-Historical automated P5.8 evidence exists for checkpoint `0b0ac2d2c8fb25523c2e6e9c3808d3c702cede80`:
+Accepted P5.8 evidence remains:
 
 ```text
-P5.8-DETERMINISTIC-REGRESSION  PASS (242 dependency-light tests plus JS/static checks)
-P5.8-FULL-ADDON-REGRESSION    PASS (182 selected tests)
-P5.8-HOOT-ADDON               PASS (139 tests)
+research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
 ```
 
-The repaired candidate `688f569d441a40a4637ad6a23f111e584e18c955` subsequently passed 246 dependency-light tests, 182 selected Odoo tests and 145 HOOT tests/564 assertions, followed by every required real P5.8 gate. See `research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md`.
+The current Phase-6 implementation contains new deterministic tests for TaskPlan, multi-step EffectPlan, budget separation and Codex wire translation, but these have **not yet been recorded as executed on the final candidate**.
 
-Formal roadmap state:
+No P6 HARD real gate is currently recorded PASS.
+
+Formal cursor:
 
 ```text
 P0 COMPLETE
@@ -259,16 +255,14 @@ P1 COMPLETE
 P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
-P5 IN_PROGRESS
-  P5.1 COMPLETE
-  P5.2 COMPLETE
-  P5.3 COMPLETE
-  P5.4 COMPLETE
-  P5.5 COMPLETE
-  P5.6 COMPLETE
-  P5.7 COMPLETE
-  P5.8 COMPLETE
-P6 ELIGIBLE / NOT STARTED
+P5 COMPLETE
+P6 IN_PROGRESS
+  P6.1 TaskPlan vs EffectPlan            IMPLEMENTED CANDIDATE
+  P6.2 adaptive/deliberate modes         NOT STARTED
+  P6.3 bounded multi-step EffectPlan     IMPLEMENTED CANDIDATE
+  P6.4 atomic vs segmented effects       NOT STARTED
+  P6.5 separate budgets                  FOUNDATION IMPLEMENTED CANDIDATE
+  P6.6 EffectJournal                     NOT STARTED
 ```
 
-The stronger real semantic gate passed with explicit host-owned grouping, independent-call preservation, grounded progress/results and Odoo-localized headline codes. Phase 6 is now eligible; it was not started here.
+The next meaningful boundary is validation of the combined P6.1/P6.3/P6.5 checkpoint before building segmented recovery/journaling on assumptions that have not been exercised in Odoo/Codex.
