@@ -60,6 +60,10 @@ class TestCapabilityActivityCorrelation(TransactionCase):
         started_id = lifecycle[0][2].get("activity_id")
         self.assertRegex(started_id, _ACTIVITY_ID)
         self.assertEqual(lifecycle[1][2].get("activity_id"), started_id)
+        semantic = lifecycle[0][2]["semantic"]
+        self.assertEqual(semantic["operation"], "odoo.records.query")
+        self.assertEqual(semantic["headline_code"], "activity.query.odoo")
+        self.assertNotIn("Activity probe", repr(semantic))
 
     def test_independent_calls_never_merge_by_capability_name(self):
         executor, events = self._executor(lambda _context, _payload: {})
@@ -72,6 +76,12 @@ class TestCapabilityActivityCorrelation(TransactionCase):
         ]
         self.assertEqual(len(ids), 2)
         self.assertNotEqual(ids[0], ids[1])
+        groups = [
+            payload["semantic"]["group_key"]
+            for event_type, _title, payload in events
+            if event_type == "tool.started"
+        ]
+        self.assertEqual(groups, [None, None])
 
     def test_failure_reuses_the_started_activity_id(self):
         def fail(_context, _payload):

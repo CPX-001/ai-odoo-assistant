@@ -23,12 +23,27 @@ const event = (sequence, overrides = {}) => ({
     diagnostic_code: null,
     occurred_at: "2026-08-28T10:00:00.000000Z",
     activity_id: activityId,
+    semantic: null,
     ...overrides,
 });
 assert.equal(contract.normalizePublicTurnEvent(event(1)).activity_id, activityId);
 assert.equal(contract.normalizePublicTurnEvent(event(1, { kind: "agent.thinking" })), null);
 assert.equal(contract.normalizePublicTurnEvent(event(1, { activity_id: "operation-42" })), null);
 assert.equal(contract.normalizePublicTurnEvent({ ...event(1), payload: { prompt: "private" } }), null);
+const semantic = {
+    group_key: "semantic:v1:11111111111111111111111111111111",
+    parent_activity_id: null,
+    operation: "capability.execute",
+    headline_code: "activity.execute.create",
+    headline_args: { model_label: "Quotations", count: 200 },
+    progress: { current: 50, total: 200 },
+    result_summary: null,
+};
+assert.equal(contract.normalizePublicTurnEvent(event(1, { semantic })).semantic.headline_args.count, 200);
+assert.equal(
+    contract.normalizePublicTurnEvent(event(1, { semantic: { ...semantic, progress: { current: 201, total: 200 } } })),
+    null
+);
 const fiftyIds = Array.from({ length: 50 }, (_value, index) => index + 1);
 assert.equal(
     contract.normalizePublicTurnEvent(
@@ -77,4 +92,4 @@ assert.deepEqual(
     [4, 5]
 );
 assert.equal(contract.normalizePublicTurnEventBatch([event(5), event(4)], { afterSequence: 3 }), null);
-console.log("public activity contract: 10 assertions passed");
+console.log("public activity contract: 12 assertions passed");

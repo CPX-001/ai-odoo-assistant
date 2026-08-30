@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import TypeAlias
@@ -55,6 +56,8 @@ _MODEL_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _CAPABILITY_RE = _MODEL_RE
 _ACTIVITY_ID_RE = re.compile(r"^activity:v[1-9][0-9]*:[0-9a-f]{32}$")
+_SEMANTIC_GROUP_RE = re.compile(r"^semantic:v[1-9][0-9]*:[0-9a-f]{32}$")
+_SEMANTIC_CODE_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _DIAGNOSTIC_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _OCCURRED_AT_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$"
@@ -63,6 +66,8 @@ _MAX_LABEL = 240
 _MAX_RESOURCE_RECORDS = 50
 _MAX_DISPLAY_NAME = 160
 _MAX_NAVIGATION_REFERENCES = 12
+_MAX_SEMANTIC_ARGS = 8
+_MAX_SEMANTIC_BYTES = 2048
 _NAVIGATION_KINDS = frozenset(
     {"odoo_model", "odoo_action", "odoo_view", "odoo_menu", "odoo_setting"}
 )
@@ -194,6 +199,93 @@ def _references(value: object) -> tuple[JsonObject, ...]:
     return tuple(_navigation_reference(item) for item in value)
 
 
+def _semantic_args(value: object) -> JsonObject:
+    if not isinstance(value, dict) or len(value) > _MAX_SEMANTIC_ARGS:
+        raise PublicTurnEventError()
+    result: JsonObject = {}
+    for key, item in value.items():
+        if not isinstance(key, str) or _FIELD_RE.fullmatch(key) is None:
+            raise PublicTurnEventError()
+        if isinstance(item, str):
+            result[key] = _one_line(item, maximum=160, allow_empty=True)
+        elif type(item) in {int, bool} and (type(item) is bool or 0 <= item <= 1_000_000):
+            result[key] = item
+        else:
+            raise PublicTurnEventError()
+    if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > _MAX_SEMANTIC_BYTES:
+        raise PublicTurnEventError()
+    return result
+
+
+def _semantic_summary(value: object) -> JsonObject | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"code", "args"}:
+        raise PublicTurnEventError()
+    code = value.get("code")
+    if not isinstance(code, str) or _SEMANTIC_CODE_RE.fullmatch(code) is None:
+        raise PublicTurnEventError()
+    return {"code": code, "args": _semantic_args(value.get("args"))}
+
+
+def _semantic_progress(value: object) -> JsonObject | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"current", "total"}:
+        raise PublicTurnEventError()
+    current = value.get("current")
+    total = value.get("total")
+    if (
+        type(current) is not int
+        or type(total) is not int
+        or not 0 <= current <= total <= 1_000_000
+        or total == 0
+    ):
+        raise PublicTurnEventError()
+    return {"current": current, "total": total}
+
+
+def _semantic(value: object) -> JsonObject | None:
+    if value is None:
+        return None
+    expected = {
+        "group_key",
+        "parent_activity_id",
+        "operation",
+        "headline_code",
+        "headline_args",
+        "progress",
+        "result_summary",
+    }
+    if not isinstance(value, dict) or set(value) != expected:
+        raise PublicTurnEventError()
+    group_key = value.get("group_key")
+    parent = value.get("parent_activity_id")
+    operation = value.get("operation")
+    headline_code = value.get("headline_code")
+    if group_key is not None and (
+        not isinstance(group_key, str) or _SEMANTIC_GROUP_RE.fullmatch(group_key) is None
+    ):
+        raise PublicTurnEventError()
+    if parent is not None and (
+        not isinstance(parent, str) or _ACTIVITY_ID_RE.fullmatch(parent) is None
+    ):
+        raise PublicTurnEventError()
+    if not isinstance(operation, str) or _SEMANTIC_CODE_RE.fullmatch(operation) is None:
+        raise PublicTurnEventError()
+    if not isinstance(headline_code, str) or _SEMANTIC_CODE_RE.fullmatch(headline_code) is None:
+        raise PublicTurnEventError()
+    return {
+        "group_key": group_key,
+        "parent_activity_id": parent,
+        "operation": operation,
+        "headline_code": headline_code,
+        "headline_args": _semantic_args(value.get("headline_args")),
+        "progress": _semantic_progress(value.get("progress")),
+        "result_summary": _semantic_summary(value.get("result_summary")),
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class PublicTurnEvent:
     sequence: int
@@ -209,6 +301,7 @@ class PublicTurnEvent:
     occurred_at: str
     activity_id: str | None = None
     references: tuple[JsonObject, ...] = ()
+    semantic: JsonObject | None = None
 
     def __post_init__(self) -> None:
         if type(self.sequence) is not int or self.sequence <= 0:
@@ -224,6 +317,7 @@ class PublicTurnEvent:
         object.__setattr__(self, "label", _one_line(self.label, maximum=_MAX_LABEL))
         object.__setattr__(self, "resource", _resource(self.resource))
         object.__setattr__(self, "references", _references(self.references))
+        object.__setattr__(self, "semantic", _semantic(self.semantic))
         if self.capability is not None and (
             not isinstance(self.capability, str)
             or _CAPABILITY_RE.fullmatch(self.capability) is None
@@ -291,6 +385,7 @@ def parse_public_turn_event(value: object) -> PublicTurnEvent:
         "occurred_at",
         "activity_id",
         "references",
+        "semantic",
     }
     if not isinstance(value, dict) or set(value) != keys:
         raise PublicTurnEventError()
@@ -324,6 +419,7 @@ def public_turn_event_payload(event: PublicTurnEvent) -> JsonObject:
         "occurred_at": event.occurred_at,
         "activity_id": event.activity_id,
         "references": [dict(item) for item in event.references],
+        "semantic": event.semantic,
     }
 
 

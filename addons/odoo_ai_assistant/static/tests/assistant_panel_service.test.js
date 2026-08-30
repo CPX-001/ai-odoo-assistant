@@ -267,6 +267,7 @@ test("history hydrates conversations and messages", async () => {
     const panelState = state();
     const response = {
         ok: true,
+        active_turn: null,
         active_conversation_id: "22345678-1234-5678-9234-567812345678",
         conversations: [
             {

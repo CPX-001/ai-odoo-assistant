@@ -6,10 +6,41 @@ import {
     performedActionsState,
 } from "@odoo_ai_assistant/components/assistant_panel/assistant_turn_control";
 import {
+    applyAcceptedStopState,
     composerActionMode,
     newClientInterventionId,
+    normalizeCancellationStatus,
     normalizeRedirectResponse,
 } from "@odoo_ai_assistant/services/zzzz_assistant_turn_control_service";
+
+test("terminal Stop acknowledgement immediately releases the composer", () => {
+    const scope = { loading: true, stopRequested: true, turnState: "running" };
+    expect(applyAcceptedStopState(scope, "cancelled")).toBe(true);
+    expect(scope).toEqual({ loading: false, stopRequested: false, turnState: "cancelled" });
+    const pending = { loading: true, stopRequested: true, turnState: "running" };
+    expect(applyAcceptedStopState(pending, "cancel_requested")).toBe(true);
+    expect(pending.loading).toBe(true);
+});
+
+test("Stop status is accepted only for the same durable turn and cancellation lifecycle", () => {
+    const turnId = "00000000-0000-4000-8000-000000000111";
+    expect(
+        normalizeCancellationStatus(
+            { ok: true, turn_id: turnId, state: "cancel_requested" },
+            turnId
+        )?.state
+    ).toBe("cancel_requested");
+    expect(
+        normalizeCancellationStatus({ ok: true, turn_id: turnId, state: "cancelled" }, turnId)
+            ?.state
+    ).toBe("cancelled");
+    expect(
+        normalizeCancellationStatus({ ok: true, turn_id: "other", state: "cancelled" }, turnId)
+    ).toBe(null);
+    expect(
+        normalizeCancellationStatus({ ok: true, turn_id: turnId, state: "completed" }, turnId)
+    ).toBe(null);
+});
 
 test("composer switches between disabled send stop and redirect", () => {
     const base = {

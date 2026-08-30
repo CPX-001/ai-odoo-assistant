@@ -37,6 +37,9 @@ function timestamp(value) {
 }
 
 function itemKey(event) {
+    if (event.semantic?.group_key) {
+        return `semantic:${event.semantic.group_key}`;
+    }
     return event.activity_id ? `activity:${event.activity_id}` : `event:${event.sequence}`;
 }
 
@@ -49,6 +52,9 @@ function semanticCode(item) {
             return "activity.cancelled";
         }
         return "activity.blocked";
+    }
+    if (item.headline_code) {
+        return item.headline_code;
     }
     switch (item.phase) {
         case "provider":
@@ -90,6 +96,17 @@ function freezeItem(item) {
         ...item,
         resource: item.resource || null,
         references: Object.freeze([...(item.references || [])]),
+        headline_args: Object.freeze({ ...(item.headline_args || {}) }),
+        progress_detail: item.progress_detail
+            ? Object.freeze({ ...item.progress_detail })
+            : null,
+        result_summary: item.result_summary
+            ? Object.freeze({
+                  code: item.result_summary.code,
+                  args: Object.freeze({ ...(item.result_summary.args || {}) }),
+              })
+            : null,
+        lifecycle_activity_ids: Object.freeze([...(item.lifecycle_activity_ids || [])]),
         semantic_code: semanticCode(item),
         duration_ms: itemDurationMs(item),
     });
@@ -188,6 +205,14 @@ export function reduceSemanticActivity(events) {
                 references: [...(event.references || [])],
                 capability: event.capability || null,
                 progress: event.progress ?? null,
+                semantic_group_key: event.semantic?.group_key || null,
+                parent_activity_id: event.semantic?.parent_activity_id || null,
+                operation: event.semantic?.operation || null,
+                headline_code: event.semantic?.headline_code || null,
+                headline_args: { ...(event.semantic?.headline_args || {}) },
+                progress_detail: event.semantic?.progress || null,
+                result_summary: event.semantic?.result_summary || null,
+                lifecycle_activity_ids: event.activity_id ? [event.activity_id] : [],
                 diagnostic_code: event.diagnostic_code || null,
                 started_at: event.occurred_at,
                 ended_at: TERMINAL_STATUSES.has(event.status) ? event.occurred_at : null,
@@ -207,6 +232,19 @@ export function reduceSemanticActivity(events) {
         }
         existing.capability = event.capability || existing.capability || null;
         existing.progress = event.progress ?? existing.progress ?? null;
+        existing.parent_activity_id =
+            event.semantic?.parent_activity_id || existing.parent_activity_id || null;
+        existing.operation = event.semantic?.operation || existing.operation || null;
+        existing.headline_code = event.semantic?.headline_code || existing.headline_code || null;
+        if (event.semantic?.headline_args) {
+            existing.headline_args = { ...event.semantic.headline_args };
+        }
+        existing.progress_detail = event.semantic?.progress || existing.progress_detail || null;
+        existing.result_summary =
+            event.semantic?.result_summary || existing.result_summary || null;
+        if (event.activity_id && !existing.lifecycle_activity_ids.includes(event.activity_id)) {
+            existing.lifecycle_activity_ids.push(event.activity_id);
+        }
         existing.diagnostic_code = event.diagnostic_code || existing.diagnostic_code || null;
         if (TERMINAL_STATUSES.has(event.status)) {
             existing.ended_at = event.occurred_at;

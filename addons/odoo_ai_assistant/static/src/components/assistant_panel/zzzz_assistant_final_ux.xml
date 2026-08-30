@@ -4,37 +4,6 @@
        t-inherit="odoo_ai_assistant.AssistantPanel"
        t-inherit-mode="extension">
 
-        <xpath expr="//section[contains(@class, 'o_ai_assistant_activity')]" position="replace">
-            <section t-if="state.currentActivity"
-                t-att-class="'o_ai_assistant_activity mt-3 border rounded bg-light-subtle px-2 py-2 ' + (state.loading ? 'o_ai_assistant_activity_running' : 'o_ai_assistant_activity_settled')"
-                aria-label="Actividad del Assistant" role="status">
-                <details>
-                    <summary class="small d-flex align-items-center gap-2">
-                        <i t-if="state.loading" class="fa fa-circle-o-notch fa-spin" aria-hidden="true"/>
-                        <i t-elif="state.errorCode" class="fa fa-exclamation-triangle" aria-hidden="true"/>
-                        <i t-elif="recoveryPending" class="fa fa-exclamation-circle" aria-hidden="true"/>
-                        <i t-elif="state.result and state.result.plan and state.result.plan.state === 'awaiting_confirmation'"
-                            class="fa fa-shield" aria-hidden="true"/>
-                        <i t-else="" class="fa fa-check-circle" aria-hidden="true"/>
-                        <span t-if="state.loading" class="text-break" t-esc="state.currentActivity.label"/>
-                        <span t-else="" class="text-break">Actividad del turno</span>
-                    </summary>
-                    <div class="mt-2 d-flex flex-column gap-1">
-                        <div t-foreach="state.activityEvents" t-as="event" t-key="event.sequence"
-                            class="small text-muted d-flex gap-2 align-items-start">
-                            <span class="font-monospace" t-esc="event.sequence"/>
-                            <span class="text-break flex-grow-1">
-                                <t t-esc="event.label"/>
-                                <t t-if="event.resource and event.resource.model">
-                                    <span class="ms-1">· <t t-esc="event.resource.model"/></span>
-                                </t>
-                            </span>
-                        </div>
-                    </div>
-                </details>
-            </section>
-        </xpath>
-
         <xpath expr="//div[contains(@t-if, 'state.loading') and contains(@t-if, '!state.streamingText')]" position="replace">
             <div t-if="state.loading and !state.streamingText and !state.currentActivity"
                 class="o_ai_assistant_turn_status small text-muted mt-3 d-flex align-items-center gap-2"

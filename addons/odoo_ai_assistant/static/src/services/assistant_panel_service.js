@@ -296,6 +296,9 @@ export function normalizeCapabilityPlanStatus(response, planId) {
 export function normalizeHistoryResponse(response) {
     if (
         response?.ok === true &&
+        (response.active_turn === null ||
+            (typeof response.active_turn?.turn_id === "string" &&
+                typeof response.active_turn?.state === "string")) &&
         (response.active_conversation_id === null ||
             typeof response.active_conversation_id === "string") &&
         Array.isArray(response.conversations) &&
@@ -377,6 +380,7 @@ export function saveDraft(storage, conversationId, value) {
 export function resetForNewConversation(state, storage) {
     saveDraft(storage, state.conversationId, state.draft);
     state.conversationId = null;
+    state.activeTurn = null;
     state.messages = [];
     state.draft = "";
     state.result = null;
@@ -515,6 +519,7 @@ export async function loadChatHistory({ state, rpcCall, conversationId = state.c
         state.conversations = parsed.history.conversations;
         state.conversationId = parsed.history.active_conversation_id;
         state.messages = parsed.history.messages;
+        state.activeTurn = parsed.history.active_turn;
         state.errorCode = null;
         return true;
     } catch {
@@ -786,6 +791,7 @@ export const assistantPanelService = {
             context: null,
             conversations: [],
             conversationId: null,
+            activeTurn: null,
             messages: [],
             draft: loadDraft(storage, null),
             result: null,

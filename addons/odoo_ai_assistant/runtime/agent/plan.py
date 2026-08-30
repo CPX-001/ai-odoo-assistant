@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import re
+import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -31,6 +33,7 @@ class CapabilityPlanExecution:
 
 
 BeforeEffect = Callable[[], None | Awaitable[None]]
+_SEMANTIC_GROUP_RE = re.compile(r"^semantic:v1:[0-9a-f]{32}$")
 
 
 class CapabilityPlanService:
@@ -48,9 +51,15 @@ class CapabilityPlanService:
         requires_confirmation = False
         for position, requested in enumerate(plan):
             definition = self._registry.resolve(requested.capability)
+            semantic_groups = {
+                "prepare": _new_semantic_group_key(),
+                "execute": _new_semantic_group_key(),
+                "verify": _new_semantic_group_key(),
+            }
             preview = await self._executor.preview(
                 definition.name,
                 requested.arguments,
+                semantic_group_key=semantic_groups["prepare"],
             )
             approval_required = self._executor.approval_required(definition.name)
             requires_confirmation = requires_confirmation or approval_required
@@ -76,6 +85,7 @@ class CapabilityPlanService:
                     "state": "previewed",
                     "result": None,
                     "verification": None,
+                    "semantic_groups": semantic_groups,
                 }
             )
         return {
@@ -122,6 +132,7 @@ class CapabilityPlanService:
             current_preview = await self._executor.preview(
                 definition.name,
                 step["arguments"],
+                semantic_group_key=step["semantic_groups"]["prepare"],
             )
             if current_preview.precondition_fingerprint != step["precondition_fingerprint"]:
                 raise CapabilityPlanError("capability_plan_precondition_changed")
@@ -144,11 +155,13 @@ class CapabilityPlanService:
                 step["arguments"],
                 authority=ExecutionAuthority.PLAN,
                 approved=human_approved,
+                semantic_group_key=step["semantic_groups"]["execute"],
             )
             verification = await self._executor.verify(
                 definition.name,
                 step["arguments"],
                 result,
+                semantic_group_key=step["semantic_groups"]["verify"],
             )
             step["state"] = "completed"
             step["result"] = dict(result.data)
@@ -188,7 +201,19 @@ def _validated_plan(payload):
             "state",
             "result",
             "verification",
+            "semantic_groups",
         }:
+            raise CapabilityPlanError("capability_plan_invalid")
+        semantic_groups = step.get("semantic_groups")
+        if (
+            not isinstance(semantic_groups, dict)
+            or set(semantic_groups) != {"prepare", "execute", "verify"}
+            or any(
+                not isinstance(value, str) or _SEMANTIC_GROUP_RE.fullmatch(value) is None
+                for value in semantic_groups.values()
+            )
+            or len(set(semantic_groups.values())) != 3
+        ):
             raise CapabilityPlanError("capability_plan_invalid")
         if (
             step.get("position") != position
@@ -203,6 +228,10 @@ def _validated_plan(payload):
         ):
             raise CapabilityPlanError("capability_plan_invalid")
     return payload
+
+
+def _new_semantic_group_key():
+    return f"semantic:v1:{secrets.token_hex(16)}"
 
 
 def _binding_fingerprint(name, version, arguments, precondition):

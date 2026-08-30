@@ -63,11 +63,14 @@ const KEYS = [
     "diagnostic_code",
     "occurred_at",
     "activity_id",
+    "semantic",
 ];
 const TURN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 const MODEL_RE = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
 const FIELD_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 const ACTIVITY_ID_RE = /^activity:v[1-9][0-9]*:[0-9a-f]{32}$/;
+const SEMANTIC_GROUP_RE = /^semantic:v[1-9][0-9]*:[0-9a-f]{32}$/;
+const SEMANTIC_CODE_RE = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
 const DIAGNOSTIC_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
 const OCCURRED_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
 const MAX_RESOURCE_RECORDS = 50;
@@ -182,12 +185,111 @@ function normalizeReferences(value) {
     return Object.freeze(result);
 }
 
+function normalizeSemanticArgs(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length > 8) {
+        return null;
+    }
+    const result = {};
+    for (const [key, raw] of Object.entries(value)) {
+        if (!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(key)) {
+            return null;
+        }
+        if (typeof raw === "string" && validLabel(raw, 160, { allowEmpty: true })) {
+            result[key] = raw.replace(/\s+/g, " ").trim();
+        } else if (
+            typeof raw === "boolean" ||
+            (Number.isSafeInteger(raw) && raw >= 0 && raw <= 1_000_000)
+        ) {
+            result[key] = raw;
+        } else {
+            return null;
+        }
+    }
+    return JSON.stringify(result).length <= 2048 ? Object.freeze(result) : null;
+}
+
+function normalizeSemanticSummary(value) {
+    if (value === null) {
+        return null;
+    }
+    if (!exactKeys(value, ["code", "args"]) || !SEMANTIC_CODE_RE.test(value.code)) {
+        return undefined;
+    }
+    const args = normalizeSemanticArgs(value.args);
+    return args === null ? undefined : Object.freeze({ code: value.code, args });
+}
+
+function normalizeSemanticProgress(value) {
+    if (value === null) {
+        return null;
+    }
+    if (
+        !exactKeys(value, ["current", "total"]) ||
+        !Number.isSafeInteger(value.current) ||
+        !Number.isSafeInteger(value.total) ||
+        value.current < 0 ||
+        value.total < 1 ||
+        value.current > value.total ||
+        value.total > 1_000_000
+    ) {
+        return undefined;
+    }
+    return Object.freeze({ current: value.current, total: value.total });
+}
+
+function normalizeSemantic(value) {
+    if (value === null) {
+        return null;
+    }
+    const keys = [
+        "group_key",
+        "parent_activity_id",
+        "operation",
+        "headline_code",
+        "headline_args",
+        "progress",
+        "result_summary",
+    ];
+    if (!exactKeys(value, keys)) {
+        return undefined;
+    }
+    const args = normalizeSemanticArgs(value.headline_args);
+    const progress = normalizeSemanticProgress(value.progress);
+    const resultSummary = normalizeSemanticSummary(value.result_summary);
+    if (
+        (value.group_key !== null &&
+            (typeof value.group_key !== "string" || !SEMANTIC_GROUP_RE.test(value.group_key))) ||
+        (value.parent_activity_id !== null &&
+            (typeof value.parent_activity_id !== "string" ||
+                !ACTIVITY_ID_RE.test(value.parent_activity_id))) ||
+        typeof value.operation !== "string" ||
+        !SEMANTIC_CODE_RE.test(value.operation) ||
+        typeof value.headline_code !== "string" ||
+        !SEMANTIC_CODE_RE.test(value.headline_code) ||
+        args === null ||
+        progress === undefined ||
+        resultSummary === undefined
+    ) {
+        return undefined;
+    }
+    return Object.freeze({
+        group_key: value.group_key,
+        parent_activity_id: value.parent_activity_id,
+        operation: value.operation,
+        headline_code: value.headline_code,
+        headline_args: args,
+        progress,
+        result_summary: resultSummary,
+    });
+}
+
 export function normalizePublicTurnEvent(value) {
     if (!exactKeys(value, KEYS)) {
         return null;
     }
     const resource = normalizeResource(value.resource);
     const references = normalizeReferences(value.references);
+    const semantic = normalizeSemantic(value.semantic);
     if (
         !Number.isSafeInteger(value.sequence) ||
         value.sequence <= 0 ||
@@ -200,6 +302,7 @@ export function normalizePublicTurnEvent(value) {
         !validLabel(value.label, 240) ||
         resource === undefined ||
         references === null ||
+        semantic === undefined ||
         (value.capability !== null &&
             (typeof value.capability !== "string" || !MODEL_RE.test(value.capability))) ||
         (value.progress !== null &&
@@ -228,6 +331,7 @@ export function normalizePublicTurnEvent(value) {
         diagnostic_code: value.diagnostic_code,
         occurred_at: value.occurred_at,
         activity_id: value.activity_id,
+        semantic,
     });
 }
 

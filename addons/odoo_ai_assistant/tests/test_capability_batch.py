@@ -42,6 +42,7 @@ class TestCapabilityBatchMutations(TransactionCase):
     def setUp(self):
         super().setUp()
         clear_discovery_cache()
+        self.semantic_events = []
         self.targets = self.env["res.partner"].create(
             [{"name": "AI BATCH A"}, {"name": "AI BATCH B"}]
         )
@@ -63,6 +64,9 @@ class TestCapabilityBatchMutations(TransactionCase):
                     "max_consecutive_failures": 3,
                 }
             },
+            event_sink=lambda event_type, title, payload: self.semantic_events.append(
+                (event_type, title, dict(payload))
+            ),
         )
         registry = discover_capabilities()
         executor = CapabilityExecutor(
@@ -168,6 +172,15 @@ class TestCapabilityBatchMutations(TransactionCase):
         )
         prepared = asyncio.run(plans.prepare(plan))
         self.assertEqual(prepared["steps"][0]["preview"]["count"], 2)
+        preview_started = next(
+            payload
+            for event_type, _title, payload in self.semantic_events
+            if event_type == "tool.preview.started"
+        )
+        self.assertEqual(
+            preview_started["semantic"]["headline_code"], "activity.prepare.create"
+        )
+        self.assertEqual(preview_started["semantic"]["headline_args"]["count"], 2)
         self.assertFalse(context.env["res.partner"].search([("name", "like", "AI CREATED %")]))
         authorized = dict(prepared)
         authorized["state"] = "authorized"
@@ -176,6 +189,15 @@ class TestCapabilityBatchMutations(TransactionCase):
         created = context.env["res.partner"].browse(record_ids).exists()
         self.assertEqual(created.mapped("name"), ["AI CREATED A", "AI CREATED B"])
         self.assertEqual(executed.payload["steps"][0]["verification"]["count"], 2)
+        verified = next(
+            payload
+            for event_type, _title, payload in self.semantic_events
+            if event_type == "tool.verify.completed"
+        )
+        self.assertEqual(verified["semantic"]["progress"], {"current": 2, "total": 2})
+        self.assertEqual(
+            verified["semantic"]["result_summary"]["code"], "activity.result.verified"
+        )
 
         browser_plan = _browser_capability_plan(
             SimpleNamespace(

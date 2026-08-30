@@ -18,7 +18,10 @@ import {
     failureCanRetry,
     failureFromError,
 } from "@odoo_ai_assistant/services/assistant_failure_contract";
-import { streamAssistantChatLive } from "@odoo_ai_assistant/services/assistant_live_stream_client";
+import {
+    replayAssistantTurnLive,
+    streamAssistantChatLive,
+} from "@odoo_ai_assistant/services/assistant_live_stream_client";
 import {
     clearRecentActiveChat,
     loadRecentActiveChat,
@@ -27,6 +30,8 @@ import {
 
 const CONVERSATION_KEY_PREFIX = "conversation:";
 const NEW_KEY_PREFIX = "new:";
+const REPLAY_POLL_MS = 500;
+const REPLAY_POLL_ATTEMPTS = 360;
 const RUNTIME_STATE_LABELS = Object.freeze({
     queued: "En cola",
     running: "En curso",
@@ -265,6 +270,128 @@ function appendActivity(scope, event) {
     scope.currentActivity = event;
 }
 
+function appendAssistantAnswerOnce(scope, turnId, answer, suffix) {
+    if (typeof answer !== "string" || !answer) {
+        return;
+    }
+    if (scope.messages.some((item) => item.role === "assistant" && item.content === answer)) {
+        return;
+    }
+    scope.messages = [
+        ...scope.messages,
+        {
+            message_id: `local-assistant-${turnId}-${suffix}`,
+            role: "assistant",
+            content: answer,
+            created_at: new Date().toISOString(),
+        },
+    ];
+}
+
+async function restorePersistedTurn(state, scope, activeTurn) {
+    if (
+        typeof activeTurn?.turn_id !== "string" ||
+        !activeTurn.turn_id ||
+        typeof activeTurn.state !== "string"
+    ) {
+        return false;
+    }
+    const generation = (scope.replayGeneration || 0) + 1;
+    scope.replayGeneration = generation;
+    scope.turnId = activeTurn.turn_id;
+    scope.turnState = activeTurn.state;
+    scope.activityEvents = [];
+    scope.currentActivity = null;
+    scope.streamingText = "";
+    scope.errorCode = null;
+    scope.failure = null;
+    scope.loading = ["queued", "running", "cancel_requested"].includes(activeTurn.state);
+    projectIfActive(state, scope);
+
+    let cursor = 0;
+    try {
+        for (let attempt = 0; attempt < REPLAY_POLL_ATTEMPTS; attempt += 1) {
+            if (scope.replayGeneration !== generation || scope.turnId !== activeTurn.turn_id) {
+                return false;
+            }
+            cursor = await replayAssistantTurnLive({
+                turnId: activeTurn.turn_id,
+                afterSequence: cursor,
+                onActivity: async (event) => {
+                    appendActivity(scope, event);
+                    projectIfActive(state, scope);
+                },
+                onDelta: async (text) => {
+                    const next = `${scope.streamingText || ""}${text}`;
+                    if (next.length > 16384) {
+                        throw new AssistantFailureError("invalid_response");
+                    }
+                    scope.streamingText = next;
+                    projectIfActive(state, scope);
+                },
+            });
+            const status = await rpc("/odoo_ai/v1/turn/status", {
+                turn_id: activeTurn.turn_id,
+                after_sequence: 0,
+            });
+            if (
+                status?.ok !== true ||
+                status.turn_id !== activeTurn.turn_id ||
+                status.conversation_id !== scope.conversationId ||
+                typeof status.state !== "string"
+            ) {
+                throw new AssistantFailureError("invalid_response");
+            }
+            scope.turnState = status.state;
+            if (["completed", "awaiting_confirmation"].includes(status.state)) {
+                const parsed = normalizeChatResponse(status.response);
+                if (!parsed.result) {
+                    throw new AssistantFailureError(parsed.errorCode || "invalid_response");
+                }
+                scope.result = parsed.result;
+                scope.streamingText = "";
+                scope.loading = false;
+                appendAssistantAnswerOnce(
+                    scope,
+                    activeTurn.turn_id,
+                    parsed.result.answer,
+                    "replay"
+                );
+                projectIfActive(state, scope);
+                return true;
+            }
+            if (status.state === "cancelled") {
+                scope.streamingText = "";
+                scope.loading = false;
+                appendAssistantAnswerOnce(scope, activeTurn.turn_id, status.answer, "cancelled");
+                projectIfActive(state, scope);
+                return true;
+            }
+            if (["failed", "recovery_required"].includes(status.state)) {
+                scope.streamingText = "";
+                scope.loading = false;
+                scope.errorCode = status.error_code || "runtime_unavailable";
+                projectIfActive(state, scope);
+                return false;
+            }
+            scope.loading = true;
+            projectIfActive(state, scope);
+            await new Promise((resolve) => setTimeout(resolve, REPLAY_POLL_MS));
+        }
+        scope.loading = false;
+        scope.errorCode = "engine_timeout";
+        projectIfActive(state, scope);
+        return false;
+    } catch (error) {
+        scope.loading = false;
+        const parsed = failureFromError(error);
+        scope.errorCode = parsed.code;
+        scope.failure = parsed.failure;
+        projectIfActive(state, scope);
+        return false;
+    }
+}
+
 async function bindPersistedTurn(state, scope, turnId, title) {
     const status = await rpc("/odoo_ai/v1/turn/status", {
         turn_id: turnId,
@@ -287,7 +414,7 @@ async function bindPersistedTurn(state, scope, turnId, title) {
     projectIfActive(state, scope);
 }
 
-async function submitScopedTurn({ state, screenContext, scope, message }) {
+async function submitScopedTurn({ state, screenContext, scope, message, onConversationBound }) {
     if (scope.loading || scope.decisionLoading || recoveryPending(scope)) {
         return false;
     }
@@ -341,6 +468,7 @@ async function submitScopedTurn({ state, screenContext, scope, message }) {
                             timing.turn_id,
                             normalized.slice(0, 160)
                         );
+                        onConversationBound?.(scope.conversationId);
                     } catch {
                         // The final validated response also carries the conversation binding.
                         // A transient status read must not fail an otherwise durable turn.
@@ -450,6 +578,20 @@ patch(assistantPanelService, {
             return scope;
         };
 
+        const restoreLoadedActiveTurn = async () => {
+            for (let attempt = 0; attempt < 80; attempt += 1) {
+                if (state.conversationId && state.activeTurn) {
+                    const key = conversationScopeKey(state.conversationId);
+                    const scope = ensureScope(state, key, state.conversationId);
+                    scope.messages = [...state.messages];
+                    projectConversationTurnScope(state, scope);
+                    return restorePersistedTurn(state, scope, state.activeTurn);
+                }
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+            return false;
+        };
+
         const loadConversation = async (conversationId) => {
             if (state.historyLoading || typeof conversationId !== "string" || !conversationId) {
                 return false;
@@ -484,6 +626,9 @@ patch(assistantPanelService, {
             projectConversationTurnScope(state, targetScope);
             state.historyView = false;
             saveRecentActiveChat(sessionStorage, conversationId);
+            if (state.activeTurn) {
+                void restorePersistedTurn(state, targetScope, state.activeTurn);
+            }
             return true;
         };
 
@@ -523,6 +668,7 @@ patch(assistantPanelService, {
             if (state.runtimeState !== "authenticated") {
                 return false;
             }
+            state.publicReferenceNotice = "";
             return startNewConversation();
         };
 
@@ -530,6 +676,7 @@ patch(assistantPanelService, {
             if (state.runtimeState !== "authenticated") {
                 return false;
             }
+            state.publicReferenceNotice = "";
             return loadConversation(conversationId);
         };
 
@@ -565,6 +712,8 @@ patch(assistantPanelService, {
                 screenContext: dependencies.odoo_ai_screen_context,
                 scope,
                 message,
+                onConversationBound: (conversationId) =>
+                    saveRecentActiveChat(sessionStorage, conversationId),
             });
             if (sent) {
                 state.historyView = false;
@@ -658,6 +807,7 @@ patch(assistantPanelService, {
                 state.isOpen = true;
                 service.refreshContext();
                 syncVisibleScope();
+                void restoreLoadedActiveTurn();
                 if (typeof baseRefreshRuntimeAccount === "function") {
                     void baseRefreshRuntimeAccount().then(() => syncVisibleScope());
                 }
@@ -665,6 +815,7 @@ patch(assistantPanelService, {
                 return;
             }
             baseOpen();
+            void restoreLoadedActiveTurn();
         };
         service.close = () => {
             const scope = activeScope(state);

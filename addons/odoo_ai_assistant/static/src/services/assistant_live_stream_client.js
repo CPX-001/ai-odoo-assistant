@@ -189,6 +189,37 @@ export function subscribeReasoningSummary(listener) {
     return () => reasoningSummarySubscribers.delete(listener);
 }
 
+export async function replayAssistantTurnLive({
+    turnId,
+    afterSequence = 0,
+    onActivity = () => {},
+    onDelta = () => {},
+    onReasoningSummary = () => {},
+    fetchCall = globalThis.fetch,
+}) {
+    if (
+        typeof turnId !== "string" ||
+        !turnId ||
+        !Number.isSafeInteger(afterSequence) ||
+        afterSequence < 0 ||
+        typeof onActivity !== "function" ||
+        typeof onDelta !== "function" ||
+        typeof onReasoningSummary !== "function"
+    ) {
+        throw new AssistantFailureError("invalid_context");
+    }
+    return drainLive({
+        fetchCall,
+        turnId,
+        afterSequence,
+        onActivity,
+        onDelta,
+        onReasoningSummary,
+        onFirstActivity: () => {},
+        onFirstAnswerDelta: () => {},
+    });
+}
+
 async function drainLive({
     fetchCall,
     turnId,

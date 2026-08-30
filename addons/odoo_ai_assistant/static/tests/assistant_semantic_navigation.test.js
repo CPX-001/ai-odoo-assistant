@@ -18,6 +18,7 @@ function event(sequence, status, references = []) {
         diagnostic_code: null,
         occurred_at: `2026-08-30T00:00:0${sequence}.000000Z`,
         activity_id: ACTIVITY,
+        semantic: null,
     };
 }
 

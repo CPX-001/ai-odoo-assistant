@@ -11,7 +11,7 @@
                     type="button" class="btn btn-sm btn-outline-secondary rounded-pill"
                     t-att-title="reference.description || finalReferenceLabel(reference)"
                     t-att-aria-label="finalReferenceLabel(reference)"
-                    t-on-click="() => openFinalReference(reference)">
+                    t-on-click="() => this.openFinalReference(reference)">
                     <i class="fa fa-external-link me-1" aria-hidden="true"/>
                     <span t-esc="finalReferenceLabel(reference)"/>
                 </button>

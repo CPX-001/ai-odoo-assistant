@@ -29,42 +29,148 @@ function durationLabel(milliseconds) {
 
 function semanticLabel(item) {
     if (!item) {
-        return _t("Trabajando en Odoo");
+        return _t("Working in Odoo");
     }
     switch (item.semantic_code) {
         case "request.analysis":
-            return _t("Analizando la petición");
+            return _t("Analyzing the request");
         case "answer.compose":
-            return _t("Redactando respuesta");
+            return _t("Drafting the answer");
         case "evidence.search":
-            return _t("Buscando información");
+            return _t("Searching for information");
         case "capability.prepare":
-            return _t("Preparando cambios");
+            return _t("Preparing changes");
         case "approval.wait":
-            return _t("Esperando aprobación");
+            return _t("Waiting for approval");
         case "capability.execute":
-            return _t("Ejecutando cambios");
+            return _t("Applying changes");
         case "capability.verify":
-            return _t("Verificando resultados");
+            return _t("Verifying results");
         case "capability.use":
-            return _t("Consultando Odoo");
+            return _t("Consulting Odoo");
+        case "activity.prepare.model":
+            return item.headline_args?.model_label
+                ? _t("Preparing %s", item.headline_args.model_label)
+                : _t("Preparing the requested operation");
+        case "activity.inspect.model":
+            return item.headline_args?.model_label
+                ? _t("Reviewing available data for %s", item.headline_args.model_label)
+                : _t("Reviewing available Odoo data");
+        case "activity.query.records":
+            return item.headline_args?.model_label
+                ? _t("Consulting %s", item.headline_args.model_label)
+                : _t("Consulting Odoo records");
+        case "activity.search.odoo":
+            return _t("Finding the relevant Odoo data");
+        case "activity.navigation.resolve":
+            return _t("Finding where to open it in Odoo");
+        case "activity.inspect.odoo":
+            return _t("Reviewing the current Odoo context");
+        case "activity.query.odoo":
+            return _t("Consulting Odoo");
+        case "activity.prepare.create":
+            return mutationLabel(item, "prepare", "create");
+        case "activity.prepare.patch":
+            return mutationLabel(item, "prepare", "update");
+        case "activity.prepare.archive":
+            return mutationLabel(item, "prepare", "archive");
+        case "activity.prepare.unarchive":
+            return mutationLabel(item, "prepare", "restore");
+        case "activity.prepare.delete":
+            return mutationLabel(item, "prepare", "delete");
+        case "activity.prepare.confirm":
+            return mutationLabel(item, "prepare", "confirm");
+        case "activity.prepare.changes":
+            return mutationLabel(item, "prepare", "change");
+        case "activity.execute.create":
+            return mutationLabel(item, "execute", "create");
+        case "activity.execute.patch":
+            return mutationLabel(item, "execute", "update");
+        case "activity.execute.archive":
+            return mutationLabel(item, "execute", "archive");
+        case "activity.execute.unarchive":
+            return mutationLabel(item, "execute", "restore");
+        case "activity.execute.delete":
+            return mutationLabel(item, "execute", "delete");
+        case "activity.execute.confirm":
+            return mutationLabel(item, "execute", "confirm");
+        case "activity.execute.changes":
+            return mutationLabel(item, "execute", "change");
+        case "activity.verify.results":
+            return _t("Verifying results");
         case "activity.failed":
-            return _t("La operación ha fallado");
+            return _t("The operation failed");
         case "activity.blocked":
-            return _t("La operación está bloqueada");
+            return _t("The operation is blocked");
         case "activity.cancelled":
-            return _t("La operación se ha cancelado");
+            return _t("The operation was cancelled");
         case "queue.wait":
-            return _t("Esperando turno");
+            return _t("Waiting for a worker");
         case "turn.finalize":
-            return _t("Finalizando");
+            return _t("Finishing");
         default:
-            return _t("Trabajando en Odoo");
+            return _t("Working in Odoo");
     }
 }
 
+function mutationLabel(item, stage, operation) {
+    const model = item.headline_args?.model_label;
+    const count = item.headline_args?.count;
+    const target = model || _t("Odoo records");
+    if (stage === "prepare") {
+        if (Number.isSafeInteger(count)) {
+            return _t("Preparing %s %s", count, target);
+        }
+        return _t("Preparing changes to %s", target);
+    }
+    if (Number.isSafeInteger(count)) {
+        const counted = {
+            create: () => _t("Creating %s %s", count, target),
+            update: () => _t("Updating %s %s", count, target),
+            archive: () => _t("Archiving %s %s", count, target),
+            restore: () => _t("Restoring %s %s", count, target),
+            delete: () => _t("Deleting %s %s", count, target),
+            confirm: () => _t("Confirming %s %s", count, target),
+            change: () => _t("Applying changes to %s %s", count, target),
+        };
+        return counted[operation]();
+    }
+    const singular = {
+        create: () => _t("Creating %s", target),
+        update: () => _t("Updating %s", target),
+        archive: () => _t("Archiving %s", target),
+        restore: () => _t("Restoring %s", target),
+        delete: () => _t("Deleting %s", target),
+        confirm: () => _t("Confirming %s", target),
+        change: () => _t("Applying changes to %s", target),
+    };
+    return singular[operation]();
+}
+
+function resultSummaryLabel(item) {
+    const summary = item?.result_summary;
+    if (!summary) {
+        return "";
+    }
+    const count = summary.args?.count;
+    const model = summary.args?.model_label || _t("records");
+    if (!Number.isSafeInteger(count)) {
+        return "";
+    }
+    if (summary.code === "activity.result.records_found") {
+        return _t("%s %s found", count, model);
+    }
+    if (summary.code === "activity.result.verified") {
+        return _t("Verified result: %s %s", count, model);
+    }
+    return _t("Completed result: %s %s", count, model);
+}
+
 function technicalSuffix(item, preferences) {
-    if (!preferences?.show_technical_names || !item) {
+    if (
+        (!preferences?.show_technical_names && preferences?.detail_level !== "diagnostic") ||
+        !item
+    ) {
         return "";
     }
     const technical = [];
@@ -158,6 +264,10 @@ patch(AssistantPanel.prototype, {
                     activity.preferences.show_step_durations && item.duration_ms !== null
                         ? durationLabel(item.duration_ms)
                         : "",
+                progress_label: item.progress_detail
+                    ? _t("%s / %s", item.progress_detail.current, item.progress_detail.total)
+                    : "",
+                result_summary_label: resultSummaryLabel(item),
                 references: disclosure.visible,
                 model_reference: resourceModelReference(item.resource),
                 reference_remaining_count: disclosure.remaining_count,
@@ -174,22 +284,22 @@ patch(AssistantPanel.prototype, {
     },
 
     get activityReasoningSummaryTitle() {
-        return _t("Resumen del razonamiento");
+        return _t("Reasoning summary");
     },
 
     get activitySummaryLabel() {
         const activity = this.semanticActivity;
         if (this.state.loading) {
-            return _t("Razonando · %s", semanticLabel(activity.headline));
+            return _t("Reasoning · %s", semanticLabel(activity.headline));
         }
         if (!activity.step_count) {
             return "";
         }
         const duration = durationLabel(activity.duration_ms);
         if (activity.step_count === 1) {
-            return _t("Ha pensado durante %s · 1 paso", duration);
+            return _t("Thought for %s · 1 step", duration);
         }
-        return _t("Ha pensado durante %s · %s pasos", duration, activity.step_count);
+        return _t("Thought for %s · %s steps", duration, activity.step_count);
     },
 
     get activityDetailLevel() {
@@ -204,14 +314,14 @@ patch(AssistantPanel.prototype, {
         if (!item?.reference_next_count) {
             return "";
         }
-        return _t("Mostrar %s más", item.reference_next_count);
+        return _t("Show %s more", item.reference_next_count);
     },
 
     activityShowRemainingLabel(item) {
         if (!item?.reference_remaining_count) {
             return "";
         }
-        return _t("Mostrar los %s restantes", item.reference_remaining_count);
+        return _t("Show the remaining %s", item.reference_remaining_count);
     },
 
     showMoreActivityReferences(item) {
@@ -241,7 +351,7 @@ patch(AssistantPanel.prototype, {
         const opened = await openPublicReference(reference, { actionService: this.actionService });
         this.state.publicReferenceNotice = opened
             ? ""
-            : _t("Este enlace ya no está disponible con tus permisos o contexto actuales.");
+            : _t("This link is no longer available with your current permissions or context.");
         return opened;
     },
 
@@ -268,4 +378,4 @@ patch(AssistantPanel.prototype, {
     },
 });
 
-export { durationLabel, semanticLabel, visibleReasoningParts };
+export { durationLabel, resultSummaryLabel, semanticLabel, visibleReasoningParts };

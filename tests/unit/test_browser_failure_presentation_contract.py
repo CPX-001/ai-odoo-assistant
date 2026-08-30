@@ -1,6 +1,50 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_late_final_ux_template_cannot_restore_raw_activity_lifecycle_dump():
+    source = (
+        ROOT
+        / "addons/odoo_ai_assistant/static/src/components/assistant_panel/zzzz_assistant_final_ux.xml"
+    ).read_text(encoding="utf-8")
+    assert "state.currentActivity.label" not in source
+    assert 't-esc="event.label"' not in source
+    assert 't-foreach="state.activityEvents"' not in source
+
+
+def test_spanish_semantic_activity_catalog_entries_are_javascript_translations():
+    catalog = (
+        ROOT / "addons" / "odoo_ai_assistant" / "i18n" / "es.po"
+    ).read_text(encoding="utf-8")
+    entries = [block for block in catalog.split("\n\n") if 'msgid ""' not in block]
+
+    assert entries
+    assert all("#. odoo-javascript" in block for block in entries)
+    assert all("#: code:addons/odoo_ai_assistant/" in block for block in entries)
+    assert 'msgid "Analyzing the request"\nmsgstr "Analizando la petición"' in catalog
+
+
+def test_semantic_activity_interactions_keep_the_component_receiver():
+    source = (
+        ROOT
+        / "addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_panel_activity.xml"
+    ).read_text(encoding="utf-8")
+
+    for handler in [
+        "openActivityReference",
+        "showMoreActivityReferences",
+        "showRemainingActivityReferences",
+    ]:
+        assert f"() =&gt; this.{handler}" in source or f"() => this.{handler}" in source
+
+    final_references = (
+        ROOT
+        / "addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_navigation_references.xml"
+    ).read_text(encoding="utf-8")
+    assert "() => this.openFinalReference" in final_references
+
+
 FAILURE = ROOT / "addons/odoo_ai_assistant/static/src/services/assistant_failure_contract.js"
 STREAM = ROOT / "addons/odoo_ai_assistant/static/src/services/assistant_stream_client.js"
 PRESENTATION = (

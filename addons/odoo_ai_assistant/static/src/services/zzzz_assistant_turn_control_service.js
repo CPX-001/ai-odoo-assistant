@@ -12,6 +12,8 @@ const FOLLOW_POLL_MS = 500;
 const FOLLOW_MAX_ATTEMPTS = 360;
 const BIND_WAIT_MS = 50;
 const BIND_WAIT_ATTEMPTS = 40;
+const CANCEL_POLL_MS = 250;
+const CANCEL_POLL_ATTEMPTS = 40;
 let interventionSequence = 0;
 
 export function newClientInterventionId() {
@@ -105,6 +107,52 @@ export function composerActionMode({
         return loading || awaitingApproval ? "redirect" : "send";
     }
     return "disabled";
+}
+
+export function applyAcceptedStopState(scope, state) {
+    if (!scope || !["cancel_requested", "cancelled"].includes(state)) {
+        return false;
+    }
+    scope.turnState = state;
+    if (state === "cancelled") {
+        scope.stopRequested = false;
+        scope.loading = false;
+    }
+    return true;
+}
+
+export function normalizeCancellationStatus(response, turnId) {
+    if (
+        response?.ok !== true ||
+        response.turn_id !== turnId ||
+        !["cancel_requested", "cancelled"].includes(response.state)
+    ) {
+        return null;
+    }
+    return response;
+}
+
+async function waitForTerminalCancellation(turnId, initialResponse) {
+    let current = normalizeCancellationStatus(initialResponse, turnId);
+    for (
+        let attempt = 0;
+        current?.state === "cancel_requested" && attempt < CANCEL_POLL_ATTEMPTS;
+        attempt += 1
+    ) {
+        await wait(CANCEL_POLL_MS);
+        const status = normalizeCancellationStatus(
+            await rpc("/odoo_ai/v1/turn/status", {
+                turn_id: turnId,
+                after_sequence: 0,
+            }),
+            turnId
+        );
+        if (!status) {
+            return null;
+        }
+        current = status;
+    }
+    return current;
 }
 
 export function normalizeRedirectResponse(response, turnId, clientInterventionId = null) {
@@ -340,17 +388,22 @@ patch(assistantPanelService, {
                     state.turnControlNotice = _t("No se pudo identificar el procesamiento que debía detenerse.");
                     return false;
                 }
-                const response = await rpc("/odoo_ai/v1/turn/cancel", { turn_id: turnId });
-                if (
-                    response?.ok !== true ||
-                    response.turn_id !== turnId ||
-                    !["cancel_requested", "cancelled"].includes(response.state)
-                ) {
+                let response = normalizeCancellationStatus(
+                    await rpc("/odoo_ai/v1/turn/cancel", { turn_id: turnId }),
+                    turnId
+                );
+                if (!response) {
                     scope.stopRequested = false;
                     state.turnControlNotice = noticeForError(errorCode(response, "invalid_response"));
                     return false;
                 }
-                scope.turnState = response.state;
+                response = await waitForTerminalCancellation(turnId, response);
+                if (!response) {
+                    scope.stopRequested = false;
+                    state.turnControlNotice = noticeForError("invalid_response");
+                    return false;
+                }
+                applyAcceptedStopState(scope, response.state);
                 scope.streamingText = "";
                 scope.errorCode = null;
                 scope.failure = null;

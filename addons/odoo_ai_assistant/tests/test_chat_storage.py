@@ -47,6 +47,7 @@ class TestAssistantNativeStorage(TransactionCase):
 
         history = store_a.history_payload(conversation_uuid=conversation_id)
         self.assertEqual(history["active_conversation_id"], conversation_id)
+        self.assertIsNone(history["active_turn"])
         self.assertEqual([item["role"] for item in history["messages"]], ["user", "assistant"])
         self.assertIn("User: Resume este pedido", store_a.recent_text(conversation_id))
 

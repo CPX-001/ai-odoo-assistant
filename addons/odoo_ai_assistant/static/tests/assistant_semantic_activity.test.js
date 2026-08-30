@@ -22,6 +22,7 @@ function event(sequence, overrides = {}) {
         diagnostic_code: null,
         occurred_at: `2026-08-29T10:00:0${sequence}.000000Z`,
         activity_id: FIRST,
+        semantic: null,
         ...overrides,
     };
 }
@@ -45,6 +46,71 @@ test("identical capabilities with different host activity ids remain separate", 
     expect(items).toHaveLength(2);
     expect(items[0].activity_id).toBe(FIRST);
     expect(items[1].activity_id).toBe(SECOND);
+});
+
+test("explicit host semantic grouping merges related lifecycle operations only", () => {
+    const group = "semantic:v1:33333333333333333333333333333333";
+    const semantic = {
+        group_key: group,
+        parent_activity_id: null,
+        operation: "capability.prepare",
+        headline_code: "activity.prepare.create",
+        headline_args: { model_label: "Quotations", count: 200 },
+        progress: null,
+        result_summary: null,
+    };
+    const items = reduceSemanticActivity([
+        event(1, { semantic }),
+        event(2, { activity_id: SECOND, semantic, status: "completed", kind: "preview.completed" }),
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].lifecycle_activity_ids).toEqual([FIRST, SECOND]);
+    expect(items[0].semantic_code).toBe("activity.prepare.create");
+    expect(items[0].headline_args.count).toBe(200);
+});
+
+test("normal semantic projection replaces raw technical titles with host codes", () => {
+    const semantic = {
+        group_key: null,
+        parent_activity_id: null,
+        operation: "odoo.records.query",
+        headline_code: "activity.query.records",
+        headline_args: { model_label: "Customers" },
+        progress: null,
+        result_summary: { code: "activity.result.records_found", args: { count: 12, model_label: "Customers" } },
+    };
+    const presentation = semanticActivityPresentation([
+        event(1, { label: "Query Odoo records", semantic }),
+        event(2, { label: "Query Odoo records", semantic, kind: "capability.completed", status: "completed" }),
+    ]);
+
+    expect(presentation.items).toHaveLength(1);
+    expect(presentation.items[0].semantic_code).toBe("activity.query.records");
+    expect(presentation.items[0].result_summary.args.count).toBe(12);
+    expect(presentation.items[0].semantic_code).not.toBe("Query Odoo records");
+});
+
+test("grounded progress is preserved and absent when the host did not provide it", () => {
+    const base = {
+        group_key: null,
+        parent_activity_id: null,
+        operation: "capability.execute",
+        headline_code: "activity.execute.create",
+        headline_args: { model_label: "Quotations", count: 200 },
+        progress: null,
+        result_summary: null,
+    };
+    const items = reduceSemanticActivity([
+        event(1, { semantic: base }),
+        event(2, {
+            activity_id: SECOND,
+            semantic: { ...base, progress: { current: 50, total: 200 } },
+        }),
+    ]);
+
+    expect(items[0].progress_detail).toBe(null);
+    expect(items[1].progress_detail).toEqual({ current: 50, total: 200 });
 });
 
 test("failure updates the same work item and reconnect replay is idempotent", () => {

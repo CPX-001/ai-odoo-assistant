@@ -1,0 +1,342 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+#   * odoo_ai_assistant
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 18.0\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Working in Odoo"
+msgstr "Trabajando en Odoo"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Analyzing the request"
+msgstr "Analizando la petición"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Drafting the answer"
+msgstr "Redactando la respuesta"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Searching for information"
+msgstr "Buscando información"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Preparing changes"
+msgstr "Preparando cambios"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Waiting for approval"
+msgstr "Esperando aprobación"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Applying changes"
+msgstr "Aplicando cambios"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Verifying results"
+msgstr "Verificando resultados"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Consulting Odoo"
+msgstr "Consultando Odoo"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "The operation failed"
+msgstr "La operación ha fallado"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "The operation is blocked"
+msgstr "La operación está bloqueada"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "The operation was cancelled"
+msgstr "La operación se ha cancelado"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Waiting for a worker"
+msgstr "Esperando un proceso disponible"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Finishing"
+msgstr "Finalizando"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Preparing %s"
+msgstr "Preparando %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Preparing the requested operation"
+msgstr "Preparando la operación solicitada"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Reviewing available data for %s"
+msgstr "Revisando los datos disponibles de %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Reviewing available Odoo data"
+msgstr "Revisando los datos disponibles en Odoo"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Consulting %s"
+msgstr "Consultando %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Consulting Odoo records"
+msgstr "Consultando registros de Odoo"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Finding the relevant Odoo data"
+msgstr "Buscando los datos relevantes en Odoo"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Finding where to open it in Odoo"
+msgstr "Buscando dónde abrirlo en Odoo"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Reviewing the current Odoo context"
+msgstr "Revisando el contexto actual de Odoo"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Odoo records"
+msgstr "registros de Odoo"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Preparing %s %s"
+msgstr "Preparando %s %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Preparing changes to %s"
+msgstr "Preparando cambios en %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Creating %s %s"
+msgstr "Creando %s %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Updating %s %s"
+msgstr "Actualizando %s %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Archiving %s %s"
+msgstr "Archivando %s %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Restoring %s %s"
+msgstr "Restaurando %s %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Deleting %s %s"
+msgstr "Eliminando %s %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Confirming %s %s"
+msgstr "Confirmando %s %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Applying changes to %s %s"
+msgstr "Aplicando cambios en %s %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Creating %s"
+msgstr "Creando %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Updating %s"
+msgstr "Actualizando %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Archiving %s"
+msgstr "Archivando %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Restoring %s"
+msgstr "Restaurando %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Deleting %s"
+msgstr "Eliminando %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Confirming %s"
+msgstr "Confirmando %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Applying changes to %s"
+msgstr "Aplicando cambios en %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "records"
+msgstr "registros"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "%s %s found"
+msgstr "%s %s encontrados"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Verified result: %s %s"
+msgstr "Resultado verificado: %s %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Completed result: %s %s"
+msgstr "Resultado completado: %s %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Reasoning summary"
+msgstr "Resumen del razonamiento"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Reasoning · %s"
+msgstr "Razonando · %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Thought for %s · 1 step"
+msgstr "Ha pensado durante %s · 1 paso"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Thought for %s · %s steps"
+msgstr "Ha pensado durante %s · %s pasos"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Show %s more"
+msgstr "Mostrar %s más"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Show the remaining %s"
+msgstr "Mostrar los %s restantes"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "This link is no longer available with your current permissions or context."
+msgstr "Este enlace ya no está disponible con tus permisos o contexto actuales."
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Assistant activity"
+msgstr "Actividad del Assistant"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Not all records are shown at once to avoid overloading the browser."
+msgstr "No se muestran todos los registros a la vez para evitar sobrecargar el navegador."
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Open in Odoo"
+msgstr "Abrir en Odoo"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Older steps have been hidden to keep the panel responsive."
+msgstr "Se han ocultado pasos antiguos para mantener el panel ligero."

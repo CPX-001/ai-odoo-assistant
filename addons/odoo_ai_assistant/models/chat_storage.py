@@ -131,12 +131,29 @@ class AssistantConversation(models.Model):
                 order="create_date desc, id desc",
             )
             messages = newest.sorted(key=lambda item: (item.create_date, item.id))
+        latest_turn = (
+            self.env["odoo.ai.turn"].search(
+                [
+                    ("conversation_id", "=", selected.id),
+                    ("user_id", "=", self.env.uid),
+                ],
+                order="id desc",
+                limit=1,
+            )
+            if selected
+            else self.env["odoo.ai.turn"].browse()
+        )
         return {
             "active_conversation_id": (
                 selected.conversation_uuid if selected else None
             ),
             "conversations": [item._history_view() for item in conversations],
             "messages": [item._history_view() for item in messages],
+            "active_turn": (
+                {"turn_id": latest_turn.turn_uuid, "state": latest_turn.state}
+                if latest_turn
+                else None
+            ),
         }
 
     @api.model

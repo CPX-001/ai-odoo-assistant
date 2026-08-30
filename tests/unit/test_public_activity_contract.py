@@ -31,6 +31,7 @@ def event(sequence=1, **overrides):
         "diagnostic_code": None,
         "occurred_at": "2026-08-28T10:00:00.000000Z",
         "activity_id": "activity:v1:0123456789abcdef0123456789abcdef",
+        "semantic": None,
     }
     value.update(overrides)
     return value
@@ -99,6 +100,32 @@ def test_private_reasoning_extra_payload_and_bad_activity_id_fail_closed():
 def test_non_correlated_public_event_remains_valid():
     parsed = module.parse_public_turn_event(event(activity_id=None))
     assert parsed.activity_id is None
+
+
+def test_semantic_work_item_contract_is_closed_and_grounded():
+    semantic = {
+        "group_key": "semantic:v1:11111111111111111111111111111111",
+        "parent_activity_id": None,
+        "operation": "capability.execute",
+        "headline_code": "activity.execute.create",
+        "headline_args": {"model_label": "Quotations", "count": 200},
+        "progress": {"current": 50, "total": 200},
+        "result_summary": None,
+    }
+    parsed = module.parse_public_turn_event(event(semantic=semantic))
+    assert parsed.semantic == semantic
+    for invalid in (
+        {**semantic, "group_key": "activity.execute.create"},
+        {**semantic, "progress": {"current": 201, "total": 200}},
+        {**semantic, "headline_args": {"private_reasoning": ["never"]}},
+        {**semantic, "invented": True},
+    ):
+        try:
+            module.parse_public_turn_event(event(semantic=invalid))
+        except module.PublicTurnEventError:
+            pass
+        else:
+            raise AssertionError("invalid semantic work item accepted")
 
 
 def test_cursor_order_turn_binding_and_reconnect():

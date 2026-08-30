@@ -27,6 +27,7 @@ from .validation import validate_payload
 _PUBLIC_MODEL = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
 _PUBLIC_FIELD = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _PUBLIC_ACTIVITY_ID = re.compile(r"^activity:v1:[0-9a-f]{32}$")
+_PUBLIC_SEMANTIC_GROUP = re.compile(r"^semantic:v1:[0-9a-f]{32}$")
 _MAX_PUBLIC_RECORD_REFS = 50
 _MAX_PUBLIC_DISPLAY_NAME = 160
 _MAX_PUBLIC_NAV_REFS = 12
@@ -56,6 +57,8 @@ class CapabilityExecutor:
         self,
         name: str,
         arguments: Mapping[str, JsonValue],
+        *,
+        semantic_group_key: str | None = None,
     ) -> CapabilityPreview:
         definition, payload, context = self._prepare(name, arguments)
         if definition.exposure is not CapabilityExposure.PLAN:
@@ -63,7 +66,12 @@ class CapabilityExecutor:
         if definition.preview_handler is None:
             raise CapabilityError("capability_preview_unavailable")
         public = _public_operation_payload(
-            definition.name, payload, activity_id=_new_activity_id()
+            context,
+            definition,
+            payload,
+            stage="prepare",
+            activity_id=_new_activity_id(),
+            semantic_group_key=semantic_group_key,
         )
         context.emit(
             "tool.preview.started",
@@ -104,6 +112,7 @@ class CapabilityExecutor:
         *,
         authority: ExecutionAuthority = ExecutionAuthority.REASONING,
         approved: bool = False,
+        semantic_group_key: str | None = None,
     ) -> CapabilityResult:
         definition, payload, context = self._prepare(name, arguments)
         decision = self._policy.evaluate(
@@ -119,7 +128,12 @@ class CapabilityExecutor:
             raise CapabilityError("capability_call_limit_exceeded")
         self._calls[name] = calls + 1
         public = _public_operation_payload(
-            definition.name, payload, activity_id=_new_activity_id()
+            context,
+            definition,
+            payload,
+            stage="execute",
+            activity_id=_new_activity_id(),
+            semantic_group_key=semantic_group_key,
         )
         context.emit(
             "tool.started",
@@ -166,6 +180,8 @@ class CapabilityExecutor:
         name: str,
         arguments: Mapping[str, JsonValue],
         result: CapabilityResult,
+        *,
+        semantic_group_key: str | None = None,
     ) -> CapabilityVerification:
         definition, payload, context = self._prepare(name, arguments)
         if definition.exposure is not CapabilityExposure.PLAN:
@@ -176,7 +192,12 @@ class CapabilityExecutor:
         metadata["capability_result"] = dict(result.data)
         context = replace(context, metadata=metadata)
         public = _public_operation_payload(
-            definition.name, payload, activity_id=_new_activity_id()
+            context,
+            definition,
+            payload,
+            stage="verify",
+            activity_id=_new_activity_id(),
+            semantic_group_key=semantic_group_key,
         )
         context.emit(
             "tool.verify.started",
@@ -207,10 +228,11 @@ class CapabilityExecutor:
                 {**public, "code": "capability_verification_failed"},
             )
             raise CapabilityError("capability_verification_failed")
+        completed_public = _public_verified_payload(public, raw.summary)
         context.emit(
             "tool.verify.completed",
             definition.title or definition.name,
-            public,
+            completed_public,
         )
         return CapabilityVerification(verified=True, summary=dict(raw.summary))
 
@@ -288,10 +310,18 @@ def _new_activity_id():
     return f"activity:v1:{secrets.token_hex(16)}"
 
 
-def _public_operation_payload(name, payload, *, activity_id=None):
+def _public_operation_payload(
+    context,
+    definition,
+    payload,
+    *,
+    stage,
+    activity_id=None,
+    semantic_group_key=None,
+):
     """Project only schema-validated non-secret resource identifiers into host activity."""
 
-    result = {"capability": name}
+    result = {"capability": definition.name}
     if isinstance(activity_id, str) and _PUBLIC_ACTIVITY_ID.fullmatch(activity_id):
         result["activity_id"] = activity_id
     model = payload.get("model")
@@ -300,6 +330,15 @@ def _public_operation_payload(name, payload, *, activity_id=None):
     record_id = payload.get("record_id")
     if type(record_id) is int and record_id > 0:
         result["record_id"] = record_id
+    semantic = _semantic_activity(
+        context,
+        definition,
+        payload,
+        stage=stage,
+        group_key=semantic_group_key,
+    )
+    if semantic is not None:
+        result["semantic"] = semantic
     return result
 
 
@@ -312,6 +351,9 @@ def _public_result_payload(context, public, output):
     """
 
     result = dict(public)
+    semantic = _semantic_result(result.get("semantic"), output, verified=False)
+    if semantic is not None:
+        result["semantic"] = semantic
     if result.get("capability") == "odoo.resolve_navigation":
         references = _public_navigation_references(output.get("references"))
         if references is not None:
@@ -365,6 +407,145 @@ def _public_result_payload(context, public, output):
         return result
     result["record_ids"] = ids
     result["display_names"] = names
+    return result
+
+
+def _public_verified_payload(public, summary):
+    result = dict(public)
+    semantic = _semantic_result(result.get("semantic"), summary, verified=True)
+    if semantic is not None:
+        result["semantic"] = semantic
+    return result
+
+
+def _semantic_activity(context, definition, payload, *, stage, group_key):
+    if group_key is not None and (
+        not isinstance(group_key, str) or _PUBLIC_SEMANTIC_GROUP.fullmatch(group_key) is None
+    ):
+        raise CapabilityError("capability_semantic_group_invalid")
+    model = payload.get("model")
+    model_label = _public_model_label(context, model)
+    operation = payload.get("operation") if isinstance(payload.get("operation"), str) else None
+    count = _input_count(payload)
+    name = definition.name
+    args = {}
+    if model_label:
+        args["model_label"] = model_label
+    if count is not None:
+        args["count"] = count
+
+    if stage == "verify":
+        semantic_operation = "capability.verify"
+        headline_code = "activity.verify.results"
+    elif stage == "prepare":
+        semantic_operation = "capability.prepare"
+        headline_code = _mutation_headline("prepare", operation or _operation_from_tags(definition.tags))
+    elif name == "odoo.get_effective_write_schema":
+        semantic_operation = "odoo.schema.write.inspect"
+        headline_code = "activity.prepare.model"
+    elif name == "odoo.get_effective_schema":
+        semantic_operation = "odoo.schema.read.inspect"
+        headline_code = "activity.inspect.model"
+    elif name in {"odoo.query_records", "odoo.aggregate_records"}:
+        semantic_operation = "odoo.records.query"
+        headline_code = "activity.query.records"
+    elif name == "odoo.search_models":
+        semantic_operation = "odoo.models.search"
+        headline_code = "activity.search.odoo"
+        query = payload.get("query")
+        if isinstance(query, str):
+            args["query"] = " ".join(query.split())[:160]
+    elif name == "odoo.resolve_navigation":
+        semantic_operation = "odoo.navigation.resolve"
+        headline_code = "activity.navigation.resolve"
+    elif definition.effect.value != "read-only":
+        semantic_operation = "capability.execute"
+        headline_code = _mutation_headline("execute", operation or _operation_from_tags(definition.tags))
+    elif definition.risk.value == "metadata":
+        semantic_operation = "odoo.metadata.inspect"
+        headline_code = "activity.inspect.odoo"
+    else:
+        semantic_operation = "odoo.records.query"
+        headline_code = "activity.query.odoo"
+    parent = context.metadata.get("semantic_parent_activity_id")
+    if not isinstance(parent, str) or _PUBLIC_ACTIVITY_ID.fullmatch(parent) is None:
+        parent = None
+    return {
+        "group_key": group_key,
+        "parent_activity_id": parent,
+        "operation": semantic_operation,
+        "headline_code": headline_code,
+        "headline_args": args,
+        "progress": None,
+        "result_summary": None,
+    }
+
+
+def _operation_from_tags(tags):
+    for operation in ("create", "patch", "archive", "unarchive", "delete", "confirm"):
+        if operation in tags:
+            return operation
+    return None
+
+
+def _mutation_headline(stage, operation):
+    known = {"create", "patch", "archive", "unarchive", "delete", "confirm"}
+    suffix = operation if operation in known else "changes"
+    return f"activity.{stage}.{suffix}"
+
+
+def _input_count(payload):
+    if isinstance(payload.get("rows"), list):
+        return len(payload["rows"])
+    if isinstance(payload.get("records"), list):
+        return len(payload["records"])
+    if isinstance(payload.get("record_ids"), list):
+        return len(payload["record_ids"])
+    return 1 if type(payload.get("record_id")) is int else None
+
+
+def _public_model_label(context, model):
+    if not isinstance(model, str) or _PUBLIC_MODEL.fullmatch(model) is None:
+        return None
+    try:
+        model_set = context.env[model]
+        label = str(getattr(model_set, "_description", "") or model)
+        translator = getattr(context.env, "_", None)
+        if callable(translator):
+            label = str(translator(label))
+    except Exception:  # noqa: BLE001 - presentation remains non-authoritative
+        return None
+    normalized = " ".join(label.split())
+    return normalized[:160] if normalized else None
+
+
+def _semantic_result(semantic, output, *, verified):
+    if not isinstance(semantic, dict) or not isinstance(output, Mapping):
+        return None
+    result = dict(semantic)
+    args = dict(result.get("headline_args") or {})
+    count = output.get("count")
+    if type(count) is not int:
+        count = output.get("returned_count")
+    if type(count) is not int and isinstance(output.get("record_ids"), list):
+        count = len(output["record_ids"])
+    if type(count) is int and 0 <= count <= 1_000_000:
+        operation = output.get("operation")
+        summary_args = {"count": count}
+        if isinstance(args.get("model_label"), str):
+            summary_args["model_label"] = args["model_label"]
+        if isinstance(operation, str):
+            summary_args["operation"] = operation[:64]
+        if verified:
+            code = "activity.result.verified"
+            expected = args.get("count")
+            if type(expected) is int and expected == count and expected > 0:
+                result["progress"] = {"current": count, "total": expected}
+        elif result.get("operation") == "odoo.records.query":
+            code = "activity.result.records_found"
+        else:
+            return result
+        result["result_summary"] = {"code": code, "args": summary_args}
     return result
 
 

@@ -77,6 +77,7 @@ class AssistantTurnLiveEvent(models.Model):
     label = fields.Char(readonly=True, size=240)
     resource = fields.Json(readonly=True)
     references = fields.Json(readonly=True)
+    semantic = fields.Json(readonly=True)
     capability = fields.Char(readonly=True, size=128)
     activity_id = fields.Char(readonly=True, size=64, index=True)
     progress = fields.Integer(readonly=True)
@@ -113,6 +114,7 @@ class AssistantTurnLiveEvent(models.Model):
         activity_id=None,
         progress=None,
         diagnostic_code=None,
+        semantic=None,
     ):
         _require_live_writer(self.env)
         return _append_activity(
@@ -128,6 +130,7 @@ class AssistantTurnLiveEvent(models.Model):
             activity_id=activity_id,
             progress=progress,
             diagnostic_code=diagnostic_code,
+            semantic=semantic,
         )
 
     @api.model
@@ -154,6 +157,7 @@ class AssistantTurnLiveEvent(models.Model):
                 diagnostic_code=self.diagnostic_code or None,
                 occurred_at=_iso_utc(self.occurred_at),
                 activity_id=self.activity_id or None,
+                semantic=self.semantic or None,
             )
         except PublicTurnEventError as error:
             raise ValidationError("Invalid persisted Assistant public activity") from error
@@ -222,11 +226,13 @@ class AssistantTurnEventLiveBridge(models.Model):
                 "diagnostic_code",
             }
             optional = {"activity_id", "references"}
+            optional.add("semantic")
             if not expected.issubset(payload) or set(payload) - expected - optional:
                 raise ValidationError("Invalid Assistant public-activity bridge")
             normalized = dict(payload)
             normalized.setdefault("activity_id", None)
             normalized.setdefault("references", [])
+            normalized.setdefault("semantic", None)
             self.env["odoo.ai.turn.live.event"].append_activity_independent(
                 turn_id=turn.id,
                 **normalized,
@@ -340,6 +346,7 @@ def _public_projection(event_type, title, payload, diagnostic_code):
         "activity_id": activity_id,
         "progress": None,
         "diagnostic_code": code,
+        "semantic": data.get("semantic"),
     }
 
 
@@ -391,6 +398,7 @@ def _append_activity(dbname, *, turn_id, **data):
                 "progress": event.progress if event.progress is not None else 0,
                 "progress_set": event.progress is not None,
                 "diagnostic_code": event.diagnostic_code or False,
+                "semantic": event.semantic or False,
                 "occurred_at": occurred_at,
             }
         )
@@ -434,6 +442,7 @@ def _append_answer(dbname, *, turn_id, text):
                 diagnostic_code=None,
                 occurred_at=_iso_utc(started_at),
                 activity_id=None,
+                semantic=None,
             )
             live.create(
                 {
@@ -451,6 +460,7 @@ def _append_answer(dbname, *, turn_id, text):
                     "progress": 0,
                     "progress_set": False,
                     "diagnostic_code": False,
+                    "semantic": False,
                     "occurred_at": started_at,
                 }
             )

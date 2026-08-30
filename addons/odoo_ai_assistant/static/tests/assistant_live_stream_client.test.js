@@ -1,6 +1,7 @@
 import { expect, test } from "@odoo/hoot";
 import {
     normalizeLivePage,
+    replayAssistantTurnLive,
     streamAssistantChatLive,
 } from "@odoo_ai_assistant/services/assistant_live_stream_client";
 
@@ -28,8 +29,40 @@ function activity(sequence = 1) {
         diagnostic_code: null,
         occurred_at: "2026-08-28T10:00:00.000000Z",
         activity_id: "activity:v1:0123456789abcdef0123456789abcdef",
+        semantic: null,
     };
 }
+
+test("durable replay re-emits each public item once from the requested cursor", async () => {
+    const activities = [];
+    const deltas = [];
+    const cursor = await replayAssistantTurnLive({
+        turnId: "turn-live-0001",
+        afterSequence: 0,
+        onActivity: async (event) => activities.push(event.activity_id),
+        onDelta: async (text) => deltas.push(text),
+        fetchCall: async () =>
+            jsonResponse({
+                ok: true,
+                turn_id: "turn-live-0001",
+                items: [
+                    { sequence: 1, channel: "activity", event: activity(1) },
+                    {
+                        sequence: 2,
+                        channel: "answer",
+                        turn_id: "turn-live-0001",
+                        text: "respuesta",
+                        occurred_at: "2026-08-28T10:00:00.100000Z",
+                    },
+                ],
+                last_sequence: 2,
+                has_more: false,
+            }),
+    });
+    expect(cursor).toBe(2);
+    expect(activities).toEqual(["activity:v1:0123456789abcdef0123456789abcdef"]);
+    expect(deltas).toEqual(["respuesta"]);
+});
 
 test("public activity answer and readable reasoning stay on separate browser channels", async () => {
     const deltas = [];

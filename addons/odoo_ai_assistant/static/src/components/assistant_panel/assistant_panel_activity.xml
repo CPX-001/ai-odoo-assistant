@@ -6,7 +6,7 @@
         <xpath expr="//div[@t-if='state.loading and state.streamingText']" position="before">
             <section t-if="activityItems.length"
                 class="o_ai_assistant_activity mt-3 border rounded bg-light-subtle px-2 py-2"
-                aria-label="Actividad del Assistant">
+                aria-label="Assistant activity">
                 <details>
                     <summary class="small d-flex align-items-center gap-2">
                         <i t-if="state.loading" class="fa fa-circle-o-notch fa-spin" aria-hidden="true"/>
@@ -32,6 +32,10 @@
                                 <span class="text-break flex-grow-1" t-esc="item.display_label"/>
                                 <small t-if="item.duration_label" class="text-nowrap" t-esc="item.duration_label"/>
                             </div>
+                            <div t-if="item.progress_label" class="ms-4 mt-1 small text-body-secondary"
+                                t-esc="item.progress_label"/>
+                            <div t-if="item.result_summary_label" class="ms-4 mt-1 small text-body-secondary"
+                                t-esc="item.result_summary_label"/>
                             <div t-if="item.references.length" class="ms-4 mt-1 d-flex flex-wrap gap-1">
                                 <button t-foreach="item.references" t-as="reference"
                                     t-key="activityReferenceKey(reference)"
@@ -39,7 +43,7 @@
                                     class="btn btn-sm btn-outline-secondary rounded-pill py-0 px-2 text-start"
                                     t-att-title="reference.description || reference.label"
                                     t-att-aria-label="reference.label"
-                                    t-on-click="() => openActivityReference(reference)">
+                                    t-on-click="() => this.openActivityReference(reference)">
                                     <i class="fa fa-external-link me-1" aria-hidden="true"/>
                                     <t t-esc="reference.label"/>
                                 </button>
@@ -47,28 +51,28 @@
                                     class="d-flex flex-wrap gap-2 align-items-center w-100">
                                     <button t-if="item.can_show_more_references" type="button"
                                         class="btn btn-link btn-sm p-0"
-                                        t-on-click="() => showMoreActivityReferences(item)">
+                                        t-on-click="() => this.showMoreActivityReferences(item)">
                                         <t t-esc="activityShowMoreLabel(item)"/>
                                     </button>
                                     <button t-if="item.can_show_remaining_references and item.reference_remaining_count > item.reference_next_count"
                                         type="button" class="btn btn-link btn-sm p-0"
-                                        t-on-click="() => showRemainingActivityReferences(item)">
+                                        t-on-click="() => this.showRemainingActivityReferences(item)">
                                         <t t-esc="activityShowRemainingLabel(item)"/>
                                     </button>
                                 </div>
                             </div>
                             <div t-if="item.references_over_limit" class="ms-4 mt-1 small text-muted">
-                                No se muestran todos los registros a la vez para evitar sobrecargar el navegador.
+                                Not all records are shown at once to avoid overloading the browser.
                             </div>
                             <button t-if="item.model_reference" type="button"
                                 class="btn btn-link btn-sm p-0 ms-4 mt-1"
-                                t-on-click="() => openActivityReference(item.model_reference)">
+                                t-on-click="() => this.openActivityReference(item.model_reference)">
                                 <i class="fa fa-list me-1" aria-hidden="true"/>
-                                Abrir en Odoo
+                                Open in Odoo
                             </button>
                         </div>
                         <div t-if="semanticActivity.truncated" class="small text-muted fst-italic">
-                            Se han ocultado pasos antiguos para mantener el panel ligero.
+                            Older steps have been hidden to keep the panel responsive.
                         </div>
                     </div>
                 </details>
