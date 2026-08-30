@@ -19,6 +19,20 @@ export function performedActionsState(result) {
     };
 }
 
+export function composerTextareaIsDisabled({ decisionLoading, recoveryPending, stopLoading }) {
+    return Boolean(decisionLoading || recoveryPending || stopLoading);
+}
+
+export function composerActionLabel(mode) {
+    const labels = {
+        stop: _t("Detener respuesta"),
+        redirect: _t("Corregir instrucción"),
+        send: _t("Enviar mensaje"),
+        disabled: _t("Enviar mensaje"),
+    };
+    return labels[mode] || labels.disabled;
+}
+
 patch(AssistantPanel.prototype, {
     get composerActionMode() {
         return composerActionMode({
@@ -35,14 +49,16 @@ patch(AssistantPanel.prototype, {
         return this.composerActionMode === "disabled";
     },
 
+    get composerTextareaDisabled() {
+        return composerTextareaIsDisabled({
+            decisionLoading: this.state.decisionLoading,
+            recoveryPending: this.recoveryPending,
+            stopLoading: this.state.stopLoading,
+        });
+    },
+
     get composerActionLabel() {
-        const labels = {
-            stop: _t("Detener respuesta"),
-            redirect: _t("Corregir instrucción"),
-            send: _t("Enviar mensaje"),
-            disabled: _t("Enviar mensaje"),
-        };
-        return labels[this.composerActionMode];
+        return composerActionLabel(this.composerActionMode);
     },
 
     get performedActions() {
