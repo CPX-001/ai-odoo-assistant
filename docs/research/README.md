@@ -31,7 +31,9 @@ Research documents do not override:
 | `P5.7_MODEL_FAMILY_REASONING_PREFERENCES.md` | Accepted model/reasoning preference work. |
 | `P5.7_CONVERSATION_SCOPED_PREFERENCES.md` | Accepted conversation preference mutation work. |
 | `P5.8_IMPLEMENTATION.md` / `P5.8_VALIDATION_RUNBOOK.md` | Accepted semantic activity/control/navigation/compensation implementation and historical gate chain. |
-| `P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md` | Current P6.1/P6.3/P6.5 implementation candidate and validation boundary. |
+| `P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md` | P6.1/P6.3/P6.5 TaskPlan/EffectPlan/budget foundation. |
+| `P6_EFFECT_RECOVERY_JOURNAL_IMPLEMENTATION.md` | P6.4/P6.6 recovery-unit and EffectJournal implementation. |
+| `P6_ADAPTIVE_PLANNING_IMPLEMENTATION.md` | P6.2 adaptive/deliberate/auto planning, evidence-driven replan and live TaskPlan implementation. |
 | `PHASE3_PUBLIC_ACTIVITY.md` | Formal completed P3 public activity record. |
 | `PHASE4_ANSWER_STREAMING.md` | Formal completed P4 answer streaming record. |
 | `E2E_AGENT_LOOP_CONVERGENCE.md` | Host-loop convergence research behind the current one-decision runtime. |
@@ -48,13 +50,13 @@ P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
 P5 COMPLETE
-P6 IN_PROGRESS
+P6 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.1 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
-  P6.2 NOT_STARTED
+  P6.2 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.3 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
-  P6.4 NOT_STARTED
+  P6.4 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.5 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
-  P6.6 NOT_STARTED
+  P6.6 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
 P7+ NOT_ELIGIBLE
 ```
 
@@ -74,21 +76,24 @@ P5.7 complete evidence/phase5/2026-08-29/P5.7-REAL-ACCEPTANCE-074a71c.md
 P5.8 complete evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
 ```
 
-P5.8 is fully accepted. Earlier text saying it still required real validation is obsolete.
+P5.8 is fully accepted.
 
 ## Current Phase-6 candidate
 
-The current large checkpoint intentionally groups the tightly related foundation for:
+All Phase-6 implementation blocks are now present as one candidate lineage:
 
 ```text
 P6.1 TaskPlan vs EffectPlan
+P6.2 adaptive/deliberate/auto planning + evidence-driven replan
 P6.3 bounded multi-step EffectPlan
+P6.4 atomic/segmented/external recovery units
 P6.5 separate budget families
+P6.6 short-lived EffectJournal
 ```
 
-The implementation is provider-neutral at the host boundary. Codex is the current concrete adapter because it is the configured provider, but TaskPlan/EffectPlan/budget/authority semantics do not live in Codex code.
+The implementation is provider-neutral at the host boundary. Codex is the current concrete adapter because it is the configured provider; planning, EffectPlan, budgets, recovery, journal and authority semantics remain outside Codex code.
 
-The focused deterministic checkpoint is green. `P6-REAL-MULTISTEP` and `P6-REAL-LOOP-BOUNDS` remain explicit validation debt and will be batched into the next periodic full regression. Continued P6 implementation is allowed while that debt is carried honestly; no P6 real gate becomes PASS merely because code/tests exist.
+The remaining Phase-6 work is validation, not another implementation slice. The next meaningful checkpoint is one periodic full regression carrying all six current Phase-6 real gates. Phase 7 remains ineligible until that exact candidate is accepted.
 
 ## Recursive execution rule
 
@@ -122,7 +127,7 @@ agentic/product evals
 real Odoo/browser/provider acceptance
 ```
 
-Focused validation is the default during development. The complete dependency-light/addon/HOOT/real-product battery is intentionally periodic and is defined in `PERIODIC_FULL_REGRESSION_RUNBOOK.md`. Unexecuted gates remain validation debt, not inferred PASS.
+Focused validation is the default during implementation. The complete dependency-light/addon/HOOT/real-product battery is periodic and is defined in `PERIODIC_FULL_REGRESSION_RUNBOOK.md`. Unexecuted gates remain validation debt, not inferred PASS.
 
 ## External implementation references
 
