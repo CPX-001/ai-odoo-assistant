@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 39
+State format: 40
 Updated: 2026-08-30
 
 Accepted lineage:
@@ -31,15 +31,18 @@ active_slice_record: docs/research/P6_ADAPTIVE_PLANNING_IMPLEMENTATION.md
 active_slice_state: IMPLEMENTED_PENDING_PERIODIC_VALIDATION
 current_gate_type: PERIODIC_FULL_REGRESSION
 blocking_work: none
-blocking_validation: Phase 6 acceptance / Phase 7 eligibility
+blocking_validation: Phase 6 Stage D real-product acceptance is blocked by provider usageLimitExceeded; Phase 7 remains ineligible
 pending_periodic_validation: P6-REAL-MULTISTEP, P6-REAL-REPLAN, P6-REAL-EFFECT-ATOMICITY, P6-REAL-SEGMENTED-RECOVERY, P6-REAL-LOOP-BOUNDS, P6-REAL-EFFECT-JOURNAL
 periodic_regression_runbook: docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
-latest_executed_evidence: docs/research/evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md
-next_action: run one consolidated periodic full regression against the exact current Phase-6 candidate; repair focused failures if any; only then accept Phase 6 and unlock Phase 7
+latest_executed_evidence: docs/research/evidence/regression/2026-08-30/FULL-REGRESSION-46b1093.md
+periodic_stage_status: A PASS; B PASS; C PASS; D BLOCKED (provider usageLimitExceeded before first decision)
+next_action: restore Codex provider capacity, run Stage D against product candidate 46b1093, repair any focused product failure, and only then accept Phase 6 and unlock Phase 7
 ```
 
-No unexecuted P6 HARD gate is PASS. All implementation areas are present; the remaining blocker is now one meaningful acceptance checkpoint rather than another implementation micro-slice.
+No unexecuted P6 HARD gate is PASS. Stages A-C of the periodic checkpoint are green on product
+candidate `46b1093`; Stage D and all named real gates remain blocked because the host Codex session
+returned sanitized provider code `usageLimitExceeded` before its first decision.
 
 ## Phase summary
 
@@ -159,7 +162,16 @@ Recorded focused checkpoint already green for the earlier P6.1/P6.3/P6.5 foundat
 docs/research/evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md
 ```
 
-Later P6.2/P6.4/P6.6 tests are committed but have not been executed in this GitHub-only environment. They include dependency-light contracts, Odoo TransactionCases and frontend HOOT coverage.
+The periodic regression on product candidate `46b1093` executed and passed the complete current
+dependency-light/static stage, complete Odoo addon stage and complete addon HOOT stage. Its
+consolidated evidence is:
+
+```text
+docs/research/evidence/regression/2026-08-30/FULL-REGRESSION-46b1093.md
+```
+
+The real-product stage was attempted but the configured host session returned
+`usageLimitExceeded` before the first provider decision. It therefore remains BLOCKED, not PASS.
 
 Accumulated periodic real debt:
 
@@ -172,7 +184,9 @@ P6-REAL-LOOP-BOUNDS
 P6-REAL-EFFECT-JOURNAL
 ```
 
-The expensive current-product validation must now be run once according to `PERIODIC_FULL_REGRESSION_RUNBOOK.md`, against one exact candidate SHA.
+Restore provider capacity and resume Stage D according to
+`PERIODIC_FULL_REGRESSION_RUNBOOK.md`, without rerunning already-green A-C unless the product
+candidate changes or a Stage-D repair affects them.
 
 ## Invariants carried forward
 
