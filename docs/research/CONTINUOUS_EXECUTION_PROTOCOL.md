@@ -1,6 +1,6 @@
 # Continuous execution protocol
 
-Date: 2026-08-28  
+Date: 2026-08-30  
 Status: execution protocol, not architecture authority
 
 ## 1. Purpose
@@ -90,38 +90,47 @@ implementation slices carrying unresolved real debt: 2
 stacked unvalidated contract layers: 1
 ```
 
-### Current exception/debt
+### Historical exception/debt
 
-P3/P4 production code is already landed while the P2 real gate is pending. This bounded look-ahead was intentionally used to create a reproducible P2-P4 validation batch.
+P3/P4 production code landed while the P2 real gate was pending. That bounded look-ahead was intentionally used to create a reproducible P2-P4 validation batch and was later accepted in order.
 
-Therefore current state treats look-ahead capacity as **exhausted**:
-
-```text
-P2 real gates pending
-P3 code landed
-P4 code landed
-=> no P5 contract implementation until ordered P2 -> P3 -> P4 acceptance is processed
-```
-
-Preparation that cannot consume/change those contracts (documentation, test data, external research) may still be possible, but implementation of the P5 runtime/frontend contract is blocked.
+The general rule remains: do not stack a dependent production contract on top of a failed/unaccepted HARD contract merely to keep implementation moving.
 
 ## 7. Validation batching
 
 Batch real gates when causality remains clear.
 
-Current intended batch:
+A failed HARD gate stops downstream acceptance immediately. Adjacent checks may be executed together when they validate one coherent product contract and a failure can still be attributed to a specific gate.
 
-```text
-run P2 gates
-  if PASS -> run P3 gates
-    if PASS -> run P4 gates
-```
+Do not create separate roadmap slices merely to mirror each validation command. Tests may be numerous while the implementation remains one coherent slice.
 
-A failed gate stops downstream acceptance immediately.
+## 8. Slice sizing — maximize coherent value
 
-Future phases may batch adjacent slices inside one phase after deterministic coverage, but a later phase cannot consume a failed/unaccepted HARD contract.
+The default unit of roadmap work is the **largest coherent slice that is still feasible to implement, understand, validate and recover safely**.
 
-## 8. Validation layers
+A good slice normally closes one meaningful product/architecture behavior end-to-end, including the relevant runtime/backend contract, frontend projection, deterministic coverage, documentation and cleanup. It should not stop after an arbitrary file, class, helper, test fixture or UI fragment when the same run can safely complete the behavior those pieces jointly implement.
+
+Split a slice only when a real boundary requires it:
+
+1. a HARD gate must be passed before dependent design is valid;
+2. authority/security semantics deserve an independent review boundary;
+3. one portion requires a materially different/unavailable execution environment;
+4. rollback/recovery risk makes an intermediate checkpoint substantially safer;
+5. the combined scope can no longer be reviewed or validated coherently in one run.
+
+Do **not** split merely because:
+
+- backend and frontend are different layers;
+- tests live in separate files;
+- documentation is separate from code;
+- the GitHub/API tool produces multiple commits;
+- a task can be described as several tiny implementation steps.
+
+Commit granularity and slice granularity are different. A tool may mechanically create several commits while they still belong to one roadmap slice.
+
+When in doubt, prefer fewer broader slices with explicit internal checkpoints and tests over many micro-slices that create partial-product ambiguity or make the roadmap harder to reconstruct.
+
+## 9. Validation layers
 
 Every slice defines applicable checks from:
 
@@ -143,7 +152,7 @@ Real Odoo 18 + configured provider + browser/host environment where relevant. Us
 
 Only executed successful checks may be recorded PASS.
 
-## 9. Slice metadata
+## 10. Slice metadata
 
 Every implementation slice records:
 
@@ -164,9 +173,9 @@ docs/cleanup required
 ADR requirement if any
 ```
 
-Use `SLICE_TEMPLATE.md` where useful.
+Also record why the selected scope is the largest coherent feasible unit when the phase contains multiple nearby changes. Use `SLICE_TEMPLATE.md` where useful.
 
-## 10. Recursive run algorithm
+## 11. Recursive run algorithm
 
 ### Step 1 — reconstruct
 
@@ -187,9 +196,11 @@ Priority:
 1. repair a failed HARD gate;
 2. finish still-valid IN_PROGRESS work;
 3. close validation debt if evidence is available;
-4. select first READY slice with all HARD prerequisites satisfied;
+4. select the first READY **coherent product slice**, grouping adjacent implementation work that can safely be completed and validated together;
 5. only if blocked by unavailable real evidence, evaluate explicit look-ahead eligibility;
 6. otherwise stop with exact required validation.
+
+Do not convert each helper, file, frontend/backend layer or test into its own roadmap slice. Keep working inside the selected slice until the coherent product behavior is implemented or a genuine gate/risk boundary is reached.
 
 ### Step 5 — inspect reusable implementation
 
@@ -204,7 +215,9 @@ Also inspect proven external Odoo patterns when they materially reduce design ri
 
 Do not add a dependency merely because a pattern is useful.
 
-### Step 6 — implement smallest coherent change
+### Step 6 — implement the largest coherent feasible slice
+
+Complete the selected product behavior across all affected current-path layers when practical. Use internal checkpoints/tests as needed, but do not declare the slice finished while a required part of that same behavior is knowingly left for another micro-slice without a genuine boundary.
 
 Preserve cross-phase invariants from the active playbook.
 
@@ -239,37 +252,21 @@ Do not force-push/discard concurrent work.
 
 ### Step 10 — decide whether execution may continue
 
-Continue only when another READY/eligible slice exists.
+Continue inside the same slice while coherent required work remains and no genuine blocker exists. Select a new slice only after the current one reaches its actual boundary.
 
 Stop when:
 
 - a HARD gate blocks downstream work;
 - look-ahead budget is exhausted;
 - next work needs an ADR/product decision not already defined;
-- required real evidence is unavailable and no independent preparation remains.
+- required real evidence is unavailable and no independent preparation remains;
+- continuing would make the slice too large to validate/recover coherently.
 
-## 11. Current exact stop rule
+## 12. Current exact stop rule
 
-At this revision, `EXECUTION_STATE.md` requires the five P2 real gates. P3/P4 implementation exists and must be accepted in order after P2.
+`EXECUTION_STATE.md` is the only authoritative current stop rule. Historical phase-specific stop rules in earlier revisions are not current execution instructions.
 
-Until that chain passes, a recurring implementation run should not start Phase 5 code.
-
-It may:
-
-- process new P2/P3/P4 evidence;
-- repair a failing current gate;
-- improve the validation harness without changing the unaccepted product contracts;
-- keep docs/evidence coherent.
-
-## 12. After P4 acceptance
-
-Set Phase 5 READY and begin at:
-
-```text
-P5.1 turn-scoped frontend/background state
-```
-
-Do not skip directly to RAG/host operations/imports merely because those features are attractive. P5-P7 establish non-blocking UX, deep effect semantics and extension/self-awareness contracts that later functional layers consume.
+A recurring run should process the exact active phase/slice and its blocking validation/repair work from that cursor rather than infer current work from old examples in this protocol.
 
 ## 13. External-reference rule
 
