@@ -61,6 +61,7 @@ python -m pytest -q \
   tests/e2e/test_next_decision_contract.py \
   tests/e2e/test_canonical_plan_proposal.py \
   tests/e2e/test_phase6_planning_contract.py \
+  tests/e2e/test_phase6_adaptive_planning_contract.py \
   tests/e2e/test_phase6_effect_recovery_contract.py \
   tests/e2e/test_e2e_decision_sequences.py
 node tests/js/failure_contract_test.mjs
@@ -89,7 +90,7 @@ Update/install the exact candidate and execute the entire addon test tag:
   --stop-after-init --log-level=test
 ```
 
-This is intentionally the broad backend integration gate. It covers the accumulated Odoo model/runtime/capability/ACL/queue/effect/approval/recovery regressions rather than repeatedly rerunning the entire addon after each small change. It now includes the focused `TestAssistantEffectJournal` and format-v3 recovery-unit assertions committed with P6.4/P6.6.
+This is intentionally the broad backend integration gate. It covers the accumulated Odoo model/runtime/capability/ACL/queue/effect/approval/recovery regressions rather than repeatedly rerunning the entire addon after each small change. It includes the P6 planning preference/settings tests, `TestAssistantEffectJournal` and format-v3 recovery-unit assertions.
 
 Gate ID:
 
@@ -103,7 +104,7 @@ Record selected/total test count, failures and errors against the exact SHA.
 
 Run the complete `@odoo_ai_assistant` HOOT suite using `/web/tests` or the already accepted headless runner in the disposable environment.
 
-The full suite is required here, not just touched files. It includes panel, multi-chat ownership, model/autonomy preferences, streaming, semantic activity, TaskPlan presentation, approval/recovery, contextual navigation and public-reference contracts.
+The full suite is required here, not just touched files. It includes panel, multi-chat ownership, model/autonomy/planning preferences, streaming, semantic activity, live TaskPlan/replan presentation, approval/recovery, contextual navigation and public-reference contracts.
 
 Use loopback `localhost` for the headless browser when required by browser secure-context behavior, as established by accepted P5.8 evidence.
 
@@ -137,15 +138,18 @@ Current accumulated Phase-6 real debt:
 
 ```text
 P6-REAL-MULTISTEP
-P6-REAL-LOOP-BOUNDS
+P6-REAL-REPLAN
 P6-REAL-EFFECT-ATOMICITY
 P6-REAL-SEGMENTED-RECOVERY
+P6-REAL-LOOP-BOUNDS
 P6-REAL-EFFECT-JOURNAL
 ```
 
-When P6.2 adaptive/deliberate/replan work lands, add `P6-REAL-REPLAN` to this same batch rather than forcing a separate expensive environment run.
+A gate is included only when the corresponding implementation exists and its scenario can honestly be exercised. Unimplemented future-phase gates remain roadmap work, not test failures.
 
-A gate is included only when the corresponding implementation exists and its scenario can honestly be exercised. Unimplemented gates remain roadmap work, not test failures.
+### Planning/replan observation
+
+For `P6-REAL-REPLAN`, use a complex safe task whose first TaskPlan assumption is invalidated by a real Odoo read/evidence result. Verify that the next TaskPlan revision is structural only after that evidence, has a bounded public replan summary, remains separate from EffectPlan authority and updates visibly without exposing private reasoning. Also verify that the same TaskPlan cannot structurally rewrite itself as an ordinary `progress` update.
 
 ### Recovery-specific observations
 
@@ -214,3 +218,5 @@ implement coherent product work
 ```
 
 This means an implementation slice may be `IMPLEMENTED_PENDING_PERIODIC_VALIDATION` without pretending it is accepted. Phase completion and safety claims still require the applicable evidence; implementation progress does not have to consume a full real-environment regression after every slice.
+
+At the current cursor all Phase-6 implementation blocks are present, so the next periodic run is a meaningful phase acceptance checkpoint rather than a per-slice regression.
