@@ -132,3 +132,33 @@ class EmbeddedAssistantEffectRecoveryRuntime(models.AbstractModel):
             executor=executor,
             working_items=receipt_items,
         )
+
+    def _plan_response(self, turn, envelope, policy, *, completed=False):
+        """Expose recovery shape without leaking journal snapshots or inventing atomicity."""
+
+        response = super()._plan_response(turn, envelope, policy, completed=completed)
+        source_plan = envelope.get("plan") if isinstance(envelope, dict) else None
+        browser_plan = response.get("plan") if isinstance(response, dict) else None
+        if not isinstance(source_plan, dict) or not isinstance(browser_plan, dict):
+            return response
+        units = source_plan.get("recovery_units")
+        if not isinstance(units, list) or not units:
+            return response
+        modes = [unit.get("mode") for unit in units if isinstance(unit, dict)]
+        if len(modes) != len(units) or any(
+            mode not in {"odoo_atomic", "segmented", "external"} for mode in modes
+        ):
+            raise EmbeddedRuntimeError("capability_plan_corrupt")
+        metadata = dict(browser_plan.get("metadata") or {})
+        metadata.update(
+            {
+                "is_atomic": len(units) == 1 and modes[0] == "odoo_atomic",
+                "recovery_unit_count": len(units),
+                "has_segmented_effects": "segmented" in modes,
+                "has_external_effect": (
+                    metadata.get("has_external_effect") is True or "external" in modes
+                ),
+            }
+        )
+        response["plan"] = {**browser_plan, "metadata": metadata}
+        return response
