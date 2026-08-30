@@ -185,8 +185,6 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
         if not result.plan:
             return self._read_only_response(turn, result, policy_snapshot)
 
-        if len(result.plan) != 1:
-            raise EmbeddedRuntimeError("agent_plan_limit_exceeded")
         prepared = asyncio.run(plans.prepare(result.plan))
         _ensure_turn_control_current(turn)
         prepared_items = _append_plan_prepared(service.working_items, prepared)
@@ -240,9 +238,6 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 raise EmbeddedRuntimeError(error.code) from error
 
         def before_effect():
-            # Serialize the final control check against redirect/stop. The transaction-scoped
-            # advisory lock is released by _commit_plan_barrier's durable commit immediately
-            # before the first business effect executes.
             acquire_turn_effect_lock(turn.env.cr, turn.turn_uuid)
             _ensure_turn_control_current(turn)
             _commit_plan_barrier(
@@ -379,29 +374,43 @@ def _new_reasoning_activity_id():
 
 def _append_plan_prepared(working_items, prepared):
     steps = prepared.get("steps") if isinstance(prepared, dict) else None
-    if not isinstance(steps, list) or len(steps) != 1 or not isinstance(steps[0], dict):
+    if not isinstance(steps, list) or not steps or len(steps) > 5:
         raise EmbeddedRuntimeError("capability_plan_corrupt")
-    proposed = next(
-        (item for item in reversed(working_items) if item.kind == "plan_step_proposed"),
-        None,
-    )
-    if proposed is None:
+    if any(not isinstance(step, dict) for step in steps):
+        raise EmbeddedRuntimeError("capability_plan_corrupt")
+    proposals = [item for item in working_items if item.kind == "plan_step_proposed"]
+    if len(proposals) < len(steps):
         raise EmbeddedRuntimeError("agent_working_transcript_invalid")
-    call_id = proposed.data.get("call_id")
-    capability = proposed.data.get("capability")
-    if not isinstance(call_id, str) or not isinstance(capability, str):
-        raise EmbeddedRuntimeError("agent_working_transcript_invalid")
-    if steps[0].get("capability") != capability:
-        raise EmbeddedRuntimeError("capability_plan_binding_mismatch")
+    proposals = proposals[-len(steps):]
+    call_ids = []
+    capabilities = []
+    for proposal, step in zip(proposals, steps, strict=True):
+        call_id = proposal.data.get("call_id")
+        capability = proposal.data.get("capability")
+        arguments = proposal.data.get("arguments")
+        if (
+            not isinstance(call_id, str)
+            or not isinstance(capability, str)
+            or not isinstance(arguments, dict)
+        ):
+            raise EmbeddedRuntimeError("agent_working_transcript_invalid")
+        if (
+            step.get("capability") != capability
+            or step.get("arguments") != arguments
+            or step.get("step_id") not in {None, call_id}
+        ):
+            raise EmbeddedRuntimeError("capability_plan_binding_mismatch")
+        call_ids.append(call_id)
+        capabilities.append(capability)
     return append_working_item(
         working_items,
         "plan_prepared",
         {
-            "call_id": call_id,
-            "capability": capability,
+            "call_ids": call_ids,
+            "capabilities": capabilities,
             "state": prepared.get("state"),
             "requires_confirmation": prepared.get("requires_confirmation") is True,
-            "step_count": 1,
+            "step_count": len(steps),
         },
     )
 
@@ -427,6 +436,7 @@ def _append_verified_effect_receipt(working_items, plan):
         receipt_steps.append(
             {
                 "position": step.get("position"),
+                "step_id": step.get("step_id"),
                 "capability": step.get("capability"),
                 "title": step.get("title"),
                 "result": dict(result),
