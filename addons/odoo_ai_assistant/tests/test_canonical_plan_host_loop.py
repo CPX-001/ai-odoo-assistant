@@ -63,6 +63,7 @@ class TestCanonicalPlanHostLoop(TransactionCase):
                     "max_capability_calls": 8,
                     "max_consecutive_correctable_failures": 3,
                     "max_write_steps_per_plan": 12,
+                    "max_effect_steps_per_plan": 5,
                 }
             },
         )
