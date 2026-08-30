@@ -81,8 +81,8 @@ class AssistantEffectJournal(models.Model):
         index=True,
     )
     before_payload = fields.Json(required=True, readonly=True, copy=False, default=dict)
-    after_payload = fields.Json(required=True, readonly=True, copy=False, default=dict)
-    receipt_payload = fields.Json(required=True, readonly=True, copy=False, default=dict)
+    after_payload = fields.Json(readonly=True, copy=False, default=dict)
+    receipt_payload = fields.Json(readonly=True, copy=False, default=dict)
     expires_at = fields.Datetime(required=True, readonly=True, index=True)
 
     _sql_constraints = [
