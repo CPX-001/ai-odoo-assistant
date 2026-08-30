@@ -441,7 +441,6 @@ class TestAssistantTurnControl(TransactionCase):
                 "name": "AI compensation write deny",
                 "model_id": self.env["ir.model"]._get_id("res.partner"),
                 "domain_force": "[('id', '=', 0)]",
-                "global": True,
                 "perm_read": False,
                 "perm_write": True,
                 "perm_create": False,
