@@ -16,13 +16,25 @@ export function finalReferenceActionLabel(reference) {
     if (!reference?.label) {
         return _t("Abrir en Odoo");
     }
-    if (reference.kind === "odoo_setting") {
-        return _t("Abrir %s", reference.label);
-    }
     if (reference.kind === "odoo_menu") {
         return _t("Ir a %s", reference.label);
     }
     return _t("Abrir %s", reference.label);
+}
+
+export function referenceKey(reference) {
+    if (!reference || typeof reference !== "object") {
+        return "reference:invalid";
+    }
+    const identity =
+        reference.record_id ||
+        reference.view_id ||
+        reference.menu_id ||
+        reference.action_id ||
+        reference.setting_field ||
+        reference.model ||
+        "unknown";
+    return `${reference.kind || "reference"}:${reference.model || ""}:${identity}`;
 }
 
 patch(AssistantPanel.prototype, {
@@ -36,6 +48,10 @@ patch(AssistantPanel.prototype, {
 
     finalReferenceLabel(reference) {
         return finalReferenceActionLabel(reference);
+    },
+
+    activityReferenceKey(reference) {
+        return referenceKey(reference);
     },
 
     async openFinalReference(reference) {
