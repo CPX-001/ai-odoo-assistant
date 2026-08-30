@@ -154,6 +154,11 @@ def validate_task_plan_transition(
     if kind == "progress":
         if not _same_plan_structure(previous, plan):
             raise NextDecisionValidationError("agent_task_plan_replan_required")
+        if all(
+            left.state == right.state
+            for left, right in zip(previous.steps, plan.steps, strict=True)
+        ):
+            raise NextDecisionValidationError("agent_task_plan_progress_required")
         return
     if kind != "replan":
         raise NextDecisionValidationError("agent_task_plan_revision_invalid")
@@ -197,7 +202,10 @@ class PlanningDecisionEngine:
         ):
             raise NextDecisionValidationError("agent_task_plan_required", decision)
         if isinstance(decision, TaskPlanUpdate):
-            validate_task_plan_transition(decision.task_plan, working_items)
+            try:
+                validate_task_plan_transition(decision.task_plan, working_items)
+            except NextDecisionValidationError as error:
+                raise NextDecisionValidationError(error.code, decision) from error
         return decision
 
 

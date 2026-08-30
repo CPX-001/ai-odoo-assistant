@@ -44,6 +44,9 @@ Choose one next operation only. For non-trivial work you may return task_plan_up
 small user-visible TaskPlan. It is progress communication, not private reasoning and never grants
 execution authority. The first TaskPlan revision is 1; every later update increments it by exactly
 one. Keep the goal and steps concise and revise states only from evidence available in host context.
+Use progress only when at least one existing step changes state; never emit a TaskPlan merely to
+increment its revision. If task_plan_error reports agent_task_plan_progress_required, choose the
+next capability call, effect proposal or final answer instead of repeating the unchanged plan.
 Do not place capability names, arguments, approvals, secrets or hidden reasoning into a TaskPlan.
 
 For supported requested state changes, stage typed effects one distinct plan_step_proposal at a

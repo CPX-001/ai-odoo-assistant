@@ -302,13 +302,19 @@ class AgentTurnService:
                 if not decision_counted:
                     provider_decisions += 1
                 rejected = getattr(error, "decision", None)
-                if not isinstance(rejected, (ReasoningCapabilityCall, PlanStepProposal)):
+                if not isinstance(
+                    rejected,
+                    (ReasoningCapabilityCall, PlanStepProposal, TaskPlanUpdate),
+                ):
                     raise AgentTurnError(error.code) from error
                 if isinstance(rejected, ReasoningCapabilityCall):
                     capability_calls += 1
                     if capability_calls > budgets.exploration.max_capability_calls:
                         raise AgentTurnError("agent_capability_call_budget_exceeded") from error
-                await self._record_rejected_decision(rejected, error.code)
+                if isinstance(rejected, TaskPlanUpdate):
+                    await self._record_rejected_task_plan(rejected.task_plan, error.code)
+                else:
+                    await self._record_rejected_decision(rejected, error.code)
                 consecutive_failures += 1
                 if consecutive_failures > budgets.safety.max_consecutive_failures:
                     raise AgentTurnError("agent_correctable_failure_budget_exceeded") from error
@@ -539,6 +545,14 @@ class AgentTurnService:
         )
         await self._persist()
 
+    async def _record_rejected_task_plan(self, plan: TaskPlan, code: str) -> None:
+        self._working_items = append_working_item(
+            self._working_items,
+            "task_plan_error",
+            {"code": code, "rejected_revision": plan.revision},
+        )
+        await self._persist()
+
     async def _record_decision(
         self,
         decision: ReasoningCapabilityCall | PlanStepProposal,
@@ -753,7 +767,7 @@ def _proposed_plan(items: tuple[WorkingItem, ...]) -> tuple[PlannedCapability, .
 
 def _provider_decisions_used(items: tuple[WorkingItem, ...]) -> int:
     return sum(
-        item.kind in {"assistant_decision", "task_plan", "final_answer"}
+        item.kind in {"assistant_decision", "task_plan", "task_plan_error", "final_answer"}
         for item in items
     )
 
@@ -769,7 +783,7 @@ def _capability_calls_used(items: tuple[WorkingItem, ...]) -> int:
 def _trailing_failure_count(items: tuple[WorkingItem, ...]) -> int:
     count = 0
     for item in reversed(items):
-        if item.kind == "capability_error":
+        if item.kind in {"capability_error", "task_plan_error"}:
             count += 1
             continue
         if item.kind == "capability_result":

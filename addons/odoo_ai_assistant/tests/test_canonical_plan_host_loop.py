@@ -5,6 +5,7 @@ from odoo.tests.common import TransactionCase
 
 from ..runtime.agent.contracts import FinalAnswer, PlanStepProposal, TaskPlanUpdate
 from ..runtime.agent.plan import CapabilityPlanService
+from ..runtime.agent.planning import PlanningDecisionEngine
 from ..runtime.agent.service import AgentTurnError, AgentTurnService
 from ..runtime.agent.task_plan import TaskPlan, TaskPlanStep
 from ..runtime.capabilities import (
@@ -362,3 +363,38 @@ class TestCanonicalPlanHostLoop(TransactionCase):
 
         self.assertEqual(captured.exception.code, "agent_task_plan_revision_invalid")
         self.assertEqual(engine.calls, 2)
+
+    def test_noop_task_plan_progress_is_correctable_and_not_published(self):
+        context, registry, executor, _plans = self._runtime()
+        initial = TaskPlan(
+            goal="Resolver",
+            revision=1,
+            steps=(TaskPlanStep("one", "Primero", "in_progress"),),
+        )
+        duplicate = TaskPlan(
+            goal="Resolver",
+            revision=2,
+            steps=(TaskPlanStep("one", "Primero", "in_progress"),),
+        )
+        underlying = _PlanDecisionEngine(
+            TaskPlanUpdate("task_plan_update", initial),
+            TaskPlanUpdate("task_plan_update", duplicate),
+            FinalAnswer("final_answer", "Continúo sin simular progreso.", "high"),
+        )
+        service = AgentTurnService(
+            registry=registry,
+            context=context,
+            executor=executor,
+            decision_engine=PlanningDecisionEngine(underlying),
+            allow_plan_proposals=True,
+        )
+
+        result = asyncio.run(service.run(message="Resuelve"))
+
+        self.assertEqual(result.answer, "Continúo sin simular progreso.")
+        self.assertEqual(underlying.calls, 3)
+        task_items = [item for item in service.working_items if item.kind == "task_plan"]
+        self.assertEqual([item.data["revision"] for item in task_items], [1])
+        errors = [item for item in service.working_items if item.kind == "task_plan_error"]
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(errors[0].data["code"], "agent_task_plan_progress_required")

@@ -13,6 +13,7 @@ _ALLOWED_KINDS = frozenset(
         "user_input",
         "assistant_decision",
         "task_plan",
+        "task_plan_error",
         "capability_call",
         "capability_result",
         "capability_error",

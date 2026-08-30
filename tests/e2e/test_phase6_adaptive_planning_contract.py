@@ -20,7 +20,10 @@ for package_name, package_path in (
     package.__path__ = [str(package_path)]
     sys.modules[package_name] = package
 
-from _p62_fixture.runtime.agent.contracts import ReasoningCapabilityCall  # noqa: E402
+from _p62_fixture.runtime.agent.contracts import (  # noqa: E402
+    ReasoningCapabilityCall,
+    TaskPlanUpdate,
+)
 from _p62_fixture.runtime.agent.decision_validation import (  # noqa: E402
     NextDecisionValidationError,
 )
@@ -161,6 +164,49 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
         with self.assertRaises(NextDecisionValidationError) as captured:
             validate_task_plan_transition(changed, working)
         self.assertEqual(captured.exception.code, "agent_task_plan_replan_required")
+
+    def test_progress_revision_must_change_a_step_state_and_preserve_rejected_decision(self):
+        initial = TaskPlan(
+            goal="Resolver",
+            revision=1,
+            steps=(TaskPlanStep("inspect", "Inspeccionar", "in_progress"),),
+            revision_kind="initial",
+        )
+        duplicate = TaskPlan(
+            goal="Resolver",
+            revision=2,
+            steps=(TaskPlanStep("inspect", "Inspeccionar", "in_progress"),),
+            revision_kind="progress",
+        )
+        decision = TaskPlanUpdate("task_plan_update", duplicate)
+        provider = _Provider(decision)
+        engine = PlanningDecisionEngine(provider)
+        context = CapabilityContext(
+            env=object(),
+            turn_id="p6-progress",
+            screen={},
+            metadata={
+                "planning_strategy": resolve_planning_strategy(
+                    "deliberate", message="Investiga", screen={}
+                ).payload()
+            },
+        )
+
+        with self.assertRaises(NextDecisionValidationError) as captured:
+            asyncio.run(
+                engine.next_decision(
+                    message="Investiga",
+                    conversation_summary="",
+                    context=context,
+                    reasoning_capabilities=(),
+                    planning_capabilities=(),
+                    working_items=({"kind": "task_plan", "data": initial.payload()},),
+                    remaining_budgets={},
+                )
+            )
+
+        self.assertEqual(captured.exception.code, "agent_task_plan_progress_required")
+        self.assertIs(captured.exception.decision, decision)
 
     def test_structural_replan_requires_new_host_evidence(self):
         initial = TaskPlan(
