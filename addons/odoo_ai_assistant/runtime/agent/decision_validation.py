@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from ..capabilities.contracts import CapabilityDefinition, CapabilityError
 from ..capabilities.validation import validate_payload
-from .contracts import FinalAnswer, NextDecision, PlanStepProposal, ReasoningCapabilityCall
+from .contracts import (
+    FinalAnswer,
+    NextDecision,
+    PlanStepProposal,
+    ReasoningCapabilityCall,
+    TaskPlanUpdate,
+)
+from .task_plan import parse_task_plan
 
 
 class NextDecisionValidationError(RuntimeError):
@@ -24,6 +31,13 @@ def validate_next_decision(
 
     if isinstance(decision, FinalAnswer):
         return decision
+    if isinstance(decision, TaskPlanUpdate):
+        try:
+            plan = parse_task_plan(decision.task_plan.payload())
+        except Exception as error:
+            code = getattr(error, "code", "agent_task_plan_invalid")
+            raise NextDecisionValidationError(code, decision) from error
+        return TaskPlanUpdate(kind=decision.kind, task_plan=plan)
     if isinstance(decision, ReasoningCapabilityCall):
         definition = _allowed(decision.capability, reasoning_capabilities)
         if definition is None:
