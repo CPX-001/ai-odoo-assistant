@@ -69,7 +69,21 @@ class AgentBudgetSet:
         capability_calls: int,
         consecutive_failures: int,
         transcript_bytes: int,
+        effect_steps: int = 0,
     ) -> dict[str, int]:
+        if (
+            type(provider_decisions) is not int
+            or provider_decisions < 0
+            or type(capability_calls) is not int
+            or capability_calls < 0
+            or type(consecutive_failures) is not int
+            or consecutive_failures < 0
+            or type(transcript_bytes) is not int
+            or transcript_bytes < 0
+            or type(effect_steps) is not int
+            or effect_steps < 0
+        ):
+            raise AgentBudgetError()
         return {
             "provider_decisions": max(0, self.provider_decision_limit - provider_decisions),
             "capability_calls": max(
@@ -78,7 +92,7 @@ class AgentBudgetSet:
             "correctable_failures": max(
                 0, self.safety.max_consecutive_failures - consecutive_failures
             ),
-            "effect_steps": self.safety.max_effect_steps,
+            "effect_steps": max(0, self.safety.max_effect_steps - effect_steps),
             "cost_provider_decisions": max(
                 0, self.cost.max_provider_decisions - provider_decisions
             ),
