@@ -22,7 +22,7 @@ from ..capabilities import (
     JsonValue,
 )
 from ..capabilities.validation import validate_payload
-from .budgets import resolve_agent_budgets
+from .budgets import AgentBudgetError, resolve_agent_budgets
 from .contracts import (
     FinalAnswer,
     NextDecision,
@@ -248,7 +248,10 @@ class AgentTurnService:
         engine = self._decision_engine
         if engine is None:
             raise AgentTurnError("agent_reasoning_engine_invalid")
-        budgets = resolve_agent_budgets(self._context)
+        try:
+            budgets = resolve_agent_budgets(self._context)
+        except AgentBudgetError as error:
+            raise AgentTurnError(error.code) from error
         await self._ensure_user_input(message)
         resumed = self._resume_terminal(planning)
         if resumed is not None:
@@ -320,7 +323,7 @@ class AgentTurnService:
                     {"answer": answer, "confidence": decision.confidence},
                 )
                 await self._persist()
-                proposed = _proposed_plan(self._working_items)
+                proposed = _proposed_plan(self._working_items) if self._allow_plan_proposals else ()
                 plan = self._validate_plan(proposed, planning) if proposed else ()
                 return AgentTurnResult(answer=answer, confidence=decision.confidence, plan=plan)
 
@@ -364,6 +367,13 @@ class AgentTurnService:
                 await self._persist()
                 consecutive_failures = 0
                 terminal_error = False
+                if budgets.safety.max_effect_steps == 1:
+                    plan = self._validate_plan(_proposed_plan(self._working_items), planning)
+                    return AgentTurnResult(
+                        answer="He preparado la acción solicitada para revisión.",
+                        confidence="high",
+                        plan=plan,
+                    )
                 continue
 
             if not isinstance(decision, ReasoningCapabilityCall):
@@ -542,7 +552,7 @@ class AgentTurnService:
         confidence = last.data.get("confidence")
         if not isinstance(answer, str) or not isinstance(confidence, str):
             raise AgentTurnError("agent_working_transcript_invalid")
-        proposed = _proposed_plan(self._working_items)
+        proposed = _proposed_plan(self._working_items) if self._allow_plan_proposals else ()
         plan = self._validate_plan(proposed, planning) if proposed else ()
         return AgentTurnResult(
             answer=_validated_answer(answer, confidence),
@@ -597,7 +607,10 @@ class AgentTurnService:
         plan: tuple[PlannedCapability, ...],
         planning: tuple[CapabilityDefinition, ...],
     ) -> tuple[PlannedCapability, ...]:
-        budgets = resolve_agent_budgets(self._context)
+        try:
+            budgets = resolve_agent_budgets(self._context)
+        except AgentBudgetError as error:
+            raise AgentTurnError(error.code) from error
         if not isinstance(plan, tuple) or len(plan) > budgets.safety.max_effect_steps:
             raise AgentTurnError("agent_plan_limit_exceeded")
         allowed = {definition.name: definition for definition in planning}
