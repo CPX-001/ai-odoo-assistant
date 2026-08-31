@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 44
+State format: 45
 Updated: 2026-08-31
 
 Accepted lineage:
@@ -24,23 +24,26 @@ P5 is **COMPLETE** and remains the latest fully accepted phase.
 ```text
 phase: 6
 phase_name: deep task planning, multi-step effects and recent effect journal
-phase_state: ALL_REAL_GATES_VALIDATED_PENDING_FINAL_PERIODIC_REGRESSION
+phase_state: COMPLETE
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P6-final-periodic-regression-pending
+active_slice: P6-final-periodic-regression
 active_slice_record: docs/research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md
-active_slice_state: PART2_VALIDATED_PENDING_FINAL_PERIODIC_REGRESSION
-current_gate_type: PERIODIC_FULL_REGRESSION
-blocking_work: none in the implemented Phase-6 functional slices
-blocking_validation: the applicable final periodic regression remains unexecuted; Phase 6 is not COMPLETE and Phase 7 remains ineligible
-pending_periodic_validation: applicable final periodic regression
+active_slice_state: VALIDATED_COMPLETE
+current_gate_type: NONE
+blocking_work: none
+blocking_validation: none
+pending_periodic_validation: none
 periodic_regression_runbook: docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md
-latest_accepted_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
-latest_executed_evidence: docs/research/evidence/phase6/2026-08-31/P6-VALIDATION-PART2-124ce4f.md
-periodic_stage_status: historical A-C PASS on 46b1093; D was BLOCKED there; no periodic batch has run against the current Direct/Plan candidate
-next_action: execute the applicable final periodic regression from PERIODIC_FULL_REGRESSION_RUNBOOK.md before any Phase-6 COMPLETE or Phase-7 claim
+latest_accepted_evidence: docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
+latest_executed_evidence: docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
+periodic_stage_status: final current-product A-D PASS on fc022a6; 246 unit, 39 E2E, 281 Odoo-counted, 157 HOOT/604 assertions, all permanent smokes and all six P6 real gates
+next_action: Phase 7 is eligible but has not been started; reconstruct its first coherent slice from the current playbook before implementation
 ```
 
-Part-1 evidence at `2689691` validates P6.1/P6.2/P6.3/P6.5 and the real multistep, replan and loop-bound gates. Part-2 evidence at `124ce4f` validates P6.4/P6.6 and the atomicity, segmented-recovery and EffectJournal real gates. The final periodic regression remains unexecuted.
+Part-1 evidence at `2689691` validates P6.1/P6.2/P6.3/P6.5. Part-2 evidence at `124ce4f`
+validates P6.4/P6.6. The final full regression at `fc022a6` repeated the complete current
+dependency-light, addon and HOOT suites plus all permanent real smokes and all six Phase-6 real
+gates. Phase 6 is therefore complete; Phase 7 was not started in that run.
 
 ## Phase summary
 
@@ -51,7 +54,7 @@ P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
 P5 COMPLETE
-P6 ALL_REAL_GATES_VALIDATED_PENDING_FINAL_PERIODIC_REGRESSION
+P6 COMPLETE
   P6.1 TaskPlan vs EffectPlan        VALIDATED_PART1
   P6.2 direct/deliberate/replan      VALIDATED_PART1
   P6.3 multi-step EffectPlan         VALIDATED_PART1
