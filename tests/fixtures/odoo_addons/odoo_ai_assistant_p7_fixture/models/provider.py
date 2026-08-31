@@ -50,7 +50,7 @@ def _current_screen_context(context):
             key="fixture_label",
             title="Fixture label",
             kind=CapabilitySettingType.STRING,
-            default="phase7",
+            required=True,
         ),
     ),
 )
@@ -58,7 +58,7 @@ def phase7_read_identity(context, arguments):
     del arguments
     return {
         "user_id": context.env.uid,
-        "label": context.settings.get("fixture_label") or "phase7",
+        "label": context.settings["fixture_label"],
     }
 
 
@@ -79,6 +79,7 @@ def phase7_read_identity(context, arguments):
     risk=CapabilityRisk.READ,
     effect=CapabilityEffect.READ_ONLY,
     exposure=CapabilityExposure.PLAN,
+    required_groups=("base.group_system",),
 )
 def phase7_plan_probe(context, arguments):
     del context, arguments
