@@ -11,10 +11,6 @@ for package_name, package_path in (
     ("addons.odoo_ai_assistant", ADDON_ROOT),
     ("addons.odoo_ai_assistant.runtime", ADDON_ROOT / "runtime"),
     (
-        "addons.odoo_ai_assistant.runtime.capabilities",
-        ADDON_ROOT / "runtime/capabilities",
-    ),
-    (
         "addons.odoo_ai_assistant.runtime.agent",
         ADDON_ROOT / "runtime/agent",
     ),
@@ -41,7 +37,6 @@ CapabilityConfigResolver = capabilities.CapabilityConfigResolver
 CapabilityContext = capabilities.CapabilityContext
 CapabilityDefinition = capabilities.CapabilityDefinition
 CapabilityEffect = capabilities.CapabilityEffect
-CapabilityError = capabilities.CapabilityError
 CapabilityExposure = capabilities.CapabilityExposure
 CapabilityRegistry = capabilities.CapabilityRegistry
 CapabilityRisk = capabilities.CapabilityRisk
