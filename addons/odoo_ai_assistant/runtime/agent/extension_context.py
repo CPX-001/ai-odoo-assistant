@@ -65,6 +65,16 @@ class AssistantExtensionDecisionEngine:
             context,
             capability_names=model_visible_names,
         )
+        configuration_health = list(_configuration_health(self._registry, self._config))
+        configuration_health.extend(
+            {
+                "provider_id": item.provider_id,
+                "state": f"extension_{item.state}",
+                "error_code": item.error_code or None,
+            }
+            for item in self._extensions.statuses
+            if item.state != "loaded"
+        )
         manifest = build_effective_assistant_manifest(
             registry=self._registry,
             context=context,
@@ -72,7 +82,7 @@ class AssistantExtensionDecisionEngine:
             skills=self._extensions.skills,
             context_providers=self._extensions.context_providers,
             technical_profile=self._technical_profile,
-            configuration_health=_configuration_health(self._registry, self._config),
+            configuration_health=configuration_health,
         )
 
         extension_contract = {
