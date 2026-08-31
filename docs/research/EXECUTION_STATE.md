@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 50  
+State format: 51  
 Updated: 2026-08-31
 
 ## Accepted lineage
@@ -18,190 +18,204 @@ P5.8 through 688f569d441a40a4637ad6a23f111e584e18c955
 P6 final acceptance through 0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0
 ```
 
-P6 is **COMPLETE**. No Phase-7 implementation after the accepted P6 checkpoint is promoted or accepted by this
-record unless explicit validation evidence says so.
+P0-P6 remain accepted. Phase-7 code after the P6 checkpoint is **not accepted yet** unless the consolidated validation
+below is actually executed and recorded.
 
-## User-directed validation sequencing override
+## User-directed validation sequencing
 
-On 2026-08-31 the user explicitly requested that implementation continue and that the pending gates be accumulated
-for validation later. This changes the **sequencing stop rule**, not the acceptance criteria:
+On 2026-08-31 the user requested that Phase-7 implementation be finished first and that the pending tests plus
+corrections be executed afterward as one consolidated pass. That sequencing choice has now been applied.
+
+It changes implementation order only:
 
 ```text
-implementation may continue across P7 slices
-validation gates remain pending
-no deferred gate may be reported as PASS
-P7 remains IN_PROGRESS until the accumulated gates are actually executed and accepted
+implementation may be complete
+validation may still be pending
+unexecuted gates are never PASS
+P8 stays blocked until P7 acceptance
 ```
-
-The Product Behavior Evals v1 gate is therefore no longer a code-sequencing blocker for this session, but it remains
-a required promotion gate together with the Phase-7 deterministic/real gates.
 
 ## Current cursor
 
 ```text
 phase: 7
 phase_name: mini-framework, feature negotiation and Assistant self-awareness
-phase_state: IN_PROGRESS_IMPLEMENTATION_ADVANCING_VALIDATION_DEFERRED
-active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice_record: docs/research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md
-current_gate_type: DEFERRED_ACCUMULATED_VALIDATION
-blocking_work: none from the deferred validation gates; continue only changes coherent with current P7 architecture
-blocking_validation: none for implementation sequencing by explicit user direction; all listed gates remain required before P7 acceptance
+phase_state: IMPLEMENTATION_COMPLETE_ACCEPTANCE_PENDING
+active_phase_record: docs/research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md
+active_validation_runbook: docs/research/P7_CONSOLIDATED_VALIDATION_RUNBOOK.md
+current_gate_type: CONSOLIDATED_P7_AND_PRODUCT_VALIDATION
+blocking_work: no planned Phase-7 implementation slice remains before validation
+blocking_validation: Product Behavior focused + SMOKE + FULL, P7 deterministic/Odoo gates, six P7 real gates, final affected regression
 latest_accepted_evidence: docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
-latest_executed_evidence: docs/research/evidence/phase7/2026-08-31/P7.1-FOUNDATION-3c9e118.md
-unvalidated_p7_code_checkpoint: 75e4a2c74b29c7309bfc7688f182466901659c58
-next_action: continue P7.2/P7.3 live Skill/Context activation and P7.4/P7.5 provider-profile/manifest binding, then prepare the installed test-provider fixture; do not mark the phase accepted
+latest_executed_p7_evidence: docs/research/evidence/phase7/2026-08-31/P7.1-FOUNDATION-3c9e118.md
+next_action: freeze current candidate, execute P7_CONSOLIDATED_VALIDATION_RUNBOOK.md, repair every HARD failure, rerun affected gates, then accept P7
 ```
 
 ## Phase summary
 
 ```text
-P0 COMPLETE
-P1 COMPLETE
-P2 COMPLETE
-P3 COMPLETE
-P4 COMPLETE
-P5 COMPLETE
-P6 COMPLETE
-P7 IN_PROGRESS / VALIDATION DEFERRED
+P0 COMPLETE / ACCEPTED
+P1 COMPLETE / ACCEPTED
+P2 COMPLETE / ACCEPTED
+P3 COMPLETE / ACCEPTED
+P4 COMPLETE / ACCEPTED
+P5 COMPLETE / ACCEPTED
+P6 COMPLETE / ACCEPTED
+P7 IMPLEMENTATION COMPLETE / ACCEPTANCE PENDING
   PRE-P7 Product Behavior Evals v1   IMPLEMENTED / VALIDATION_PENDING
-  P7.1 CapabilityProvider API        LIVE_WIRING_IMPLEMENTED / VALIDATION_PENDING
-  P7.2 Skill/Bundle                  CONTRACT+COMPOSITION_IMPLEMENTED / LIVE_ACTIVATION_PENDING
-  P7.3 ContextProvider               CONTRACT+COMPOSITION_IMPLEMENTED / LIVE_ACTIVATION_PENDING
-  P7.4 ProviderProfile               CONTRACT_IMPLEMENTED / CURRENT_PROVIDER_BINDING_PENDING
-  P7.5 EffectiveAssistantManifest    CONTRACT+DERIVATION_IMPLEMENTED / PRODUCT_BINDING_PENDING
+  P7.1 CapabilityProvider API        IMPLEMENTED_LIVE / VALIDATION_PENDING
+  P7.2 Skill/Bundle                  IMPLEMENTED_LIVE / VALIDATION_PENDING
+  P7.3 ContextProvider               IMPLEMENTED_LIVE / VALIDATION_PENDING
+  P7.4 ProviderProfile               IMPLEMENTED_BOUND / VALIDATION_PENDING
+  P7.5 EffectiveAssistantManifest    IMPLEMENTED_LIVE / VALIDATION_PENDING
   P7.6 Technical profile skeleton    IMPLEMENTED / NO_PRIVILEGED_AUTHORITY
-  P7.7 Progressive disclosure        CONTRACT_IMPLEMENTED / DEFAULT_DISABLED / EVAL_GATED
-P8+ NOT_ELIGIBLE_FOR_ACCEPTANCE
+  P7.7 Progressive disclosure        FRAMEWORK_IMPLEMENTED / EAGER_DEFAULT / PROMOTION_EVAL_GATED
+P8+ NOT_ELIGIBLE
 ```
 
-## P7 implementation now present on main
+## Phase-7 implementation now present
 
-### P7.1 — installed-addon capability providers
+### Effective provider extension boundary
 
-The previously isolated provider foundation is now wired into the current Odoo-owned effective-catalog surfaces:
+Trusted installed Odoo addons can contribute `CapabilityProvider` markers through the active Odoo registry. Their
+`CapabilityDefinition` objects compose into the same effective registry used by:
 
 ```text
-live embedded host loop -> discover_capabilities_for_env(self.env)
-settings/catalog/config -> discover_capabilities_for_env(self.env)
-reversion/compensation -> discover_capabilities_for_env(self.env)
-reversion eligibility -> discover_capabilities_for_env(self.env)
+live host loop
+Settings / capability diagnostics
+plan/reversion/compensation paths
 ```
 
-This means trusted installed Odoo addons can contribute `CapabilityDefinition` objects through the registry marker
-`_odoo_ai_capability_provider` while the existing executor/policy/ACL/approval/verification boundary remains the only
-execution authority. Optional provider failures and identity conflicts remain fail-isolated/fail-closed according to
-the provider contract.
+Provider/capability/executor collisions fail closed. Optional provider failure cannot remove the core catalog.
 
-### P7.2/P7.3 — Skill and Context resource layer
+### Skills and JIT context
 
-The framework now contains:
+`CapabilityProvider` may now contribute `SkillDefinition` and `ContextProvider` resources. The live decision path:
 
 ```text
-SkillDefinition / SkillCatalog
-ContextProvider / ContextProviderCatalog
-CapabilityProvider.skills
-CapabilityProvider.context_providers
-AssistantExtensionCatalog
-ActiveAssistantExtensions
+effective registry
+ -> AssistantExtensionCatalog
+ -> active Skills
+ -> selected bounded ContextProviders
+ -> AssistantExtensionDecisionEngine
+ -> provider adapter
 ```
 
-Skills carry behavior/instructions/selectors/config/eval ownership but no authorization. Context providers return
-bounded JSON data and are explicitly treated as data, not policy. Non-executable resources are composed only for a
-provider whose executable capability provider was accepted by the host registry; optional resource collisions are
-isolated without shadowing existing identities.
-
-`AssistantExtensionCatalog.activate(...)` resolves host-enabled Skills and only the JIT ContextProviders selected by
-those Skills. The contract exists, but the active Skill instructions/JIT context are **not yet injected into the live
-Codex decision input** at this checkpoint.
-
-### P7.4/P7.5/P7.6/P7.7 contract layer
-
-Current framework code also contains:
+Trust separation is explicit:
 
 ```text
-ProviderProfile
-ProviderFeature / ProviderFeatureState(native|emulated|unavailable)
-EffectiveAssistantManifest
-TechnicalAccessProfile(BUSINESS|DEVELOPER)
-DisclosurePolicy
-CapabilityDisclosureSnapshot
+Skill instructions       trusted installed-code guidance, NO authority
+Assistant manifest       host-derived projection, NO authority
+ContextProvider payload  untrusted contextual data
+CapabilityDefinition     executable unit still validated by host
 ```
 
-The manifest is a derived projection, not a second authority registry. It omits handlers and Skill instructions from
-browser payloads. Progressive disclosure is deliberately disabled by default until catalog-scale/product evals justify
-hiding detailed schemas. The current Codex adapter has not yet been bound to a product-level `ProviderProfile`, so no
-feature-support claims should be surfaced to users yet.
+### Provider feature negotiation
 
-## Validation accumulated for later
+`ProviderProfile` records `native | emulated | unavailable` for structured output, tool calling, answer streaming,
+vision, file input, web and large context. The current Codex App Server binding is intentionally conservative and
+describes only features exposed through this addon.
 
-### Product Behavior Evals v1
+### Effective self-awareness
 
-The current Product Behavior implementation remains unaccepted until its focused/static/Odoo/HOOT checks and real
-SMOKE/FULL runs are executed. Owning documents:
+`EffectiveAssistantManifest` is derived from the current provider profile, effective REASONING/PLAN catalog, Skills,
+ContextProviders, technical profile and sanitized configuration/provider health. Host-only capabilities are excluded.
+
+The manifest is available to live reasoning and through admin diagnostics (`assistant_effective_manifest()`). It is a
+projection, not a second tool/authority registry.
+
+### Technical profile
+
+`Business/User` vs `Developer/Operator` is descriptive only in Phase 7. It grants no shell/filesystem/SQL/service or
+other host privilege. Those remain Phase-10 work behind a dedicated privilege boundary.
+
+### Progressive disclosure
+
+The framework implements `discovered -> available -> revealed -> active` state and synthetic 100+ catalog coverage,
+but the current product remains eager by default. Lazy disclosure cannot be promoted simply for token savings; the
+real disclosure gate must preserve task/tool-selection quality and acceptable latency.
+
+This is consistent with the project's progressive-disclosure rule: activation is an eval decision, not a reason to
+introduce a second agent/runtime framework.
+
+## Prepared Phase-7 fixture/tests
+
+The trusted fixture addon is:
 
 ```text
-docs/research/PRODUCT_BEHAVIOR_EVALS_V1.md
-docs/research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md
-docs/research/PRODUCT_BEHAVIOR_EVALS_V1_IMPLEMENTATION.md
+tests/fixtures/odoo_addons/odoo_ai_assistant_p7_fixture
 ```
 
-The gate still includes one-shot Plan behavior, real answer streaming, ACL/persona behavior, provider/capability
-timing, grounding and zero unresolved HARD failures.
+It contains a configured READ capability, a Settings-admin-only PLAN capability, a Skill, a ContextProvider and Odoo
+integration tests. It distinguishes missing configuration, permission denial and explicit capability disablement.
 
-### Phase-7 deterministic/eval gate
-
-Still required before Phase-7 acceptance:
+Dependency-light tests prepared for the final pass:
 
 ```text
-trusted installed test addon contributes:
-  one Skill
-  one READ capability
-  one PLAN capability
-  one ContextProvider
-  configuration
-
-validate:
-  enable/disable/uninstall
-  missing configuration vs permission denial
-  self-description accuracy
-  explicit hidden-capability call denied
-  synthetic 100+ capability catalog with/without disclosure
-  optional-provider/resource failure isolation
-  provider identity/capability/resource collision behavior
+tests/unit/test_capability_provider_extensions.py
+tests/unit/test_phase7_feature_negotiation.py
+tests/unit/test_phase7_extension_composition.py
+tests/unit/test_phase7_live_extension_context.py
 ```
 
-New dependency-light tests have been added for the P7 negotiation/resource contracts, but they have **not been run**
-after the latest implementation changes in this record.
+None of the newly added/deferred tests is reported PASS by this state record.
 
-### Phase-7 real gates — all pending
+## Required consolidated validation
+
+Follow `docs/research/P7_CONSOLIDATED_VALIDATION_RUNBOOK.md` in order:
 
 ```text
-P7-REAL-PROVIDER-DISCOVERY
-P7-REAL-SELF-AWARENESS
-P7-REAL-DISABLEMENT
-P7-REAL-CONTEXT-PROVIDER
-P7-REAL-DISCLOSURE
-P7-REAL-AUTHORITY
+1. P7 dependency-light + static
+2. Product Behavior focused gate
+3. installed-fixture Odoo gate
+4. Product Behavior real SMOKE
+5. P7-REAL-PROVIDER-DISCOVERY
+6. P7-REAL-SELF-AWARENESS
+7. P7-REAL-DISABLEMENT
+8. P7-REAL-CONTEXT-PROVIDER
+9. P7-REAL-DISCLOSURE
+10. P7-REAL-AUTHORITY
+11. Product Behavior FULL
+12. final affected/full regression required by the periodic runbook
 ```
 
-None is claimed by this state record.
+A HARD failure freezes acceptance, is repaired at the owning layer, and is rerun before downstream acceptance.
 
-## Invariants carried forward
+## Product Behavior gate retained
+
+The permanent Product Behavior v1 layer remains required. Its 54-case dataset, SMOKE/FULL policy, one-shot Plan
+behavior, answer-streaming validation, timing, persona/ACL coverage and hard product invariants were intentionally not
+removed just because implementation continued.
+
+Historical Phase-4 streaming PASS remains historical only; the current real first-delta path must be measured again.
+
+## Authority invariants carried forward
 
 - Odoo remains persistence and operational authority.
-- Business operations execute under the effective user with `su=False`.
-- `CapabilityDefinition` remains the atomic executable authority.
-- Provider/Skill/Context metadata cannot grant ACL, policy, approval or write authority.
-- Duplicate extension identities never silently shadow existing definitions/resources.
+- Business execution uses the effective user with `su=False`.
+- `CapabilityDefinition` remains the atomic executable contract.
+- Skills/manifests/context/provider metadata cannot create execution authority.
+- Hidden/disabled/unauthorized capabilities cannot be made executable by naming them in a prompt.
+- Planning strategy/TaskPlan do not grant effect authority.
+- Effects remain preview/policy/approval/barrier/execute/verify host-owned operations.
 - No arbitrary SQL/Python/shell/sudo/unrestricted ORM is exposed.
-- Policy, approval, preconditions, write barrier, verification and recovery remain host-owned.
-- Context/source/record/log text is data and cannot redefine system/tool policy.
-- Raw/private provider reasoning never becomes product progress, eval evidence or public diagnostics.
-- Progressive disclosure cannot hide an executable capability from host-side validation; it only changes what is revealed to the model.
+- Raw/private provider reasoning never becomes public activity, TaskPlan, manifest or eval evidence.
+- Provider-specific behavior stays beneath the neutral `NextDecisionEngine` contract.
+- No unexecuted validation may be represented as acceptance evidence.
 
-## Validation policy for the current session
+## Exit rule
 
-Continue implementing coherent Phase-7 code while the user owns the later validation pass. Keep an explicit list of
-pending gates. If a change requires evidence to choose between incompatible architectures rather than merely to
-promote/accept code, stop at that design uncertainty rather than inventing an answer.
+Phase 7 becomes accepted only after the consolidated pass has zero unresolved HARD failures and all repairs have been
+revalidated. Then update this cursor to:
+
+```text
+P7 COMPLETE / ACCEPTED
+P8 ELIGIBLE
+```
+
+Until that evidence exists, the authoritative state is:
+
+```text
+P7 IMPLEMENTATION COMPLETE / ACCEPTANCE PENDING
+P8 NOT ELIGIBLE
+```
