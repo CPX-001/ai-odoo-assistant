@@ -168,7 +168,7 @@ class ResConfigSettingsRuntime(models.TransientModel):
     def action_assistant_codex_login_cancel(self):
         return self._retired_database_login_action()
 
-    def action_assistant_logout(self):
+    def action_assistant_codex_logout(self):
         return self._retired_database_login_action()
 
     @api.model
