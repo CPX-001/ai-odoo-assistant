@@ -26,7 +26,7 @@ from ..runtime.capabilities import (
     CapabilityContext,
     CapabilityExecutor,
     CapabilityPolicy,
-    discover_capabilities,
+    discover_capabilities_for_env,
 )
 from .chat_policy import resolve_capability_policy
 
@@ -376,7 +376,7 @@ class AssistantTurnControl(models.Model):
             raise TurnControlError("turn_reversion_unavailable")
 
         policy_snapshot = resolve_capability_policy(turn.policy_payload or {})
-        registry = discover_capabilities()
+        registry = discover_capabilities_for_env(self.env)
         resolver = CapabilityConfigResolver.from_env(self.env)
         enablement = resolver.enablement_overrides(registry.definitions)
 
@@ -521,7 +521,7 @@ class EmbeddedAssistantTurnControlRuntime(models.AbstractModel):
         return response
 
     def _plan_reversion_state(self, turn, plan, policy):
-        registry = discover_capabilities()
+        registry = discover_capabilities_for_env(self.env)
         resolver = CapabilityConfigResolver.from_env(self.env)
         context = CapabilityContext(
             env=self.env,
