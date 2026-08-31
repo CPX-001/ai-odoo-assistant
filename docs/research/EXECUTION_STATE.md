@@ -1,7 +1,7 @@
 # Stabilization execution state
 
-State format: 40
-Updated: 2026-08-30
+State format: 41
+Updated: 2026-08-31
 
 Accepted lineage:
 
@@ -29,20 +29,20 @@ active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: P6-final-implementation-candidate
 active_slice_record: docs/research/P6_ADAPTIVE_PLANNING_IMPLEMENTATION.md
 active_slice_state: IMPLEMENTED_PENDING_PERIODIC_VALIDATION
-current_gate_type: PERIODIC_FULL_REGRESSION
-blocking_work: none
-blocking_validation: Phase 6 Stage D real-product acceptance is blocked by provider usageLimitExceeded; Phase 7 remains ineligible
+current_gate_type: FOCUSED_IMPLEMENTATION_FOLLOWUP
+blocking_work: short-turn latency remains above the near-immediate product target (14.75s direct capability answer; 30.55s bounded quotation count)
+blocking_validation: Phase 6 periodic regression and named real-product gates remain unexecuted against the new candidate; Phase 7 remains ineligible
 pending_periodic_validation: P6-REAL-MULTISTEP, P6-REAL-REPLAN, P6-REAL-EFFECT-ATOMICITY, P6-REAL-SEGMENTED-RECOVERY, P6-REAL-LOOP-BOUNDS, P6-REAL-EFFECT-JOURNAL
 periodic_regression_runbook: docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
-latest_executed_evidence: docs/research/evidence/regression/2026-08-30/FULL-REGRESSION-46b1093.md
-periodic_stage_status: A PASS; B PASS; C PASS; D BLOCKED (provider usageLimitExceeded before first decision)
-next_action: retry Stage D after the host-reported primary Codex reset at 2026-08-30T21:25+00:00 (or after an explicitly authorized usage reset), against product candidate 46b1093; only then accept Phase 6 and unlock Phase 7
+latest_executed_evidence: docs/research/evidence/phase6/2026-08-31/SEMANTIC-ROUTING-9197be6.md
+periodic_stage_status: historical A-C PASS on 46b1093; D was BLOCKED there; provider access is now restored but the periodic batch has not run against 9197be6
+next_action: reduce repeated provider latency for short direct/read turns without weakening the host-owned NextDecision/capability boundary, then run the applicable periodic validation against one final candidate
 ```
 
-No unexecuted P6 HARD gate is PASS. Stages A-C of the periodic checkpoint are green on product
-candidate `46b1093`; Stage D and all named real gates remain blocked because the host Codex session
-returned sanitized provider code `usageLimitExceeded` before its first decision.
+No unexecuted P6 HARD gate is PASS. Stages A-C remain historical green evidence for product
+candidate `46b1093`, not for the newer candidate. Provider access has recovered and the focused
+semantic smoke on `9197be6` completed, but it was not the periodic Stage-D/P6 acceptance batch.
 
 ## Phase summary
 
@@ -64,6 +64,17 @@ P7+ NOT_ELIGIBLE
 ```
 
 ## Current Phase-6 implementation candidate
+
+The current implementation candidate is `9197be6659f7397ed577ec41d813764dcd5ca998`.
+It adds semantic short-turn routing, host-owned TaskPlan transition schema, adaptive suppression of
+artificial plans, lazy public work activity and terminal failure collapse. Focused evidence is:
+
+```text
+docs/research/evidence/phase6/2026-08-31/SEMANTIC-ROUTING-9197be6.md
+```
+
+Correctness is green for the focused contract and real smoke. Performance is not accepted: the
+measured short-turn latencies remain explicit implementation debt.
 
 ### P6.1 / P6.2 — visible planning without authority
 
@@ -170,10 +181,9 @@ consolidated evidence is:
 docs/research/evidence/regression/2026-08-30/FULL-REGRESSION-46b1093.md
 ```
 
-The real-product stage was attempted but the configured host session returned
-`usageLimitExceeded` before the first provider decision. It therefore remains BLOCKED, not PASS.
-A user-requested retry produced the same result; the normal settings projection reported the
-primary Codex window at 100% used with reset time `2026-08-30T21:25+00:00`.
+The earlier real-product stage on `46b1093` returned `usageLimitExceeded` before the first provider
+decision. Provider access is available again, and `9197be6` has focused real semantic-routing
+evidence, but the named Phase-6 real gates have not been rerun and remain pending rather than PASS.
 
 Accumulated periodic real debt:
 
