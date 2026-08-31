@@ -71,7 +71,7 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
         self.assertNotIn("approval", deliberate.payload())
         self.assertNotIn("capability", deliberate.payload())
 
-    def test_auto_uses_bounded_structural_complexity_only(self):
+    def test_legacy_auto_keeps_complexity_diagnostic_but_does_not_enable_plan(self):
         simple = resolve_planning_strategy(
             "auto",
             message="Resume el contacto",
@@ -89,7 +89,8 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
         )
 
         self.assertEqual(simple.effective_mode, "adaptive")
-        self.assertEqual(complex_request.effective_mode, "deliberate")
+        self.assertEqual(complex_request.effective_mode, "adaptive")
+        self.assertFalse(complex_request.task_plan_required)
         self.assertGreaterEqual(complex_request.complexity_score, 4)
 
     def test_current_task_plan_schema_exposes_public_revision_semantics(self):
@@ -147,6 +148,7 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
         )
         self.assertEqual(provider.working_items[-1]["kind"], "host_task_plan_state")
         self.assertEqual(provider.working_items[-1]["data"]["next_revision"], 1)
+        self.assertTrue(provider.working_items[-1]["data"]["task_plan_available"])
 
     def test_adaptive_mode_keeps_short_reads_planless_and_rejects_artificial_plan(self):
         context = CapabilityContext(
@@ -180,10 +182,6 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
         )
 
         self.assertIs(accepted, read)
-        self.assertEqual(
-            read_provider.working_items[-1]["data"]["minimum_initial_steps"],
-            2,
-        )
         self.assertFalse(read_provider.working_items[-1]["data"]["task_plan_available"])
 
         artificial = TaskPlanUpdate(
@@ -209,7 +207,7 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
             )
         self.assertEqual(captured.exception.code, "agent_task_plan_not_useful")
 
-    def test_adaptive_multiphase_plan_remains_available(self):
+    def test_adaptive_multiphase_work_stays_planless_after_multiple_results(self):
         context = CapabilityContext(
             env=object(),
             turn_id="p62-adaptive-multiphase",
@@ -233,6 +231,60 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
             ),
         )
 
+        with self.assertRaises(NextDecisionValidationError) as captured:
+            asyncio.run(
+                PlanningDecisionEngine(_Provider(plan)).next_decision(
+                    message="Investiga y prepara cambios",
+                    conversation_summary="",
+                    context=context,
+                    reasoning_capabilities=(),
+                    planning_capabilities=(),
+                    working_items=(
+                        {
+                            "kind": "capability_result",
+                            "data": {
+                                "call_id": "read-1",
+                                "capability": "odoo.query_records",
+                            },
+                        },
+                        {
+                            "kind": "capability_result",
+                            "data": {
+                                "call_id": "read-2",
+                                "capability": "odoo.aggregate_records",
+                            },
+                        },
+                    ),
+                    remaining_budgets={},
+                )
+            )
+
+        self.assertEqual(captured.exception.code, "agent_task_plan_not_useful")
+
+    def test_deliberate_mode_accepts_visible_plan_when_user_opted_in(self):
+        context = CapabilityContext(
+            env=object(),
+            turn_id="p62-deliberate-plan",
+            screen={},
+            metadata={
+                "planning_strategy": resolve_planning_strategy(
+                    "deliberate", message="Investiga y prepara cambios", screen={}
+                ).payload()
+            },
+        )
+        plan = TaskPlanUpdate(
+            "task_plan_update",
+            TaskPlan(
+                goal="Investigar y preparar cambios",
+                revision=1,
+                steps=(
+                    TaskPlanStep("inspect", "Investigar", "in_progress"),
+                    TaskPlanStep("prepare", "Preparar cambios", "pending", ("inspect",)),
+                ),
+                revision_kind="initial",
+            ),
+        )
+
         accepted = asyncio.run(
             PlanningDecisionEngine(_Provider(plan)).next_decision(
                 message="Investiga y prepara cambios",
@@ -240,22 +292,7 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
                 context=context,
                 reasoning_capabilities=(),
                 planning_capabilities=(),
-                working_items=(
-                    {
-                        "kind": "capability_result",
-                        "data": {
-                            "call_id": "read-1",
-                            "capability": "odoo.query_records",
-                        },
-                    },
-                    {
-                        "kind": "capability_result",
-                        "data": {
-                            "call_id": "read-2",
-                            "capability": "odoo.aggregate_records",
-                        },
-                    },
-                ),
+                working_items=(),
                 remaining_budgets={},
             )
         )
