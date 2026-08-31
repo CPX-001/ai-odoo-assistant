@@ -21,9 +21,11 @@ class _PlanDecisionEngine:
     def __init__(self, *decisions):
         self.decisions = list(decisions)
         self.calls = 0
+        self.working_items = []
 
-    async def next_decision(self, **_kwargs):
+    async def next_decision(self, **kwargs):
         self.calls += 1
+        self.working_items.append(kwargs.get("working_items", ()))
         if not self.decisions:
             raise AssertionError("unexpected provider decision request")
         return self.decisions.pop(0)
@@ -409,3 +411,93 @@ class TestCanonicalPlanHostLoop(TransactionCase):
         errors = [item for item in service.working_items if item.kind == "task_plan_error"]
         self.assertEqual(len(errors), 1)
         self.assertEqual(errors[0].data["code"], "agent_task_plan_progress_required")
+        self.assertFalse(
+            underlying.working_items[2][-1]["data"]["task_plan_available"]
+        )
+
+    def test_task_plan_updates_do_not_reset_provider_decision_budget(self):
+        context, registry, executor, _plans = self._runtime()
+        context.metadata["capability_policy"]["max_provider_decisions"] = 2
+        context.metadata["planning_strategy"] = resolve_planning_strategy(
+            "deliberate",
+            message="Resuelve",
+            screen=context.screen,
+        ).payload()
+        initial = TaskPlan(
+            goal="Resolver",
+            revision=1,
+            steps=(TaskPlanStep("one", "Primero", "in_progress"),),
+        )
+        progress = TaskPlan(
+            goal="Resolver",
+            revision=2,
+            steps=(TaskPlanStep("one", "Primero", "completed"),),
+            revision_kind="progress",
+            revision_summary="Paso completado.",
+        )
+        underlying = _PlanDecisionEngine(
+            TaskPlanUpdate("task_plan_update", initial),
+            TaskPlanUpdate("task_plan_update", progress),
+            FinalAnswer("final_answer", "No debe alcanzarse.", "high"),
+        )
+        service = AgentTurnService(
+            registry=registry,
+            context=context,
+            executor=executor,
+            decision_engine=PlanningDecisionEngine(underlying),
+            allow_plan_proposals=True,
+        )
+
+        with self.assertRaises(AgentTurnError) as captured:
+            asyncio.run(service.run(message="Resuelve"))
+
+        self.assertEqual(captured.exception.code, "agent_provider_decision_budget_exceeded")
+        self.assertEqual(underlying.calls, 2)
+        self.assertEqual(
+            [item.data["revision"] for item in service.working_items if item.kind == "task_plan"],
+            [1, 2],
+        )
+
+    def test_task_plan_retry_cannot_evade_consecutive_failure_budget(self):
+        context, registry, executor, _plans = self._runtime()
+        context.metadata["capability_policy"]["max_consecutive_failures"] = 1
+        context.metadata["capability_policy"]["max_consecutive_correctable_failures"] = 1
+        context.metadata["planning_strategy"] = resolve_planning_strategy(
+            "deliberate",
+            message="Resuelve",
+            screen=context.screen,
+        ).payload()
+        initial = TaskPlan(
+            goal="Resolver",
+            revision=1,
+            steps=(TaskPlanStep("one", "Primero", "in_progress"),),
+        )
+        duplicate = TaskPlan(
+            goal="Resolver",
+            revision=2,
+            steps=(TaskPlanStep("one", "Primero", "in_progress"),),
+            revision_kind="progress",
+        )
+        underlying = _PlanDecisionEngine(
+            TaskPlanUpdate("task_plan_update", initial),
+            TaskPlanUpdate("task_plan_update", duplicate),
+            TaskPlanUpdate("task_plan_update", duplicate),
+        )
+        service = AgentTurnService(
+            registry=registry,
+            context=context,
+            executor=executor,
+            decision_engine=PlanningDecisionEngine(underlying),
+            allow_plan_proposals=True,
+        )
+
+        with self.assertRaises(AgentTurnError) as captured:
+            asyncio.run(service.run(message="Resuelve"))
+
+        self.assertEqual(captured.exception.code, "agent_correctable_failure_budget_exceeded")
+        self.assertEqual(underlying.calls, 3)
+        errors = [item for item in service.working_items if item.kind == "task_plan_error"]
+        self.assertEqual(
+            [item.data["code"] for item in errors],
+            ["agent_task_plan_progress_required", "agent_task_plan_not_useful"],
+        )

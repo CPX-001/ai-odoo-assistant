@@ -16,7 +16,9 @@ from . import test_conversation_preferences as test_conversation_preferences
 from . import test_e2e_convergence_battery as test_e2e_convergence_battery
 from . import test_effect_journal as test_effect_journal
 from . import test_embedded_agent_runtime as test_embedded_agent_runtime
+from . import test_host_loop_agent_runtime as test_host_loop_agent_runtime
 from . import test_model_catalog as test_model_catalog
+from . import test_next_decision_validation as test_next_decision_validation
 from . import test_planning_preferences as test_planning_preferences
 from . import (
     test_phase2_browser_failure_projection as test_phase2_browser_failure_projection,

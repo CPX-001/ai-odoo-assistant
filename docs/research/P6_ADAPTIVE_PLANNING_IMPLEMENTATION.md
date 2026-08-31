@@ -173,6 +173,11 @@ replan
 
 The host owns the exact next revision and currently legal revision kinds. A provider cannot relabel an arbitrary rewrite as an evidence-driven replan.
 
+If the host rejects a no-op `progress` revision with `agent_task_plan_progress_required`, the
+TaskPlan branch is temporarily unavailable for the next provider decision. The provider must
+advance the turn with a capability call, effect proposal or final answer before another TaskPlan
+revision is offered. This prevents cosmetic plan retries from consuming the bounded decision loop.
+
 Existing turns that already contain a TaskPlan can continue their validated revision lifecycle even if the product preference model has since changed.
 
 ## 8. Deliberate mode enforcement

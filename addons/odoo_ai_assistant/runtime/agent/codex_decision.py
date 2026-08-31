@@ -60,7 +60,9 @@ revision, allowed revision kinds and minimum initial step count. Keep the goal a
 revise states only from evidence available in host context.
 Use progress only when at least one existing step changes state; never emit a TaskPlan merely to
 increment its revision. If task_plan_error reports agent_task_plan_progress_required, choose the
-next capability call, effect proposal or final answer instead of repeating the unchanged plan.
+next capability call, effect proposal or final answer instead of repeating the unchanged plan. The
+host may temporarily remove the TaskPlan branch after that error until a non-plan decision advances
+the turn.
 Do not place capability names, arguments, approvals, secrets or hidden reasoning into a TaskPlan.
 
 For supported requested state changes, stage typed effects one distinct plan_step_proposal at a

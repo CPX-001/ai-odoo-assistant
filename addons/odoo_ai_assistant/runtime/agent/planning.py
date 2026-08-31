@@ -18,6 +18,7 @@ _EFFECTIVE_MODES = frozenset({"adaptive", "deliberate"})
 _REPLAN_EVIDENCE_KINDS = frozenset(
     {"capability_result", "capability_error", "verified_effect_receipt"}
 )
+_TASK_PLAN_RETRY_BLOCKING_CODES = frozenset({"agent_task_plan_progress_required"})
 _LIST_ITEM_RE = re.compile(r"(?m)^\s*(?:[-*]|\d+[.)])\s+")
 
 
@@ -214,6 +215,7 @@ def task_plan_host_state(
             minimum_initial_steps=1,
             task_plan_available=available,
         )
+    retry_blocked = _task_plan_retry_blocked(working_items)
     kinds = ["progress"]
     if _has_replan_evidence(working_items, after_index=previous_index):
         kinds.append("replan")
@@ -222,7 +224,7 @@ def task_plan_host_state(
         next_revision=previous.revision + 1,
         allowed_revision_kinds=tuple(kinds),
         minimum_initial_steps=1,
-        task_plan_available=True,
+        task_plan_available=not retry_blocked,
     )
 
 
@@ -268,7 +270,7 @@ class PlanningDecisionEngine:
         ):
             raise NextDecisionValidationError("agent_task_plan_required", decision)
         if isinstance(decision, TaskPlanUpdate):
-            if current_plan is None and not plan_state.task_plan_available:
+            if not plan_state.task_plan_available:
                 raise NextDecisionValidationError("agent_task_plan_not_useful", decision)
             if (
                 current_plan is None
@@ -295,6 +297,18 @@ def _latest_task_plan(
         except TaskPlanError as error:
             raise NextDecisionValidationError(error.code) from error
     return -1, None
+
+
+def _task_plan_retry_blocked(working_items: tuple[dict[str, object], ...]) -> bool:
+    """Force a non-plan decision after a rejected cosmetic progress revision."""
+
+    if not working_items:
+        return False
+    latest = working_items[-1]
+    if not isinstance(latest, dict) or latest.get("kind") != "task_plan_error":
+        return False
+    data = latest.get("data")
+    return isinstance(data, dict) and data.get("code") in _TASK_PLAN_RETRY_BLOCKING_CODES
 
 
 def _same_plan_structure(previous: TaskPlan, current: TaskPlan) -> bool:

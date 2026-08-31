@@ -361,6 +361,59 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
         self.assertEqual(captured.exception.code, "agent_task_plan_progress_required")
         self.assertIs(captured.exception.decision, decision)
 
+    def test_rejected_noop_progress_temporarily_forces_a_non_plan_decision(self):
+        initial = TaskPlan(
+            goal="Resolver",
+            revision=1,
+            steps=(TaskPlanStep("inspect", "Inspeccionar", "in_progress"),),
+            revision_kind="initial",
+        )
+        next_call = ReasoningCapabilityCall(
+            "reasoning_capability_call",
+            "read-2",
+            "odoo.query_records",
+            {},
+        )
+        provider = _Provider(next_call)
+        context = CapabilityContext(
+            env=object(),
+            turn_id="p6-progress-recovery",
+            screen={},
+            metadata={
+                "planning_strategy": resolve_planning_strategy(
+                    "deliberate", message="Investiga", screen={}
+                ).payload()
+            },
+        )
+        working = (
+            {"kind": "task_plan", "data": initial.payload()},
+            {
+                "kind": "task_plan_error",
+                "data": {
+                    "code": "agent_task_plan_progress_required",
+                    "rejected_revision": 2,
+                },
+            },
+        )
+
+        accepted = asyncio.run(
+            PlanningDecisionEngine(provider).next_decision(
+                message="Investiga",
+                conversation_summary="",
+                context=context,
+                reasoning_capabilities=(),
+                planning_capabilities=(),
+                working_items=working,
+                remaining_budgets={},
+            )
+        )
+
+        self.assertIs(accepted, next_call)
+        state = provider.working_items[-1]["data"]
+        self.assertFalse(state["task_plan_available"])
+        self.assertEqual(state["current_revision"], 1)
+        self.assertEqual(state["next_revision"], 2)
+
     def test_structural_replan_requires_new_host_evidence(self):
         initial = TaskPlan(
             goal="Resolver",
