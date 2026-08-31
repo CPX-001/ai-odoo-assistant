@@ -23,12 +23,28 @@ class TestAssistantPlanningPreferences(TransactionCase):
 
         self.assertEqual(preference.current_planning_mode(), "adaptive")
         self.assertEqual(preference.planning_mode_preferences(), {"ok": True, "mode": "adaptive"})
-        for mode in ("deliberate", "auto", "adaptive"):
+        for mode in ("deliberate", "adaptive"):
             self.assertEqual(
                 preference.set_planning_mode_preference(mode),
                 {"ok": True, "mode": mode},
             )
             self.assertEqual(preference.current_planning_mode(), mode)
+
+    def test_legacy_auto_value_normalizes_to_direct_and_cannot_be_reselected(self):
+        env = self.env(user=self.user, su=False)
+        preference = env["odoo.ai.user.preference"]
+        stored = preference.search([("user_id", "=", self.user.id)], limit=1)
+        if not stored:
+            stored = preference.create({"user_id": self.user.id, "planning_mode": "auto"})
+        else:
+            stored.write({"planning_mode": "auto"})
+
+        self.assertEqual(preference.current_planning_mode(), "adaptive")
+        self.assertEqual(preference.planning_mode_preferences(), {"ok": True, "mode": "adaptive"})
+        self.assertEqual(
+            preference.set_planning_mode_preference("auto"),
+            {"ok": False, "error": {"code": "invalid_context"}},
+        )
 
     def test_invalid_planning_mode_fails_closed(self):
         env = self.env(user=self.user, su=False)
