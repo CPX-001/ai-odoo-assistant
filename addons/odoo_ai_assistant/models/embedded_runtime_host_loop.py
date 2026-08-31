@@ -10,9 +10,11 @@ from odoo.exceptions import AccessError, ValidationError
 
 from ..runtime.agent import (
     AgentTurnService,
+    AssistantExtensionDecisionEngine,
     CapabilityPlanError,
     CapabilityPlanService,
     PostEffectDecisionEngine,
+    current_codex_provider_profile,
 )
 from ..runtime.agent.interactive_codex import InteractiveCodexDecisionEngine
 from ..runtime.agent.planning import PlanningDecisionEngine
@@ -29,7 +31,9 @@ from ..runtime.capabilities import (
     CapabilityError,
     CapabilityExecutor,
     CapabilityPolicy,
+    discover_assistant_extensions_for_env,
     discover_capabilities_for_env,
+    technical_access_profile_for_env,
 )
 from .chat_policy import resolve_capability_policy
 from .embedded_runtime import EmbeddedRuntimeError, _commit_plan_barrier, _plan_envelope
@@ -141,13 +145,18 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 raise EmbeddedRuntimeError(str(error)) from error
 
         decision_engine = PlanningDecisionEngine(
-            FailureNormalizingDecisionEngine(
-                InteractiveCodexDecisionEngine(
-                    settings,
-                    cancellation_requested=cancellation_requested,
+            _with_assistant_extensions(
+                self.env,
+                FailureNormalizingDecisionEngine(
+                    InteractiveCodexDecisionEngine(
+                        settings,
+                        cancellation_requested=cancellation_requested,
+                    ),
+                    component="codex",
+                    effect_state="none",
                 ),
-                component="codex",
-                effect_state="none",
+                registry=registry,
+                config=resolver,
             )
         )
         reasoning_activity_id = None
@@ -321,16 +330,22 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             except RuntimeError as error:
                 raise EmbeddedRuntimeError(str(error)) from error
 
+        resolver = CapabilityConfigResolver.from_env(self.env)
         decision_engine = PlanningDecisionEngine(
-            PostEffectDecisionEngine(
-                FailureNormalizingDecisionEngine(
-                    InteractiveCodexDecisionEngine(
-                        self._codex_settings(turn),
-                        cancellation_requested=cancellation_requested,
-                    ),
-                    component="codex",
-                    effect_state="confirmed",
-                )
+            _with_assistant_extensions(
+                self.env,
+                PostEffectDecisionEngine(
+                    FailureNormalizingDecisionEngine(
+                        InteractiveCodexDecisionEngine(
+                            self._codex_settings(turn),
+                            cancellation_requested=cancellation_requested,
+                        ),
+                        component="codex",
+                        effect_state="confirmed",
+                    )
+                ),
+                registry=registry,
+                config=resolver,
             )
         )
         service = AgentTurnService(
@@ -378,6 +393,22 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
         natural["answer"] = result.answer
         natural["confidence"] = result.confidence
         return self._plan_response(turn, natural, policy)
+
+
+def _with_assistant_extensions(env, provider, *, registry, config):
+    """Compose the Phase-7 non-authoritative extension layer around any decision provider."""
+
+    return AssistantExtensionDecisionEngine(
+        provider,
+        registry=registry,
+        extensions=discover_assistant_extensions_for_env(
+            env,
+            capability_registry=registry,
+        ),
+        provider_profile=current_codex_provider_profile(),
+        config=config,
+        technical_profile=technical_access_profile_for_env(env),
+    )
 
 
 def _ensure_turn_control_current(turn):
