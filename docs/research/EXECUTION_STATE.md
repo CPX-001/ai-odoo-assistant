@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 42
+State format: 43
 Updated: 2026-08-31
 
 Accepted lineage:
@@ -24,25 +24,23 @@ P5 is **COMPLETE** and remains the latest fully accepted phase.
 ```text
 phase: 6
 phase_name: deep task planning, multi-step effects and recent effect journal
-phase_state: IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+phase_state: PART1_VALIDATED_PHASE2_PENDING
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P6-direct-plan-routing-followup
-active_slice_record: docs/research/P6_ADAPTIVE_PLANNING_IMPLEMENTATION.md
-active_slice_state: IMPLEMENTED_PENDING_FOCUSED_VALIDATION
-current_gate_type: FOCUSED_IMPLEMENTATION_FOLLOWUP
-blocking_work: short-turn latency remains above the near-immediate product target; the latest measured baseline before this follow-up was 14.75s direct capability answer and 30.55s bounded quotation count
-blocking_validation: the new Direct/Plan follow-up has not yet run its focused deterministic/Odoo/HOOT/real smoke; Phase 6 periodic regression and named real-product gates also remain pending; Phase 7 remains ineligible
-pending_periodic_validation: P6-REAL-MULTISTEP, P6-REAL-REPLAN, P6-REAL-EFFECT-ATOMICITY, P6-REAL-SEGMENTED-RECOVERY, P6-REAL-LOOP-BOUNDS, P6-REAL-EFFECT-JOURNAL
+active_slice: P6-validation-part2-pending
+active_slice_record: docs/research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md
+active_slice_state: PHASE1_VALIDATED_STOPPED_BEFORE_PHASE2
+current_gate_type: PHASE2_REAL_VALIDATION
+blocking_work: none for P6.1/P6.2/P6.3/P6.5; Phase 2 was explicitly outside the 2026-08-31 validation run
+blocking_validation: P6.4/P6.6 real recovery/journal gates and the applicable final periodic regression remain unexecuted; Phase 6 is not COMPLETE and Phase 7 remains ineligible
+pending_periodic_validation: P6-REAL-EFFECT-ATOMICITY, P6-REAL-SEGMENTED-RECOVERY, P6-REAL-EFFECT-JOURNAL, applicable final periodic regression
 periodic_regression_runbook: docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
-latest_executed_evidence: docs/research/evidence/phase6/2026-08-31/SEMANTIC-ROUTING-9197be6.md
+latest_executed_evidence: docs/research/evidence/phase6/2026-08-31/P6-VALIDATION-PART1-2689691.md
 periodic_stage_status: historical A-C PASS on 46b1093; D was BLOCKED there; no periodic batch has run against the current Direct/Plan candidate
-next_action: run the focused Direct/Plan contract and real semantic smoke; if correctness is green, profile remaining provider-decision latency and implement the smallest host-owned round-trip reduction before the final periodic Phase-6 acceptance batch
+next_action: in a separate Phase-2 run, execute only P6-REAL-EFFECT-ATOMICITY, P6-REAL-SEGMENTED-RECOVERY and P6-REAL-EFFECT-JOURNAL; do not infer those results from Part 1
 ```
 
-No unexecuted P6 HARD gate is PASS. The latest real semantic evidence is still the earlier
-`9197be6` smoke; the Direct/Plan follow-up supersedes that implementation behavior and therefore
-needs fresh focused evidence before its latency or correctness can be called accepted.
+Part-1 evidence at `2689691` validates P6.1/P6.2/P6.3/P6.5 and the real multistep, replan and loop-bound gates. No unexecuted Phase-2 gate is PASS.
 
 ## Phase summary
 
@@ -53,12 +51,12 @@ P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
 P5 COMPLETE
-P6 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
-  P6.1 TaskPlan vs EffectPlan        IMPLEMENTED_PENDING_PERIODIC_VALIDATION
-  P6.2 direct/deliberate/replan      IMPLEMENTED_PENDING_FOCUSED_VALIDATION
-  P6.3 multi-step EffectPlan         IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+P6 PART1_VALIDATED_PHASE2_PENDING
+  P6.1 TaskPlan vs EffectPlan        VALIDATED_PART1
+  P6.2 direct/deliberate/replan      VALIDATED_PART1
+  P6.3 multi-step EffectPlan         VALIDATED_PART1
   P6.4 atomic vs segmented effects   IMPLEMENTED_PENDING_PERIODIC_VALIDATION
-  P6.5 separate budgets              IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+  P6.5 separate budgets              VALIDATED_PART1
   P6.6 EffectJournal                 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
 P7+ NOT_ELIGIBLE
 ```
@@ -225,6 +223,27 @@ Do not reintroduce rigid GENERAL/QUERY/HOW_TO/ACTION routing and do not make Tas
 
 ## Validation state
 
+Phase-6 Part-1 focused validation is recorded at:
+
+```text
+docs/research/evidence/phase6/2026-08-31/P6-VALIDATION-PART1-2689691.md
+```
+
+Against product/test candidate `268969184c7fbeff479d3f22308576c526ba2692`, the focused
+dependency-light, Odoo and HOOT checks passed, as did P6-REAL-MULTISTEP, P6-REAL-REPLAN and
+P6-REAL-LOOP-BOUNDS. The real replan gate found and repaired a bounded-convergence defect: after a
+rejected no-op progress revision, the host now temporarily removes the TaskPlan decision branch so
+the next provider decision must advance the turn. TaskPlan revisions cannot reset provider or
+correctable/consecutive failure counters.
+
+This checkpoint does not validate P6.4/P6.6. The exact remaining Phase-2 gates are:
+
+```text
+P6-REAL-EFFECT-ATOMICITY
+P6-REAL-SEGMENTED-RECOVERY
+P6-REAL-EFFECT-JOURNAL
+```
+
 Recorded focused checkpoint already green for the earlier P6.1/P6.3/P6.5 foundation:
 
 ```text
@@ -257,14 +276,11 @@ docs/research/evidence/regression/2026-08-30/FULL-REGRESSION-46b1093.md
 
 That evidence is historical and does not validate this newer candidate.
 
-Accumulated periodic real debt remains:
+Remaining real Phase-2 debt is:
 
 ```text
-P6-REAL-MULTISTEP
-P6-REAL-REPLAN
 P6-REAL-EFFECT-ATOMICITY
 P6-REAL-SEGMENTED-RECOVERY
-P6-REAL-LOOP-BOUNDS
 P6-REAL-EFFECT-JOURNAL
 ```
 
