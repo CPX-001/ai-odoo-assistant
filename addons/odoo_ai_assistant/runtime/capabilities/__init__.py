@@ -6,6 +6,13 @@ resolves to the same host-owned :class:`CapabilityDefinition` contract.
 """
 
 from .config import CapabilityConfigResolver
+from .context import (
+    ContextCollector,
+    ContextContribution,
+    ContextProvider,
+    ContextProviderCatalog,
+    ContextProviderStatus,
+)
 from .contracts import (
     CapabilityApproval,
     CapabilityContext,
@@ -23,7 +30,23 @@ from .contracts import (
     JsonValue,
 )
 from .decorators import tool
+from .disclosure import (
+    CapabilityDisclosureSnapshot,
+    DisclosurePolicy,
+    build_disclosure_snapshot,
+)
 from .executor import CapabilityExecutor
+from .features import (
+    ProviderFeature,
+    ProviderFeatureState,
+    ProviderFeatureSupport,
+    ProviderProfile,
+)
+from .manifest import (
+    EffectiveAssistantManifest,
+    TechnicalAccessProfile,
+    build_effective_assistant_manifest,
+)
 from .policy import CapabilityPolicy, CapabilityPolicyDecision, ExecutionAuthority
 from .provider import (
     CapabilityProvider,
@@ -38,6 +61,7 @@ from .registry import (
     discover_capabilities,
     discover_capabilities_for_env,
 )
+from .skills import SkillCatalog, SkillDefinition, selector_matches
 
 __all__ = [
     "CapabilityApproval",
@@ -45,6 +69,7 @@ __all__ = [
     "CapabilityContext",
     "CapabilityDefinition",
     "CapabilityDependency",
+    "CapabilityDisclosureSnapshot",
     "CapabilityEffect",
     "CapabilityError",
     "CapabilityExecutor",
@@ -61,12 +86,29 @@ __all__ = [
     "CapabilitySetting",
     "CapabilitySettingType",
     "CapabilityVerification",
+    "ContextCollector",
+    "ContextContribution",
+    "ContextProvider",
+    "ContextProviderCatalog",
+    "ContextProviderStatus",
+    "DisclosurePolicy",
+    "EffectiveAssistantManifest",
     "ExecutionAuthority",
     "JsonValue",
+    "ProviderFeature",
+    "ProviderFeatureState",
+    "ProviderFeatureSupport",
+    "ProviderProfile",
+    "SkillCatalog",
+    "SkillDefinition",
+    "TechnicalAccessProfile",
+    "build_disclosure_snapshot",
+    "build_effective_assistant_manifest",
     "clear_discovery_cache",
     "compose_capability_registry",
     "discover_capabilities",
     "discover_capabilities_for_env",
     "discover_odoo_capability_providers",
+    "selector_matches",
     "tool",
 ]

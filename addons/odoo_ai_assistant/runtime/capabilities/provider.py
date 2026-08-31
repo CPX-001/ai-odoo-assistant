@@ -1,8 +1,8 @@
 """Trusted addon extension contract for capability providers.
 
 Phase 7 keeps :class:`CapabilityDefinition` as the atomic executable authority while
-allowing installed Odoo addons to contribute definitions without editing the core
-``runtime.capabilities.providers`` package.
+allowing installed Odoo addons to contribute definitions and higher-level declarative
+resources without editing the core ``runtime.capabilities.providers`` package.
 """
 
 from __future__ import annotations
@@ -11,7 +11,9 @@ import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 
+from .context import ContextProvider
 from .contracts import CapabilityDefinition, CapabilityError, JsonValue
+from .skills import SkillDefinition
 
 _PROVIDER_ID_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _PROVIDER_VERSION_RE = re.compile(r"^[1-9][0-9]*$")
@@ -22,17 +24,20 @@ type CapabilityProviderLoader = Callable[[], Iterable[CapabilityDefinition]]
 
 @dataclass(frozen=True, slots=True)
 class CapabilityProvider:
-    """One trusted installed-code source of capability definitions.
+    """One trusted installed-code source of Assistant extension resources.
 
-    ``definitions`` is the simple/static path. ``loader`` exists for providers that
-    need deferred construction and is also the failure-isolation boundary. A provider
-    may use one or the other, never both.
+    ``definitions`` is the simple/static executable path. ``loader`` exists for providers
+    that need deferred capability construction and is also the failure-isolation boundary.
+    A provider may use one or the other, never both. Skills and ContextProviders remain
+    declarative/non-authoritative resources layered around those atomic definitions.
     """
 
     provider_id: str
     version: str = "1"
     definitions: tuple[CapabilityDefinition, ...] = ()
     loader: CapabilityProviderLoader | None = field(default=None, repr=False, compare=False)
+    skills: tuple[SkillDefinition, ...] = ()
+    context_providers: tuple[ContextProvider, ...] = ()
     title: str = ""
     optional: bool = True
     metadata: Mapping[str, JsonValue] = field(default_factory=dict)
@@ -48,6 +53,14 @@ class CapabilityProvider:
             raise CapabilityError("capability_provider_source_ambiguous")
         if any(not isinstance(item, CapabilityDefinition) for item in self.definitions):
             raise CapabilityError("capability_provider_definition_invalid")
+        if any(not isinstance(item, SkillDefinition) for item in self.skills):
+            raise CapabilityError("capability_provider_skill_invalid")
+        if any(not isinstance(item, ContextProvider) for item in self.context_providers):
+            raise CapabilityError("capability_provider_context_invalid")
+        if len({item.skill_id for item in self.skills}) != len(self.skills):
+            raise CapabilityError("skill_id_duplicate")
+        if len({item.provider_id for item in self.context_providers}) != len(self.context_providers):
+            raise CapabilityError("context_provider_id_duplicate")
 
     @classmethod
     def from_objects(
@@ -59,6 +72,8 @@ class CapabilityProvider:
         title: str = "",
         optional: bool = True,
         metadata: Mapping[str, JsonValue] | None = None,
+        skills: Iterable[SkillDefinition] = (),
+        context_providers: Iterable[ContextProvider] = (),
     ) -> CapabilityProvider:
         """Build a static provider from handlers decorated with ``@tool``.
 
@@ -78,6 +93,8 @@ class CapabilityProvider:
             provider_id=provider_id,
             version=version,
             definitions=tuple(definitions),
+            skills=tuple(skills),
+            context_providers=tuple(context_providers),
             title=title,
             optional=optional,
             metadata=dict(metadata or {}),
