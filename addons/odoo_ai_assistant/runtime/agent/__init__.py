@@ -32,8 +32,10 @@ from .service import (
 )
 from .task_plan import TaskPlan, TaskPlanError, TaskPlanStep, parse_task_plan
 from .codex_streaming import install_codex_streaming
+from .codex_extension_context import install_codex_extension_context
 
 install_codex_streaming()
+install_codex_extension_context()
 
 __all__ = [
     "AgentBudgetSet",
