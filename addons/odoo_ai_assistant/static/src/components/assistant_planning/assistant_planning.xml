@@ -20,34 +20,25 @@
                     </button>
                     <t t-set-slot="content">
                         <div class="o_ai_assistant_picker_menu_title small text-muted">
-                            Profundidad de planificación
+                            Modo de trabajo
                         </div>
                         <DropdownItem class="'o_ai_assistant_picker_option'"
                             onSelected="() => this.selectPlanningMode('adaptive')">
-                            <span class="o_ai_assistant_picker_option_icon"><i class="fa fa-random" aria-hidden="true"/></span>
+                            <span class="o_ai_assistant_picker_option_icon"><i class="fa fa-bolt" aria-hidden="true"/></span>
                             <span class="min-w-0 flex-grow-1">
-                                <span class="d-block fw-semibold">Adaptativo</span>
-                                <span class="d-block small text-muted">Empieza directo y crea un plan visible cuando el trabajo lo necesita.</span>
+                                <span class="d-block fw-semibold">Directo</span>
+                                <span class="d-block small text-muted">Responde, consulta y encadena acciones cortas sin crear un plan visible.</span>
                             </span>
                             <i t-if="state.planningMode === 'adaptive'" class="fa fa-check" aria-hidden="true"/>
                         </DropdownItem>
-                        <DropdownItem class="'o_ai_assistant_picker_option'"
+                        <DropdownItem class="'o_ai_assistant_picker_option o_ai_assistant_picker_option_divided'"
                             onSelected="() => this.selectPlanningMode('deliberate')">
                             <span class="o_ai_assistant_picker_option_icon"><i class="fa fa-list-ol" aria-hidden="true"/></span>
                             <span class="min-w-0 flex-grow-1">
                                 <span class="d-block fw-semibold">Plan</span>
-                                <span class="d-block small text-muted">Para trabajo profundo, exige un TaskPlan antes de consultar o preparar acciones.</span>
+                                <span class="d-block small text-muted">Úsalo cuando quieras una guía visible para trabajo largo, incierto o con varias fases.</span>
                             </span>
                             <i t-if="state.planningMode === 'deliberate'" class="fa fa-check" aria-hidden="true"/>
-                        </DropdownItem>
-                        <DropdownItem class="'o_ai_assistant_picker_option o_ai_assistant_picker_option_divided'"
-                            onSelected="() => this.selectPlanningMode('auto')">
-                            <span class="o_ai_assistant_picker_option_icon"><i class="fa fa-magic" aria-hidden="true"/></span>
-                            <span class="min-w-0 flex-grow-1">
-                                <span class="d-block fw-semibold">Auto</span>
-                                <span class="d-block small text-muted">Odoo elige entre Adaptativo y Plan según señales estructurales de complejidad.</span>
-                            </span>
-                            <i t-if="state.planningMode === 'auto'" class="fa fa-check" aria-hidden="true"/>
                         </DropdownItem>
                     </t>
                 </Dropdown>
