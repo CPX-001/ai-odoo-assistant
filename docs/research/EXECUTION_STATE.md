@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 43
+State format: 44
 Updated: 2026-08-31
 
 Accepted lineage:
@@ -24,23 +24,23 @@ P5 is **COMPLETE** and remains the latest fully accepted phase.
 ```text
 phase: 6
 phase_name: deep task planning, multi-step effects and recent effect journal
-phase_state: PART1_VALIDATED_PHASE2_PENDING
+phase_state: ALL_REAL_GATES_VALIDATED_PENDING_FINAL_PERIODIC_REGRESSION
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P6-validation-part2-pending
+active_slice: P6-final-periodic-regression-pending
 active_slice_record: docs/research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md
-active_slice_state: PHASE1_VALIDATED_STOPPED_BEFORE_PHASE2
-current_gate_type: PHASE2_REAL_VALIDATION
-blocking_work: none for P6.1/P6.2/P6.3/P6.5; Phase 2 was explicitly outside the 2026-08-31 validation run
-blocking_validation: P6.4/P6.6 real recovery/journal gates and the applicable final periodic regression remain unexecuted; Phase 6 is not COMPLETE and Phase 7 remains ineligible
-pending_periodic_validation: P6-REAL-EFFECT-ATOMICITY, P6-REAL-SEGMENTED-RECOVERY, P6-REAL-EFFECT-JOURNAL, applicable final periodic regression
+active_slice_state: PART2_VALIDATED_PENDING_FINAL_PERIODIC_REGRESSION
+current_gate_type: PERIODIC_FULL_REGRESSION
+blocking_work: none in the implemented Phase-6 functional slices
+blocking_validation: the applicable final periodic regression remains unexecuted; Phase 6 is not COMPLETE and Phase 7 remains ineligible
+pending_periodic_validation: applicable final periodic regression
 periodic_regression_runbook: docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
-latest_executed_evidence: docs/research/evidence/phase6/2026-08-31/P6-VALIDATION-PART1-2689691.md
+latest_executed_evidence: docs/research/evidence/phase6/2026-08-31/P6-VALIDATION-PART2-124ce4f.md
 periodic_stage_status: historical A-C PASS on 46b1093; D was BLOCKED there; no periodic batch has run against the current Direct/Plan candidate
-next_action: in a separate Phase-2 run, execute only P6-REAL-EFFECT-ATOMICITY, P6-REAL-SEGMENTED-RECOVERY and P6-REAL-EFFECT-JOURNAL; do not infer those results from Part 1
+next_action: execute the applicable final periodic regression from PERIODIC_FULL_REGRESSION_RUNBOOK.md before any Phase-6 COMPLETE or Phase-7 claim
 ```
 
-Part-1 evidence at `2689691` validates P6.1/P6.2/P6.3/P6.5 and the real multistep, replan and loop-bound gates. No unexecuted Phase-2 gate is PASS.
+Part-1 evidence at `2689691` validates P6.1/P6.2/P6.3/P6.5 and the real multistep, replan and loop-bound gates. Part-2 evidence at `124ce4f` validates P6.4/P6.6 and the atomicity, segmented-recovery and EffectJournal real gates. The final periodic regression remains unexecuted.
 
 ## Phase summary
 
@@ -51,19 +51,19 @@ P2 COMPLETE
 P3 COMPLETE
 P4 COMPLETE
 P5 COMPLETE
-P6 PART1_VALIDATED_PHASE2_PENDING
+P6 ALL_REAL_GATES_VALIDATED_PENDING_FINAL_PERIODIC_REGRESSION
   P6.1 TaskPlan vs EffectPlan        VALIDATED_PART1
   P6.2 direct/deliberate/replan      VALIDATED_PART1
   P6.3 multi-step EffectPlan         VALIDATED_PART1
-  P6.4 atomic vs segmented effects   IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+  P6.4 atomic vs segmented effects   VALIDATED_PART2
   P6.5 separate budgets              VALIDATED_PART1
-  P6.6 EffectJournal                 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+  P6.6 EffectJournal                 VALIDATED_PART2
 P7+ NOT_ELIGIBLE
 ```
 
 ## Current Phase-6 implementation candidate
 
-The current product candidate through `3103f7028f0f346c5a6789da9618bb5876f9b91d` changes the
+The current product candidate through `268969184c7fbeff479d3f22308576c526ba2692` changes the
 planning boundary after the earlier `9197be6` semantic-routing checkpoint.
 
 Current behavior:
@@ -223,6 +223,31 @@ Do not reintroduce rigid GENERAL/QUERY/HOW_TO/ACTION routing and do not make Tas
 
 ## Validation state
 
+Phase-6 Part-2 focused/real validation is recorded at:
+
+```text
+docs/research/evidence/phase6/2026-08-31/P6-VALIDATION-PART2-124ce4f.md
+```
+
+Against test/evidence candidate `124ce4f0583afde13e228f48e00362a5b35c1e58`, focused recovery
+contracts, selected Odoo integration and the relevant HOOT projection passed. The following gates
+also passed with disposable Odoo data:
+
+```text
+P6-REAL-EFFECT-ATOMICITY
+P6-REAL-SEGMENTED-RECOVERY
+P6-REAL-EFFECT-JOURNAL
+```
+
+The segmented gate used separate Odoo processes for failure persistence and recovery attempt. A
+completed unit stayed durable, the in-flight external unit remained uncertain, future work stayed
+unexecuted and the fresh process refused blind replay. The journal gate covered patch/create/delete
+classification and sanitized owned-turn projection, then verified that safe patch compensation
+marks its reversible row reverted.
+
+Together with Part 1, every named Phase-6 real gate has passed. The applicable final periodic
+regression is still unexecuted, so Phase 6 remains incomplete and Phase 7 remains ineligible.
+
 Phase-6 Part-1 focused validation is recorded at:
 
 ```text
@@ -236,13 +261,8 @@ rejected no-op progress revision, the host now temporarily removes the TaskPlan 
 the next provider decision must advance the turn. TaskPlan revisions cannot reset provider or
 correctable/consecutive failure counters.
 
-This checkpoint does not validate P6.4/P6.6. The exact remaining Phase-2 gates are:
-
-```text
-P6-REAL-EFFECT-ATOMICITY
-P6-REAL-SEGMENTED-RECOVERY
-P6-REAL-EFFECT-JOURNAL
-```
+That Part-1 checkpoint did not validate P6.4/P6.6; the Part-2 checkpoint above now supplies those
+results.
 
 Recorded focused checkpoint already green for the earlier P6.1/P6.3/P6.5 foundation:
 
@@ -276,12 +296,10 @@ docs/research/evidence/regression/2026-08-30/FULL-REGRESSION-46b1093.md
 
 That evidence is historical and does not validate this newer candidate.
 
-Remaining real Phase-2 debt is:
+Remaining periodic acceptance debt is:
 
 ```text
-P6-REAL-EFFECT-ATOMICITY
-P6-REAL-SEGMENTED-RECOVERY
-P6-REAL-EFFECT-JOURNAL
+applicable final periodic regression from PERIODIC_FULL_REGRESSION_RUNBOOK.md
 ```
 
 ## Invariants carried forward
@@ -303,4 +321,4 @@ P6-REAL-EFFECT-JOURNAL
 
 ## Exact stop rule
 
-Do not begin Phase 7 and do not call Phase 6 COMPLETE until the applicable periodic full regression and named Phase-6 real gates are green against the same final candidate lineage. Before that final batch, the current Direct/Plan follow-up needs its focused deterministic/Odoo/HOOT/real semantic smoke. If the focused smoke exposes latency without a correctness failure, address the measured provider round-trip bottleneck as a performance follow-up rather than weakening the planning/authority contract.
+Do not begin Phase 7 and do not call Phase 6 COMPLETE until the applicable final periodic regression is green against the current candidate lineage. All six named Phase-6 real gates have focused evidence across Part 1 and Part 2; do not rerun them merely to replace the still-missing periodic regression.
