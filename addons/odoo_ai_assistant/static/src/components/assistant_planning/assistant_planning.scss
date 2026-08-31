@@ -1,0 +1,65 @@
+.o_ai_assistant_panel {
+    .o_ai_assistant_composer_add {
+        flex: 0 0 auto;
+    }
+
+    .o_ai_assistant_composer_add_button {
+        position: relative;
+        display: inline-flex;
+        width: 2rem;
+        height: 2rem;
+        min-height: 2rem;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+        color: var(--bs-secondary-color, #6c757d);
+        cursor: pointer;
+        transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+
+        &:hover,
+        &:focus-visible {
+            background-color: var(--o-ai-surface-subtle, var(--o-gray-100, #f8f9fa));
+            color: var(--bs-body-color, #212529);
+            outline: none;
+        }
+
+        &:active {
+            transform: scale(0.94);
+        }
+
+        &:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+    }
+
+    .o_ai_assistant_composer_add_button_active {
+        background-color: color-mix(in srgb, var(--o-ai-accent) 12%, transparent);
+        color: var(--o-ai-accent);
+
+        &::after {
+            position: absolute;
+            right: 0.12rem;
+            bottom: 0.12rem;
+            width: 0.38rem;
+            height: 0.38rem;
+            border: 1px solid var(--o-ai-surface, var(--bs-body-bg, #fff));
+            border-radius: 50%;
+            background-color: currentColor;
+            content: "";
+        }
+    }
+}
+
+.o_ai_assistant_composer_add_menu.o-dropdown--menu {
+    width: 18rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .o_ai_assistant_panel .o_ai_assistant_composer_add_button {
+        transition: none;
+    }
+}
