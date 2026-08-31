@@ -1,44 +1,40 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
-    <t t-name="odoo_ai_assistant.AssistantPanelPlanningPicker"
+    <t t-name="odoo_ai_assistant.AssistantPanelPlanningAddMenu"
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
-        <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//button[contains(@class, 'o_ai_assistant_send_button')]" position="before">
-            <div class="o_ai_assistant_planning_picker">
-                <Dropdown position="'top-end'"
-                    menuClass="'o_ai_assistant_picker_menu o_ai_assistant_planning_menu'"
+        <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//textarea[@id='o_ai_assistant_question']" position="before">
+            <div class="o_ai_assistant_composer_add">
+                <Dropdown position="'top-start'"
+                    menuClass="'o_ai_assistant_picker_menu o_ai_assistant_composer_add_menu'"
                     disabled="state.planningLoading or state.planningSaving">
                     <button type="button"
-                        class="o_ai_assistant_picker_button o_ai_assistant_picker_button_icon"
-                        aria-label="Modo de planificación del Assistant"
-                        t-att-title="'Planificación: ' + planningModeLabel">
+                        t-att-class="'o_ai_assistant_composer_add_button' + (planModeActive ? ' o_ai_assistant_composer_add_button_active' : '')"
+                        aria-label="Añadir funciones al mensaje"
+                        t-att-title="planModeActive ? 'Añadir funciones · Plan activo' : 'Añadir funciones'">
                         <i t-if="state.planningLoading or state.planningSaving"
                             class="fa fa-spinner fa-spin" aria-hidden="true"/>
-                        <i t-else="" t-att-class="'fa ' + planningModeIconClass"
-                            aria-hidden="true"/>
-                        <i class="fa fa-angle-down o_ai_assistant_picker_caret"
-                            aria-hidden="true"/>
+                        <i t-else="" class="fa fa-plus" aria-hidden="true"/>
                     </button>
                     <t t-set-slot="content">
                         <div class="o_ai_assistant_picker_menu_title small text-muted">
-                            Modo de trabajo
+                            Añadir al mensaje
                         </div>
-                        <DropdownItem class="'o_ai_assistant_picker_option'"
-                            onSelected="() => this.selectPlanningMode('adaptive')">
-                            <span class="o_ai_assistant_picker_option_icon"><i class="fa fa-bolt" aria-hidden="true"/></span>
-                            <span class="min-w-0 flex-grow-1">
-                                <span class="d-block fw-semibold">Directo</span>
-                                <span class="d-block small text-muted">Responde, consulta y encadena acciones cortas sin crear un plan visible.</span>
+                        <DropdownItem
+                            class="planModeActive ? 'o_ai_assistant_picker_option o_ai_assistant_picker_option_selected' : 'o_ai_assistant_picker_option'"
+                            onSelected="() => this.togglePlanMode()">
+                            <span class="o_ai_assistant_picker_option_icon">
+                                <i class="fa fa-list-ol" aria-hidden="true"/>
                             </span>
-                            <i t-if="state.planningMode === 'adaptive'" class="fa fa-check" aria-hidden="true"/>
-                        </DropdownItem>
-                        <DropdownItem class="'o_ai_assistant_picker_option o_ai_assistant_picker_option_divided'"
-                            onSelected="() => this.selectPlanningMode('deliberate')">
-                            <span class="o_ai_assistant_picker_option_icon"><i class="fa fa-list-ol" aria-hidden="true"/></span>
                             <span class="min-w-0 flex-grow-1">
                                 <span class="d-block fw-semibold">Plan</span>
-                                <span class="d-block small text-muted">Úsalo cuando quieras una guía visible para trabajo largo, incierto o con varias fases.</span>
+                                <span t-if="planModeActive" class="d-block small text-muted">
+                                    Activo. Pulsa de nuevo para volver al modo directo.
+                                </span>
+                                <span t-else="" class="d-block small text-muted">
+                                    Crea un plan visible antes de trabajo largo, incierto o con varias fases.
+                                </span>
                             </span>
-                            <i t-if="state.planningMode === 'deliberate'" class="fa fa-check" aria-hidden="true"/>
+                            <i t-if="planModeActive" class="fa fa-check" aria-hidden="true"/>
                         </DropdownItem>
                     </t>
                 </Dropdown>
