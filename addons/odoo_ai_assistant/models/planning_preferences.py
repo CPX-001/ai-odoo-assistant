@@ -5,7 +5,7 @@ from __future__ import annotations
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
-_PLANNING_MODES = frozenset({"adaptive", "deliberate", "auto"})
+_PLANNING_MODES = frozenset({"adaptive", "deliberate"})
 
 
 class AssistantUserPlanningPreference(models.Model):
@@ -15,7 +15,9 @@ class AssistantUserPlanningPreference(models.Model):
         selection=[
             ("adaptive", "Adaptive"),
             ("deliberate", "Plan"),
-            ("auto", "Auto"),
+            # Kept only so databases that briefly stored the former automatic mode remain readable.
+            # Product APIs normalize it back to adaptive and never accept it for new selections.
+            ("auto", "Auto (legacy)"),
         ],
         string="Assistant planning mode",
         default="adaptive",
