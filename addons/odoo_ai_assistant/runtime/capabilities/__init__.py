@@ -36,6 +36,12 @@ from .disclosure import (
     build_disclosure_snapshot,
 )
 from .executor import CapabilityExecutor
+from .extensions import (
+    AssistantExtensionCatalog,
+    AssistantExtensionStatus,
+    compose_assistant_extensions,
+    discover_assistant_extensions_for_env,
+)
 from .features import (
     ProviderFeature,
     ProviderFeatureState,
@@ -64,6 +70,8 @@ from .registry import (
 from .skills import SkillCatalog, SkillDefinition, selector_matches
 
 __all__ = [
+    "AssistantExtensionCatalog",
+    "AssistantExtensionStatus",
     "CapabilityApproval",
     "CapabilityConfigResolver",
     "CapabilityContext",
@@ -105,7 +113,9 @@ __all__ = [
     "build_disclosure_snapshot",
     "build_effective_assistant_manifest",
     "clear_discovery_cache",
+    "compose_assistant_extensions",
     "compose_capability_registry",
+    "discover_assistant_extensions_for_env",
     "discover_capabilities",
     "discover_capabilities_for_env",
     "discover_odoo_capability_providers",
