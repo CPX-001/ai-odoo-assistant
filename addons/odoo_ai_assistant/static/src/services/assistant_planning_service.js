@@ -16,6 +16,13 @@ export function normalizePlanningModeResponse(response) {
     return response.mode;
 }
 
+export function planningModeAfterSubmit(mode, sent) {
+    if (!PLANNING_MODES.includes(mode)) {
+        return "adaptive";
+    }
+    return sent && mode === "deliberate" ? "adaptive" : mode;
+}
+
 patch(assistantPanelService, {
     start(env, dependencies) {
         const panel = super.start(env, dependencies);
@@ -36,9 +43,7 @@ patch(assistantPanelService, {
         const submitOneShot = async (message) => {
             const selected = panel.state.planningMode;
             const sent = await submit(message);
-            if (sent && selected === "deliberate") {
-                panel.state.planningMode = "adaptive";
-            }
+            panel.state.planningMode = planningModeAfterSubmit(selected, sent);
             return sent;
         };
 
