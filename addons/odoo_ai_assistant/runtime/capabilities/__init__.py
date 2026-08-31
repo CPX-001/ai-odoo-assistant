@@ -37,6 +37,7 @@ from .disclosure import (
 )
 from .executor import CapabilityExecutor
 from .extensions import (
+    ActiveAssistantExtensions,
     AssistantExtensionCatalog,
     AssistantExtensionStatus,
     compose_assistant_extensions,
@@ -70,6 +71,7 @@ from .registry import (
 from .skills import SkillCatalog, SkillDefinition, selector_matches
 
 __all__ = [
+    "ActiveAssistantExtensions",
     "AssistantExtensionCatalog",
     "AssistantExtensionStatus",
     "CapabilityApproval",
