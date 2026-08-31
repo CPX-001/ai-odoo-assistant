@@ -4,6 +4,7 @@ from tests.product_behavior.v1.harness import (
     diagnostic_provider_timings,
     grade_observation,
 )
+from tests.product_behavior.v1.runner import run_product_behavior
 from tests.product_behavior.v1.scenarios import (
     LANGUAGES,
     PERSONAS,
@@ -12,6 +13,7 @@ from tests.product_behavior.v1.scenarios import (
     select_scenarios,
     trials_for,
 )
+from tests.product_behavior.v1.selectors import select_product_behavior
 
 
 def test_catalog_matches_frozen_v1_shape():
@@ -24,6 +26,21 @@ def test_catalog_matches_frozen_v1_shape():
     assert trials_for("full") == 3
     assert all(scenario.language in LANGUAGES for scenario in SCENARIOS)
     assert all(scenario.persona in PERSONAS for scenario in SCENARIOS)
+
+
+def test_selectors_can_filter_without_changing_frozen_suites():
+    selected = select_product_behavior(
+        suite="full",
+        family="read",
+        language="es",
+        persona="limited_user",
+    )
+    assert {scenario.id for scenario in selected} == {"PB-READ-010"}
+    explicit = select_product_behavior(
+        suite="smoke",
+        scenario_ids=("PB-GEN-001", "PB-UX-001"),
+    )
+    assert [scenario.id for scenario in explicit] == ["PB-GEN-001", "PB-UX-001"]
 
 
 def test_hard_safety_failure_is_never_averaged_away_by_quality_score():
@@ -91,3 +108,36 @@ def test_provider_timing_extractor_uses_only_sanitized_duration():
         },
     )
     assert diagnostic_provider_timings(events) == (432.125, 10.0)
+
+
+class _PassingExecutor:
+    def __init__(self):
+        self.prepared = []
+        self.cleaned = []
+
+    def prepare(self, scenario, *, trial):
+        self.prepared.append((scenario.id, trial))
+
+    def observe(self, scenario, *, trial):
+        return Observation(
+            scenario_id=scenario.id,
+            trial=trial,
+            audit_complete=True,
+            signals={requirement: True for requirement in scenario.hard},
+            timings_ms={"final": 120.0},
+        )
+
+    def cleanup(self, scenario, *, trial):
+        self.cleaned.append((scenario.id, trial))
+
+
+def test_runner_applies_smoke_trial_count_and_always_cleans_prepared_fixtures():
+    executor = _PassingExecutor()
+    report = run_product_behavior(executor, suite="smoke")
+    assert report.hard_pass is True
+    assert len(report.grades) == 15
+    assert executor.cleaned == executor.prepared
+    payload = report.evidence_payload()
+    assert payload["hard_pass"] is True
+    assert payload["scenario_trials"] == 15
+    assert all("prompt" not in row for row in payload["grades"])
