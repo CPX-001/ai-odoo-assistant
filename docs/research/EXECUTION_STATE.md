@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 45
+State format: 46  
 Updated: 2026-08-31
 
 Accepted lineage:
@@ -15,35 +15,30 @@ P5.5 through 8427c8849b1e1f3afa6337de1209a6027410c266
 P5.6 through 720102f2a13af5240c779b07cc71ee65994a87b1
 P5.7 through 074a71c29a6a6109ae7412e7b1f9850c4449e379
 P5.8 through 688f569d441a40a4637ad6a23f111e584e18c955
+P6 final acceptance through 0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0
 ```
 
-P5 is **COMPLETE** and remains the latest fully accepted phase.
+P6 is **COMPLETE**. Phase 7 is now active.
 
 ## Current cursor
 
 ```text
-phase: 6
-phase_name: deep task planning, multi-step effects and recent effect journal
-phase_state: COMPLETE
+phase: 7
+phase_name: mini-framework, feature negotiation and Assistant self-awareness
+phase_state: IN_PROGRESS
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P6-final-periodic-regression
-active_slice_record: docs/research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md
-active_slice_state: VALIDATED_COMPLETE
-current_gate_type: NONE
-blocking_work: none
-blocking_validation: none
-pending_periodic_validation: none
+active_slice: P7.1-provider-extension-boundary-foundation
+active_slice_record: docs/research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md
+active_slice_state: LOCAL_VALIDATION_REQUIRED
+current_gate_type: FOCUSED_DETERMINISTIC_HARD
+blocking_work: live effective-catalog integration is intentionally held until the new provider composition boundary passes its focused deterministic gate
+blocking_validation: tests/unit/test_capability_provider_extensions.py plus py_compile/ruff for the changed provider/registry boundary
+pending_periodic_validation: none; no full regression is authorized by the current slice
 periodic_regression_runbook: docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md
 latest_accepted_evidence: docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
 latest_executed_evidence: docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
-periodic_stage_status: final current-product A-D PASS on fc022a6; 246 unit, 39 E2E, 281 Odoo-counted, 157 HOOT/604 assertions, all permanent smokes and all six P6 real gates
-next_action: Phase 7 is eligible but has not been started; reconstruct its first coherent slice from the current playbook before implementation
+next_action: run the focused P7.1 provider-extension tests; on PASS continue inside P7.1 by wiring discover_capabilities_for_env(self.env) into all current Odoo-owned effective-catalog surfaces and add installed-provider Odoo coverage
 ```
-
-Part-1 evidence at `2689691` validates P6.1/P6.2/P6.3/P6.5. Part-2 evidence at `124ce4f`
-validates P6.4/P6.6. The final full regression at `fc022a6` repeated the complete current
-dependency-light, addon and HOOT suites plus all permanent real smokes and all six Phase-6 real
-gates. Phase 6 is therefore complete; Phase 7 was not started in that run.
 
 ## Phase summary
 
@@ -61,255 +56,101 @@ P6 COMPLETE
   P6.4 atomic vs segmented effects   VALIDATED_PART2
   P6.5 separate budgets              VALIDATED_PART1
   P6.6 EffectJournal                 VALIDATED_PART2
-P7+ NOT_ELIGIBLE
+P7 IN_PROGRESS
+  P7.1 CapabilityProvider API        LOCAL_VALIDATION_REQUIRED
+  P7.2 Skill/Bundle                  NOT_STARTED
+  P7.3 ContextProvider               NOT_STARTED
+  P7.4 ProviderProfile               NOT_STARTED
+  P7.5 EffectiveAssistantManifest    NOT_STARTED
+  P7.6 Technical profile skeleton    NOT_STARTED
+  P7.7 Progressive disclosure        NOT_STARTED
+P8+ NOT_ELIGIBLE
 ```
 
-## Current Phase-6 implementation candidate
+## Phase-6 acceptance checkpoint
 
-The current product candidate through `268969184c7fbeff479d3f22308576c526ba2692` changes the
-planning boundary after the earlier `9197be6` semantic-routing checkpoint.
-
-Current behavior:
+The final current-product regression published by `0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0`
+closed Phase 6. Its accepted evidence is:
 
 ```text
-Directo / adaptive is the default
-new Direct turns cannot create a TaskPlan
-Direct may perform multiple bounded reads and stage short EffectPlans
-number of tool/effect calls never promotes Direct into visible planning
-Plan / deliberate is explicit user opt-in
-Plan requires an initial TaskPlan before capability/effect work
-former Auto is removed from the product surface and rejected for new preferences
-legacy stored Auto normalizes to Direct for new turns
-historical immutable Auto snapshots remain readable
-structural complexity remains diagnostic/eval evidence only
-lazy public work activity remains intact
+docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
 ```
 
-The addon version is `18.0.13.3.0` for this product behavior follow-up.
+It passed the complete current dependency-light/static, Odoo addon and HOOT suites plus all six
+Phase-6 real gates. There is no remaining Phase-6 gate blocking P7.
 
-The change deliberately does **not** claim that short-turn latency is solved. It removes artificial
-planning overhead, while the current one-decision-at-a-time Codex path can still spend multiple
-provider generations on schema/read/effect chains.
+## Current P7.1 implementation candidate
 
-### P6.1 / P6.2 — visible planning without authority
-
-Implemented:
+Starting from accepted `0b1bcab`, Phase 7 now has the provider-extension foundation described in:
 
 ```text
-provider-neutral task_plan_update NextDecision branch
-TaskPlan 1..12 bounded public steps
-user-facing planning modes: Directo | Plan
-stable stored identities: adaptive | deliberate
-legacy auto read compatibility only
-planning mode captured immutably per turn
-host-derived structural complexity score retained as diagnostic evidence
-PlanningDecisionEngine above provider adapters
-Direct new-turn task_plan_available=false
-Deliberate requires initial TaskPlan before capability/effect requests
-TaskPlan revision_kind: initial | progress | replan
-progress cannot mutate plan structure
-structural replan requires new host-observed evidence
-replan carries short public revision_summary
-live running-turn TaskPlan projection without capability args/private reasoning
+docs/research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md
 ```
 
-Planning mode is not autonomy and cannot change ACL, capability availability, approval or execution authority.
-
-Prepared focused contracts now explicitly cover a normal short action chain remaining planless:
+Current code adds:
 
 ```text
-look up Demo
- -> stage/create Demo if needed
- -> stage/create a test quotation
+CapabilityProvider
+CapabilityProviderStatus
+discover_odoo_capability_providers(env)
+compose_capability_registry(...)
+discover_capabilities_for_env(env)
+provider provenance on CapabilityRegistry/catalog
+optional-provider failure isolation
+provider/capability identity conflict rejection
 ```
 
-That is an EffectPlan/orchestration concern, not a reason to expose a TaskPlan.
+The Odoo-registry marker is `_odoo_ai_capability_provider` on trusted installed model code. Discovery
+is constrained to the active Odoo registry; it does not scan arbitrary host packages/filesystem.
 
-### P6.3 — bounded EffectPlan
+This foundation deliberately does **not** yet alter live turn execution. That is the next step of the
+same P7.1 slice after focused deterministic acceptance. This boundary prevents third-party provider
+composition from entering the authoritative runtime before its duplicate/failure-isolation contract
+has executed successfully.
 
-Implemented:
+Focused test prepared:
 
 ```text
-max 5 typed effect steps
-host accumulation and dependency ordering
-format-v3 prepared plan
-per-step version/arguments/preview/preconditions/risk/approval/binding
-format-v1/v2 execution compatibility
-post-effect PLAN authority removed
+tests/unit/test_capability_provider_extensions.py
 ```
 
-### P6.4 — recovery units
+No test in that file has been recorded PASS yet.
 
-Implemented:
+## Phase-7 target order
+
+The active playbook remains authoritative for the target:
 
 ```text
-odoo_atomic
-segmented
-external
+P7.1 CapabilityProvider API
+P7.2 Skill/Bundle
+P7.3 ContextProvider
+P7.4 ProviderProfile feature negotiation
+P7.5 EffectiveAssistantManifest / self-awareness
+P7.6 Business vs Developer/Operator technical profile skeleton
+P7.7 progressive disclosure when catalog/evals justify it
 ```
 
-Recovery mode is trusted host/capability metadata, not provider authority. Units are preflighted, durably checkpointed where required, Stop/redirect is rechecked at each new boundary, and a persisted in-flight unit is not blindly replayed.
+Do not start P7.2 while P7.1's authority-relevant effective catalog boundary is still unvalidated.
 
-### P6.5 — separate budget families
-
-Implemented foundation:
+## Phase-7 real gates — all pending
 
 ```text
-SafetyBudget
-ExplorationBudget
-CostBudget
-LatencyBudget
-ResponseBudget
+P7-REAL-PROVIDER-DISCOVERY
+P7-REAL-SELF-AWARENESS
+P7-REAL-DISABLEMENT
+P7-REAL-CONTEXT-PROVIDER
+P7-REAL-DISCLOSURE
+P7-REAL-AUTHORITY
 ```
 
-Remaining counters are provider context only; host enforcement remains authoritative.
-
-### P6.6 — EffectJournal
-
-Implemented:
-
-```text
-Odoo-owned recent effect journal
-bounded before/after/receipt evidence
-recovery unit/state binding
-7-day TTL + bounded cron cleanup
-system-only raw records + owned-turn sanitized projection
-reversible / reconstructable / irreversible / external_or_unknown
-verified P5.8 compensation marks matching rows reverted
-```
-
-The journal is not a backup and does not turn reconstructable effects into automatic undo.
-
-## Provider boundary
-
-Codex is still the concrete configured provider, but it does not own the Phase-6 logic. The neutral path is:
-
-```text
-Odoo host
- -> PlanningDecisionEngine
- -> NextDecisionEngine provider port
- -> Codex adapter today / other adapters later
-```
-
-TaskPlan, EffectPlan, budgets, ACL/policy, approval, recovery units, EffectJournal, execution and verification stay above provider adapters.
-
-The Direct/Plan repair is host-enforced. `PlanningDecisionEngine` projects
-`task_plan_available=false` for a new Direct turn and the Codex Structured Outputs adapter removes
-the `task_plan_update` branch from the wire schema. The model therefore cannot create a visible plan
-merely because a prompt is long or because two capability results already exist.
-
-## Performance follow-up
-
-The previous focused real smoke measured:
-
-```text
-capability explanation     14.75s
-bounded quotation count    30.55s
-```
-
-Those values are baseline evidence from `9197be6`, not measurements of the current candidate.
-
-Historical provider timing also shows that App Server initialization/thread creation has measurable
-cost, but provider/model generation is a larger contributor on a simple greeting. The next
-performance slice should therefore be evidence-driven rather than another intent-router patch.
-
-Preferred investigation order:
-
-```text
-1. measure provider decisions + process/thread/model timing on the focused semantic matrix
-2. reuse initialized App Server state within one durable Odoo turn if it materially helps
-3. reduce schema/query technical round-trips through safe host-owned capability composition or an equivalent continuation seam
-4. evaluate model/reasoning-effort fast routing only with explicit product semantics and agent evals
-```
-
-Do not reintroduce rigid GENERAL/QUERY/HOW_TO/ACTION routing and do not make TaskPlan automatic to solve latency.
-
-## Validation state
-
-Phase-6 Part-2 focused/real validation is recorded at:
-
-```text
-docs/research/evidence/phase6/2026-08-31/P6-VALIDATION-PART2-124ce4f.md
-```
-
-Against test/evidence candidate `124ce4f0583afde13e228f48e00362a5b35c1e58`, focused recovery
-contracts, selected Odoo integration and the relevant HOOT projection passed. The following gates
-also passed with disposable Odoo data:
-
-```text
-P6-REAL-EFFECT-ATOMICITY
-P6-REAL-SEGMENTED-RECOVERY
-P6-REAL-EFFECT-JOURNAL
-```
-
-The segmented gate used separate Odoo processes for failure persistence and recovery attempt. A
-completed unit stayed durable, the in-flight external unit remained uncertain, future work stayed
-unexecuted and the fresh process refused blind replay. The journal gate covered patch/create/delete
-classification and sanitized owned-turn projection, then verified that safe patch compensation
-marks its reversible row reverted.
-
-Together with Part 1, every named Phase-6 real gate has passed. The applicable final periodic
-regression is still unexecuted, so Phase 6 remains incomplete and Phase 7 remains ineligible.
-
-Phase-6 Part-1 focused validation is recorded at:
-
-```text
-docs/research/evidence/phase6/2026-08-31/P6-VALIDATION-PART1-2689691.md
-```
-
-Against product/test candidate `268969184c7fbeff479d3f22308576c526ba2692`, the focused
-dependency-light, Odoo and HOOT checks passed, as did P6-REAL-MULTISTEP, P6-REAL-REPLAN and
-P6-REAL-LOOP-BOUNDS. The real replan gate found and repaired a bounded-convergence defect: after a
-rejected no-op progress revision, the host now temporarily removes the TaskPlan decision branch so
-the next provider decision must advance the turn. TaskPlan revisions cannot reset provider or
-correctable/consecutive failure counters.
-
-That Part-1 checkpoint did not validate P6.4/P6.6; the Part-2 checkpoint above now supplies those
-results.
-
-Recorded focused checkpoint already green for the earlier P6.1/P6.3/P6.5 foundation:
-
-```text
-docs/research/evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md
-```
-
-The earlier semantic-routing checkpoint is:
-
-```text
-docs/research/evidence/phase6/2026-08-31/SEMANTIC-ROUTING-9197be6.md
-```
-
-It remains useful baseline evidence but predates the explicit Direct/Plan follow-up.
-
-Prepared but not yet executed focused coverage for the follow-up includes:
-
-```text
-tests/e2e/test_phase6_adaptive_planning_contract.py
-tests/e2e/test_phase6_direct_mode_short_chain_contract.py
-addons/odoo_ai_assistant/tests/test_planning_preferences.py
-addons/odoo_ai_assistant/tests/test_turn_settings_snapshot.py
-addons/odoo_ai_assistant/static/tests/assistant_planning_service.test.js
-```
-
-The periodic regression on product candidate `46b1093` previously passed the complete dependency-light/static stage, complete Odoo addon stage and complete addon HOOT stage. Its consolidated evidence is:
-
-```text
-docs/research/evidence/regression/2026-08-30/FULL-REGRESSION-46b1093.md
-```
-
-That evidence is historical and does not validate this newer candidate.
-
-Remaining periodic acceptance debt is:
-
-```text
-applicable final periodic regression from PERIODIC_FULL_REGRESSION_RUNBOOK.md
-```
+None is PASS merely because the contract or test fixture exists.
 
 ## Invariants carried forward
 
 - Odoo remains persistence and operational authority.
 - Business operations execute under the effective user with `su=False`.
 - `CapabilityDefinition` remains atomic executable authority.
+- `CapabilityProvider` contributes trusted declarations; it does not own execution authorization.
 - Planning strategy and TaskPlan never grant effect authority.
 - Direct mode does not weaken EffectPlan/policy/approval/verification.
 - No arbitrary SQL/Python/shell/sudo/unrestricted ORM is exposed.
@@ -318,10 +159,15 @@ applicable final periodic regression from PERIODIC_FULL_REGRESSION_RUNBOOK.md
 - Persisted in-flight effects are never blindly retried.
 - Stop/redirect cannot bypass the effect boundary.
 - Raw/private provider reasoning never becomes TaskPlan/activity/journal content.
-- Provider-specific adapters remain below the neutral decision contract.
-- Broad/real validation is batched periodically rather than repeated after every implementation slice.
+- Provider-specific reasoning adapters remain below neutral host contracts.
+- Optional extension failures must not remove the valid core capability catalog.
+- Duplicate capability/provider identity must fail closed rather than shadow existing authority.
+- Broad/real validation is batched only when the authoritative slice/runbook requires it.
 - No GitHub Actions are used while repository policy says usable runners are unavailable.
 
 ## Exact stop rule
 
-Do not begin Phase 7 and do not call Phase 6 COMPLETE until the applicable final periodic regression is green against the current candidate lineage. All six named Phase-6 real gates have focused evidence across Part 1 and Part 2; do not rerun them merely to replace the still-missing periodic regression.
+Execute the focused P7.1 provider-extension deterministic gate before wiring external providers into
+the live Odoo turn catalog. If it passes, continue inside the same P7.1 slice. If it fails, repair P7.1
+before any P7.2 work. Do not run a full regression for this checkpoint unless a concrete failure expands
+the blast radius or the authoritative state/runbook is updated to require one.
