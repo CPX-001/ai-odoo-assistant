@@ -11,6 +11,7 @@ Components render the Assistant experience. They should stay focused on interact
 | `assistant_markdown/` | safe answer rendering |
 | `assistant_model/` | model selection UI |
 | `assistant_autonomy/` | autonomy/policy profile controls |
+| `assistant_planning/` | composer `+` actions surface and explicit Plan-mode presentation |
 | `assistant_view_context/` | current-screen/context presentation/integration |
 | `zzz_assistant_multichat/` | additive P5.1 multi-chat UI patch |
 
@@ -39,6 +40,12 @@ Prefer:
 - tests for interaction branches.
 
 Avoid displaying raw JSON/tool internals as the primary UX when a semantic card/message can explain the same thing.
+
+## Composer add menu
+
+The round `+` control at the left of the composer's lower action row is the product surface for optional per-chat features. Keep the button/menu generic so future attachments, image inputs or explicitly selected tools can be added without creating another row of permanent selectors.
+
+For now the menu exposes only `Plan`. `Plan` toggles the existing planning preference between `deliberate` and the default `adaptive` mode; it does not introduce a second planning authority or bypass the turn settings snapshot. Active Plan state is indicated in the menu and on the `+` control.
 
 ## Approval UX
 
