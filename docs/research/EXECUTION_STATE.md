@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 41
+State format: 42
 Updated: 2026-08-31
 
 Accepted lineage:
@@ -26,23 +26,23 @@ phase: 6
 phase_name: deep task planning, multi-step effects and recent effect journal
 phase_state: IMPLEMENTED_PENDING_PERIODIC_VALIDATION
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
-active_slice: P6-final-implementation-candidate
+active_slice: P6-direct-plan-routing-followup
 active_slice_record: docs/research/P6_ADAPTIVE_PLANNING_IMPLEMENTATION.md
-active_slice_state: IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+active_slice_state: IMPLEMENTED_PENDING_FOCUSED_VALIDATION
 current_gate_type: FOCUSED_IMPLEMENTATION_FOLLOWUP
-blocking_work: short-turn latency remains above the near-immediate product target (14.75s direct capability answer; 30.55s bounded quotation count)
-blocking_validation: Phase 6 periodic regression and named real-product gates remain unexecuted against the new candidate; Phase 7 remains ineligible
+blocking_work: short-turn latency remains above the near-immediate product target; the latest measured baseline before this follow-up was 14.75s direct capability answer and 30.55s bounded quotation count
+blocking_validation: the new Direct/Plan follow-up has not yet run its focused deterministic/Odoo/HOOT/real smoke; Phase 6 periodic regression and named real-product gates also remain pending; Phase 7 remains ineligible
 pending_periodic_validation: P6-REAL-MULTISTEP, P6-REAL-REPLAN, P6-REAL-EFFECT-ATOMICITY, P6-REAL-SEGMENTED-RECOVERY, P6-REAL-LOOP-BOUNDS, P6-REAL-EFFECT-JOURNAL
 periodic_regression_runbook: docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md
 latest_accepted_evidence: docs/research/evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
 latest_executed_evidence: docs/research/evidence/phase6/2026-08-31/SEMANTIC-ROUTING-9197be6.md
-periodic_stage_status: historical A-C PASS on 46b1093; D was BLOCKED there; provider access is now restored but the periodic batch has not run against 9197be6
-next_action: reduce repeated provider latency for short direct/read turns without weakening the host-owned NextDecision/capability boundary, then run the applicable periodic validation against one final candidate
+periodic_stage_status: historical A-C PASS on 46b1093; D was BLOCKED there; no periodic batch has run against the current Direct/Plan candidate
+next_action: run the focused Direct/Plan contract and real semantic smoke; if correctness is green, profile remaining provider-decision latency and implement the smallest host-owned round-trip reduction before the final periodic Phase-6 acceptance batch
 ```
 
-No unexecuted P6 HARD gate is PASS. Stages A-C remain historical green evidence for product
-candidate `46b1093`, not for the newer candidate. Provider access has recovered and the focused
-semantic smoke on `9197be6` completed, but it was not the periodic Stage-D/P6 acceptance batch.
+No unexecuted P6 HARD gate is PASS. The latest real semantic evidence is still the earlier
+`9197be6` smoke; the Direct/Plan follow-up supersedes that implementation behavior and therefore
+needs fresh focused evidence before its latency or correctness can be called accepted.
 
 ## Phase summary
 
@@ -55,7 +55,7 @@ P4 COMPLETE
 P5 COMPLETE
 P6 IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.1 TaskPlan vs EffectPlan        IMPLEMENTED_PENDING_PERIODIC_VALIDATION
-  P6.2 adaptive/deliberate/replan    IMPLEMENTED_PENDING_PERIODIC_VALIDATION
+  P6.2 direct/deliberate/replan      IMPLEMENTED_PENDING_FOCUSED_VALIDATION
   P6.3 multi-step EffectPlan         IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.4 atomic vs segmented effects   IMPLEMENTED_PENDING_PERIODIC_VALIDATION
   P6.5 separate budgets              IMPLEMENTED_PENDING_PERIODIC_VALIDATION
@@ -65,16 +65,30 @@ P7+ NOT_ELIGIBLE
 
 ## Current Phase-6 implementation candidate
 
-The current implementation candidate is `9197be6659f7397ed577ec41d813764dcd5ca998`.
-It adds semantic short-turn routing, host-owned TaskPlan transition schema, adaptive suppression of
-artificial plans, lazy public work activity and terminal failure collapse. Focused evidence is:
+The current product candidate through `3103f7028f0f346c5a6789da9618bb5876f9b91d` changes the
+planning boundary after the earlier `9197be6` semantic-routing checkpoint.
+
+Current behavior:
 
 ```text
-docs/research/evidence/phase6/2026-08-31/SEMANTIC-ROUTING-9197be6.md
+Directo / adaptive is the default
+new Direct turns cannot create a TaskPlan
+Direct may perform multiple bounded reads and stage short EffectPlans
+number of tool/effect calls never promotes Direct into visible planning
+Plan / deliberate is explicit user opt-in
+Plan requires an initial TaskPlan before capability/effect work
+former Auto is removed from the product surface and rejected for new preferences
+legacy stored Auto normalizes to Direct for new turns
+historical immutable Auto snapshots remain readable
+structural complexity remains diagnostic/eval evidence only
+lazy public work activity remains intact
 ```
 
-Correctness is green for the focused contract and real smoke. Performance is not accepted: the
-measured short-turn latencies remain explicit implementation debt.
+The addon version is `18.0.13.3.0` for this product behavior follow-up.
+
+The change deliberately does **not** claim that short-turn latency is solved. It removes artificial
+planning overhead, while the current one-decision-at-a-time Codex path can still spend multiple
+provider generations on schema/read/effect chains.
 
 ### P6.1 / P6.2 — visible planning without authority
 
@@ -83,11 +97,14 @@ Implemented:
 ```text
 provider-neutral task_plan_update NextDecision branch
 TaskPlan 1..12 bounded public steps
-planning modes: adaptive | deliberate | auto
+user-facing planning modes: Directo | Plan
+stable stored identities: adaptive | deliberate
+legacy auto read compatibility only
 planning mode captured immutably per turn
-host-derived auto complexity score from structural request/screen signals only
+host-derived structural complexity score retained as diagnostic evidence
 PlanningDecisionEngine above provider adapters
-deliberate mode requires initial TaskPlan before capability/effect requests
+Direct new-turn task_plan_available=false
+Deliberate requires initial TaskPlan before capability/effect requests
 TaskPlan revision_kind: initial | progress | replan
 progress cannot mutate plan structure
 structural replan requires new host-observed evidence
@@ -96,6 +113,16 @@ live running-turn TaskPlan projection without capability args/private reasoning
 ```
 
 Planning mode is not autonomy and cannot change ACL, capability availability, approval or execution authority.
+
+Prepared focused contracts now explicitly cover a normal short action chain remaining planless:
+
+```text
+look up Demo
+ -> stage/create Demo if needed
+ -> stage/create a test quotation
+```
+
+That is an EffectPlan/orchestration concern, not a reason to expose a TaskPlan.
 
 ### P6.3 — bounded EffectPlan
 
@@ -165,6 +192,37 @@ Odoo host
 
 TaskPlan, EffectPlan, budgets, ACL/policy, approval, recovery units, EffectJournal, execution and verification stay above provider adapters.
 
+The Direct/Plan repair is host-enforced. `PlanningDecisionEngine` projects
+`task_plan_available=false` for a new Direct turn and the Codex Structured Outputs adapter removes
+the `task_plan_update` branch from the wire schema. The model therefore cannot create a visible plan
+merely because a prompt is long or because two capability results already exist.
+
+## Performance follow-up
+
+The previous focused real smoke measured:
+
+```text
+capability explanation     14.75s
+bounded quotation count    30.55s
+```
+
+Those values are baseline evidence from `9197be6`, not measurements of the current candidate.
+
+Historical provider timing also shows that App Server initialization/thread creation has measurable
+cost, but provider/model generation is a larger contributor on a simple greeting. The next
+performance slice should therefore be evidence-driven rather than another intent-router patch.
+
+Preferred investigation order:
+
+```text
+1. measure provider decisions + process/thread/model timing on the focused semantic matrix
+2. reuse initialized App Server state within one durable Odoo turn if it materially helps
+3. reduce schema/query technical round-trips through safe host-owned capability composition or an equivalent continuation seam
+4. evaluate model/reasoning-effort fast routing only with explicit product semantics and agent evals
+```
+
+Do not reintroduce rigid GENERAL/QUERY/HOW_TO/ACTION routing and do not make TaskPlan automatic to solve latency.
+
 ## Validation state
 
 Recorded focused checkpoint already green for the earlier P6.1/P6.3/P6.5 foundation:
@@ -173,19 +231,33 @@ Recorded focused checkpoint already green for the earlier P6.1/P6.3/P6.5 foundat
 docs/research/evidence/phase6/2026-08-30/P6-FOCUSED-CHECKPOINT-1d6dc69.md
 ```
 
-The periodic regression on product candidate `46b1093` executed and passed the complete current
-dependency-light/static stage, complete Odoo addon stage and complete addon HOOT stage. Its
-consolidated evidence is:
+The earlier semantic-routing checkpoint is:
+
+```text
+docs/research/evidence/phase6/2026-08-31/SEMANTIC-ROUTING-9197be6.md
+```
+
+It remains useful baseline evidence but predates the explicit Direct/Plan follow-up.
+
+Prepared but not yet executed focused coverage for the follow-up includes:
+
+```text
+tests/e2e/test_phase6_adaptive_planning_contract.py
+tests/e2e/test_phase6_direct_mode_short_chain_contract.py
+addons/odoo_ai_assistant/tests/test_planning_preferences.py
+addons/odoo_ai_assistant/tests/test_turn_settings_snapshot.py
+addons/odoo_ai_assistant/static/tests/assistant_planning_service.test.js
+```
+
+The periodic regression on product candidate `46b1093` previously passed the complete dependency-light/static stage, complete Odoo addon stage and complete addon HOOT stage. Its consolidated evidence is:
 
 ```text
 docs/research/evidence/regression/2026-08-30/FULL-REGRESSION-46b1093.md
 ```
 
-The earlier real-product stage on `46b1093` returned `usageLimitExceeded` before the first provider
-decision. Provider access is available again, and `9197be6` has focused real semantic-routing
-evidence, but the named Phase-6 real gates have not been rerun and remain pending rather than PASS.
+That evidence is historical and does not validate this newer candidate.
 
-Accumulated periodic real debt:
+Accumulated periodic real debt remains:
 
 ```text
 P6-REAL-MULTISTEP
@@ -196,16 +268,13 @@ P6-REAL-LOOP-BOUNDS
 P6-REAL-EFFECT-JOURNAL
 ```
 
-Restore provider capacity and resume Stage D according to
-`PERIODIC_FULL_REGRESSION_RUNBOOK.md`, without rerunning already-green A-C unless the product
-candidate changes or a Stage-D repair affects them.
-
 ## Invariants carried forward
 
 - Odoo remains persistence and operational authority.
 - Business operations execute under the effective user with `su=False`.
 - `CapabilityDefinition` remains atomic executable authority.
 - Planning strategy and TaskPlan never grant effect authority.
+- Direct mode does not weaken EffectPlan/policy/approval/verification.
 - No arbitrary SQL/Python/shell/sudo/unrestricted ORM is exposed.
 - Policy/approval/preconditions/write-barrier/verification remain host-owned.
 - Recovery-unit mode/classification is host-derived.
@@ -218,4 +287,4 @@ candidate changes or a Stage-D repair affects them.
 
 ## Exact stop rule
 
-Do not begin Phase 7 and do not call Phase 6 COMPLETE until the applicable periodic full regression and named Phase-6 real gates are green against the same final candidate lineage. If that batch fails, repair the concrete underlying contract with focused tests, then rerun only the affected broad stage before the final acceptance rerun as defined by the periodic runbook.
+Do not begin Phase 7 and do not call Phase 6 COMPLETE until the applicable periodic full regression and named Phase-6 real gates are green against the same final candidate lineage. Before that final batch, the current Direct/Plan follow-up needs its focused deterministic/Odoo/HOOT/real semantic smoke. If the focused smoke exposes latency without a correctness failure, address the measured provider round-trip bottleneck as a performance follow-up rather than weakening the planning/authority contract.
