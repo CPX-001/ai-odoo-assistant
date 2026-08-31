@@ -1,6 +1,7 @@
 import { expect, test } from "@odoo/hoot";
 import {
     normalizePlanningModeResponse,
+    planningModeAfterSubmit,
     PLANNING_MODES,
 } from "@odoo_ai_assistant/services/assistant_planning_service";
 import { normalizeLiveTaskPlan } from "@odoo_ai_assistant/services/zzzzzz_phase6_task_plan_live_service";
@@ -12,6 +13,14 @@ test("planning mode response exposes direct and explicit plan only", () => {
     expect(normalizePlanningModeResponse({ ok: true, mode: "deliberate" })).toBe("deliberate");
     expect(normalizePlanningModeResponse({ ok: true, mode: "auto" })).toBe(null);
     expect(normalizePlanningModeResponse({ ok: true, mode: "unbounded" })).toBe(null);
+});
+
+
+test("Plan is consumed only after a successful submitted turn", () => {
+    expect(planningModeAfterSubmit("deliberate", true)).toBe("adaptive");
+    expect(planningModeAfterSubmit("deliberate", false)).toBe("deliberate");
+    expect(planningModeAfterSubmit("adaptive", true)).toBe("adaptive");
+    expect(planningModeAfterSubmit("auto", true)).toBe("adaptive");
 });
 
 
