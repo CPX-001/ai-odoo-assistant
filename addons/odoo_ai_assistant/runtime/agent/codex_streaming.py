@@ -140,6 +140,8 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
         answer_item_id: str | None = None
         streaming_enabled = True
         reasoning_summary_enabled = True
+        provider_delta_observed = False
+        answer_chunk_observed = False
         for _ in range(_MAX_EVENTS):
             if self._cancelled():
                 await _best_effort_interrupt(client, thread_id, turn_id)
@@ -186,6 +188,13 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                     answer_item_id = item_id
                 elif item_id != answer_item_id:
                     raise CodexAgentError("codex_answer_delta_item_mismatch")
+                if delta and not provider_delta_observed:
+                    provider_delta_observed = True
+                    _emit_streaming_diagnostic(
+                        context,
+                        "diagnostic.streaming.provider_delta",
+                        chars=len(delta),
+                    )
                 if streaming_enabled and delta:
                     try:
                         chunks = extractor.feed(delta)
@@ -195,6 +204,13 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                         streaming_enabled = False
                     else:
                         for chunk in chunks:
+                            if not answer_chunk_observed:
+                                answer_chunk_observed = True
+                                _emit_streaming_diagnostic(
+                                    context,
+                                    "diagnostic.streaming.answer_chunk",
+                                    chars=len(chunk),
+                                )
                             if not _emit_answer_delta(context, chunk):
                                 streaming_enabled = False
                                 break
@@ -276,6 +292,15 @@ def _emit_answer_delta(context, text: str) -> bool:
     except Exception:  # noqa: BLE001 - live UX cannot become business authority
         return False
     return True
+
+
+def _emit_streaming_diagnostic(context, event_type: str, *, chars: int) -> None:
+    """Record only timing-stage metadata; never persist provisional answer text here."""
+
+    try:
+        context.emit(event_type, "Streaming timing", {"chars": chars})
+    except Exception:  # noqa: BLE001 - diagnostic observability cannot control the turn
+        return
 
 
 def _emit_reasoning_summary_delta(
