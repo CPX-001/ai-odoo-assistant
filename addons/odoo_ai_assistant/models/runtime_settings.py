@@ -20,7 +20,7 @@ from ..runtime.capabilities import (
     CapabilityContext,
     CapabilityError,
     CapabilitySettingType,
-    discover_capabilities,
+    discover_capabilities_for_env,
 )
 
 
@@ -168,7 +168,7 @@ class ResConfigSettingsRuntime(models.TransientModel):
     def action_assistant_codex_login_cancel(self):
         return self._retired_database_login_action()
 
-    def action_assistant_codex_logout(self):
+    def action_assistant_logout(self):
         return self._retired_database_login_action()
 
     @api.model
@@ -189,7 +189,7 @@ class ResConfigSettingsRuntime(models.TransientModel):
         """Generic settings/diagnostics surface; no per-provider fields or XML required."""
 
         self._require_capability_admin()
-        registry = discover_capabilities()
+        registry = discover_capabilities_for_env(self.env)
         resolver = CapabilityConfigResolver.from_env(self.env)
         enabled = resolver.enablement_overrides(registry.definitions)
         context = CapabilityContext(
@@ -236,7 +236,7 @@ class ResConfigSettingsRuntime(models.TransientModel):
         self._require_capability_admin()
         if type(enabled) is not bool:
             raise ValidationError("Invalid capability enablement")
-        definition = discover_capabilities().resolve(capability_name)
+        definition = discover_capabilities_for_env(self.env).resolve(capability_name)
         key = CapabilityConfigResolver.enabled_parameter_key(definition.name)
         self.env["ir.config_parameter"].set_param(key, "true" if enabled else "false")
         return True
@@ -244,7 +244,7 @@ class ResConfigSettingsRuntime(models.TransientModel):
     @api.model
     def assistant_set_capability_setting(self, capability_name, setting_key, value):
         self._require_capability_admin()
-        definition = discover_capabilities().resolve(capability_name)
+        definition = discover_capabilities_for_env(self.env).resolve(capability_name)
         setting = next((item for item in definition.settings if item.key == setting_key), None)
         if setting is None:
             raise ValidationError("Unknown capability setting")
