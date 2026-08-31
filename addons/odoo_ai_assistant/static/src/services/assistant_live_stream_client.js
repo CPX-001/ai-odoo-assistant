@@ -285,7 +285,8 @@ export async function streamAssistantChatLive({
         !payload.message.trim() ||
         payload.message.length > 4000 ||
         payload.screen === null ||
-        typeof payload.screen !== "object"
+        typeof payload.screen !== "object" ||
+        !["adaptive", "deliberate"].includes(payload.planning_mode || "adaptive")
     ) {
         throw new AssistantFailureError("invalid_context");
     }
@@ -300,6 +301,7 @@ export async function streamAssistantChatLive({
         screen: payload.screen,
         conversation_id: payload.conversation_id || null,
         client_request_id: requestId(),
+        planning_mode: payload.planning_mode || "adaptive",
     });
     if (queued?.ok !== true || typeof queued.turn_id !== "string") {
         throw new AssistantFailureError(
