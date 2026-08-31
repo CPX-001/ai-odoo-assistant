@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 from typing import Mapping
 
@@ -260,7 +261,13 @@ class PlanningDecisionEngine:
                 "data": plan_state.payload(),
             },
         )
-        decision = await self._provider.next_decision(**provider_kwargs)
+        started = time.perf_counter()
+        try:
+            decision = await self._provider.next_decision(**provider_kwargs)
+        except Exception:
+            _emit_provider_decision_timing(context, started=started, outcome="failed")
+            raise
+        _emit_provider_decision_timing(context, started=started, outcome="completed")
 
         _index, current_plan = _latest_task_plan(working_items)
         if (
@@ -282,6 +289,25 @@ class PlanningDecisionEngine:
             except NextDecisionValidationError as error:
                 raise NextDecisionValidationError(error.code, decision) from error
         return decision
+
+
+def _emit_provider_decision_timing(
+    context: CapabilityContext,
+    *,
+    started: float,
+    outcome: str,
+) -> None:
+    """Persist safe diagnostic timing without making observability part of authority."""
+
+    duration_ms = max(0.0, (time.perf_counter() - started) * 1000)
+    try:
+        context.emit(
+            "diagnostic.provider.decision",
+            "Provider decision timing",
+            {"duration_ms": round(duration_ms, 3), "outcome": outcome},
+        )
+    except Exception:  # noqa: BLE001 - diagnostics cannot change turn success/failure
+        return
 
 
 def _latest_task_plan(
