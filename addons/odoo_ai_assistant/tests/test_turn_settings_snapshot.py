@@ -38,27 +38,38 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
             "view_type": "list",
         }
 
-    def _enqueue(self, env, *, request_id, message, screen=None):
+    def _enqueue(
+        self,
+        env,
+        *,
+        request_id,
+        message,
+        screen=None,
+        planning_mode="adaptive",
+    ):
         result = env["odoo.ai.turn"].enqueue_for_current_user(
             message=message,
             screen=screen or self._screen(),
             client_request_id=request_id,
+            planning_mode=planning_mode,
         )
         self.assertTrue(result["ok"])
         return env["odoo.ai.turn"]._owned_turn(result["turn_id"])
 
-    def test_future_preference_changes_do_not_mutate_existing_turn_snapshot(self):
+    def test_one_shot_plan_is_captured_without_becoming_a_persistent_preference(self):
         env = self.env(user=self.user, su=False)
         preference = env["odoo.ai.user.preference"]
         preference.set_current_reasoning_model("snapshot-model-a")
         preference.set_current_reasoning_effort("high")
         preference.set_current_agent_profile("strict")
+        # Historical/persisted deliberate remains readable but is no longer new-turn authority.
         preference.set_current_planning_mode("deliberate")
 
         turn_a = self._enqueue(
             env,
             request_id="request.settings.snapshot.0001",
             message="Captura la configuración A",
+            planning_mode="deliberate",
         )
         snapshot_a = turn_a.execution_settings_snapshot()
         self.assertEqual(snapshot_a["format_version"], 3)
@@ -76,7 +87,7 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         preference.set_current_reasoning_model("snapshot-model-b")
         preference.set_current_reasoning_effort("low")
         preference.set_current_agent_profile("full_access")
-        preference.set_current_planning_mode("adaptive")
+        # Deliberate stays stored on purpose to prove it cannot silently reactivate Plan.
         turn_a.invalidate_recordset()
         self.assertEqual(turn_a.execution_settings_snapshot(), snapshot_a)
 
@@ -91,6 +102,7 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         self.assertEqual(snapshot_b["autonomy_profile"], "full_access")
         self.assertEqual(snapshot_b["planning_mode"], "adaptive")
         self.assertEqual(snapshot_b["planning_strategy"]["effective_mode"], "adaptive")
+        self.assertFalse(snapshot_b["planning_strategy"]["task_plan_required"])
         self.assertEqual(
             snapshot_b["policy"]["layers"]["user"]["max_auto_risk"],
             "protected",
@@ -128,13 +140,23 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         turn.invalidate_recordset()
         self.assertEqual(turn.execution_settings_snapshot(), snapshot)
 
+    def test_invalid_one_shot_planning_mode_fails_closed(self):
+        env = self.env(user=self.user, su=False)
+        with self.assertRaisesRegex(ValidationError, "Invalid Assistant planning mode"):
+            env["odoo.ai.turn"].enqueue_for_current_user(
+                message="No aceptes un modo inventado",
+                screen=self._screen(),
+                client_request_id="request.settings.snapshot.invalid.0001",
+                planning_mode="auto",
+            )
+
     def test_captured_settings_fields_are_immutable_after_turn_creation(self):
         env = self.env(user=self.user, su=False)
         preference = env["odoo.ai.user.preference"]
         preference.set_current_reasoning_model("snapshot-model-fixed")
         preference.set_current_reasoning_effort("medium")
         preference.set_current_agent_profile("balanced")
-        preference.set_current_planning_mode("adaptive")
+        preference.set_current_planning_mode("deliberate")
         turn = self._enqueue(
             env,
             request_id="request.settings.snapshot.0003",
