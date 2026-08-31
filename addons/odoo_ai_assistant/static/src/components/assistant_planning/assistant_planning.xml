@@ -19,8 +19,7 @@
                         <div class="o_ai_assistant_picker_menu_title small text-muted">
                             Añadir al mensaje
                         </div>
-                        <DropdownItem
-                            class="planModeActive ? 'o_ai_assistant_picker_option o_ai_assistant_picker_option_selected' : 'o_ai_assistant_picker_option'"
+                        <DropdownItem class="'o_ai_assistant_picker_option'"
                             onSelected="() => this.togglePlanMode()">
                             <span class="o_ai_assistant_picker_option_icon">
                                 <i class="fa fa-list-ol" aria-hidden="true"/>
