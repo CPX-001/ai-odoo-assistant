@@ -24,6 +24,8 @@ _BOUND_SETTINGS_FIELDS = frozenset(
 _AUTONOMY_PROFILES = frozenset({"strict", "balanced", "autonomous", "full_access"})
 _EFFORT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 _PLANNING_MODES = frozenset({"adaptive", "deliberate", "auto"})
+_NEW_TURN_PLANNING_MODES = frozenset({"adaptive", "deliberate"})
+_PLANNING_CONTEXT_KEY = "assistant_planning_mode_override"
 
 
 class AssistantTurnSettingsSnapshot(models.Model):
@@ -46,7 +48,7 @@ class AssistantTurnSettingsSnapshot(models.Model):
                 if "reasoning_effort" not in values:
                     effort = _reasoning_effort_for_user(self.env, values.get("user_id"))
                     values["reasoning_effort"] = effort or False
-                planning_mode = _planning_mode_for_user(self.env, values.get("user_id"))
+                planning_mode = _planning_mode_for_new_turn(self.env)
                 values["execution_settings_payload"] = _build_settings_snapshot(
                     reasoning_model=values.get("reasoning_model"),
                     reasoning_effort=values.get("reasoning_effort"),
@@ -186,18 +188,11 @@ def _reasoning_effort_for_user(env, user_id):
     return preference.current_reasoning_effort()
 
 
-def _planning_mode_for_user(env, user_id):
-    if type(user_id) is not int or user_id <= 0:
-        return "adaptive"
-    user = env["res.users"].browse(user_id).exists()
-    if not user:
-        return "adaptive"
-    preference = env["odoo.ai.user.preference"].with_user(user)
-    getter = getattr(preference, "current_planning_mode", None)
-    if not callable(getter):
-        return "adaptive"
-    mode = getter()
-    return mode if mode in _PLANNING_MODES else "adaptive"
+def _planning_mode_for_new_turn(env):
+    """Resolve only the explicit one-shot input; stored Plan is migration history."""
+
+    mode = env.context.get(_PLANNING_CONTEXT_KEY)
+    return mode if mode in _NEW_TURN_PLANNING_MODES else "adaptive"
 
 
 def _autonomy_profile_from_policy(policy):
