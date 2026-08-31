@@ -4,14 +4,33 @@ Date: 2026-08-31
 Inspected starting `main`: `0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0`  
 Phase: 7 — mini-framework, feature negotiation and Assistant self-awareness  
 Current coherent slice: `P7.1-provider-extension-boundary-foundation`  
-State: `LOCAL_VALIDATION_REQUIRED`
+State: `FOUNDATION_LANDED_LOCAL_VALIDATION_REQUIRED / LIVE_INTEGRATION_PAUSED_BY_PRODUCT_GATE`
 
-## Why Phase 7 is now eligible
+## Why Phase 7 became eligible
 
 Phase 6 was closed by the final current-product regression published at `0b1bcab`; the accepted
 regression evidence is `docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md`.
-The previous `EXECUTION_STATE.md` cursor already says Phase 7 is eligible. Its older `P7+
-NOT_ELIGIBLE` summary/stop-rule wording is stale documentation and must not override that cursor.
+
+Phase 7 then began and the provider-extension foundation below was committed. After that start, the user approved a
+new permanent product-behavior eval gate intended to exist before Phase-7 product expansion. Because this P7.1
+foundation is deliberately isolated and has **not** yet changed the live effective capability catalog, do not roll it
+back merely to make the chronology look cleaner. Instead:
+
+```text
+preserve isolated P7.1 foundation
+ -> execute its already-required focused deterministic gate
+ -> pause before live effective-catalog wiring
+ -> implement/execute Product Behavior Evals v1
+ -> repair HARD product regressions
+ -> resume P7.1 live integration only after that gate is green
+```
+
+Owning product gate documents:
+
+```text
+docs/research/PRODUCT_BEHAVIOR_EVALS_V1.md
+docs/research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md
+```
 
 ## Slice objective
 
@@ -26,11 +45,10 @@ trusted installed addon declaration
  -> existing CapabilityDefinition / executor / policy authority
 ```
 
-This slice deliberately stops before changing the effective product runtime catalog. Letting
-third-party installed code alter the catalog is a security/authority-relevant boundary; the new
-composition contract must first pass focused dependency-light tests. After that gate, P7.1 can wire
-Odoo-registry discovery into the real runtime/settings surfaces without stacking an unvalidated
-contract layer.
+This slice deliberately stopped before changing the effective product runtime catalog. Letting third-party
+installed code alter the catalog is a security/authority-relevant boundary; the new composition contract must first
+pass focused dependency-light tests. The newly inserted product-behavior gate now also blocks the subsequent live
+wiring so that capability expansion cannot land before the current user-visible baseline is measurable.
 
 ## Implemented foundation
 
@@ -55,21 +73,23 @@ Added `runtime/capabilities/provider.py` with:
 - rejects duplicate provider identities;
 - rejects capability/executor collisions rather than shadowing core authority;
 - isolates optional provider loader/definition failures;
-- preserves the valid core catalog when an all-optional extension set has an invalid dependency
-  graph;
+- preserves the valid core catalog when an all-optional extension set has an invalid dependency graph;
 - records provider provenance per capability plus sanitized provider status;
 - does not change `CapabilityDefinition`, executor, policy, ACL, approval or verification authority.
 
-`discover_capabilities_for_env(env)` is prepared as the Odoo-registry-aware composition entry point.
-It is **not yet wired into live turn execution in this checkpoint**.
+`discover_capabilities_for_env(env)` is prepared as the Odoo-registry-aware composition entry point. It is **not yet
+wired into live turn execution** at this checkpoint.
 
 ## References used
 
-The design follows the current repository playbook and `docs/CAPABILITY_FRAMEWORK.md`. The Project
-Atlas v1.1 is the supporting design reference: Pydantic AI contributes the provider/bundle/atomic
-separation and stable discovery semantics; FastMCP contributes the provider abstraction; Apexive
-shows Odoo-native discovery. None is introduced as a runtime dependency. `CapabilityDefinition`
-remains the stricter host-owned executable unit.
+The design follows the current repository playbook and `docs/CAPABILITY_FRAMEWORK.md`. The Project Atlas v1.1 is
+the supporting design reference: Pydantic AI contributes the provider/bundle/atomic separation and stable discovery
+semantics; FastMCP contributes the provider abstraction; Apexive shows Odoo-native discovery. None is introduced as
+a runtime dependency. `CapabilityDefinition` remains the stricter host-owned executable unit.
+
+The same Atlas and the Project Benchmark also identify agentic evals as a P0 gap: deterministic tests alone do not
+prove correct tool selection, grounding, approval behavior, UX or cost/latency. `PRODUCT_BEHAVIOR_EVALS_V1.md`
+turns that recommendation into the current promotion gate.
 
 ## Invariants
 
@@ -81,6 +101,7 @@ remains the stricter host-owned executable unit.
 - Raw extension exceptions do not become model/user-facing diagnostics.
 - No arbitrary Python/package discovery, shell, SQL, sudo or unrestricted ORM is introduced.
 - Provider metadata/configuration is data, not policy.
+- Product-eval instrumentation must not capture raw private reasoning/secrets.
 
 ## Focused deterministic gate prepared
 
@@ -101,7 +122,7 @@ It covers:
 - invalid optional dependency fallback to the core catalog;
 - deterministic Odoo registry marker discovery without inherited duplicate markers.
 
-Required focused command before live runtime integration:
+Required focused command before any further P7 code:
 
 ```bash
 .venv/bin/python -m pytest -q tests/unit/test_capability_provider_extensions.py
@@ -122,17 +143,34 @@ Recommended static checks for the changed Python boundary:
   tests/unit/test_capability_provider_extensions.py
 ```
 
-No full regression is authorized by this slice.
+No repository-wide regression is authorized by this P7.1 foundation slice.
 
-## Next action after focused PASS
+## Product gate before live P7 integration
 
-Continue **inside P7.1** and wire `discover_capabilities_for_env(self.env)` into every current
-Odoo-owned effective-catalog composition surface (live host loop, plan/reversion path and
-settings/diagnostics). Then add an installed test addon/provider fixture and focused Odoo coverage for
-enable/disable/uninstall/failure isolation before attempting `P7-REAL-PROVIDER-DISCOVERY`.
+After the focused P7.1 foundation test passes, **do not wire `discover_capabilities_for_env(self.env)` into live
+turns yet**. Execute the handoff in `PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md`.
 
-Do not start P7.2 Skill/Bundle until the P7.1 effective runtime boundary has deterministic acceptance;
-that would stack a second unvalidated contract layer.
+The gate includes a permanent 54-case product behavior dataset, SMOKE/FULL runners, per-provider/tool timing,
+permissions/persona coverage, real answer-streaming checks, and user-approved behavior such as one-shot Plan UX.
+
+Two current-product issues are specifically called out for evidence-driven repair:
+
+1. user-observed answer streaming may currently remain in `thinking` until the full answer arrives, despite the
+   accepted historical P4 streaming contract;
+2. current Plan is persisted as a user preference, while the approved product behavior is a removable one-shot
+   composer tag consumed by the next submitted turn.
+
+These are product contract changes/regression investigations, not reasons to weaken P7 authority invariants.
+
+## Next action after product gate PASS
+
+Resume **inside P7.1** and wire `discover_capabilities_for_env(self.env)` into every current Odoo-owned
+effective-catalog composition surface (live host loop, plan/reversion path and settings/diagnostics). Then add an
+installed test addon/provider fixture and focused Odoo coverage for enable/disable/uninstall/failure isolation before
+attempting `P7-REAL-PROVIDER-DISCOVERY`.
+
+Do not start P7.2 Skill/Bundle until the P7.1 effective runtime boundary has deterministic acceptance; that would
+stack a second unvalidated contract layer.
 
 ## Phase-7 real gates still pending
 
