@@ -29,7 +29,7 @@ from ..runtime.capabilities import (
     CapabilityError,
     CapabilityExecutor,
     CapabilityPolicy,
-    discover_capabilities,
+    discover_capabilities_for_env,
 )
 from .chat_policy import resolve_capability_policy
 from .embedded_runtime import EmbeddedRuntimeError, _commit_plan_barrier, _plan_envelope
@@ -58,7 +58,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             raise AccessError("Assistant turn binding is no longer valid")
 
         policy_snapshot = resolve_capability_policy(turn.policy_payload or {})
-        registry = discover_capabilities()
+        registry = discover_capabilities_for_env(self.env)
         resolver = CapabilityConfigResolver.from_env(self.env)
         enablement = resolver.enablement_overrides(registry.definitions)
         settings_snapshot = turn.execution_settings_snapshot() or {}
