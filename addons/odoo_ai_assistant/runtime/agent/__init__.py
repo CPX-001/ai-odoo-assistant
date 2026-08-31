@@ -9,6 +9,7 @@ from .budgets import (
     SafetyBudget,
     resolve_agent_budgets,
 )
+from .extension_context import AssistantExtensionDecisionEngine
 from .plan import CapabilityPlanError, CapabilityPlanExecution, CapabilityPlanService
 from .planning import (
     PlanningDecisionEngine,
@@ -20,6 +21,7 @@ from .planning import (
 )
 from .post_effect import PostEffectDecisionEngine
 from .provider import ReasoningProvider
+from .provider_profile import current_codex_provider_profile
 from .service import (
     AgentReasoningResult,
     AgentTurnResult,
@@ -38,6 +40,7 @@ __all__ = [
     "AgentReasoningResult",
     "AgentTurnResult",
     "AgentTurnService",
+    "AssistantExtensionDecisionEngine",
     "CapabilityPlanError",
     "CapabilityPlanExecution",
     "CapabilityPlanService",
@@ -57,6 +60,7 @@ __all__ = [
     "TaskPlan",
     "TaskPlanError",
     "TaskPlanStep",
+    "current_codex_provider_profile",
     "measure_task_complexity",
     "parse_task_plan",
     "resolve_agent_budgets",
