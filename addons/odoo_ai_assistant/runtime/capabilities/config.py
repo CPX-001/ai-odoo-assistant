@@ -43,6 +43,8 @@ class CapabilityConfigResolver:
         return values
 
     def enabled(self, definition: CapabilityDefinition) -> bool:
+        """Return the declared/default enablement toggle without configuration readiness."""
+
         if self._get is None:
             return definition.default_enabled
         enabled = definition.default_enabled
@@ -55,11 +57,11 @@ class CapabilityConfigResolver:
             enabled = _decode_bool(raw)
         return enabled
 
-    def enablement_overrides(
+    def declared_enablement_overrides(
         self,
         definitions: Iterable[CapabilityDefinition],
     ) -> dict[str, bool]:
-        """Return explicit/default enablement independent from configuration readiness."""
+        """Return only explicit/default enablement, useful for detailed Settings diagnostics."""
 
         return {definition.name: self.enabled(definition) for definition in definitions}
 
@@ -67,12 +69,11 @@ class CapabilityConfigResolver:
         self,
         definitions: Iterable[CapabilityDefinition],
     ) -> dict[str, bool]:
-        """Return runtime-visible enablement after validating required configuration.
+        """Return effective model/runtime enablement including configuration readiness.
 
-        The capability stays present in the trusted registry and Settings catalog, but the model
-        cannot receive/call a definition that the host already knows cannot resolve its declared
-        configuration.  This is availability only; ACL/groups/guards are still evaluated by the
-        registry under the effective Environment.
+        The definition remains registered and inspectable even when configuration is missing or
+        invalid, but it is removed from the model-visible effective catalog before reasoning. ACLs,
+        groups and guards remain separate registry checks under the effective Environment.
         """
 
         effective: dict[str, bool] = {}
@@ -87,6 +88,14 @@ class CapabilityConfigResolver:
             else:
                 effective[definition.name] = True
         return effective
+
+    def enablement_overrides(
+        self,
+        definitions: Iterable[CapabilityDefinition],
+    ) -> dict[str, bool]:
+        """Backward-compatible effective availability used by live capability contexts."""
+
+        return self.availability_overrides(definitions)
 
     @staticmethod
     def parameter_key(capability_name: str, setting_key: str) -> str:
