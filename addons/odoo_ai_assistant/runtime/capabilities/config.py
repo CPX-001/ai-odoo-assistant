@@ -59,7 +59,34 @@ class CapabilityConfigResolver:
         self,
         definitions: Iterable[CapabilityDefinition],
     ) -> dict[str, bool]:
+        """Return explicit/default enablement independent from configuration readiness."""
+
         return {definition.name: self.enabled(definition) for definition in definitions}
+
+    def availability_overrides(
+        self,
+        definitions: Iterable[CapabilityDefinition],
+    ) -> dict[str, bool]:
+        """Return runtime-visible enablement after validating required configuration.
+
+        The capability stays present in the trusted registry and Settings catalog, but the model
+        cannot receive/call a definition that the host already knows cannot resolve its declared
+        configuration.  This is availability only; ACL/groups/guards are still evaluated by the
+        registry under the effective Environment.
+        """
+
+        effective: dict[str, bool] = {}
+        for definition in definitions:
+            if not self.enabled(definition):
+                effective[definition.name] = False
+                continue
+            try:
+                self.resolve(definition)
+            except CapabilityError:
+                effective[definition.name] = False
+            else:
+                effective[definition.name] = True
+        return effective
 
     @staticmethod
     def parameter_key(capability_name: str, setting_key: str) -> str:
