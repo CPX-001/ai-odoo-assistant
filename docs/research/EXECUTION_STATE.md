@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 48
+State format: 49
 Updated: 2026-08-31
 
 Accepted lineage:
@@ -18,8 +18,13 @@ P5.8 through 688f569d441a40a4637ad6a23f111e584e18c955
 P6 final acceptance through 0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0
 ```
 
-P6 is **COMPLETE**. Phase 7 has started, but live Phase-7 integration is now intentionally paused behind the
+P6 is **COMPLETE**. Phase 7 has started, but live Phase-7 integration is intentionally paused behind the
 user-directed Product Behavior Evals v1 gate.
+
+The pre-real Product Behavior implementation checkpoint is now present on `main`: the v1 catalog/harness, one-shot
+Plan path and additional timing/streaming observability have been implemented. They are **not yet accepted** because
+the focused deterministic/Odoo/HOOT validation and the real SMOKE/FULL product runs have not been executed at this
+checkpoint.
 
 ## Current cursor
 
@@ -29,16 +34,18 @@ phase_name: mini-framework, feature negotiation and Assistant self-awareness
 phase_state: IN_PROGRESS_PAUSED_BEFORE_LIVE_INTEGRATION
 active_phase_record: docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md
 active_slice: PRE-P7-LIVE-product-behavior-baseline-v1
-active_slice_record: docs/research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md
-active_slice_state: IMPLEMENTATION_AND_REAL_BASELINE_REQUIRED
-current_gate_type: PRODUCT_BEHAVIOR_HARD
+active_slice_record: docs/research/PRODUCT_BEHAVIOR_EVALS_V1_IMPLEMENTATION.md
+active_slice_state: LOCAL_VALIDATION_REQUIRED
+current_gate_type: PRODUCT_BEHAVIOR_FOCUSED_VALIDATION
 blocking_work: do not wire the P7.1 provider extension boundary into the live effective capability catalog and do not start P7.2
-blocking_validation: implement and pass Product Behavior Evals v1 SMOKE/FULL according to the handoff
-pending_periodic_validation: none; the new product-eval FULL is a dedicated gate and does not authorize unrelated repository-wide regression
+blocking_validation: run the focused dependency-light/static, Odoo settings-snapshot and HOOT gates recorded in PRODUCT_BEHAVIOR_EVALS_V1_IMPLEMENTATION.md; after PASS execute real SMOKE then FULL
+pending_periodic_validation: none; the product-eval FULL is a dedicated gate and does not authorize unrelated repository-wide regression
 periodic_regression_runbook: docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md
 latest_accepted_evidence: docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
 latest_executed_evidence: docs/research/evidence/phase7/2026-08-31/P7.1-FOUNDATION-3c9e118.md
-next_action: preserve the focused-validated P7.1 foundation; implement PRODUCT_BEHAVIOR_EVALS_V1 including timing, real streaming validation and one-shot Plan UX before any live P7 catalog wiring
+latest_implementation_checkpoint: docs/research/PRODUCT_BEHAVIOR_EVALS_V1_IMPLEMENTATION.md
+implementation_checkpoint_sha: 5d9c47ab70a01bf88f3b04d86056b6ffff501a36
+next_action: execute only the focused validation gate from PRODUCT_BEHAVIOR_EVALS_V1_IMPLEMENTATION.md; if green, build/use disposable real-Odoo scenario executors and run the 15-case real SMOKE before FULL
 ```
 
 ## Phase summary
@@ -58,6 +65,7 @@ P6 COMPLETE
   P6.5 separate budgets              VALIDATED_PART1
   P6.6 EffectJournal                 VALIDATED_PART2
 P7 IN_PROGRESS / LIVE INTEGRATION PAUSED
+  PRE-P7 Product Behavior Evals v1   IMPLEMENTED / LOCAL_VALIDATION_REQUIRED
   P7.1 CapabilityProvider API        FOUNDATION_FOCUSED_VALIDATED
        live effective-catalog wiring BLOCKED_BY_PRODUCT_BEHAVIOR_GATE
   P7.2 Skill/Bundle                  NOT_STARTED
@@ -112,17 +120,18 @@ Result: **8 passed**, plus focused `py_compile`, Ruff and `git diff --check` PAS
 
 ## Product Behavior Evals v1 gate
 
-The user has approved a permanent separate eval layer because technical tests can remain green while real behavior
+The user approved a permanent separate eval layer because technical tests can remain green while real behavior
 regresses.
 
-Authoritative design/handoff:
+Authoritative design/handoff and current implementation checkpoint:
 
 ```text
 docs/research/PRODUCT_BEHAVIOR_EVALS_V1.md
 docs/research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md
+docs/research/PRODUCT_BEHAVIOR_EVALS_V1_IMPLEMENTATION.md
 ```
 
-Required direction:
+Required direction remains:
 
 ```text
 SMOKE: 12-15 scenarios, one probabilistic trial
@@ -138,16 +147,42 @@ HARD product invariants include no unauthorized writes, no read approvals, no Ta
 after correction/Stop, no ungrounded current-installation facts, no raw private reasoning/secrets, no duplicate final
 answer/effect, safe ACL behavior and host-resolved navigation.
 
-### User-approved product behavior changes/findings to close in this gate
+### Implementation checkpoint now landed
 
-1. **Plan is one-shot.** Current persisted per-user Plan UX is not the target. Selecting Plan should render a removable
-   composer/input chip for the next turn only; after submission the following turn returns to Direct unless selected
-   again. Trivial/social prompts must not manufacture a useless plan merely because the tag was selected.
-2. **Answer streaming must be revalidated.** The user reports that current chat often remains thinking and then
-   displays the whole answer at once. Historical Phase-4 streaming PASS does not disprove a later regression. Measure
-   provider delta -> extractor -> Odoo live event -> browser first delta -> final and repair the actual bottleneck.
-3. **Tool timing is first-class.** Eval output must expose each capability duration separately from provider decision
-   latency so a single anomalous 30-second local tool cannot hide inside aggregate turn time.
+The pre-real implementation through `5d9c47ab70a01bf88f3b04d86056b6ffff501a36` adds the coherent boundary that can
+be validated before spending real-provider/browser time:
+
+```text
+one-shot Plan composer option + removable chip
+planning_mode carried by the submitted turn and captured immutably
+legacy stored deliberate/auto prevented from silently activating new turns
+Plan consumption at durable turn persistence
+54 stable Product Behavior scenarios
+15-case SMOKE subset
+suite/id/family/language/persona selectors
+SMOKE x1 / FULL x3 trial policy
+HARD grading + secondary quality-grader seam
+safe timing/reporting + guaranteed cleanup boundary
+provider-decision timing diagnostics
+provider-first-delta / extractor-first-chunk streaming diagnostics
+```
+
+This implementation checkpoint is not evidence that the new path passes. The next required action is exactly the
+focused validation recorded in `PRODUCT_BEHAVIOR_EVALS_V1_IMPLEMENTATION.md`; no real SMOKE/FULL result is claimed.
+
+### Product behavior changes/findings carried by the gate
+
+1. **Plan is one-shot.** The implementation now treats Plan as next-turn composer state rather than a persistent user
+   mode. It must still pass the focused frontend/Odoo snapshot tests and the later real product scenarios. A trivial or
+   social prompt with Plan selected must not manufacture a useless TaskPlan.
+2. **Answer streaming must be revalidated.** The user reported that the chat often remains thinking and then displays
+   the whole answer at once. Historical Phase-4 streaming PASS does not disprove a later regression. The implementation
+   now adds safe first-provider-delta and first-extractor-chunk diagnostics; the real SMOKE must locate and repair any
+   remaining provider -> extractor -> Odoo live event -> browser bottleneck.
+3. **Tool timing is first-class.** Eval output must expose capability duration separately from provider-decision
+   latency so a single anomalous local tool cannot hide inside aggregate turn time. The harness can derive
+   tool/preview/verify durations from existing activity ids/timestamps and consumes sanitized provider duration
+   diagnostics.
 4. **Installation facts require evidence.** Current conversation summary can preserve continuity but is not a
    freshness-aware authoritative business-data cache. Measure repeated-query latency first; do not add unsafe cache
    semantics merely for speed.
@@ -158,12 +193,40 @@ answer/effect, safe ACL behavior and host-resolved navigation.
 7. **Create defaults are conservative.** Do not fill optional fields merely because defaults exist; omit unrelated
    optional fields and let Odoo defaults apply naturally when omitted.
 
+## Focused validation now blocking
+
+Run only the focused gate defined in `docs/research/PRODUCT_BEHAVIOR_EVALS_V1_IMPLEMENTATION.md`:
+
+```text
+dependency-light Product Behavior harness/provider timing + direct planning/answer-stream regressions
+focused py_compile + Ruff + git diff --check
+Odoo TestAssistantTurnSettingsSnapshot
+focused HOOT:
+  assistant_planning_service.test.js
+  assistant_plan_one_shot_submit.test.js
+  assistant_live_stream_client.test.js
+```
+
+Do not broaden this into an unrelated full repository regression. If this focused gate passes, continue inside the
+same pre-P7 slice with disposable real-Odoo fixture executors and the 15-case real SMOKE. Repair every unresolved
+HARD failure before FULL.
+
 ## Current streaming evidence boundary
 
 `docs/research/PHASE4_ANSWER_STREAMING.md` remains valid historical acceptance for its checkpoint. Current code still
 contains the provisional `answer.delta` path, but the Phase-6 final periodic regression did not rerun the real
 `P4-REAL-FIRST-DELTA` gate. Its basic-chat smoke checked terminal behavior rather than useful provisional answer
 arrival. The product gate must establish current evidence instead of assuming streaming remains healthy.
+
+The current implementation adds sanitized milestone diagnostics without treating provisional text as authority:
+
+```text
+provider first agent-message delta
+structured extractor first answer chunk
+existing live-event commit/browser first delta/final timing path
+```
+
+No raw provisional answer text or private reasoning is stored merely for diagnostics.
 
 ## Conversation context/cache finding
 
@@ -223,9 +286,12 @@ Do not continue P7.1 live effective-catalog wiring and do not start P7.2 until:
 ```text
 P7.1 isolated provider-extension focused deterministic gate PASS
 AND Product Behavior Evals v1 harness/dataset implemented
+AND focused validation of the current Product Behavior implementation PASS
 AND real SMOKE executed with zero unresolved HARD failures
 AND real FULL baseline executed as specified
 AND user-approved Plan/streaming behavior gaps discovered by the gate are repaired or explicitly reclassified by user
 ```
 
-After that, return to `P7_MINI_FRAMEWORK_IMPLEMENTATION.md` and resume P7.1 live integration before P7.2.
+The harness/dataset implementation condition is now satisfied at the implementation level but is not accepted until
+its focused validation passes. After the complete Product Behavior gate is green, return to
+`P7_MINI_FRAMEWORK_IMPLEMENTATION.md` and resume P7.1 live integration before P7.2.
