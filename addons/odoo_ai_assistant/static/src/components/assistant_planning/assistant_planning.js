@@ -5,15 +5,13 @@ import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
 
 const MODE_LABELS = {
-    adaptive: _t("Adaptativo"),
+    adaptive: _t("Directo"),
     deliberate: _t("Plan"),
-    auto: _t("Auto"),
 };
 
 const MODE_ICONS = {
-    adaptive: "fa-random",
+    adaptive: "fa-bolt",
     deliberate: "fa-list-ol",
-    auto: "fa-magic",
 };
 
 patch(AssistantPanel.prototype, {
