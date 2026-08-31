@@ -26,7 +26,7 @@ AgentTurnService / host loop
     +--> immutable planning strategy
     +--> effective CapabilityRegistry
     +--> provider-neutral NextDecision (Codex today)
-    +--> TaskPlan progress / host capability execution
+    +--> optional explicit TaskPlan / host capability execution
     +--> semantic live events / answer deltas
     v
 EffectPlan prepare / approval / recovery-unit execute / verify
@@ -162,12 +162,18 @@ revision / revision_kind / revision_summary
 bounded steps with title/state/dependencies
 ```
 
-It cannot contain executable capability arguments or approval authority. Planning modes are
-`adaptive`, `deliberate` and `auto`; the resolved strategy is captured per turn. In adaptive mode,
-direct answers, short bounded reads and one batch operation remain planless. A TaskPlan starts only
-for meaningful dependent phases; an adaptive initial plan therefore needs at least two steps. In
-deliberate mode, an initial TaskPlan is required before capability/effect requests. A structural
-replan requires new host-observed evidence, and the host supplies the exact legal next revision.
+It cannot contain executable capability arguments or approval authority. Visible planning has two current product modes:
+
+```text
+Directo (adaptive)  default; a new turn cannot create a TaskPlan
+Plan (deliberate)   explicit user opt-in; initial TaskPlan required before capability/effect work
+```
+
+Directo may still answer, inspect schema, perform multiple bounded reads, reason over evidence and stage several typed EffectPlan steps. The number of tool calls, effect proposals or structural complexity signals never promotes a Direct turn into a visible TaskPlan. A short chain such as “find Demo; create it if absent; create a test quotation” therefore stays planless unless Plan was selected.
+
+The former `auto` selector is legacy compatibility only and is no longer exposed/accepted for new preferences. Stored legacy `auto` preferences normalize to Direct; historical immutable snapshots remain readable.
+
+A structural replan is possible only for an existing TaskPlan, requires new host-observed evidence, and the host supplies the exact legal next revision.
 
 Effectful work uses a separate bounded typed EffectPlan:
 
@@ -225,20 +231,16 @@ The UI distinguishes:
 ```text
 private/raw reasoning                 never public
 readable provider reasoning summary   optional, bounded, advisory
-TaskPlan                              bounded public planning/progress
+TaskPlan                              explicit bounded public planning/progress
 semantic host work items              normal user-facing progress
 technical lifecycle/trace             diagnostic detail
 ```
 
-A compact live line follows the latest meaningful step. A direct model answer creates no generic
-Thought activity; public work begins only after the host accepts a capability, effect or useful
-TaskPlan decision. Completed activity collapses to total elapsed time plus semantic step count.
-Normal/compact history replaces provider retry failures with one terminal failure, while detailed
-and diagnostic profiles retain the underlying events. Technical identifiers are hidden by default.
+A compact live line follows the latest meaningful step. A direct model answer creates no generic Thought activity; public work begins only after the host accepts a capability, effect or explicit TaskPlan decision. Completed activity collapses to total elapsed time plus semantic step count. Normal/compact history replaces provider retry failures with one terminal failure, while detailed and diagnostic profiles retain the underlying events. Technical identifiers are hidden by default.
 
 Readable provider summaries accept bounded `summaryTextDelta`; raw reasoning `textDelta` never enters public state.
 
-Running status separately projects the latest validated TaskPlan. The UI chooses the newest valid revision and prefers the authoritative final response on equal revisions, so a stale final live poll cannot hide the terminal plan.
+Running status separately projects the latest validated TaskPlan when Plan mode is in use. The UI chooses the newest valid revision and prefers the authoritative final response on equal revisions, so a stale final live poll cannot hide the terminal plan.
 
 ## 11. Answer streaming
 
@@ -248,7 +250,7 @@ Conceptual browser channels/surfaces are:
 
 ```text
 activity.event
-TaskPlan status projection
+optional TaskPlan status projection
 answer.delta
 reasoning.summary.delta
 turn.final
