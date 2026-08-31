@@ -51,6 +51,15 @@ class EffectiveAssistantManifest:
         }
 
 
+def technical_access_profile_for_env(env) -> TechnicalAccessProfile:
+    """Describe technical reach without granting any new execution authority."""
+
+    user = getattr(env, "user", None)
+    if user is not None and user.has_group("base.group_system"):
+        return TechnicalAccessProfile.DEVELOPER
+    return TechnicalAccessProfile.BUSINESS
+
+
 def build_effective_assistant_manifest(
     *,
     registry: CapabilityRegistry,
@@ -63,12 +72,20 @@ def build_effective_assistant_manifest(
     disclosure: CapabilityDisclosureSnapshot | None = None,
     configuration_health: Iterable[Mapping[str, JsonValue]] = (),
 ) -> EffectiveAssistantManifest:
-    """Build a safe projection; it never mutates authority or exposes handlers/instructions."""
+    """Build a safe projection; it never mutates authority or exposes handlers/instructions.
+
+    Host-only capabilities remain outside the model/user self-description surface. The manifest
+    describes the same REASONING/PLAN catalog the model may know, while host validation still uses
+    the complete registry independently.
+    """
 
     if not isinstance(technical_profile, TechnicalAccessProfile):
         raise CapabilityError("technical_profile_invalid")
-    available_defs = registry.available(context)
-    available_names = tuple(item.name for item in available_defs)
+    available_defs = (
+        *registry.for_reasoning(context),
+        *registry.for_planning(context),
+    )
+    available_names = tuple(sorted(item.name for item in available_defs))
     disclosure = disclosure or build_disclosure_snapshot(available_names)
     if set(disclosure.available) != set(available_names):
         raise CapabilityError("capability_disclosure_state_invalid")
@@ -94,6 +111,7 @@ def build_effective_assistant_manifest(
     )
 
     revealed = set(disclosure.revealed)
+    by_name = {item.name: item for item in available_defs}
     capability_rows = tuple(
         {
             "name": definition.name,
@@ -105,7 +123,7 @@ def build_effective_assistant_manifest(
             "provider_id": registry.provider_for(definition.name),
             "revealed": definition.name in revealed,
         }
-        for definition in available_defs
+        for definition in (by_name[name] for name in available_names)
     )
     provider_health = tuple(
         {
@@ -133,4 +151,5 @@ __all__ = [
     "EffectiveAssistantManifest",
     "TechnicalAccessProfile",
     "build_effective_assistant_manifest",
+    "technical_access_profile_for_env",
 ]
