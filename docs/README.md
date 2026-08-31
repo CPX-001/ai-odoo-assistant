@@ -15,7 +15,9 @@ If you only read three documents, read:
 | Understand the project from outside development | [`../README.md`](../README.md) | [`PRODUCT_VISION.md`](PRODUCT_VISION.md), component READMEs |
 | Know what actually works today | [`CURRENT_STATE.md`](CURRENT_STATE.md) | [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) |
 | Understand the runtime | [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md) |
-| Work on TaskPlan / multi-step effects | [`research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md`](research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md) | [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md), active P6 cursor |
+| Work on TaskPlan / multi-step effects | [`research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md`](research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md) | [`CHAT_PRODUCT_FLOW.md`](CHAT_PRODUCT_FLOW.md) |
+| Work on the current Phase-7 provider boundary | [`research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md`](research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md) | [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md), active execution cursor |
+| Implement/evaluate user-visible product behavior | [`research/PRODUCT_BEHAVIOR_EVALS_V1.md`](research/PRODUCT_BEHAVIOR_EVALS_V1.md) | [`research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md`](research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md) |
 | Add or change a capability | [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) | [`../addons/odoo_ai_assistant/runtime/capabilities/README.md`](../addons/odoo_ai_assistant/runtime/capabilities/README.md) |
 | Work on the agent/provider loop | [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md) | [`adr/ADR-019-host-owned-iterative-decision-loop.md`](adr/ADR-019-host-owned-iterative-decision-loop.md) |
 | Work on writes/actions | [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`adr/ADR-014-unified-host-authorized-agent.md`](adr/ADR-014-unified-host-authorized-agent.md) |
@@ -41,14 +43,16 @@ flowchart TB
     EXEC --> ORM[Odoo ORM / bounded host service]
     HOST --> EFFECT[Typed EffectPlan → preview → policy/approval → execute → verify]
     EFFECT --> ORM
-    HOST --> LIVE[Semantic activity + answer/reasoning presentation]
+    HOST --> LIVE[Semantic activity + provisional answer + final reconciliation]
     TASK --> UI
     LIVE --> UI
 ```
 
 Today this is an embedded Odoo runtime using Codex as the concrete reasoning provider. The core `NextDecisionEngine`, TaskPlan/EffectPlan semantics, capability framework, budgets and effect authority are provider-neutral.
 
-General RAG, first-class Skills/Bundles, external `CapabilityProvider`, MCP, automations/AI fields, multiple production provider adapters and governed memory are later layers, not current claims.
+The first P7 `CapabilityProvider` composition foundation is present on `main`, but live external-provider catalog wiring is intentionally paused until the new Product Behavior Evals v1 baseline is implemented and accepted.
+
+General company RAG, first-class Skills/Bundles, Context/Evidence providers, MCP, automations/AI fields, multiple production model providers and governed long-lived memory are later layers, not current claims.
 
 ## Current vs target notation
 
@@ -62,14 +66,15 @@ Documentation should make lifecycle status obvious:
 Current formal state:
 
 ```text
-P0-P5 COMPLETE
-P6 IN_PROGRESS
-  P6.1 TaskPlan vs EffectPlan        REAL_ENV_VALIDATION_REQUIRED
-  P6.3 bounded multi-step EffectPlan REAL_ENV_VALIDATION_REQUIRED
-  P6.5 separate budgets              REAL_ENV_VALIDATION_REQUIRED
+P0-P6 COMPLETE
+P7 IN_PROGRESS / LIVE INTEGRATION PAUSED
+  P7.1 provider-extension foundation LANDED / focused local validation required
+  Product Behavior Evals v1 IMPLEMENTATION + REAL BASELINE REQUIRED
+  P7.1 live effective-catalog wiring BLOCKED
+  P7.2+ NOT STARTED
 ```
 
-No P6 HARD real gate is recorded PASS yet. The exact live cursor is always [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
+The exact live cursor is always [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
 
 ## Documentation layers
 
@@ -78,14 +83,17 @@ No P6 HARD real gate is recorded PASS yet. The exact live cursor is always [`res
 - [`PRODUCT_VISION.md`](PRODUCT_VISION.md) — intended user experience and product boundaries.
 - [`CURRENT_STATE.md`](CURRENT_STATE.md) — what is currently implemented, accepted or still missing.
 - [`CHAT_PRODUCT_FLOW.md`](CHAT_PRODUCT_FLOW.md) — chat-facing flow and interaction contracts.
+- [`research/PRODUCT_BEHAVIOR_EVALS_V1.md`](research/PRODUCT_BEHAVIOR_EVALS_V1.md) — approved user-visible behavior baseline, metrics and 54 initial scenarios.
+- [`research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md`](research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md) — implementation/real-gate handoff, including streaming and one-shot Plan work.
 - [`research/P5.8_IMPLEMENTATION.md`](research/P5.8_IMPLEMENTATION.md) — accepted semantic activity/control/navigation/compensation implementation record.
-- [`research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md`](research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md) — current TaskPlan/multi-step/budget implementation candidate and validation boundary.
+- [`research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md`](research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md) — accepted Phase-6 planning/effect foundation record.
+- [`research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md`](research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md) — current isolated P7.1 provider-extension foundation and stop boundary.
 
 ### Architecture and subsystem contracts
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — current system architecture.
 - [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md) — active agent/runtime contract.
-- [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) — atomic capabilities, registry, executor and target extension model.
+- [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) — atomic capabilities, registry, executor and extension model.
 - [`QUERY_CONTRACT.md`](QUERY_CONTRACT.md) — bounded query semantics.
 - [`KNOWLEDGE_INDEX.md`](KNOWLEDGE_INDEX.md) — knowledge/index direction; check `CURRENT_STATE.md` before treating it as active runtime.
 - [`FUTURE_MODEL_ROUTING.md`](FUTURE_MODEL_ROUTING.md) — future provider/model routing ideas, not current product behavior.
@@ -114,7 +122,7 @@ An ADR explains a decision and trade-offs; current code may evolve under the sam
 
 ### Research, roadmap and evidence
 
-[`research/`](research/) contains execution playbooks, phase records and named acceptance evidence. These files are intentionally more procedural than the current architecture docs.
+[`research/`](research/) contains execution playbooks, phase records, product-eval specifications and named acceptance evidence. These files are intentionally more procedural than the current architecture docs.
 
 Always use [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) as the active roadmap cursor rather than inferring phase state from an older playbook.
 
@@ -149,8 +157,8 @@ When sources disagree, normally prefer:
 1. current code and accepted ADRs;
 2. `CURRENT_STATE.md`, `ARCHITECTURE.md` and current subsystem contracts;
 3. current tests and named real-environment evidence;
-4. active research/playbooks;
-5. dated reports and Project reference documents;
+4. active execution state/research records;
+5. dated Project reports/PDFs and external references;
 6. retired code/historical documentation.
 
 External projects and research are design references, not requirements.
@@ -164,7 +172,8 @@ When changing a subsystem:
 - update `ARCHITECTURE.md` for cross-component boundary changes;
 - add/update an ADR when authority, deployment, persistence or a major invariant changes;
 - update `research/EXECUTION_STATE.md` as part of governed roadmap/validation work;
-- do not rewrite history to make an old report look current;
+- add/extend product-behavior evals whenever agent/model behavior or user-visible tool strategy changes;
+- do not rewrite historical evidence to make an old report look current;
 - mark target behavior as target until its tests/real gates are accepted.
 
 A new reader should be able to answer quickly: **what is this piece for, how does it connect, how do I extend/replace it, and what must never be bypassed?**
