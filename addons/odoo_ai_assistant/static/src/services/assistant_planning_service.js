@@ -4,7 +4,7 @@ import { rpc } from "@web/core/network/rpc";
 import { patch } from "@web/core/utils/patch";
 import { assistantPanelService } from "@odoo_ai_assistant/services/assistant_panel_service";
 
-export const PLANNING_MODES = Object.freeze(["adaptive", "deliberate", "auto"]);
+export const PLANNING_MODES = Object.freeze(["adaptive", "deliberate"]);
 
 export function normalizePlanningModeResponse(response) {
     if (
