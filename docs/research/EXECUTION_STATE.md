@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 47  
+State format: 48
 Updated: 2026-08-31
 
 Accepted lineage:
@@ -33,12 +33,12 @@ active_slice_record: docs/research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md
 active_slice_state: IMPLEMENTATION_AND_REAL_BASELINE_REQUIRED
 current_gate_type: PRODUCT_BEHAVIOR_HARD
 blocking_work: do not wire the P7.1 provider extension boundary into the live effective capability catalog and do not start P7.2
-blocking_validation: first execute the already-prepared focused P7.1 foundation test; then implement and pass Product Behavior Evals v1 SMOKE/FULL according to the handoff
+blocking_validation: implement and pass Product Behavior Evals v1 SMOKE/FULL according to the handoff
 pending_periodic_validation: none; the new product-eval FULL is a dedicated gate and does not authorize unrelated repository-wide regression
 periodic_regression_runbook: docs/research/PERIODIC_FULL_REGRESSION_RUNBOOK.md
 latest_accepted_evidence: docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
-latest_executed_evidence: docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
-next_action: run the focused P7.1 provider-extension deterministic gate; preserve the isolated foundation; then implement PRODUCT_BEHAVIOR_EVALS_V1 including timing, real streaming validation and one-shot Plan UX before any live P7 catalog wiring
+latest_executed_evidence: docs/research/evidence/phase7/2026-08-31/P7.1-FOUNDATION-3c9e118.md
+next_action: preserve the focused-validated P7.1 foundation; implement PRODUCT_BEHAVIOR_EVALS_V1 including timing, real streaming validation and one-shot Plan UX before any live P7 catalog wiring
 ```
 
 ## Phase summary
@@ -58,7 +58,7 @@ P6 COMPLETE
   P6.5 separate budgets              VALIDATED_PART1
   P6.6 EffectJournal                 VALIDATED_PART2
 P7 IN_PROGRESS / LIVE INTEGRATION PAUSED
-  P7.1 CapabilityProvider API        FOUNDATION_LANDED_LOCAL_VALIDATION_REQUIRED
+  P7.1 CapabilityProvider API        FOUNDATION_FOCUSED_VALIDATED
        live effective-catalog wiring BLOCKED_BY_PRODUCT_BEHAVIOR_GATE
   P7.2 Skill/Bundle                  NOT_STARTED
   P7.3 ContextProvider               NOT_STARTED
@@ -101,14 +101,14 @@ provider/capability identity conflict rejection
 The Odoo-registry marker is `_odoo_ai_capability_provider` on trusted installed model code. Discovery is constrained
 to the active Odoo registry; it does not scan arbitrary host packages/filesystem.
 
-Crucially, this foundation has **not** yet been wired into live turn execution. Keep it. The already-prepared focused
-gate remains required:
+Crucially, this foundation has **not** yet been wired into live turn execution. Keep it. Its focused gate passed at
+the published checkpoint recorded in `docs/research/evidence/phase7/2026-08-31/P7.1-FOUNDATION-3c9e118.md`:
 
 ```text
 tests/unit/test_capability_provider_extensions.py
 ```
 
-Do not claim PASS until executed in the appropriate local environment.
+Result: **8 passed**, plus focused `py_compile`, Ruff and `git diff --check` PASS.
 
 ## Product Behavior Evals v1 gate
 

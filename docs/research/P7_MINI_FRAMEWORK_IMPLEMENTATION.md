@@ -4,7 +4,7 @@ Date: 2026-08-31
 Inspected starting `main`: `0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0`  
 Phase: 7 — mini-framework, feature negotiation and Assistant self-awareness  
 Current coherent slice: `P7.1-provider-extension-boundary-foundation`  
-State: `FOUNDATION_LANDED_LOCAL_VALIDATION_REQUIRED / LIVE_INTEGRATION_PAUSED_BY_PRODUCT_GATE`
+State: `FOUNDATION_FOCUSED_VALIDATED / LIVE_INTEGRATION_PAUSED_BY_PRODUCT_GATE`
 
 ## Why Phase 7 became eligible
 
@@ -18,7 +18,7 @@ back merely to make the chronology look cleaner. Instead:
 
 ```text
 preserve isolated P7.1 foundation
- -> execute its already-required focused deterministic gate
+ -> focused deterministic gate PASS at the published P7.1 foundation checkpoint
  -> pause before live effective-catalog wiring
  -> implement/execute Product Behavior Evals v1
  -> repair HARD product regressions
