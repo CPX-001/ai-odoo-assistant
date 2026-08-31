@@ -50,10 +50,16 @@ steps: step_id / title / state / depends_on
 
 It has **no capability, arguments, approval or execution authority**. Revisions are host-validated and durable in the private working transcript. It is not chain-of-thought.
 
-In adaptive mode it is reserved for a genuinely multi-phase workflow with at least two meaningful,
-dependent user-visible steps. A direct answer, one lookup, schema discovery followed by a bounded
-read, or one batch operation remains planless. The host projects the exact next revision and legal
-revision kinds as trusted contract data and rejects an artificial one-step adaptive plan.
+Visible planning is now an explicit product choice:
+
+```text
+Directo (adaptive)  default; no TaskPlan is available for a new turn
+Plan (deliberate)   user opt-in; requires an initial TaskPlan before capability/effect work
+```
+
+Direct mode may still answer, inspect schema, perform several bounded reads, reason over their results and stage a short EffectPlan. The number of provider/tool calls does not promote a Direct turn into visible planning. In particular, a bounded chain such as “find the Demo contact; create it if absent; create a test quotation” remains planless unless the user selected Plan.
+
+The former `auto` preference is legacy-read compatibility only. Existing stored values normalize to Direct for new turns, and historical snapshots remain parseable. Structural complexity can still be retained as diagnostic/eval evidence, but it does not activate TaskPlan.
 
 ### EffectPlan
 
@@ -70,6 +76,7 @@ For the currently supported Odoo-local effects, execution is one Odoo business t
 | `service.py` | provider-neutral host loop, TaskPlan/EffectPlan accumulation and budgets |
 | `contracts.py` | typed `NextDecision` contract |
 | `task_plan.py` | closed non-authoritative TaskPlan contract |
+| `planning.py` | Direct/Plan strategy and host-owned TaskPlan availability/revision rules |
 | `decision_validation.py` | host validation of provider decisions |
 | `working_transcript.py` | bounded private continuation state |
 | `budgets.py` | Safety / Exploration / Cost / Latency / Response ceilings |
@@ -99,6 +106,8 @@ A provider receives bounded context, effective reasoning/planning capability des
 Another provider can replace Codex by implementing the same `NextDecisionEngine`; it does not need a duplicated Odoo agent runtime.
 
 Provider-specific code may own transport features such as Structured Outputs translation, model options, streaming, provider errors and steering. It must not own business authorization.
+
+`PlanningDecisionEngine` projects `task_plan_available` as host-owned contract data. In Direct mode the TaskPlan branch is removed from the provider wire schema for a new turn, so planning behavior is not merely a prompt convention.
 
 ## Capability calls
 
@@ -154,14 +163,13 @@ Two projections remain separate:
 
 TaskPlan is a separate product-plan artifact. Phase 6 does not turn private reasoning into activity.
 
-The first provider decision is also the semantic route: it may answer directly, request the minimum
-authoritative Odoo reads, or begin a multi-phase workflow. Direct model answers publish no generic
-"Thought" activity. Short Odoo lookups may use one or more tightly scoped read capabilities without
-creating a TaskPlan; public work starts only after the host accepts a non-final decision.
+The first provider decision is also the semantic route: it may answer directly, request the minimum authoritative Odoo reads, or begin bounded effect work. Direct model answers publish no generic "Thought" activity. Short Odoo lookups and short action chains may use several tightly scoped capabilities without creating a TaskPlan; public work starts only after the host accepts a non-final decision.
 
-Exact social messages such as a greeting, thanks, or farewell additionally use a final-answer-only
-provider contract. The constraint stays deliberately narrow: a greeting combined with a business
-request still enters the normal semantic route.
+Exact social messages such as a greeting, thanks, or farewell additionally use a final-answer-only provider contract. The constraint stays deliberately narrow: a greeting combined with a business request still enters the normal semantic route.
+
+## Latency note
+
+Removing artificial TaskPlans avoids extra orchestration, but it does not by itself make provider generation instantaneous. The current one-`NextDecision` host loop may still require several provider round-trips for schema/read/effect chains, and the Codex adapter currently starts an ephemeral App Server/thread for each decision. Optimize that boundary from measured timings and evals rather than reintroducing a rigid intent router or making TaskPlan automatic again.
 
 ## Failure semantics
 
@@ -176,7 +184,7 @@ Good changes preserve:
 - the provider-neutral `NextDecisionEngine` port;
 - one host-validated decision at a time;
 - `CapabilityRegistry`/`CapabilityExecutor` as the execution path;
-- TaskPlan as non-authoritative progress only;
+- TaskPlan as explicit non-authoritative progress only;
 - bounded typed EffectPlan steps;
 - host-owned budget/policy/approval/recovery semantics;
 - separate private state and public projections.
