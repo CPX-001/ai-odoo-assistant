@@ -15,12 +15,16 @@ from ..runtime import (
     RuntimePaths,
     detect_codex,
 )
+from ..runtime.agent import current_codex_provider_profile
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
     CapabilityError,
     CapabilitySettingType,
+    build_effective_assistant_manifest,
+    discover_assistant_extensions_for_env,
     discover_capabilities_for_env,
+    technical_access_profile_for_env,
 )
 
 
@@ -232,6 +236,43 @@ class ResConfigSettingsRuntime(models.TransientModel):
         return rows
 
     @api.model
+    def assistant_effective_manifest(self):
+        """Safe admin projection of the same effective state used for Assistant self-awareness."""
+
+        self._require_capability_admin()
+        registry = discover_capabilities_for_env(self.env)
+        resolver = CapabilityConfigResolver.from_env(self.env)
+        enabled = resolver.enablement_overrides(registry.definitions)
+        context = CapabilityContext(
+            env=self.env,
+            turn_id="settings-manifest",
+            metadata={"capability_enabled": enabled},
+        )
+        extensions = discover_assistant_extensions_for_env(
+            self.env,
+            capability_registry=registry,
+        )
+        configuration_health = _configuration_health(registry, resolver)
+        configuration_health.extend(
+            {
+                "provider_id": item.provider_id,
+                "state": f"extension_{item.state}",
+                "error_code": item.error_code or None,
+            }
+            for item in extensions.statuses
+            if item.state != "loaded"
+        )
+        return build_effective_assistant_manifest(
+            registry=registry,
+            context=context,
+            provider_profile=current_codex_provider_profile(),
+            skills=extensions.skills,
+            context_providers=extensions.context_providers,
+            technical_profile=technical_access_profile_for_env(self.env),
+            configuration_health=configuration_health,
+        ).browser_payload()
+
+    @api.model
     def assistant_set_capability_enabled(self, capability_name, enabled):
         self._require_capability_admin()
         if type(enabled) is not bool:
@@ -336,6 +377,26 @@ class ResConfigSettingsRuntime(models.TransientModel):
             code,
             _("Codex authentication could not be validated. Refresh or retry the connection."),
         )
+
+
+def _configuration_health(registry, resolver):
+    rows = []
+    for definition in registry.definitions:
+        try:
+            resolver.resolve(definition)
+        except CapabilityError as error:
+            rows.append(
+                {
+                    "capability": definition.name,
+                    "state": (
+                        "missing_configuration"
+                        if error.code == "capability_configuration_missing"
+                        else "invalid_configuration"
+                    ),
+                    "error_code": error.code,
+                }
+            )
+    return rows
 
 
 def _format_rate_limits(rows):
