@@ -91,6 +91,7 @@ export async function submitStreamingAssistantRequest({
     state.actionReceipt = null;
     state.lastSubmittedMessage = normalized;
     const previousConversationId = state.conversationId;
+    const submittedPlanningMode = state.planningMode === "deliberate" ? "deliberate" : "adaptive";
     const submittedAt = new Date().toISOString();
     state.messages = [
         ...state.messages,
@@ -108,7 +109,7 @@ export async function submitStreamingAssistantRequest({
                 message: normalized,
                 screen: state.context,
                 conversation_id: state.conversationId,
-                planning_mode: state.planningMode === "deliberate" ? "deliberate" : "adaptive",
+                planning_mode: submittedPlanningMode,
             },
             onActivity: async (event) => appendActivity(state, event),
             onDelta: async (text) => {
@@ -120,6 +121,15 @@ export async function submitStreamingAssistantRequest({
                     throw new Error("invalid_stream");
                 }
                 state.streamingText = next;
+            },
+            onTiming: async (timing) => {
+                if (
+                    timing?.point === "turn_persisted" &&
+                    submittedPlanningMode === "deliberate" &&
+                    state.planningMode === "deliberate"
+                ) {
+                    state.planningMode = "adaptive";
+                }
             },
         });
         const parsed = normalizeChatResponse(response);
