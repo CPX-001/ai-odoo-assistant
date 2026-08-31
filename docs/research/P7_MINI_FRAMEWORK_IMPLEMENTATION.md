@@ -1,178 +1,217 @@
 # Phase 7 implementation record — mini-framework and feature negotiation
 
 Date: 2026-08-31  
-Inspected starting `main`: `0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0`  
 Phase: 7 — mini-framework, feature negotiation and Assistant self-awareness  
-Current coherent slice: `P7.1-provider-extension-boundary-foundation`  
-State: `FOUNDATION_FOCUSED_VALIDATED / LIVE_INTEGRATION_PAUSED_BY_PRODUCT_GATE`
+State: `IMPLEMENTATION_ADVANCING / VALIDATION_DEFERRED_BY_USER`
 
-## Why Phase 7 became eligible
+## Sequencing decision
 
-Phase 6 was closed by the final current-product regression published at `0b1bcab`; the accepted
-regression evidence is `docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md`.
+The earlier checkpoint paused live P7 work behind Product Behavior Evals v1. On 2026-08-31 the user explicitly
+requested continued implementation and chose to validate the accumulated gates later. The gate is therefore no longer
+a **sequencing** blocker, but it is still a required **acceptance/promotion** gate. No unexecuted validation is treated
+as PASS in this record.
 
-Phase 7 then began and the provider-extension foundation below was committed. After that start, the user approved a
-new permanent product-behavior eval gate intended to exist before Phase-7 product expansion. Because this P7.1
-foundation is deliberately isolated and has **not** yet changed the live effective capability catalog, do not roll it
-back merely to make the chronology look cleaner. Instead:
+## Architecture retained
 
 ```text
-preserve isolated P7.1 foundation
- -> focused deterministic gate PASS at the published P7.1 foundation checkpoint
- -> pause before live effective-catalog wiring
- -> implement/execute Product Behavior Evals v1
- -> repair HARD product regressions
- -> resume P7.1 live integration only after that gate is green
-```
-
-Owning product gate documents:
-
-```text
-docs/research/PRODUCT_BEHAVIOR_EVALS_V1.md
-docs/research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md
-```
-
-## Slice objective
-
-Establish the first P7.1 authority-safe extension boundary before any third-party provider is wired
-into live turn execution:
-
-```text
-trusted installed addon declaration
+trusted installed addon
  -> CapabilityProvider
- -> deterministic composition/conflict validation
- -> CapabilityRegistry
- -> existing CapabilityDefinition / executor / policy authority
+ -> CapabilityBundle/Skill + ContextProvider resources
+ -> effective CapabilityRegistry
+ -> CapabilityDefinition
+ -> existing executor / policy / ACL / approval / verification authority
 ```
 
-This slice deliberately stopped before changing the effective product runtime catalog. Letting third-party
-installed code alter the catalog is a security/authority-relevant boundary; the new composition contract must first
-pass focused dependency-light tests. The newly inserted product-behavior gate now also blocks the subsequent live
-wiring so that capability expansion cannot land before the current user-visible baseline is measurable.
+`CapabilityDefinition` remains the only atomic executable contract. Skills organize behavior; ContextProviders add
+bounded data; neither grants authority.
 
-## Implemented foundation
+## P7.1 — live CapabilityProvider wiring
 
-### CapabilityProvider contract
+The P7.1 foundation already provided stable provider identity/version, deterministic Odoo-registry discovery,
+optional-provider isolation, conflict rejection, provider provenance and `discover_capabilities_for_env(env)`.
 
-Added `runtime/capabilities/provider.py` with:
+The effective installed-addon catalog is now used by the current live Odoo surfaces:
 
-- stable dotted `provider_id` and monotonic integer version;
-- static definitions or one deferred loader, never both;
-- `CapabilityProvider.from_objects(...)` for explicit `@tool` handlers;
-- optional vs required provider semantics;
-- sanitized `CapabilityProviderStatus` for later diagnostics/manifest projection;
-- an Odoo-native registry marker convention: `_odoo_ai_capability_provider` on a trusted installed
-  model class;
-- registry scanning only, not filesystem/package scanning across installed addons.
+```text
+addons/odoo_ai_assistant/models/embedded_runtime_host_loop.py
+addons/odoo_ai_assistant/models/runtime_settings.py
+addons/odoo_ai_assistant/models/turn_control.py
+```
 
-### Registry composition
+Specifically:
 
-`compose_capability_registry(...)` now:
+- live turns compose the registry from the effective Odoo registry before resolving settings/policy;
+- generic Settings catalog and capability configuration resolve installed-provider capabilities too;
+- reversion/compensation and reversion eligibility use the same effective registry;
+- no provider can bypass `CapabilityExecutor`, host policy, current-user ACL/record rules, approval or verification.
 
-- preserves the existing built-in cached package catalog;
-- rejects duplicate provider identities;
-- rejects capability/executor collisions rather than shadowing core authority;
-- isolates optional provider loader/definition failures;
-- preserves the valid core catalog when an all-optional extension set has an invalid dependency graph;
-- records provider provenance per capability plus sanitized provider status;
-- does not change `CapabilityDefinition`, executor, policy, ACL, approval or verification authority.
+Addon version is now `18.0.13.7.0` for this live-catalog behavior change.
 
-`discover_capabilities_for_env(env)` is prepared as the Odoo-registry-aware composition entry point. It is **not yet
-wired into live turn execution** at this checkpoint.
+## P7.2 — Skill/Bundle contracts
 
-## References used
+Added `runtime/capabilities/skills.py`:
 
-The design follows the current repository playbook and `docs/CAPABILITY_FRAMEWORK.md`. The Project Atlas v1.1 is
-the supporting design reference: Pydantic AI contributes the provider/bundle/atomic separation and stable discovery
-semantics; FastMCP contributes the provider abstraction; Apexive shows Odoo-native discovery. None is introduced as
-a runtime dependency. `CapabilityDefinition` remains the stricter host-owned executable unit.
+```text
+SkillDefinition
+SkillCatalog
+```
 
-The same Atlas and the Project Benchmark also identify agentic evals as a P0 gap: deterministic tests alone do not
-prove correct tool selection, grounding, approval behavior, UX or cost/latency. `PRODUCT_BEHAVIOR_EVALS_V1.md`
-turns that recommendation into the current promotion gate.
+A Skill can declare:
+
+- stable id/version/title/description;
+- trusted behavior instructions and bounded examples;
+- capability selectors;
+- ContextProvider selectors;
+- EvidenceProvider selectors;
+- activation/configuration metadata;
+- eval owner;
+- default enablement with host-side override semantics.
+
+Selectors support exact identities and `namespace.*`. A Skill never creates or authorizes an executable handler.
+
+## P7.3 — ContextProvider contracts and resource composition
+
+Added `runtime/capabilities/context.py` and `runtime/capabilities/extensions.py`.
+
+`ContextProvider` supplies bounded JSON JIT context with:
+
+- stable identity/version;
+- explicit output byte limit;
+- host-side enablement;
+- optional failure isolation;
+- sanitized status codes;
+- no permission or policy semantics.
+
+`CapabilityProvider` can now contribute `skills` and `context_providers` alongside executable definitions.
+
+`AssistantExtensionCatalog` composes those non-executable resources only after the corresponding capability provider
+has been accepted by the host registry. A provider whose executable contract failed cannot smuggle Skill instructions
+or ContextProviders into the turn. Optional resource identity collisions are fail-isolated rather than shadowing an
+existing resource; required collisions fail closed.
+
+`AssistantExtensionCatalog.activate(...)` resolves active Skills and only the JIT ContextProviders selected by those
+Skills. `ActiveAssistantExtensions` keeps trusted Skill guidance separate from untrusted JIT context data.
+
+The remaining P7.2/P7.3 product step is to inject this active resource projection into the live provider decision
+context while preserving the current `host_contract` vs `untrusted_data` split.
+
+## P7.4 — ProviderProfile
+
+Added `runtime/capabilities/features.py` with an explicit complete feature matrix:
+
+```text
+structured_output
+ tool_calling
+ answer_streaming
+ vision
+ file_input
+ web
+ large_context
+```
+
+Every feature is `native`, `emulated` or `unavailable`; unavailable states require a safe reason code. Capacity fields
+include context window, max output and parallel-request limits when known.
+
+The current Codex adapter is **not yet bound** to a product-level ProviderProfile in this checkpoint. That binding must
+be derived from actual adapter/model behavior rather than guessed from generic provider knowledge.
+
+## P7.5 — EffectiveAssistantManifest
+
+Added `runtime/capabilities/manifest.py`.
+
+The manifest derives a safe projection of:
+
+- provider profile;
+- technical profile;
+- effective Skills;
+- capability identity/exposure/effect/risk/provider provenance;
+- available/revealed state;
+- ContextProvider/evidence-provider identities;
+- provider/configuration health;
+- known unavailable features and safe reason codes.
+
+It is explicitly a projection, not a second registry. Handlers and Skill instructions are not exposed in the browser
+payload.
+
+## P7.6 — technical profile skeleton
+
+`TechnicalAccessProfile` currently distinguishes:
+
+```text
+BUSINESS
+DEVELOPER
+```
+
+This is descriptive reach only. It does not grant shell, SQL, Python, sudo, unrestricted ORM or any other privileged
+host operation.
+
+## P7.7 — progressive disclosure contract
+
+Added `runtime/capabilities/disclosure.py` with:
+
+```text
+DisclosurePolicy
+CapabilityDisclosureSnapshot
+available -> revealed -> active
+```
+
+Disclosure is **disabled by default**. With it disabled, every currently available capability is revealed exactly as
+before. Lazy reveal is only activated explicitly and always preserves host-side validation; an unrevealed capability
+never becomes executable merely because the model names it.
+
+This is intentional: the Atlas/roadmap requires progressive disclosure when catalog-scale evals show pressure, not as
+an unmeasured optimization.
+
+## New dependency-light coverage prepared
+
+```text
+tests/unit/test_phase7_feature_negotiation.py
+tests/unit/test_phase7_extension_composition.py
+```
+
+They cover the new contract layer, including Skill selection, bounded ContextProviders, complete ProviderProfile
+matrices, derived manifest behavior, disclosure semantics, provider resource acceptance and collision/failure
+isolation.
+
+These tests were added but **have not been executed after the latest P7 changes** because validation is deferred by
+user direction.
+
+## References and rationale
+
+The design follows the Project Atlas and Benchmark direction: keep `CapabilityDefinition` as the strict host-owned
+unit, add provider/bundle/context composition around it, and model `discovered -> available -> revealed -> active`
+without adding Pydantic AI/FastMCP as a second runtime. Pydantic AI contributes the bundle/progressive-disclosure
+pattern; FastMCP the provider abstraction; Apexive proves Odoo-native extension discovery is practical. Odoo's
+Agent/Skill/Tool/Source separation remains the product-level reference.
 
 ## Invariants
 
-- Odoo remains operational and persistence authority.
-- Business execution remains effective-user `su=False`.
-- A provider can contribute definitions but cannot grant itself execution authority.
-- Duplicate capability identity never silently overrides an existing definition.
-- Optional provider failure cannot remove the core catalog.
-- Raw extension exceptions do not become model/user-facing diagnostics.
-- No arbitrary Python/package discovery, shell, SQL, sudo or unrestricted ORM is introduced.
-- Provider metadata/configuration is data, not policy.
-- Product-eval instrumentation must not capture raw private reasoning/secrets.
+- Odoo remains operational/persistence authority.
+- Business operations use effective-user `su=False`.
+- Provider discovery is limited to trusted installed Odoo registry code.
+- Capability/resource identity conflicts never silently shadow existing identities.
+- Skills and context cannot grant authority.
+- Context is data and remains prompt-injection capable/untrusted by default.
+- Provider metadata never replaces ACL/policy/approval/verification.
+- No arbitrary host-code/package/filesystem discovery is introduced.
+- Progressive disclosure changes model visibility, not host executability.
 
-## Focused deterministic gate prepared
+## Remaining implementation before Phase-7 validation run
 
-New dependency-light coverage:
+1. Inject active Skill guidance and selected JIT ContextProvider data into the provider decision seam with an explicit
+   trusted-guidance vs untrusted-data contract.
+2. Bind the concrete Codex/model adapter to `ProviderProfile` using only behavior the runtime can actually support and
+   explain safely.
+3. Expose/use `EffectiveAssistantManifest` for self-awareness (`¿qué puedes hacer?`) and admin diagnostics without
+   duplicating authority.
+4. Add the trusted installed test-addon fixture (Skill + READ + PLAN + ContextProvider + configuration).
+5. Add synthetic 100+ capability disclosure coverage and explicit hidden-call denial coverage.
 
-```text
-tests/unit/test_capability_provider_extensions.py
-```
+## Validation accumulated for later
 
-It covers:
+Product Behavior Evals v1 remains pending, including focused/static/Odoo/HOOT validation plus real SMOKE/FULL.
 
-- static provider composition and provenance;
-- explicit decorated-handler contribution;
-- duplicate provider identity rejection;
-- optional loader failure isolation;
-- required provider failure fail-closed behavior;
-- capability collision rejection without core shadowing;
-- invalid optional dependency fallback to the core catalog;
-- deterministic Odoo registry marker discovery without inherited duplicate markers.
-
-Required focused command before any further P7 code:
-
-```bash
-.venv/bin/python -m pytest -q tests/unit/test_capability_provider_extensions.py
-```
-
-Recommended static checks for the changed Python boundary:
-
-```bash
-.venv/bin/python -m py_compile \
-  addons/odoo_ai_assistant/runtime/capabilities/provider.py \
-  addons/odoo_ai_assistant/runtime/capabilities/registry.py \
-  addons/odoo_ai_assistant/runtime/capabilities/__init__.py \
-  tests/unit/test_capability_provider_extensions.py
-.venv/bin/ruff check \
-  addons/odoo_ai_assistant/runtime/capabilities/provider.py \
-  addons/odoo_ai_assistant/runtime/capabilities/registry.py \
-  addons/odoo_ai_assistant/runtime/capabilities/__init__.py \
-  tests/unit/test_capability_provider_extensions.py
-```
-
-No repository-wide regression is authorized by this P7.1 foundation slice.
-
-## Product gate before live P7 integration
-
-After the focused P7.1 foundation test passes, **do not wire `discover_capabilities_for_env(self.env)` into live
-turns yet**. Execute the handoff in `PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md`.
-
-The gate includes a permanent 54-case product behavior dataset, SMOKE/FULL runners, per-provider/tool timing,
-permissions/persona coverage, real answer-streaming checks, and user-approved behavior such as one-shot Plan UX.
-
-Two current-product issues are specifically called out for evidence-driven repair:
-
-1. user-observed answer streaming may currently remain in `thinking` until the full answer arrives, despite the
-   accepted historical P4 streaming contract;
-2. current Plan is persisted as a user preference, while the approved product behavior is a removable one-shot
-   composer tag consumed by the next submitted turn.
-
-These are product contract changes/regression investigations, not reasons to weaken P7 authority invariants.
-
-## Next action after product gate PASS
-
-Resume **inside P7.1** and wire `discover_capabilities_for_env(self.env)` into every current Odoo-owned
-effective-catalog composition surface (live host loop, plan/reversion path and settings/diagnostics). Then add an
-installed test addon/provider fixture and focused Odoo coverage for enable/disable/uninstall/failure isolation before
-attempting `P7-REAL-PROVIDER-DISCOVERY`.
-
-Do not start P7.2 Skill/Bundle until the P7.1 effective runtime boundary has deterministic acceptance; that would
-stack a second unvalidated contract layer.
-
-## Phase-7 real gates still pending
+Phase-7 real gates remain pending:
 
 ```text
 P7-REAL-PROVIDER-DISCOVERY
@@ -183,4 +222,4 @@ P7-REAL-DISCLOSURE
 P7-REAL-AUTHORITY
 ```
 
-None has been executed or claimed by this checkpoint.
+No gate above is claimed by this implementation record.
