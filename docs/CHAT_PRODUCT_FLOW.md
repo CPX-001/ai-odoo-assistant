@@ -162,7 +162,12 @@ revision / revision_kind / revision_summary
 bounded steps with title/state/dependencies
 ```
 
-It cannot contain executable capability arguments or approval authority. Planning modes are `adaptive`, `deliberate` and `auto`; the resolved strategy is captured per turn. In deliberate mode, an initial TaskPlan is required before capability/effect requests. A structural replan requires new host-observed evidence.
+It cannot contain executable capability arguments or approval authority. Planning modes are
+`adaptive`, `deliberate` and `auto`; the resolved strategy is captured per turn. In adaptive mode,
+direct answers, short bounded reads and one batch operation remain planless. A TaskPlan starts only
+for meaningful dependent phases; an adaptive initial plan therefore needs at least two steps. In
+deliberate mode, an initial TaskPlan is required before capability/effect requests. A structural
+replan requires new host-observed evidence, and the host supplies the exact legal next revision.
 
 Effectful work uses a separate bounded typed EffectPlan:
 
@@ -225,7 +230,11 @@ semantic host work items              normal user-facing progress
 technical lifecycle/trace             diagnostic detail
 ```
 
-A compact live line follows the latest meaningful step. Completed activity collapses to total elapsed time plus semantic step count. Technical identifiers are hidden by default. Presentation profiles are compact/normal/detailed/diagnostic.
+A compact live line follows the latest meaningful step. A direct model answer creates no generic
+Thought activity; public work begins only after the host accepts a capability, effect or useful
+TaskPlan decision. Completed activity collapses to total elapsed time plus semantic step count.
+Normal/compact history replaces provider retry failures with one terminal failure, while detailed
+and diagnostic profiles retain the underlying events. Technical identifiers are hidden by default.
 
 Readable provider summaries accept bounded `summaryTextDelta`; raw reasoning `textDelta` never enters public state.
 

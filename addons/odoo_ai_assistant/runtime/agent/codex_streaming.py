@@ -105,7 +105,8 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                 {
                     "input": [{"type": "text", "text": turn_input}],
                     "outputSchema": _codex_next_decision_schema(
-                        final_answer_only=final_answer_only
+                        final_answer_only=final_answer_only,
+                        working_items=working_items,
                     ),
                     "threadId": thread_id,
                 },

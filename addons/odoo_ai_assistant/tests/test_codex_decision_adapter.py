@@ -15,6 +15,7 @@ from ..runtime.agent.codex_decision import (
     _codex_next_decision_schema,
     _decision_result,
     _is_simple_social_message,
+    _partition_provider_context,
 )
 from ..runtime.agent.contracts import (
     FinalAnswer,
@@ -110,15 +111,137 @@ class TestCodexDecisionAdapter(BaseCase):
             ["final_answer"],
         )
 
+    def test_task_plan_wire_schema_requires_the_exact_next_revision_and_kind(self):
+        initial_schema = _codex_next_decision_schema()
+        initial_branch = next(
+            branch
+            for branch in initial_schema["properties"]["decision"]["anyOf"]
+            if branch["properties"]["kind"]["enum"] == ["task_plan_update"]
+        )
+        initial_plan = initial_branch["properties"]["task_plan"]["properties"]
+        self.assertEqual(initial_plan["revision"]["enum"], [1])
+        self.assertEqual(initial_plan["revision_kind"]["enum"], ["initial"])
+
+        continued_schema = _codex_next_decision_schema(
+            working_items=(
+                {
+                    "kind": "task_plan",
+                    "data": {
+                        "goal": "Resolver",
+                        "revision": 1,
+                        "revision_kind": "initial",
+                        "revision_summary": "",
+                        "steps": [],
+                    },
+                },
+                {
+                    "kind": "task_plan_error",
+                    "data": {
+                        "code": "agent_task_plan_revision_invalid",
+                        "rejected_revision": 1,
+                    },
+                },
+            )
+        )
+        continued_branch = next(
+            branch
+            for branch in continued_schema["properties"]["decision"]["anyOf"]
+            if branch["properties"]["kind"]["enum"] == ["task_plan_update"]
+        )
+        continued_plan = continued_branch["properties"]["task_plan"]["properties"]
+        self.assertEqual(continued_plan["revision"]["enum"], [2])
+        self.assertEqual(
+            continued_plan["revision_kind"]["enum"],
+            ["progress", "replan"],
+        )
+
+        host_constrained = _codex_next_decision_schema(
+            working_items=(
+                {
+                    "kind": "host_task_plan_state",
+                    "source": "host",
+                    "data": {
+                        "current_revision": 1,
+                        "next_revision": 2,
+                        "allowed_revision_kinds": ["progress"],
+                        "minimum_initial_steps": 2,
+                        "task_plan_available": True,
+                    },
+                },
+            )
+        )
+        host_branch = next(
+            branch
+            for branch in host_constrained["properties"]["decision"]["anyOf"]
+            if branch["properties"]["kind"]["enum"] == ["task_plan_update"]
+        )
+        host_plan = host_branch["properties"]["task_plan"]["properties"]
+        self.assertEqual(host_plan["revision"]["enum"], [2])
+        self.assertEqual(host_plan["revision_kind"]["enum"], ["progress"])
+        self.assertEqual(host_plan["steps"]["minItems"], 2)
+
+        unavailable = _codex_next_decision_schema(
+            working_items=(
+                {
+                    "kind": "host_task_plan_state",
+                    "source": "host",
+                    "data": {
+                        "current_revision": 0,
+                        "next_revision": 1,
+                        "allowed_revision_kinds": ["initial"],
+                        "minimum_initial_steps": 2,
+                        "task_plan_available": False,
+                    },
+                },
+            )
+        )
+        self.assertNotIn(
+            "task_plan_update",
+            {
+                branch["properties"]["kind"]["enum"][0]
+                for branch in unavailable["properties"]["decision"]["anyOf"]
+            },
+        )
+
+    def test_host_planning_facts_are_not_mixed_into_untrusted_working_data(self):
+        host, untrusted = _partition_provider_context(
+            (
+                {
+                    "kind": "user_input",
+                    "data": {"message": "Investiga y prepara"},
+                },
+                {
+                    "kind": "host_planning_strategy",
+                    "source": "host",
+                    "data": {"effective_mode": "adaptive"},
+                },
+                {
+                    "kind": "host_task_plan_state",
+                    "source": "host",
+                    "data": {
+                        "current_revision": 0,
+                        "next_revision": 1,
+                        "allowed_revision_kinds": ["initial"],
+                        "minimum_initial_steps": 2,
+                        "task_plan_available": False,
+                    },
+                },
+            )
+        )
+
+        self.assertEqual(set(host), {"planning_strategy", "task_plan_state"})
+        self.assertEqual([item["kind"] for item in untrusted], ["user_input"])
+
     def test_codex_instructions_keep_task_plan_non_authoritative_and_effect_steps_distinct(self):
         instructions = " ".join(_DECISION_INSTRUCTIONS.split())
-        self.assertIn("user-visible TaskPlan", instructions)
+        self.assertIn("user-visible phases", instructions)
         self.assertIn("never grants execution authority", instructions)
         self.assertIn("one distinct plan_step_proposal at a time", instructions)
         self.assertIn("never repeat them", instructions)
         self.assertIn("verified_effect_receipt proves execution", instructions)
         self.assertIn("Return final_answer immediately for greetings", instructions)
-        self.assertIn("Never create a TaskPlan merely to restate a one-step request", instructions)
+        self.assertIn("internal schema discovery plus one bounded query", instructions)
+        self.assertIn("Create a TaskPlan only for a genuinely multi-phase workflow", instructions)
 
     def test_wire_envelope_is_normalized_to_strict_next_decision(self):
         final = _decision_result(

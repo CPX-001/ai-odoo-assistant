@@ -39,8 +39,8 @@ REQUIRED_POINTS = (
 SERVER_EVENT_POINTS = {
     "queued": "turn_persisted",
     "started": "worker_claimed",
-    # Current runtime emits reasoning.started immediately before AgentTurnService. Until a dedicated
-    # runtime checkpoint exists this is the best persisted proxy and is labelled as such below.
+    # Non-final work emits reasoning.started lazily after the host accepts a capability, effect or
+    # useful TaskPlan decision. Direct answers intentionally have no public runtime-work proxy.
     "reasoning.started": "runtime_started",
     "reasoning.completed": "reasoning_completed",
 }

@@ -5,7 +5,7 @@ from odoo.tests.common import TransactionCase
 
 from ..runtime.agent.contracts import FinalAnswer, PlanStepProposal, TaskPlanUpdate
 from ..runtime.agent.plan import CapabilityPlanService
-from ..runtime.agent.planning import PlanningDecisionEngine
+from ..runtime.agent.planning import PlanningDecisionEngine, resolve_planning_strategy
 from ..runtime.agent.service import AgentTurnError, AgentTurnService
 from ..runtime.agent.task_plan import TaskPlan, TaskPlanStep
 from ..runtime.capabilities import (
@@ -366,15 +366,26 @@ class TestCanonicalPlanHostLoop(TransactionCase):
 
     def test_noop_task_plan_progress_is_correctable_and_not_published(self):
         context, registry, executor, _plans = self._runtime()
+        context.metadata["planning_strategy"] = resolve_planning_strategy(
+            "deliberate",
+            message="Resuelve",
+            screen=context.screen,
+        ).payload()
         initial = TaskPlan(
             goal="Resolver",
             revision=1,
-            steps=(TaskPlanStep("one", "Primero", "in_progress"),),
+            steps=(
+                TaskPlanStep("one", "Primero", "in_progress"),
+                TaskPlanStep("two", "Después", "pending", ("one",)),
+            ),
         )
         duplicate = TaskPlan(
             goal="Resolver",
             revision=2,
-            steps=(TaskPlanStep("one", "Primero", "in_progress"),),
+            steps=(
+                TaskPlanStep("one", "Primero", "in_progress"),
+                TaskPlanStep("two", "Después", "pending", ("one",)),
+            ),
         )
         underlying = _PlanDecisionEngine(
             TaskPlanUpdate("task_plan_update", initial),

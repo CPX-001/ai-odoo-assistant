@@ -150,6 +150,22 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 effect_state="none",
             )
         )
+        reasoning_activity_id = None
+
+        def on_work_started():
+            nonlocal reasoning_activity_id
+            if reasoning_activity_id is not None:
+                return
+            reasoning_activity_id = _new_reasoning_activity_id()
+            event_sink(
+                "reasoning.started",
+                "Procesando solicitud",
+                {
+                    "reasoning_capabilities": len(registry.for_reasoning(context)),
+                    "activity_id": reasoning_activity_id,
+                },
+            )
+
         service = AgentTurnService(
             registry=registry,
             context=context,
@@ -159,15 +175,7 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             persist_working_items=persist,
             cancellation_requested=cancellation_requested,
             allow_plan_proposals=True,
-        )
-        reasoning_activity_id = _new_reasoning_activity_id()
-        event_sink(
-            "reasoning.started",
-            "Analizando petición",
-            {
-                "reasoning_capabilities": len(registry.for_reasoning(context)),
-                "activity_id": reasoning_activity_id,
-            },
+            on_work_started=on_work_started,
         )
         try:
             result = asyncio.run(
@@ -179,17 +187,19 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             _ensure_turn_control_current(turn)
             turn._capture_public_navigation_references(service.working_items)
         except Exception:
-            event_sink(
-                "reasoning.failed",
-                "Análisis no completado",
-                {"activity_id": reasoning_activity_id},
-            )
+            if reasoning_activity_id is not None:
+                event_sink(
+                    "reasoning.failed",
+                    "Procesamiento no completado",
+                    {"activity_id": reasoning_activity_id},
+                )
             raise
-        event_sink(
-            "reasoning.completed",
-            "Respuesta preparada",
-            {"confidence": result.confidence, "activity_id": reasoning_activity_id},
-        )
+        if reasoning_activity_id is not None:
+            event_sink(
+                "reasoning.completed",
+                "Respuesta preparada",
+                {"confidence": result.confidence, "activity_id": reasoning_activity_id},
+            )
         if not result.plan:
             return self._read_only_response(turn, result, policy_snapshot)
 

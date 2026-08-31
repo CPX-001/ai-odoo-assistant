@@ -21,7 +21,7 @@ Phase 6 is **IMPLEMENTED AS A CANDIDATE BUT NOT ACCEPTED**. All P6.1-P6.6 implem
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux.
-- Addon: `addons/odoo_ai_assistant`, version `18.0.13.0.0`.
+- Addon: `addons/odoo_ai_assistant`, version `18.0.13.2.0`.
 - Embedded runtime; browser talks only to Odoo.
 - Odoo/PostgreSQL own conversations, messages, immutable turn settings, working checkpoints, effects, recovery state, EffectJournal and browser-safe state.
 - Native `ir.cron` runs durable turns with bounded concurrency/backpressure.
@@ -43,6 +43,11 @@ plan_step_proposal
 The host owns capability resolution, schemas, budgets, TaskPlan rules, EffectPlan preparation, policy, approval, execution, verification and recovery semantics. Provider output is untrusted input, never execution authority.
 
 Codex-specific code remains below this boundary and owns transport details such as App Server lifecycle, Structured Outputs translation, model/reasoning settings, provider failures and steer/interrupt behavior.
+
+The first decision is the semantic route rather than a rigid intent class. It can return a direct
+model answer, request the minimum authoritative Odoo reads, or begin genuinely multi-phase work.
+A direct answer produces no generic public Thought activity. A short lookup can perform bounded
+schema/query calls without creating a TaskPlan.
 
 ## 3. Planning modes and TaskPlan
 
@@ -74,7 +79,11 @@ Rules:
 
 - no capability arguments/approval/execution authority;
 - no private chain-of-thought;
-- exact monotonic revisions;
+- in adaptive mode, no TaskPlan for direct answers, short lookups, one batch operation or another
+  artificial one-step wrapper;
+- initial adaptive TaskPlans contain at least two meaningful dependent phases;
+- exact monotonic revisions, with the next revision and legal kinds projected by the host as
+  trusted contract state rather than mixed into untrusted transcript data;
 - `progress` cannot silently change the plan structure;
 - structural `replan` requires new host-observed evidence plus a short public revision summary;
 - live turn status exposes the latest validated TaskPlan separately from effect approval;

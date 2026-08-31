@@ -211,9 +211,19 @@ _AGGREGATE_INPUT = {
             "maxItems": _MAX_METRICS,
             "items": {
                 "type": "object",
+                "description": (
+                    "For count, field must be null. For sum, min or max, field must be "
+                    "the name of an eligible schema field."
+                ),
                 "properties": {
                     "operation": {"type": "string", "enum": list(_AGGREGATES)},
-                    "field": {},
+                    "field": {
+                        "type": ["string", "null"],
+                        "description": (
+                            "Use null exactly when operation is count; otherwise provide a "
+                            "field name from the checked schema."
+                        ),
+                    },
                 },
                 "required": ["operation", "field"],
                 "additionalProperties": False,
@@ -418,7 +428,9 @@ def query_records(context: CapabilityContext, arguments):
     title="Aggregate Odoo records",
     description=(
         "Run bounded count, sum, min or max aggregation under the effective Odoo user. "
-        "Grouping is restricted to fields declared groupable by the checked schema."
+        'A count metric must be {"operation":"count","field":null}; sum, min and max '
+        "require an eligible field name. Grouping is restricted to fields declared "
+        "groupable by the checked schema."
     ),
     input_schema=_AGGREGATE_INPUT,
     output_schema=_AGGREGATE_OUTPUT,

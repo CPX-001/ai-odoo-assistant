@@ -82,7 +82,10 @@ Odoo host
           -> provider adapter (Codex today, others later)
 ```
 
-The host projects one bounded `host_planning_strategy` item into provider context. It is not persisted as user/model transcript content and grants no authority.
+The host projects bounded `host_planning_strategy` and `host_task_plan_state` items into provider
+context. The provider adapter separates them into trusted `host_contract` fields rather than mixing
+them into untrusted working data. Neither item is persisted as user/model transcript content or
+grants authority.
 
 Codex remains the current transport implementation. A future provider can receive the same strategy and return the same `NextDecision` contract without copying the Odoo planning, ACL, EffectPlan or recovery loop.
 
@@ -113,6 +116,11 @@ replan
   requires new host-observed evidence since the previous TaskPlan
 ```
 
+The host-owned state also makes the exact next revision and currently legal revision kinds part of
+the Structured Outputs schema, so an obsolete revision is not representable at the provider seam.
+Adaptive initial plans require at least two meaningful dependent phases. Direct answers, short
+lookups (including schema discovery plus a bounded read) and one batch operation stay planless.
+
 Accepted evidence kinds for a structural replan are currently bounded host transcript facts such as a capability result/error or a verified effect receipt. A provider cannot relabel an arbitrary rewrite as evidence-driven replan.
 
 Legacy persisted TaskPlans without the new fields remain readable and normalize to `initial`/`progress` semantics.
@@ -124,6 +132,11 @@ When the immutable effective strategy is `deliberate`, the host rejects a first 
 This does not make TaskPlan executable. The normal capability catalog, validation, policy, approval, EffectPlan and recovery layers remain unchanged.
 
 A direct final answer is still allowed so the host does not force fake planning for a response that genuinely needs no capability/effect work.
+
+The first provider decision acts as the semantic route: direct answer, minimum Odoo read, or
+multi-phase work. Generic reasoning activity is published lazily only for an accepted non-final
+decision, so direct model answers do not render a Thought card. Normal activity history condenses
+intermediate provider retry failures into the single terminal failure.
 
 ## 7. Live and terminal TaskPlan UX
 

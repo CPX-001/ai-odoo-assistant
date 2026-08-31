@@ -140,11 +140,127 @@ class TestPhase6AdaptivePlanningContract(unittest.TestCase):
             )
 
         self.assertEqual(captured.exception.code, "agent_task_plan_required")
-        self.assertEqual(provider.working_items[-1]["kind"], "host_planning_strategy")
+        self.assertEqual(provider.working_items[-2]["kind"], "host_planning_strategy")
         self.assertEqual(
-            provider.working_items[-1]["data"]["effective_mode"],
+            provider.working_items[-2]["data"]["effective_mode"],
             "deliberate",
         )
+        self.assertEqual(provider.working_items[-1]["kind"], "host_task_plan_state")
+        self.assertEqual(provider.working_items[-1]["data"]["next_revision"], 1)
+
+    def test_adaptive_mode_keeps_short_reads_planless_and_rejects_artificial_plan(self):
+        context = CapabilityContext(
+            env=object(),
+            turn_id="p62-adaptive-routing",
+            screen={},
+            metadata={
+                "planning_strategy": resolve_planning_strategy(
+                    "adaptive", message="¿Cuántos presupuestos hay?", screen={}
+                ).payload()
+            },
+        )
+        read = ReasoningCapabilityCall(
+            "reasoning_capability_call",
+            "count-1",
+            "odoo.aggregate_records",
+            {},
+        )
+        read_provider = _Provider(read)
+
+        accepted = asyncio.run(
+            PlanningDecisionEngine(read_provider).next_decision(
+                message="¿Cuántos presupuestos hay?",
+                conversation_summary="",
+                context=context,
+                reasoning_capabilities=(),
+                planning_capabilities=(),
+                working_items=(),
+                remaining_budgets={},
+            )
+        )
+
+        self.assertIs(accepted, read)
+        self.assertEqual(
+            read_provider.working_items[-1]["data"]["minimum_initial_steps"],
+            2,
+        )
+        self.assertFalse(read_provider.working_items[-1]["data"]["task_plan_available"])
+
+        artificial = TaskPlanUpdate(
+            "task_plan_update",
+            TaskPlan(
+                goal="Contar presupuestos",
+                revision=1,
+                steps=(TaskPlanStep("count", "Contar presupuestos", "in_progress"),),
+                revision_kind="initial",
+            ),
+        )
+        with self.assertRaises(NextDecisionValidationError) as captured:
+            asyncio.run(
+                PlanningDecisionEngine(_Provider(artificial)).next_decision(
+                    message="¿Cuántos presupuestos hay?",
+                    conversation_summary="",
+                    context=context,
+                    reasoning_capabilities=(),
+                    planning_capabilities=(),
+                    working_items=(),
+                    remaining_budgets={},
+                )
+            )
+        self.assertEqual(captured.exception.code, "agent_task_plan_not_useful")
+
+    def test_adaptive_multiphase_plan_remains_available(self):
+        context = CapabilityContext(
+            env=object(),
+            turn_id="p62-adaptive-multiphase",
+            screen={},
+            metadata={
+                "planning_strategy": resolve_planning_strategy(
+                    "adaptive", message="Investiga y prepara cambios", screen={}
+                ).payload()
+            },
+        )
+        plan = TaskPlanUpdate(
+            "task_plan_update",
+            TaskPlan(
+                goal="Investigar y preparar cambios",
+                revision=1,
+                steps=(
+                    TaskPlanStep("inspect", "Recuperar y analizar datos", "in_progress"),
+                    TaskPlanStep("prepare", "Preparar los cambios", "pending", ("inspect",)),
+                ),
+                revision_kind="initial",
+            ),
+        )
+
+        accepted = asyncio.run(
+            PlanningDecisionEngine(_Provider(plan)).next_decision(
+                message="Investiga y prepara cambios",
+                conversation_summary="",
+                context=context,
+                reasoning_capabilities=(),
+                planning_capabilities=(),
+                working_items=(
+                    {
+                        "kind": "capability_result",
+                        "data": {
+                            "call_id": "read-1",
+                            "capability": "odoo.query_records",
+                        },
+                    },
+                    {
+                        "kind": "capability_result",
+                        "data": {
+                            "call_id": "read-2",
+                            "capability": "odoo.aggregate_records",
+                        },
+                    },
+                ),
+                remaining_budgets={},
+            )
+        )
+
+        self.assertIs(accepted, plan)
 
     def test_progress_revision_cannot_silently_change_structure(self):
         initial = TaskPlan(

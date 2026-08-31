@@ -108,6 +108,7 @@ PersistWorkingItems = Callable[
     [tuple[WorkingItem, ...]],
     None | Awaitable[None],
 ]
+WorkStarted = Callable[[], None]
 
 _CORRECTABLE_ERRORS = frozenset(
     {
@@ -154,6 +155,7 @@ class AgentTurnService:
         persist_working_items: PersistWorkingItems | None = None,
         cancellation_requested: Callable[[], bool] | None = None,
         allow_plan_proposals: bool = False,
+        on_work_started: WorkStarted | None = None,
     ) -> None:
         if (reasoning_engine is None) == (decision_engine is None):
             raise AgentTurnError("agent_reasoning_engine_invalid")
@@ -166,6 +168,8 @@ class AgentTurnService:
         self._persist_working_items = persist_working_items
         self._cancelled = cancellation_requested or (lambda: False)
         self._allow_plan_proposals = bool(allow_plan_proposals)
+        self._on_work_started = on_work_started
+        self._work_started = False
 
     @property
     def working_items(self) -> tuple[WorkingItem, ...]:
@@ -347,6 +351,8 @@ class AgentTurnService:
                     task_plan=_latest_task_plan(self._working_items),
                 )
 
+            self._mark_work_started()
+
             if isinstance(decision, TaskPlanUpdate):
                 # TaskPlan is progress data only. It cannot erase a failing capability streak or
                 # clear a terminal authority/policy error, otherwise a provider could use harmless
@@ -505,6 +511,15 @@ class AgentTurnService:
             terminal_error = False
 
         raise AgentTurnError("agent_provider_decision_budget_exceeded")
+
+    def _mark_work_started(self) -> None:
+        """Publish work lazily only after the host accepts a non-final decision."""
+
+        if self._work_started:
+            return
+        self._work_started = True
+        if self._on_work_started is not None:
+            self._on_work_started()
 
     async def _record_task_plan(self, plan: TaskPlan) -> None:
         previous = _latest_task_plan(self._working_items)

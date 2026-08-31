@@ -43,6 +43,26 @@ class PlanningStrategy:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class TaskPlanHostState:
+    """Host-owned TaskPlan transition facts projected to a provider adapter."""
+
+    current_revision: int
+    next_revision: int
+    allowed_revision_kinds: tuple[str, ...]
+    minimum_initial_steps: int
+    task_plan_available: bool
+
+    def payload(self) -> dict[str, object]:
+        return {
+            "current_revision": self.current_revision,
+            "next_revision": self.next_revision,
+            "allowed_revision_kinds": list(self.allowed_revision_kinds),
+            "minimum_initial_steps": self.minimum_initial_steps,
+            "task_plan_available": self.task_plan_available,
+        }
+
+
 def resolve_planning_strategy(
     requested_mode: str | None,
     *,
@@ -166,6 +186,37 @@ def validate_task_plan_transition(
         raise NextDecisionValidationError("agent_task_plan_replan_without_evidence")
 
 
+def task_plan_host_state(
+    working_items: tuple[dict[str, object], ...],
+    *,
+    strategy: PlanningStrategy,
+) -> TaskPlanHostState:
+    """Describe the only TaskPlan transition currently valid under host state."""
+
+    previous_index, previous = _latest_task_plan(working_items)
+    if previous is None:
+        available = strategy.effective_mode == "deliberate" or _adaptive_plan_evidence_count(
+            working_items
+        ) >= 2
+        return TaskPlanHostState(
+            current_revision=0,
+            next_revision=1,
+            allowed_revision_kinds=("initial",),
+            minimum_initial_steps=2 if strategy.effective_mode == "adaptive" else 1,
+            task_plan_available=available,
+        )
+    kinds = ["progress"]
+    if _has_replan_evidence(working_items, after_index=previous_index):
+        kinds.append("replan")
+    return TaskPlanHostState(
+        current_revision=previous.revision,
+        next_revision=previous.revision + 1,
+        allowed_revision_kinds=tuple(kinds),
+        minimum_initial_steps=2 if strategy.effective_mode == "adaptive" else 1,
+        task_plan_available=True,
+    )
+
+
 class PlanningDecisionEngine:
     """Host wrapper enforcing planning-mode semantics around any provider adapter."""
 
@@ -180,6 +231,7 @@ class PlanningDecisionEngine:
         if not isinstance(working_items, tuple):
             working_items = tuple(working_items)
         strategy = planning_strategy_from_context(context)
+        plan_state = task_plan_host_state(working_items, strategy=strategy)
 
         # Project the host-selected strategy as bounded provider context without persisting it as
         # transcript content. Any provider can consume the same hint; it does not grant authority.
@@ -190,6 +242,11 @@ class PlanningDecisionEngine:
                 "kind": "host_planning_strategy",
                 "source": "host",
                 "data": strategy.payload(),
+            },
+            {
+                "kind": "host_task_plan_state",
+                "source": "host",
+                "data": plan_state.payload(),
             },
         )
         decision = await self._provider.next_decision(**provider_kwargs)
@@ -202,6 +259,13 @@ class PlanningDecisionEngine:
         ):
             raise NextDecisionValidationError("agent_task_plan_required", decision)
         if isinstance(decision, TaskPlanUpdate):
+            if current_plan is None and not plan_state.task_plan_available:
+                raise NextDecisionValidationError("agent_task_plan_not_useful", decision)
+            if (
+                current_plan is None
+                and len(decision.task_plan.steps) < plan_state.minimum_initial_steps
+            ):
+                raise NextDecisionValidationError("agent_task_plan_not_useful", decision)
             try:
                 validate_task_plan_transition(decision.task_plan, working_items)
             except NextDecisionValidationError as error:
@@ -222,6 +286,26 @@ def _latest_task_plan(
         except TaskPlanError as error:
             raise NextDecisionValidationError(error.code) from error
     return -1, None
+
+
+def _adaptive_plan_evidence_count(
+    working_items: tuple[dict[str, object], ...],
+) -> int:
+    """Count substantive completed work, excluding schema/model-discovery plumbing."""
+
+    technical_reads = {"odoo.get_effective_schema", "odoo.search_models"}
+    count = 0
+    for item in working_items:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("kind")
+        data = item.get("data")
+        if kind == "capability_result" and isinstance(data, dict):
+            if data.get("capability") not in technical_reads:
+                count += 1
+        elif kind in {"plan_step_proposed", "verified_effect_receipt"}:
+            count += 1
+    return count
 
 
 def _same_plan_structure(previous: TaskPlan, current: TaskPlan) -> bool:

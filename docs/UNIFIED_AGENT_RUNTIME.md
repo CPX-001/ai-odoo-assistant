@@ -47,6 +47,12 @@ Codex App Server is the current concrete provider. Its adapter translates this n
 
 A future provider should implement the same `NextDecisionEngine` port rather than copy Odoo orchestration.
 
+The first decision is also the semantic route. If conversation context and the effective capability
+catalog are enough, the provider returns `final_answer` in one pass. If current Odoo facts are
+needed, it requests the minimum read capability sequence and then answers. Only a dependent,
+multi-phase workflow uses TaskPlan; the number of technical provider calls alone is not planning
+complexity.
+
 ## TaskPlan
 
 Phase 6 introduces a separate user-visible TaskPlan:
@@ -69,7 +75,10 @@ It is explicitly **not** executable authority:
 - no script or arbitrary program;
 - no private chain-of-thought.
 
-The host reparses each revision, requires revision `1` then exact `+1`, persists it in the private working transcript and exposes only the latest validated payload to the browser response.
+The host reparses each revision, requires revision `1` then exact `+1`, persists it in the private
+working transcript and exposes only the latest validated payload to the browser response. It also
+projects the exact next revision, legal revision kinds and minimum initial step count as trusted
+host contract data. Adaptive one-step plans are rejected as non-useful; short reads stay planless.
 
 TaskPlan updates cannot erase terminal policy/authority errors or reset a failing capability streak.
 
@@ -177,10 +186,13 @@ Current user-facing channels include:
 - optional bounded readable reasoning summaries that never expose raw private reasoning;
 - provisional answer deltas;
 - final validated response;
-- latest validated TaskPlan on approval/final responses;
+- latest validated TaskPlan during execution and on approval/final responses;
 - typed navigation references revalidated by Odoo before navigation.
 
-Phase 6 has not yet added a dedicated running-turn live TaskPlan stream; that belongs with P6.2 deliberate/adaptive UX rather than weakening the closed P5.8 public-activity contract.
+Generic reasoning activity is deferred until the host accepts a non-final capability, effect or
+useful TaskPlan decision. Direct answers may stream provisional answer text but do not create a
+Thought card. Normal activity history collapses retry-level provider failures under one terminal
+failure; detailed/diagnostic modes retain the underlying lifecycle evidence.
 
 ## Turn control and concurrency
 

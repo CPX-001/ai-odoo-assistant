@@ -50,6 +50,11 @@ steps: step_id / title / state / depends_on
 
 It has **no capability, arguments, approval or execution authority**. Revisions are host-validated and durable in the private working transcript. It is not chain-of-thought.
 
+In adaptive mode it is reserved for a genuinely multi-phase workflow with at least two meaningful,
+dependent user-visible steps. A direct answer, one lookup, schema discovery followed by a bounded
+read, or one batch operation remains planless. The host projects the exact next revision and legal
+revision kinds as trusted contract data and rejects an artificial one-step adaptive plan.
+
 ### EffectPlan
 
 Effect steps remain typed `CapabilityDefinition` proposals. The product host currently permits up to **5** ordered steps; callers without the Phase-6 policy opt-in remain single-step for compatibility.
@@ -149,9 +154,14 @@ Two projections remain separate:
 
 TaskPlan is a separate product-plan artifact. Phase 6 does not turn private reasoning into activity.
 
-Exact social messages such as a greeting, thanks, or farewell use a final-answer-only provider
-contract. They cannot create a TaskPlan or propose an effect. This fast path stays deliberately
-narrow: a greeting combined with a business request still enters the normal validated loop.
+The first provider decision is also the semantic route: it may answer directly, request the minimum
+authoritative Odoo reads, or begin a multi-phase workflow. Direct model answers publish no generic
+"Thought" activity. Short Odoo lookups may use one or more tightly scoped read capabilities without
+creating a TaskPlan; public work starts only after the host accepts a non-final decision.
+
+Exact social messages such as a greeting, thanks, or farewell additionally use a final-answer-only
+provider contract. The constraint stays deliberately narrow: a greeting combined with a business
+request still enters the normal semantic route.
 
 ## Failure semantics
 

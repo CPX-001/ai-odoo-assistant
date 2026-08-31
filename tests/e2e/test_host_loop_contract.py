@@ -190,6 +190,47 @@ class TestHostLoopContract(unittest.TestCase):
         self.assertGreaterEqual(len(persisted), 2)
         self.assertEqual(len(engine.inputs), 1)
 
+    def test_public_work_starts_only_after_an_accepted_non_final_decision(self):
+        direct_started = []
+        direct = AgentTurnService(
+            registry=self.registry,
+            context=self.context,
+            executor=_Executor(),
+            decision_engine=_DecisionEngine(
+                [FinalAnswer("final_answer", "Respuesta directa", "high")]
+            ),
+            on_work_started=lambda: direct_started.append("started"),
+        )
+
+        direct_result = asyncio.run(direct.run(message="¿Qué capacidades tienes?"))
+
+        self.assertEqual(direct_result.answer, "Respuesta directa")
+        self.assertEqual(direct_started, [])
+
+        lookup_started = []
+        lookup = AgentTurnService(
+            registry=self.registry,
+            context=self.context,
+            executor=_Executor(results={"odoo.get_effective_schema": {"schema_id": "s1"}}),
+            decision_engine=_DecisionEngine(
+                [
+                    ReasoningCapabilityCall(
+                        "reasoning_capability_call",
+                        "schema-1",
+                        "odoo.get_effective_schema",
+                        {"model": "sale.order"},
+                    ),
+                    FinalAnswer("final_answer", "Hay 30.", "high"),
+                ]
+            ),
+            on_work_started=lambda: lookup_started.append("started"),
+        )
+
+        lookup_result = asyncio.run(lookup.run(message="¿Cuántos presupuestos hay?"))
+
+        self.assertEqual(lookup_result.answer, "Hay 30.")
+        self.assertEqual(lookup_started, ["started"])
+
     def test_multi_read_executes_only_reasoning_authority_and_feeds_results_back(self):
         executor = _Executor(
             results={

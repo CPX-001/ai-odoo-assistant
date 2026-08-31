@@ -291,6 +291,23 @@ function selectByDetail(reduced, preferences) {
     return fallback;
 }
 
+function collapseIntermediateProviderFailures(reduced, preferences) {
+    if (!["compact", "normal"].includes(preferences.detail_level)) {
+        return reduced;
+    }
+    const terminalFailure = [...reduced]
+        .reverse()
+        .find((item) => item.phase === "finalization" && item.status === "failed");
+    if (!terminalFailure) {
+        return reduced;
+    }
+    return reduced.filter(
+        (item) =>
+            item === terminalFailure ||
+            !(item.phase === "provider" && item.status === "failed")
+    );
+}
+
 function latestMeaningful(items) {
     for (let index = items.length - 1; index >= 0; index -= 1) {
         if (
@@ -324,13 +341,14 @@ export function semanticActivityPresentation(
 ) {
     const normalizedPreferences = normalizeActivityPresentationPreferences(preferences);
     const reduced = reduceSemanticActivity(events);
-    const normalVisible = reduced.filter((item) =>
+    const presentable = collapseIntermediateProviderFailures(reduced, normalizedPreferences);
+    const normalVisible = presentable.filter((item) =>
         visibleAtNormalDetail(item, normalizedPreferences)
     );
     const semanticItems = normalVisible.length
         ? normalVisible
-        : reduced.filter((item) => MEANINGFUL_PHASES.has(item.phase));
-    const selected = selectByDetail(reduced, normalizedPreferences);
+        : presentable.filter((item) => MEANINGFUL_PHASES.has(item.phase));
+    const selected = selectByDetail(presentable, normalizedPreferences);
     const maxItems = normalizedPreferences.limits.max_rendered_activity_items;
     const truncated = selected.length > maxItems;
     const items = Object.freeze(selected.slice(-maxItems));

@@ -130,6 +130,42 @@ test("failure updates the same work item and reconnect replay is idempotent", ()
     expect(items[0].semantic_code).toBe("activity.failed");
 });
 
+test("normal history replaces retry provider failures with one terminal failure", () => {
+    const events = [
+        event(1, {
+            phase: "provider",
+            kind: "turn.failed",
+            status: "failed",
+            diagnostic_code: "codex_turn_failed",
+        }),
+        event(2, {
+            activity_id: SECOND,
+            phase: "provider",
+            kind: "turn.failed",
+            status: "failed",
+            diagnostic_code: "codex_turn_failed",
+        }),
+        event(3, {
+            activity_id: null,
+            phase: "finalization",
+            kind: "turn.failed",
+            status: "failed",
+            diagnostic_code: "codex_turn_failed",
+        }),
+    ];
+
+    const normal = semanticActivityPresentation(events, {
+        preferences: { detail_level: "normal" },
+    });
+    const diagnostic = semanticActivityPresentation(events, {
+        preferences: { detail_level: "diagnostic" },
+    });
+
+    expect(normal.items).toHaveLength(1);
+    expect(normal.items[0].phase).toBe("finalization");
+    expect(diagnostic.items).toHaveLength(3);
+});
+
 test("turn completion settles an unmatched running answer item", () => {
     const items = reduceSemanticActivity([
         event(1, {

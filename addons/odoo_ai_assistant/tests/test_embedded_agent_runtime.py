@@ -146,6 +146,15 @@ class TestEmbeddedAgentRuntime(TransactionCase):
         )
         self.assertFalse(context.env.su)
 
+    def test_aggregate_count_contract_is_explicit_for_the_model(self):
+        definition = discover_capabilities().resolve("odoo.aggregate_records")
+        metric_schema = definition.input_schema["properties"]["metrics"]["items"]
+        field_schema = metric_schema["properties"]["field"]
+
+        self.assertEqual(field_schema["type"], ["string", "null"])
+        self.assertIn("field must be null", metric_schema["description"])
+        self.assertIn('"field":null', definition.description)
+
     def test_agent_turn_service_uses_registry_and_capability_executor(self):
         context = self._context()
         registry = discover_capabilities()
