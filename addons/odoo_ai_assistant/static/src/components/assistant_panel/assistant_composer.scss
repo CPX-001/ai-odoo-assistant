@@ -10,10 +10,10 @@
     .o_ai_assistant_composer_row {
         min-width: 0;
         display: grid !important;
-        grid-template-columns: auto auto auto minmax(2rem, 1fr);
+        grid-template-columns: auto auto auto auto minmax(2rem, 1fr);
         grid-template-areas:
-            "input input input input"
-            "model reasoning autonomy send";
+            "input input input input input"
+            "add model reasoning autonomy send";
         gap: 0.3rem 0.35rem !important;
         padding: 0.5rem;
         border: 1px solid var(--bs-border-color, #dee2e6);
@@ -39,6 +39,11 @@
         overflow-y: auto;
         resize: none;
         box-shadow: none;
+    }
+
+    .o_ai_assistant_composer .o_ai_assistant_composer_add {
+        grid-area: add;
+        justify-self: start;
     }
 
     .o_ai_assistant_composer .o_ai_assistant_autonomy_picker {
