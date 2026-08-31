@@ -59,7 +59,7 @@ class CapabilityProvider:
         title: str = "",
         optional: bool = True,
         metadata: Mapping[str, JsonValue] | None = None,
-    ) -> "CapabilityProvider":
+    ) -> CapabilityProvider:
         """Build a static provider from handlers decorated with ``@tool``.
 
         This is intentionally explicit: installed addon code chooses which objects it
