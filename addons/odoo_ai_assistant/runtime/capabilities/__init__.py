@@ -53,6 +53,7 @@ from .manifest import (
     EffectiveAssistantManifest,
     TechnicalAccessProfile,
     build_effective_assistant_manifest,
+    technical_access_profile_for_env,
 )
 from .policy import CapabilityPolicy, CapabilityPolicyDecision, ExecutionAuthority
 from .provider import (
@@ -122,5 +123,6 @@ __all__ = [
     "discover_capabilities_for_env",
     "discover_odoo_capability_providers",
     "selector_matches",
+    "technical_access_profile_for_env",
     "tool",
 ]
