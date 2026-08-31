@@ -43,7 +43,12 @@ patch(assistantPanelService, {
         const submitOneShot = async (message) => {
             const selected = panel.state.planningMode;
             const sent = await submit(message);
-            panel.state.planningMode = planningModeAfterSubmit(selected, sent);
+            // The streaming path consumes Plan as soon as Odoo durably accepts the turn.  Only
+            // apply the fallback transition when the underlying submit path did not already move
+            // the one-shot state, so a later stream failure cannot resurrect consumed Plan.
+            if (panel.state.planningMode === selected) {
+                panel.state.planningMode = planningModeAfterSubmit(selected, sent);
+            }
             return sent;
         };
 
