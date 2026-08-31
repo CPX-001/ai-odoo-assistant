@@ -5,15 +5,12 @@
         <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//textarea[@id='o_ai_assistant_question']" position="before">
             <div class="o_ai_assistant_composer_add">
                 <Dropdown position="'top-start'"
-                    menuClass="'o_ai_assistant_picker_menu o_ai_assistant_composer_add_menu'"
-                    disabled="state.planningLoading or state.planningSaving">
+                    menuClass="'o_ai_assistant_picker_menu o_ai_assistant_composer_add_menu'">
                     <button type="button"
                         t-att-class="'o_ai_assistant_composer_add_button' + (planModeActive ? ' o_ai_assistant_composer_add_button_active' : '')"
                         aria-label="Añadir funciones al mensaje"
-                        t-att-title="planModeActive ? 'Añadir funciones · Plan activo' : 'Añadir funciones'">
-                        <i t-if="state.planningLoading or state.planningSaving"
-                            class="fa fa-spinner fa-spin" aria-hidden="true"/>
-                        <i t-else="" class="fa fa-plus" aria-hidden="true"/>
+                        t-att-title="planModeActive ? 'Añadir funciones · Plan para este mensaje' : 'Añadir funciones'">
+                        <i class="fa fa-plus" aria-hidden="true"/>
                     </button>
                     <t t-set-slot="content">
                         <div class="o_ai_assistant_picker_menu_title small text-muted">
@@ -27,10 +24,10 @@
                             <span class="min-w-0 flex-grow-1">
                                 <span class="d-block fw-semibold">Plan</span>
                                 <span t-if="planModeActive" class="d-block small text-muted">
-                                    Activo. Pulsa de nuevo para volver al modo directo.
+                                    Se aplicará sólo al próximo mensaje.
                                 </span>
                                 <span t-else="" class="d-block small text-muted">
-                                    Crea un plan visible antes de trabajo largo, incierto o con varias fases.
+                                    Muestra un plan visible cuando el próximo trabajo realmente lo necesite.
                                 </span>
                             </span>
                             <i t-if="planModeActive" class="fa fa-check" aria-hidden="true"/>
@@ -38,6 +35,16 @@
                     </t>
                 </Dropdown>
             </div>
+            <button t-if="planModeActive"
+                type="button"
+                class="o_ai_assistant_composer_plan_chip"
+                aria-label="Quitar Plan de este mensaje"
+                title="Quitar Plan"
+                t-on-click="togglePlanMode">
+                <i class="fa fa-list-ol" aria-hidden="true"/>
+                <span>Plan</span>
+                <i class="fa fa-times" aria-hidden="true"/>
+            </button>
         </xpath>
     </t>
 </templates>
