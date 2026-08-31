@@ -6,11 +6,11 @@ import {
 import { normalizeLiveTaskPlan } from "@odoo_ai_assistant/services/zzzzzz_phase6_task_plan_live_service";
 
 
-test("planning mode response is closed to adaptive deliberate and auto", () => {
-    expect(PLANNING_MODES).toEqual(["adaptive", "deliberate", "auto"]);
+test("planning mode response exposes direct and explicit plan only", () => {
+    expect(PLANNING_MODES).toEqual(["adaptive", "deliberate"]);
     expect(normalizePlanningModeResponse({ ok: true, mode: "adaptive" })).toBe("adaptive");
     expect(normalizePlanningModeResponse({ ok: true, mode: "deliberate" })).toBe("deliberate");
-    expect(normalizePlanningModeResponse({ ok: true, mode: "auto" })).toBe("auto");
+    expect(normalizePlanningModeResponse({ ok: true, mode: "auto" })).toBe(null);
     expect(normalizePlanningModeResponse({ ok: true, mode: "unbounded" })).toBe(null);
 });
 
