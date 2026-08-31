@@ -108,6 +108,7 @@ export async function submitStreamingAssistantRequest({
                 message: normalized,
                 screen: state.context,
                 conversation_id: state.conversationId,
+                planning_mode: state.planningMode === "deliberate" ? "deliberate" : "adaptive",
             },
             onActivity: async (event) => appendActivity(state, event),
             onDelta: async (text) => {
