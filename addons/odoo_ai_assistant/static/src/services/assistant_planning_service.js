@@ -1,6 +1,5 @@
 /** @odoo-module **/
 
-import { rpc } from "@web/core/network/rpc";
 import { patch } from "@web/core/utils/patch";
 import { assistantPanelService } from "@odoo_ai_assistant/services/assistant_panel_service";
 
@@ -23,58 +22,31 @@ patch(assistantPanelService, {
         panel.state.planningMode = "adaptive";
         panel.state.planningLoading = false;
         panel.state.planningSaving = false;
-        panel.state.planningLoaded = false;
-
-        const loadPlanningMode = async ({ force = false } = {}) => {
-            if (panel.state.planningLoading || (panel.state.planningLoaded && !force)) {
-                return panel.state.planningLoaded;
-            }
-            panel.state.planningLoading = true;
-            try {
-                const mode = normalizePlanningModeResponse(
-                    await rpc("/odoo_ai/v1/planning-mode", {})
-                );
-                if (!mode) {
-                    return false;
-                }
-                panel.state.planningMode = mode;
-                panel.state.planningLoaded = true;
-                return true;
-            } catch {
-                return false;
-            } finally {
-                panel.state.planningLoading = false;
-            }
-        };
+        panel.state.planningLoaded = true;
 
         const setPlanningMode = async (mode) => {
-            if (panel.state.planningSaving || !PLANNING_MODES.includes(mode)) {
+            if (!PLANNING_MODES.includes(mode)) {
                 return false;
             }
-            panel.state.planningSaving = true;
-            try {
-                const selected = normalizePlanningModeResponse(
-                    await rpc("/odoo_ai/v1/planning-mode-set", { mode })
-                );
-                if (!selected) {
-                    return false;
-                }
-                panel.state.planningMode = selected;
-                panel.state.planningLoaded = true;
-                return true;
-            } catch {
-                return false;
-            } finally {
-                panel.state.planningSaving = false;
-            }
+            panel.state.planningMode = mode;
+            return true;
         };
 
-        void loadPlanningMode();
+        const submit = panel.submit.bind(panel);
+        const submitOneShot = async (message) => {
+            const selected = panel.state.planningMode;
+            const sent = await submit(message);
+            if (sent && selected === "deliberate") {
+                panel.state.planningMode = "adaptive";
+            }
+            return sent;
+        };
 
         return {
             ...panel,
-            loadPlanningMode,
+            loadPlanningMode: async () => true,
             setPlanningMode,
+            submit: submitOneShot,
         };
     },
 });
