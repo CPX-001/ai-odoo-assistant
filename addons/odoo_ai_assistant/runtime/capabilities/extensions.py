@@ -5,11 +5,16 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from .context import ContextProvider, ContextProviderCatalog
-from .contracts import CapabilityError
+from .context import (
+    ContextContribution,
+    ContextProvider,
+    ContextProviderCatalog,
+    ContextProviderStatus,
+)
+from .contracts import CapabilityContext, CapabilityError, JsonValue
 from .provider import CapabilityProvider, discover_odoo_capability_providers
 from .registry import CapabilityRegistry, discover_capabilities_for_env
-from .skills import SkillCatalog, SkillDefinition
+from .skills import SkillCatalog, SkillDefinition, selector_matches
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,12 +39,81 @@ class AssistantExtensionStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class ActiveAssistantExtensions:
+    """Per-turn resources after host availability/activation filtering."""
+
+    skills: tuple[SkillDefinition, ...] = ()
+    context: tuple[ContextContribution, ...] = ()
+    context_statuses: tuple[ContextProviderStatus, ...] = ()
+
+    def host_skill_contract(self) -> tuple[dict[str, JsonValue], ...]:
+        """Trusted behavior hints; authority remains the effective capability catalog."""
+
+        return tuple(
+            {
+                "skill_id": item.skill_id,
+                "description": item.description,
+                "instructions": item.instructions,
+                "examples": list(item.examples),
+            }
+            for item in self.skills
+        )
+
+    def untrusted_context_data(self) -> tuple[dict[str, JsonValue], ...]:
+        """JIT context is always projected as data, never as host instructions."""
+
+        return tuple(
+            {"provider_id": item.provider_id, "data": dict(item.data)}
+            for item in self.context
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class AssistantExtensionCatalog:
     """Effective declarative resources around the executable capability registry."""
 
     skills: SkillCatalog
     context_providers: ContextProviderCatalog
     statuses: tuple[AssistantExtensionStatus, ...] = ()
+
+    def activate(
+        self,
+        context: CapabilityContext,
+        *,
+        capability_names: Iterable[str],
+        evidence_provider_ids: Iterable[str] = (),
+    ) -> ActiveAssistantExtensions:
+        """Resolve default/host-enabled Skills and only the JIT context they select."""
+
+        available_context_ids = tuple(
+            item.provider_id for item in self.context_providers.available(context)
+        )
+        evidence_ids = tuple(evidence_provider_ids)
+        active_skills = self.skills.available(
+            context,
+            capability_names=capability_names,
+            context_provider_ids=available_context_ids,
+            evidence_provider_ids=evidence_ids,
+        )
+        selectors = tuple(
+            selector
+            for skill in active_skills
+            for selector in skill.context_provider_selectors
+        )
+        selected_context_ids = tuple(
+            provider_id
+            for provider_id in available_context_ids
+            if any(selector_matches(selector, provider_id) for selector in selectors)
+        )
+        contributions, context_statuses = self.context_providers.collect(
+            context,
+            provider_ids=selected_context_ids,
+        )
+        return ActiveAssistantExtensions(
+            skills=active_skills,
+            context=contributions,
+            context_statuses=context_statuses,
+        )
 
 
 def compose_assistant_extensions(
@@ -150,6 +224,7 @@ def _resource_conflict_code(
 
 
 __all__ = [
+    "ActiveAssistantExtensions",
     "AssistantExtensionCatalog",
     "AssistantExtensionStatus",
     "compose_assistant_extensions",
