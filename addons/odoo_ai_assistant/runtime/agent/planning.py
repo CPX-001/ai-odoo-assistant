@@ -11,6 +11,8 @@ from .contracts import NextDecision, PlanStepProposal, ReasoningCapabilityCall, 
 from .decision_validation import NextDecisionValidationError
 from .task_plan import TaskPlan, TaskPlanError, parse_task_plan
 
+# ``auto`` is retained only for legacy snapshots created by the short-lived automatic planning UI.
+# New product preferences expose adaptive/direct and deliberate/Plan only.
 _PLANNING_MODES = frozenset({"adaptive", "deliberate", "auto"})
 _EFFECTIVE_MODES = frozenset({"adaptive", "deliberate"})
 _REPLAN_EVIDENCE_KINDS = frozenset(
@@ -69,10 +71,15 @@ def resolve_planning_strategy(
     message: str,
     screen: Mapping[str, object] | None = None,
 ) -> PlanningStrategy:
-    """Resolve the host strategy without classifying business intent.
+    """Resolve visible planning without classifying business intent.
 
-    ``auto`` uses only bounded structural complexity signals. The score is an ergonomic planning
-    hint, not policy/ACL/tool authority and therefore cannot enable an otherwise unavailable action.
+    Direct/adaptive is the normal agent loop: the model may answer, read Odoo, reason over evidence and
+    stage bounded effects, but it cannot manufacture a visible TaskPlan. Deliberate is an explicit user
+    opt-in that requires TaskPlan before capability/effect work. ``auto`` remains readable only for legacy
+    snapshots and resolves to adaptive for new strategy construction.
+
+    The structural complexity score is retained as bounded diagnostic evidence for future eval-driven
+    reasoning-depth work. It does not activate Plan mode, policy, ACLs or capability authority.
     """
 
     mode = requested_mode or "adaptive"
@@ -80,8 +87,6 @@ def resolve_planning_strategy(
         raise PlanningStrategyError()
     score = measure_task_complexity(message, screen=screen)
     effective = "deliberate" if mode == "deliberate" else "adaptive"
-    if mode == "auto" and score >= 4:
-        effective = "deliberate"
     return PlanningStrategy(
         requested_mode=mode,
         effective_mode=effective,
@@ -151,8 +156,12 @@ def parse_planning_strategy(value: object) -> PlanningStrategy:
         or (requested == "deliberate" and effective != "deliberate")
     ):
         raise PlanningStrategyError()
-    if requested == "auto" and effective != ("deliberate" if score >= 4 else "adaptive"):
-        raise PlanningStrategyError()
+    if requested == "auto":
+        # Accept both historical auto snapshots (score-driven deliberate/adaptive) and the current
+        # normalized form (adaptive). New user preferences can no longer create auto snapshots.
+        historical_effective = "deliberate" if score >= 4 else "adaptive"
+        if effective not in {"adaptive", historical_effective}:
+            raise PlanningStrategyError()
     return PlanningStrategy(requested, effective, score, required)
 
 
@@ -195,14 +204,14 @@ def task_plan_host_state(
 
     previous_index, previous = _latest_task_plan(working_items)
     if previous is None:
-        available = strategy.effective_mode == "deliberate" or _adaptive_plan_evidence_count(
-            working_items
-        ) >= 2
+        # A visible TaskPlan is a deliberate product mode, not something inferred from how many
+        # technical/business calls a direct turn happens to need.
+        available = strategy.effective_mode == "deliberate"
         return TaskPlanHostState(
             current_revision=0,
             next_revision=1,
             allowed_revision_kinds=("initial",),
-            minimum_initial_steps=2 if strategy.effective_mode == "adaptive" else 1,
+            minimum_initial_steps=1,
             task_plan_available=available,
         )
     kinds = ["progress"]
@@ -212,7 +221,7 @@ def task_plan_host_state(
         current_revision=previous.revision,
         next_revision=previous.revision + 1,
         allowed_revision_kinds=tuple(kinds),
-        minimum_initial_steps=2 if strategy.effective_mode == "adaptive" else 1,
+        minimum_initial_steps=1,
         task_plan_available=True,
     )
 
@@ -286,26 +295,6 @@ def _latest_task_plan(
         except TaskPlanError as error:
             raise NextDecisionValidationError(error.code) from error
     return -1, None
-
-
-def _adaptive_plan_evidence_count(
-    working_items: tuple[dict[str, object], ...],
-) -> int:
-    """Count substantive completed work, excluding schema/model-discovery plumbing."""
-
-    technical_reads = {"odoo.get_effective_schema", "odoo.search_models"}
-    count = 0
-    for item in working_items:
-        if not isinstance(item, dict):
-            continue
-        kind = item.get("kind")
-        data = item.get("data")
-        if kind == "capability_result" and isinstance(data, dict):
-            if data.get("capability") not in technical_reads:
-                count += 1
-        elif kind in {"plan_step_proposed", "verified_effect_receipt"}:
-            count += 1
-    return count
 
 
 def _same_plan_structure(previous: TaskPlan, current: TaskPlan) -> bool:
