@@ -58,6 +58,7 @@ class AssistantTurnController(http.Controller):
         screen=None,
         conversation_id=None,
         client_request_id=None,
+        planning_mode="adaptive",
         **unexpected,
     ):
         if unexpected:
@@ -69,6 +70,7 @@ class AssistantTurnController(http.Controller):
                 screen=screen,
                 conversation_uuid=conversation_id or None,
                 client_request_id=client_request_id or None,
+                planning_mode=planning_mode,
             )
         except RuntimeAccountGateError as error:
             return _error(error.code)
