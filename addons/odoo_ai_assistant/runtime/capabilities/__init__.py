@@ -1,8 +1,8 @@
 """Addon-local extension framework for agent capabilities.
 
-Add a provider module under :mod:`.providers` and decorate a handler with ``@tool``.
-Discovery is automatic; registration, policy metadata and transport descriptors come
-from the same definition.
+Core provider modules remain automatically discovered. Trusted installed Odoo addons may
+also contribute :class:`CapabilityProvider` markers; every executable operation still
+resolves to the same host-owned :class:`CapabilityDefinition` contract.
 """
 
 from .config import CapabilityConfigResolver
@@ -25,7 +25,19 @@ from .contracts import (
 from .decorators import tool
 from .executor import CapabilityExecutor
 from .policy import CapabilityPolicy, CapabilityPolicyDecision, ExecutionAuthority
-from .registry import CapabilityRegistry, clear_discovery_cache, discover_capabilities
+from .provider import (
+    CapabilityProvider,
+    CapabilityProviderLoader,
+    CapabilityProviderStatus,
+    discover_odoo_capability_providers,
+)
+from .registry import (
+    CapabilityRegistry,
+    clear_discovery_cache,
+    compose_capability_registry,
+    discover_capabilities,
+    discover_capabilities_for_env,
+)
 
 __all__ = [
     "CapabilityApproval",
@@ -40,6 +52,9 @@ __all__ = [
     "CapabilityPolicy",
     "CapabilityPolicyDecision",
     "CapabilityPreview",
+    "CapabilityProvider",
+    "CapabilityProviderLoader",
+    "CapabilityProviderStatus",
     "CapabilityRegistry",
     "CapabilityResult",
     "CapabilityRisk",
@@ -49,6 +64,9 @@ __all__ = [
     "ExecutionAuthority",
     "JsonValue",
     "clear_discovery_cache",
+    "compose_capability_registry",
     "discover_capabilities",
+    "discover_capabilities_for_env",
+    "discover_odoo_capability_providers",
     "tool",
 ]
