@@ -97,10 +97,14 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         )
         self.assertNotEqual(snapshot_a, snapshot_b)
 
-    def test_auto_planning_mode_resolves_from_immutable_structural_inputs(self):
+    def test_legacy_auto_preference_normalizes_to_direct_for_new_turns(self):
         env = self.env(user=self.user, su=False)
         preference = env["odoo.ai.user.preference"]
-        preference.set_current_planning_mode("auto")
+        stored = preference.search([("user_id", "=", self.user.id)], limit=1)
+        if not stored:
+            stored = preference.create({"user_id": self.user.id, "planning_mode": "auto"})
+        else:
+            stored.write({"planning_mode": "auto"})
         message = (
             "1. Revisa los datos actuales.\n"
             "2. Contrasta los registros seleccionados.\n"
@@ -115,11 +119,12 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         )
         snapshot = turn.execution_settings_snapshot()
 
-        self.assertEqual(snapshot["planning_mode"], "auto")
-        self.assertEqual(snapshot["planning_strategy"]["effective_mode"], "deliberate")
+        self.assertEqual(snapshot["planning_mode"], "adaptive")
+        self.assertEqual(snapshot["planning_strategy"]["effective_mode"], "adaptive")
+        self.assertFalse(snapshot["planning_strategy"]["task_plan_required"])
         self.assertGreaterEqual(snapshot["planning_strategy"]["complexity_score"], 4)
 
-        preference.set_current_planning_mode("adaptive")
+        preference.set_current_planning_mode("deliberate")
         turn.invalidate_recordset()
         self.assertEqual(turn.execution_settings_snapshot(), snapshot)
 
