@@ -75,6 +75,10 @@ The provider never emits an authoritative arbitrary Odoo URL/route.
 
 Bounded collection/batch operations under the same capability and authority rules. Large staged imports remain a later workflow; this provider must not become a path for thousands of unconstrained model-authored writes.
 
+Scalar date and datetime inputs are normalized at the validated host boundary before ORM
+execution. ISO-8601 UTC values therefore remain safe model inputs without leaking provider wire
+format into Odoo's database datetime format, and verification compares canonical values.
+
 ### `odoo_runtime.py`
 
 Narrow technical/runtime facts required for reasoning. It is deliberately not a filesystem, shell, secret or host-admin back door.

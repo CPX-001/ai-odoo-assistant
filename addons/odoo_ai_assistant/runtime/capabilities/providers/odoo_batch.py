@@ -25,6 +25,7 @@ from .odoo_actions import (
     _safe_name,
     _validate_values,
     _values,
+    _verification_values,
     _write_descriptions,
 )
 
@@ -169,7 +170,7 @@ def _batch_verify(context: CapabilityContext, arguments):
             return CapabilityVerification(verified=False, summary={"count": len(record_ids)})
         for record_id, expected in zip(record_ids, rows, strict=True):
             record = _record(context, model, record_id, access="read")
-            if _read_values(record, expected) != expected:
+            if _read_values(record, expected) != _verification_values(record, expected):
                 return CapabilityVerification(
                     verified=False,
                     summary={"model": model, "record_id": record_id},
@@ -180,7 +181,7 @@ def _batch_verify(context: CapabilityContext, arguments):
             return CapabilityVerification(verified=False, summary={"count": len(record_ids)})
         for record_id in record_ids:
             record = _record(context, model, record_id, access="read")
-            if _read_values(record, expected) != expected:
+            if _read_values(record, expected) != _verification_values(record, expected):
                 return CapabilityVerification(
                     verified=False,
                     summary={"model": model, "record_id": record_id},

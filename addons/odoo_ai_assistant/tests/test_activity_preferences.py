@@ -35,6 +35,7 @@ class TestAssistantActivityPreferences(TransactionCase):
         self.assertEqual(payload["detail_level"], "normal")
         self.assertEqual(payload["transient_threshold_ms"], 1200)
         self.assertEqual(payload["batch_page_size"], 5)
+        self.assertEqual(payload["expanded_line_count"], 5)
         self.assertEqual(payload["reasoning_summary"], "concise")
         self.assertEqual(payload["limits"]["max_rendered_activity_items"], 100)
         self.assertEqual(payload["limits"]["max_reasoning_summary_chars"], 2000)
@@ -50,12 +51,14 @@ class TestAssistantActivityPreferences(TransactionCase):
                 "show_step_durations": True,
                 "reasoning_summary": "detailed",
                 "batch_page_size": 10,
+                "expanded_line_count": 8,
             }
         )
         self.assertTrue(changed["ok"])
         self.assertEqual(changed["detail_level"], "diagnostic")
         self.assertTrue(changed["show_technical_names"])
         self.assertEqual(changed["batch_page_size"], 10)
+        self.assertEqual(changed["expanded_line_count"], 8)
 
         untouched = preferences_b.activity_presentation_preferences()
         self.assertEqual(untouched["detail_level"], "normal")
@@ -68,6 +71,8 @@ class TestAssistantActivityPreferences(TransactionCase):
             {"detail_level": "raw"},
             {"transient_threshold_ms": 9000},
             {"batch_page_size": 0},
+            {"expanded_line_count": 0},
+            {"expanded_line_count": 21},
             {"reasoning_summary": "private"},
             {"allow_writes": True},
         ]
@@ -75,3 +80,18 @@ class TestAssistantActivityPreferences(TransactionCase):
             result = preferences.set_activity_presentation_preferences(values)
             self.assertFalse(result["ok"])
             self.assertEqual(result["error"]["code"], "invalid_context")
+
+    def test_legacy_preference_without_line_count_uses_default(self):
+        preferences = self.env["odoo.ai.user.preference"].with_user(self.user_a)
+        preference = preferences.create(
+            {
+                "user_id": self.user_a.id,
+                "activity_expanded_line_count": False,
+            }
+        )
+
+        preference.write({"activity_batch_page_size": 7})
+
+        payload = preferences.activity_presentation_preferences()
+        self.assertEqual(payload["expanded_line_count"], 5)
+        self.assertEqual(payload["batch_page_size"], 7)

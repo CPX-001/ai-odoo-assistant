@@ -21,6 +21,9 @@ function normalizeServerPreferences(response) {
         !Number.isSafeInteger(response.batch_page_size) ||
         response.batch_page_size < 1 ||
         response.batch_page_size > 20 ||
+        !Number.isSafeInteger(response.expanded_line_count) ||
+        response.expanded_line_count < 1 ||
+        response.expanded_line_count > 20 ||
         typeof response.show_technical_names !== "boolean" ||
         typeof response.show_step_durations !== "boolean" ||
         !REASONING_SUMMARY_LEVELS.has(response.reasoning_summary) ||
@@ -41,6 +44,7 @@ function validPreferencePatch(values) {
         "detail_level",
         "transient_threshold_ms",
         "batch_page_size",
+        "expanded_line_count",
         "show_technical_names",
         "show_step_durations",
         "reasoning_summary",
@@ -64,6 +68,14 @@ function validPreferencePatch(values) {
         (!Number.isSafeInteger(values.batch_page_size) ||
             values.batch_page_size < 1 ||
             values.batch_page_size > 20)
+    ) {
+        return false;
+    }
+    if (
+        Object.hasOwn(values, "expanded_line_count") &&
+        (!Number.isSafeInteger(values.expanded_line_count) ||
+            values.expanded_line_count < 1 ||
+            values.expanded_line_count > 20)
     ) {
         return false;
     }

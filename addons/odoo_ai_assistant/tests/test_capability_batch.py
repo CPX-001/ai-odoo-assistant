@@ -1,11 +1,15 @@
 import asyncio
 from types import SimpleNamespace
 
-from odoo import Command
+from odoo import Command, fields
 from odoo.tests.common import TransactionCase
 
 from ..models.embedded_runtime import _browser_capability_plan
-from ..runtime.agent import CapabilityPlanError, CapabilityPlanService, PlannedCapability
+from ..runtime.agent import (
+    CapabilityPlanError,
+    CapabilityPlanService,
+    PlannedCapability,
+)
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -24,6 +28,7 @@ class TestCapabilityBatchMutations(TransactionCase):
         system_group = cls.env.ref("base.group_system")
         internal_group = cls.env.ref("base.group_user")
         partner_manager_group = cls.env.ref("base.group_partner_manager")
+        sales_manager_group = cls.env.ref("sales_team.group_sale_manager")
         company = cls.env.company
         cls.batch_user = cls.env["res.users"].create(
             {
@@ -33,7 +38,12 @@ class TestCapabilityBatchMutations(TransactionCase):
                 "company_ids": [Command.set([company.id])],
                 "groups_id": [
                     Command.set(
-                        [internal_group.id, partner_manager_group.id, system_group.id]
+                        [
+                            internal_group.id,
+                            partner_manager_group.id,
+                            sales_manager_group.id,
+                            system_group.id,
+                        ]
                     )
                 ],
             }
@@ -80,7 +90,7 @@ class TestCapabilityBatchMutations(TransactionCase):
     def _patch_plan(self, *, record_ids=None, name="AI BATCH UPDATED"):
         return (
             PlannedCapability(
-                capability="odoo.records.batch_mutate",
+                capability="odoo.records.batch_patch",
                 arguments={
                     "operation": "patch",
                     "model": "res.partner",
@@ -95,7 +105,7 @@ class TestCapabilityBatchMutations(TransactionCase):
         context, registry, plans = self._runtime()
         self.assertFalse(context.env.su)
         self.assertEqual(
-            registry.resolve("odoo.records.batch_mutate").source_module,
+            registry.resolve("odoo.records.batch_patch").source_module,
             "odoo.addons.odoo_ai_assistant.runtime.capabilities.providers.odoo_batch",
         )
 
@@ -158,7 +168,7 @@ class TestCapabilityBatchMutations(TransactionCase):
         context, _registry, plans = self._runtime()
         plan = (
             PlannedCapability(
-                capability="odoo.records.batch_mutate",
+                capability="odoo.records.batch_create",
                 arguments={
                     "operation": "create",
                     "model": "res.partner",
@@ -215,6 +225,42 @@ class TestCapabilityBatchMutations(TransactionCase):
         self.assertEqual(receipt["outcome"], "verified")
         self.assertIsNone(receipt["record_id"])
         self.assertEqual(receipt["record_model"], "res.partner")
+
+    def test_batch_create_normalizes_iso_utc_datetime_before_odoo_create(self):
+        context, _registry, plans = self._runtime()
+        plan = (
+            PlannedCapability(
+                capability="odoo.records.batch_create",
+                arguments={
+                    "operation": "create",
+                    "model": "sale.order",
+                    "rows": [
+                        {
+                            "partner_id": self.targets[0].id,
+                            "date_order": "2026-09-01T15:04:04Z",
+                        }
+                    ],
+                },
+                summary="Crear un presupuesto con fecha UTC",
+            ),
+        )
+
+        prepared = asyncio.run(plans.prepare(plan))
+        self.assertEqual(
+            prepared["steps"][0]["preview"]["rows"][0]["date_order"],
+            "2026-09-01 15:04:04",
+        )
+        authorized = dict(prepared)
+        authorized["state"] = "authorized"
+        executed = asyncio.run(plans.execute(authorized, human_approved=True))
+        record_id = executed.results[0].data["record_ids"][0]
+        quotation = context.env["sale.order"].browse(record_id).exists()
+
+        self.assertTrue(quotation)
+        self.assertEqual(
+            fields.Datetime.to_string(quotation.date_order),
+            "2026-09-01 15:04:04",
+        )
 
     def test_batch_delete_requires_preview_and_verifies_absence(self):
         context, _registry, plans = self._runtime()

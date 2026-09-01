@@ -15,6 +15,7 @@
         cursor: pointer;
         user-select: none;
         list-style: none;
+        gap: 0.65rem;
     }
 
     .o_ai_assistant_activity summary::-webkit-details-marker {
@@ -25,8 +26,27 @@
         opacity: 0.82;
     }
 
+    .o_ai_assistant_activity_caret {
+        display: inline-block;
+        flex: 0 0 auto;
+        color: inherit;
+        font: inherit;
+        line-height: 1;
+        transform: translateY(-0.05em);
+        transition: transform 140ms ease;
+    }
+
+    .o_ai_assistant_activity details[open] .o_ai_assistant_activity_caret {
+        transform: translateY(0.05em) rotate(180deg);
+    }
+
     .o_ai_assistant_activity_details {
         padding-left: 0.15rem;
+        line-height: 1.45rem;
+        max-height: calc(var(--o-ai-assistant-activity-visible-lines, 5) * 1.45rem);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
     }
 
     .o_ai_assistant_reasoning_summary {
@@ -68,5 +88,9 @@
         animation: none;
         -webkit-text-fill-color: currentColor;
         background: none;
+    }
+
+    .o_ai_assistant_panel .o_ai_assistant_activity_caret {
+        transition: none;
     }
 }

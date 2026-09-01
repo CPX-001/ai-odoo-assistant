@@ -14,11 +14,14 @@ REASONING_SUMMARY_LEVELS = frozenset({"off", "concise", "detailed"})
 DEFAULT_DETAIL_LEVEL = "normal"
 DEFAULT_TRANSIENT_THRESHOLD_MS = 1200
 DEFAULT_BATCH_PAGE_SIZE = 5
+DEFAULT_EXPANDED_LINE_COUNT = 5
 DEFAULT_REASONING_SUMMARY = "concise"
 MIN_TRANSIENT_THRESHOLD_MS = 0
 MAX_TRANSIENT_THRESHOLD_MS = 5000
 MIN_BATCH_PAGE_SIZE = 1
 MAX_BATCH_PAGE_SIZE = 20
+MIN_EXPANDED_LINE_COUNT = 1
+MAX_EXPANDED_LINE_COUNT = 20
 MAX_RENDERED_ACTIVITY_ITEMS = 100
 MAX_RENDERED_BATCH_ROWS = 100
 MAX_REASONING_SUMMARY_CHARS = 2000
@@ -45,6 +48,10 @@ class AssistantUserPreference(models.Model):
         string="Assistant activity batch page size",
         default=DEFAULT_BATCH_PAGE_SIZE,
     )
+    activity_expanded_line_count = fields.Integer(
+        string="Assistant expanded activity visible lines",
+        default=DEFAULT_EXPANDED_LINE_COUNT,
+    )
     activity_show_technical_names = fields.Boolean(
         string="Show Assistant technical names",
         default=False,
@@ -63,15 +70,25 @@ class AssistantUserPreference(models.Model):
         default=DEFAULT_REASONING_SUMMARY,
     )
 
-    @api.constrains("activity_transient_threshold_ms", "activity_batch_page_size")
+    @api.constrains(
+        "activity_transient_threshold_ms",
+        "activity_batch_page_size",
+        "activity_expanded_line_count",
+    )
     def _check_activity_presentation_bounds(self):
         for record in self:
             threshold = record.activity_transient_threshold_ms
             page_size = record.activity_batch_page_size
+            line_count = record.activity_expanded_line_count
             if not MIN_TRANSIENT_THRESHOLD_MS <= threshold <= MAX_TRANSIENT_THRESHOLD_MS:
                 raise ValidationError("Invalid Assistant activity transient threshold.")
             if not MIN_BATCH_PAGE_SIZE <= page_size <= MAX_BATCH_PAGE_SIZE:
                 raise ValidationError("Invalid Assistant activity batch page size.")
+            # Existing preference rows have no value until the addon upgrade writes the
+            # new column. Treat that legacy null/zero as "use the default"; the public
+            # setter still rejects an explicit zero.
+            if line_count and not MIN_EXPANDED_LINE_COUNT <= line_count <= MAX_EXPANDED_LINE_COUNT:
+                raise ValidationError("Invalid Assistant expanded activity line count.")
 
     @api.model
     def activity_presentation_preferences(self):
@@ -83,6 +100,7 @@ class AssistantUserPreference(models.Model):
             "detail_level": _detail_level(preference),
             "transient_threshold_ms": _threshold(preference),
             "batch_page_size": _page_size(preference),
+            "expanded_line_count": _expanded_line_count(preference),
             "show_technical_names": bool(preference.activity_show_technical_names) if preference else False,
             "show_step_durations": bool(preference.activity_show_step_durations) if preference else False,
             "reasoning_summary": _reasoning_summary(preference),
@@ -101,6 +119,7 @@ class AssistantUserPreference(models.Model):
             "detail_level",
             "transient_threshold_ms",
             "batch_page_size",
+            "expanded_line_count",
             "show_technical_names",
             "show_step_durations",
             "reasoning_summary",
@@ -122,6 +141,11 @@ class AssistantUserPreference(models.Model):
             if type(value) is not int or not MIN_BATCH_PAGE_SIZE <= value <= MAX_BATCH_PAGE_SIZE:
                 return _error("invalid_context")
             normalized["activity_batch_page_size"] = value
+        if "expanded_line_count" in values:
+            value = values["expanded_line_count"]
+            if type(value) is not int or not MIN_EXPANDED_LINE_COUNT <= value <= MAX_EXPANDED_LINE_COUNT:
+                return _error("invalid_context")
+            normalized["activity_expanded_line_count"] = value
         for request_key, field_name in (
             ("show_technical_names", "activity_show_technical_names"),
             ("show_step_durations", "activity_show_step_durations"),
@@ -163,6 +187,13 @@ def _page_size(preference):
     if type(value) is int and MIN_BATCH_PAGE_SIZE <= value <= MAX_BATCH_PAGE_SIZE:
         return value
     return DEFAULT_BATCH_PAGE_SIZE
+
+
+def _expanded_line_count(preference):
+    value = preference.activity_expanded_line_count if preference else None
+    if type(value) is int and MIN_EXPANDED_LINE_COUNT <= value <= MAX_EXPANDED_LINE_COUNT:
+        return value
+    return DEFAULT_EXPANDED_LINE_COUNT
 
 
 def _reasoning_summary(preference):

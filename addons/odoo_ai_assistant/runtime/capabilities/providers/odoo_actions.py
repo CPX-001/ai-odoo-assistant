@@ -11,6 +11,7 @@ import json
 import re
 from datetime import UTC, date, datetime
 
+from odoo import fields
 from odoo.exceptions import AccessError, MissingError, UserError, ValidationError
 
 from ....services.turn_context import (
@@ -219,6 +220,7 @@ def _patch_verify(context, arguments):
     descriptions = _write_descriptions(context, result["model"], tuple(values))
     expected = _validate_values(context, descriptions, values)
     actual = _read_values(record, expected)
+    expected = _verification_values(record, expected)
     return CapabilityVerification(
         verified=actual == expected,
         summary={"model": result["model"], "record_id": result["record_id"]},
@@ -274,6 +276,7 @@ def _create_verify(context, arguments):
     descriptions = _write_descriptions(context, result["model"], tuple(values))
     expected = _validate_values(context, descriptions, values)
     actual = _read_values(record, expected)
+    expected = _verification_values(record, expected)
     return CapabilityVerification(
         verified=actual == expected,
         summary={"model": result["model"], "record_id": result["record_id"]},
@@ -556,7 +559,20 @@ def _value(context, description, value):
         if type(value) not in {int, float}:
             raise CapabilityError("action_value_invalid")
         return value
-    if field_type in {"char", "text", "selection", "date", "datetime"}:
+    if field_type in {"date", "datetime"}:
+        if not isinstance(value, str) or len(value) > _MAX_TEXT or "\x00" in value:
+            raise CapabilityError("action_value_invalid")
+        try:
+            if field_type == "date":
+                return fields.Date.to_string(date.fromisoformat(value))
+            suffix = "+00:00" if value.endswith("Z") else ""
+            parsed = datetime.fromisoformat(value.removesuffix("Z") + suffix)
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+            return fields.Datetime.to_string(parsed)
+        except (TypeError, ValueError):
+            raise CapabilityError("action_value_invalid") from None
+    if field_type in {"char", "text", "selection"}:
         if not isinstance(value, str) or len(value) > _MAX_TEXT or "\x00" in value:
             raise CapabilityError("action_value_invalid")
         return value
@@ -572,6 +588,17 @@ def _read_values(record, values):
     if len(rows) != 1 or rows[0].get("id") != record.id:
         raise CapabilityError("access_denied")
     return {field: _normalize(rows[0].get(field)) for field in fields}
+
+
+def _verification_values(record, values):
+    normalized = {}
+    for field, value in values.items():
+        definition = record._fields.get(field)
+        if definition and definition.type == "datetime" and isinstance(value, str):
+            normalized[field] = _normalize(fields.Datetime.to_datetime(value))
+        else:
+            normalized[field] = value
+    return normalized
 
 
 def _record(context, model, record_id, *, access):

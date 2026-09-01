@@ -40,6 +40,31 @@ test("started and completed lifecycle rows reduce to one semantic item", () => {
     expect(items[0].semantic_code).toBe("capability.use");
 });
 
+test("a running turn is visible immediately before the first server activity", () => {
+    const presentation = semanticActivityPresentation([], { running: true });
+
+    expect(presentation.items).toHaveLength(1);
+    expect(presentation.headline.semantic_code).toBe("request.analysis");
+    expect(presentation.headline.status).toBe("running");
+});
+
+test("a new semantic step settles the previous running step", () => {
+    const items = reduceSemanticActivity([
+        event(1, { phase: "provider", kind: "provider.started" }),
+        event(2, {
+            activity_id: SECOND,
+            phase: "capability",
+            kind: "capability.started",
+        }),
+    ]);
+
+    expect(items).toHaveLength(2);
+    expect(items[0].status).toBe("completed");
+    expect(items[0].ended_at).toBe("2026-08-29T10:00:02.000000Z");
+    expect(items[1].status).toBe("running");
+    expect(items.filter((item) => item.status === "running")).toHaveLength(1);
+});
+
 test("identical capabilities with different host activity ids remain separate", () => {
     const items = reduceSemanticActivity([event(1), event(2, { activity_id: SECOND })]);
 
@@ -277,6 +302,7 @@ test("presentation preferences fail to bounded defaults", () => {
         detail_level: "raw",
         transient_threshold_ms: 99_999,
         batch_page_size: 500,
+        expanded_line_count: 200,
         reasoning_summary: "private",
         limits: { max_rendered_activity_items: 1000, max_reasoning_summary_chars: 99999 },
     });
@@ -284,6 +310,7 @@ test("presentation preferences fail to bounded defaults", () => {
     expect(normalized.detail_level).toBe("normal");
     expect(normalized.transient_threshold_ms).toBe(1200);
     expect(normalized.batch_page_size).toBe(5);
+    expect(normalized.expanded_line_count).toBe(5);
     expect(normalized.reasoning_summary).toBe("concise");
     expect(normalized.limits.max_rendered_activity_items).toBe(100);
     expect(normalized.limits.max_reasoning_summary_chars).toBe(8000);

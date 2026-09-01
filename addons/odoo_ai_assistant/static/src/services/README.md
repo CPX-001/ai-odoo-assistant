@@ -16,7 +16,7 @@ Frontend services hold reusable browser-side state and RPC/live coordination. Th
 | `assistant_panel_streaming_service.js` | binds stream data to panel presentation state |
 | `assistant_public_activity_contract.js` | closed browser-safe public activity contract, including bounded contextual references |
 | `assistant_semantic_activity.js` | semantic reducer, detail profiles, transient filtering, navigation refs and render bounds |
-| `assistant_activity_preferences_service.js` | per-user presentation preferences; presentation only, never authority |
+| `assistant_activity_preferences_service.js` | per-user presentation preferences, including expanded activity height; presentation only, never authority |
 | `assistant_reasoning_summary_service.js` | turn-scoped bounded readable reasoning-summary reduction |
 | `assistant_public_reference_service.js` | record/model/action/view/menu/setting reference normalization, fresh Odoo revalidation and closed navigation |
 | `zzzz_assistant_turn_control_service.js` | active-scope Stop, same-turn correction RPC/idempotency binding, interrupted-answer follow-up and safe reversion request state |

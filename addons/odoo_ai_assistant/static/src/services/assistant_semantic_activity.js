@@ -25,6 +25,7 @@ export const DEFAULT_ACTIVITY_PRESENTATION = Object.freeze({
     detail_level: "normal",
     transient_threshold_ms: 1200,
     batch_page_size: 5,
+    expanded_line_count: 5,
     show_technical_names: false,
     show_step_durations: false,
     reasoning_summary: "concise",
@@ -138,6 +139,12 @@ export function normalizeActivityPresentationPreferences(value) {
             raw.batch_page_size <= 20
                 ? raw.batch_page_size
                 : 5,
+        expanded_line_count:
+            Number.isSafeInteger(raw.expanded_line_count) &&
+            raw.expanded_line_count >= 1 &&
+            raw.expanded_line_count <= 20
+                ? raw.expanded_line_count
+                : 5,
         show_technical_names: raw.show_technical_names === true,
         show_step_durations: raw.show_step_durations === true,
         reasoning_summary: REASONING_SUMMARY_LEVELS.has(raw.reasoning_summary)
@@ -172,6 +179,20 @@ function settleRunningItems(ordered, event) {
     }
 }
 
+function settleSupersededRunningItems(ordered, event, key) {
+    if (event.status !== "running" || !MEANINGFUL_PHASES.has(event.phase)) {
+        return;
+    }
+    for (const item of ordered) {
+        if (item.key === key || item.status !== "running") {
+            continue;
+        }
+        item.status = "completed";
+        item.ended_at = event.occurred_at;
+        item.last_sequence = Math.max(item.last_sequence, event.sequence);
+    }
+}
+
 export function reduceSemanticActivity(events) {
     if (!Array.isArray(events)) {
         return Object.freeze([]);
@@ -190,6 +211,7 @@ export function reduceSemanticActivity(events) {
         seenSequences.add(event.sequence);
         settleRunningItems(ordered, event);
         const key = itemKey(event);
+        settleSupersededRunningItems(ordered, event, key);
         const existing = byKey.get(key);
         if (!existing) {
             const created = {
@@ -341,6 +363,42 @@ export function semanticActivityPresentation(
 ) {
     const normalizedPreferences = normalizeActivityPresentationPreferences(preferences);
     const reduced = reduceSemanticActivity(events);
+    if (running && !reduced.length) {
+        const initial = freezeItem({
+            key: "activity:pending-request-analysis",
+            activity_id: null,
+            first_sequence: 0,
+            last_sequence: 0,
+            kind: "provider.pending",
+            phase: "provider",
+            status: "running",
+            label: "",
+            resource: null,
+            references: [],
+            capability: null,
+            progress: null,
+            semantic_group_key: null,
+            parent_activity_id: null,
+            operation: null,
+            headline_code: "request.analysis",
+            headline_args: {},
+            progress_detail: null,
+            result_summary: null,
+            lifecycle_activity_ids: [],
+            diagnostic_code: null,
+            started_at: null,
+            ended_at: null,
+        });
+        return Object.freeze({
+            items: Object.freeze([initial]),
+            headline: initial,
+            step_count: 1,
+            duration_ms: 0,
+            running: true,
+            truncated: false,
+            preferences: normalizedPreferences,
+        });
+    }
     const presentable = collapseIntermediateProviderFailures(reduced, normalizedPreferences);
     const normalVisible = presentable.filter((item) =>
         visibleAtNormalDetail(item, normalizedPreferences)

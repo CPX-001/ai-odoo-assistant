@@ -11,6 +11,9 @@ Frontend tests should prove that:
 - a late callback updates the turn/conversation that owns it;
 - switching chats does not cancel or overwrite unrelated background work;
 - public activity, provisional answer and readable-summary channels remain separate;
+- a submitted turn shows request analysis immediately, and only the latest semantic step remains
+  visually active while earlier steps settle in sequence;
+- a fresh authenticated Assistant entry opens on history rather than an empty chat;
 - final state reconciles provisional UI state;
 - model/autonomy controls do not mutate settings already captured by a queued/running turn;
 - idle+text is Send, processing+empty is Stop and processing+text is Correct instruction;

@@ -343,6 +343,14 @@ patch(AssistantPanel.prototype, {
         return this.semanticActivity.preferences.reasoning_summary;
     },
 
+    get activityExpandedLineCount() {
+        return this.semanticActivity.preferences.expanded_line_count;
+    },
+
+    get activityDetailsStyle() {
+        return `--o-ai-assistant-activity-visible-lines: ${this.activityExpandedLineCount}`;
+    },
+
     activityShowMoreLabel(item) {
         if (!item?.reference_next_count) {
             return "";
@@ -399,6 +407,18 @@ patch(AssistantPanel.prototype, {
         const reasoningSummary = event?.target?.value;
         if (typeof this.panel.setActivityPresentationPreferences === "function") {
             await this.panel.setActivityPresentationPreferences({ reasoning_summary: reasoningSummary });
+        }
+    },
+
+    async changeActivityExpandedLineCount(event) {
+        const lineCount = Number(event?.target?.value);
+        if (
+            Number.isSafeInteger(lineCount) &&
+            typeof this.panel.setActivityPresentationPreferences === "function"
+        ) {
+            await this.panel.setActivityPresentationPreferences({
+                expanded_line_count: lineCount,
+            });
         }
     },
 

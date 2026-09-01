@@ -157,7 +157,7 @@ patch(assistantPanelService, {
 
         const lockChat = () => {
             state.chatBootstrapped = false;
-            state.historyView = false;
+            state.historyView = true;
             state.conversations = [];
             state.messages = [];
             state.result = null;

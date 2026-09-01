@@ -23,6 +23,12 @@
                 <option value="concise" t-att-selected="activityReasoningSummaryLevel === 'concise'">Conciso</option>
                 <option value="detailed" t-att-selected="activityReasoningSummaryLevel === 'detailed'">Detallado</option>
             </select>
+            <label class="small text-muted d-block mb-1" for="o_ai_activity_expanded_lines">Líneas visibles al desplegar</label>
+            <input id="o_ai_activity_expanded_lines" type="number" min="1" max="20" step="1"
+                class="form-control form-control-sm mb-2"
+                t-att-value="activityExpandedLineCount"
+                t-att-disabled="state.activityPreferencesSaving"
+                t-on-change="changeActivityExpandedLineCount"/>
             <label class="form-check small mb-0">
                 <input type="checkbox" class="form-check-input"
                     t-att-checked="semanticActivity.preferences.show_technical_names"

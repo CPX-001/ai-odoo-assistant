@@ -23,7 +23,7 @@ flowchart TB
 - `chat_storage.py` — Odoo-native conversations/messages/history ownership.
 - `chat_preferences.py` and `user_preferences.py` — user-level chat/model/autonomy preferences.
 - `reasoning_preferences.py` — provider-backed reasoning-effort preference and turn capture.
-- `activity_preferences.py` — semantic-activity detail/bounds/readable-summary display preferences. Presentation only; never authority.
+- `activity_preferences.py` — semantic-activity detail/bounds/readable-summary display preferences, including the scrollable expanded-line count. Presentation only; never authority.
 - `public_references.py` — fresh effective-user revalidation for `odoo_record`, `odoo_model`, `odoo_action`, `odoo_view`, `odoo_menu` and `odoo_setting`; returns only closed navigation descriptors.
 - `turn_navigation.py` — bounded host capture/projection of validated contextual navigation references into final responses.
 - `chat_policy.py` — policy-related product configuration and decisions.

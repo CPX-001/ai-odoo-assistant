@@ -26,13 +26,14 @@
                 t-att-class="'o_ai_assistant_activity mt-3 ' + (state.loading ? 'o_ai_assistant_activity_running' : 'o_ai_assistant_activity_settled')"
                 aria-label="Assistant activity">
                 <details>
-                    <summary class="small d-flex align-items-center gap-2">
-                        <i t-if="state.loading" class="fa fa-circle-o-notch fa-spin" aria-hidden="true"/>
-                        <i t-else="" class="fa fa-check-circle-o" aria-hidden="true"/>
+                    <summary class="small d-flex align-items-center">
                         <span t-att-class="'text-break ' + (state.loading ? 'o_ai_assistant_activity_shimmer' : '')"
                             t-esc="activitySummaryLabel"/>
+                        <span t-att-class="'o_ai_assistant_activity_caret ' + (state.loading ? 'o_ai_assistant_activity_shimmer' : '')"
+                            aria-hidden="true">⌄</span>
                     </summary>
-                    <div class="o_ai_assistant_activity_details mt-2 d-flex flex-column gap-1">
+                    <div class="o_ai_assistant_activity_details mt-2 d-flex flex-column gap-1"
+                        t-att-style="activityDetailsStyle">
                         <div t-if="activityReasoningSummaryParts.length"
                             class="o_ai_assistant_reasoning_summary small mb-1">
                             <div t-foreach="activityReasoningSummaryParts" t-as="part" t-key="part.key"
@@ -41,12 +42,12 @@
                         <div t-foreach="activityItems" t-as="item" t-key="item.key"
                             class="small text-muted">
                             <div class="d-flex gap-2 align-items-start">
-                                <i t-if="item.status === 'running'" class="fa fa-circle-o-notch fa-spin mt-1" aria-hidden="true"/>
-                                <i t-elif="item.status === 'failed'" class="fa fa-exclamation-circle mt-1" aria-hidden="true"/>
+                                <i t-if="item.status === 'failed'" class="fa fa-exclamation-circle mt-1" aria-hidden="true"/>
                                 <i t-elif="item.status === 'blocked'" class="fa fa-pause-circle-o mt-1" aria-hidden="true"/>
                                 <i t-elif="item.status === 'cancelled'" class="fa fa-ban mt-1" aria-hidden="true"/>
-                                <i t-else="" class="fa fa-check mt-1" aria-hidden="true"/>
-                                <span class="text-break flex-grow-1" t-esc="item.display_label"/>
+                                <i t-elif="item.status !== 'running'" class="fa fa-check mt-1" aria-hidden="true"/>
+                                <span t-att-class="'text-break flex-grow-1 ' + (item.status === 'running' ? 'o_ai_assistant_activity_shimmer' : '')"
+                                    t-esc="item.display_label"/>
                                 <small t-if="item.duration_label" class="text-nowrap" t-esc="item.duration_label"/>
                             </div>
                             <div t-if="item.progress_label" class="ms-4 mt-1 small text-body-secondary"
