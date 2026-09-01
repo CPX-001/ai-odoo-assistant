@@ -10,6 +10,7 @@ READ_CAPABILITIES = frozenset(
     {
         "odoo.aggregate_records",
         "odoo.get_effective_schema",
+        "odoo.query_record_ids",
         "odoo.query_records",
         "odoo.resolve_navigation",
         "odoo.runtime_identity",
@@ -24,6 +25,7 @@ WRITE_CAPABILITIES = frozenset(
         "odoo.record.patch",
         "odoo.record.unarchive",
         "odoo.records.batch_mutate",
+        "odoo.records.bulk_delete",
         "odoo.sale_order.confirm",
     }
 )

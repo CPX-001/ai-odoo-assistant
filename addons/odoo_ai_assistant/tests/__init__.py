@@ -4,6 +4,7 @@ from . import test_capability_action_revalidation as test_capability_action_reva
 from . import test_capability_actions as test_capability_actions
 from . import test_capability_activity_correlation as test_capability_activity_correlation
 from . import test_capability_batch as test_capability_batch
+from . import test_capability_bulk as test_capability_bulk
 from . import test_capability_framework as test_capability_framework
 from . import test_chat_policy as test_chat_policy
 from . import test_chat_preferences as test_chat_preferences
@@ -17,6 +18,7 @@ from . import test_e2e_convergence_battery as test_e2e_convergence_battery
 from . import test_effect_journal as test_effect_journal
 from . import test_embedded_agent_runtime as test_embedded_agent_runtime
 from . import test_host_loop_agent_runtime as test_host_loop_agent_runtime
+from . import test_latency_routing as test_latency_routing
 from . import test_model_catalog as test_model_catalog
 from . import test_next_decision_validation as test_next_decision_validation
 from . import test_planning_preferences as test_planning_preferences
