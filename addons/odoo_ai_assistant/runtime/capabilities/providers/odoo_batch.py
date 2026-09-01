@@ -32,10 +32,10 @@ _MAX_BATCH_ROWS = 50
 _MAX_BATCH_INPUT_BYTES = 128 * 1024
 _MAX_BATCH_OUTPUT_BYTES = 192 * 1024
 
-_BATCH_INPUT = {
+_BATCH_CREATE_INPUT = {
     "type": "object",
     "properties": {
-        "operation": {"type": "string", "enum": ["create", "patch", "delete"]},
+        "operation": {"type": "string", "enum": ["create"]},
         "model": {"type": "string", "minLength": 1, "maxLength": 128},
         "rows": {
             "type": "array",
@@ -43,6 +43,15 @@ _BATCH_INPUT = {
             "maxItems": _MAX_BATCH_ROWS,
             "items": {"type": "object"},
         },
+    },
+    "required": ["operation", "model", "rows"],
+    "additionalProperties": False,
+}
+_BATCH_PATCH_INPUT = {
+    "type": "object",
+    "properties": {
+        "operation": {"type": "string", "enum": ["patch"]},
+        "model": {"type": "string", "minLength": 1, "maxLength": 128},
         "record_ids": {
             "type": "array",
             "minItems": 1,
@@ -51,7 +60,22 @@ _BATCH_INPUT = {
         },
         "values": {"type": "object"},
     },
-    "required": ["operation", "model"],
+    "required": ["operation", "model", "record_ids", "values"],
+    "additionalProperties": False,
+}
+_BATCH_DELETE_INPUT = {
+    "type": "object",
+    "properties": {
+        "operation": {"type": "string", "enum": ["delete"]},
+        "model": {"type": "string", "minLength": 1, "maxLength": 128},
+        "record_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": _MAX_BATCH_ROWS,
+            "items": {"type": "integer", "minimum": 1},
+        },
+    },
+    "required": ["operation", "model", "record_ids"],
     "additionalProperties": False,
 }
 _BATCH_OUTPUT = {
@@ -176,28 +200,85 @@ def _batch_verify(context: CapabilityContext, arguments):
 
 
 @tool(
-    name="odoo.records.batch_mutate",
-    title="Mutate multiple Odoo records",
+    name="odoo.records.batch_create",
+    title="Create multiple Odoo records",
     description=(
-        "Perform one bounded create, patch or delete operation on at most 50 records. "
-        "Patch applies the same validated field mutation to every selected record. "
-        "The host previews and revalidates all rows before crossing the write barrier."
+        "Create 1 to 50 records on one eligible Odoo model in one bounded operation. "
+        "Use this instead of repeated single-record creates. The host previews every row, verifies "
+        "the created records and can safely compensate the batch while none of those records has "
+        "been changed afterwards."
     ),
-    input_schema=_BATCH_INPUT,
+    input_schema=_BATCH_CREATE_INPUT,
     output_schema=_BATCH_OUTPUT,
     risk=CapabilityRisk.ACTION,
-    effect=CapabilityEffect.INTERNAL_IRREVERSIBLE,
+    effect=CapabilityEffect.INTERNAL_REVERSIBLE,
     exposure=CapabilityExposure.PLAN,
     approval=CapabilityApproval.POLICY,
-    tags=("odoo", "action", "batch", "write"),
+    tags=("odoo", "action", "batch", "write", "create"),
     preview=_batch_preview,
     verify=_batch_verify,
     max_calls=2,
     max_input_bytes=_MAX_BATCH_INPUT_BYTES,
     max_output_bytes=_MAX_BATCH_OUTPUT_BYTES,
 )
+def batch_create(context: CapabilityContext, arguments):
+    return _execute_batch(context, arguments, expected_operation="create")
+
+
+@tool(
+    name="odoo.records.batch_patch",
+    title="Update multiple Odoo records",
+    description=(
+        "Apply the same validated field update to 1 to 50 selected records on one eligible Odoo "
+        "model. The host snapshots the affected fields, verifies the write and can compensate the "
+        "batch if those written fields still match the verified result."
+    ),
+    input_schema=_BATCH_PATCH_INPUT,
+    output_schema=_BATCH_OUTPUT,
+    risk=CapabilityRisk.ACTION,
+    effect=CapabilityEffect.INTERNAL_REVERSIBLE,
+    exposure=CapabilityExposure.PLAN,
+    approval=CapabilityApproval.POLICY,
+    tags=("odoo", "action", "batch", "write", "patch"),
+    preview=_batch_preview,
+    verify=_batch_verify,
+    max_calls=2,
+    max_input_bytes=_MAX_BATCH_INPUT_BYTES,
+    max_output_bytes=_MAX_BATCH_OUTPUT_BYTES,
+)
+def batch_patch(context: CapabilityContext, arguments):
+    return _execute_batch(context, arguments, expected_operation="patch")
+
+
+@tool(
+    name="odoo.records.batch_mutate",
+    title="Delete multiple Odoo records",
+    description=(
+        "Permanently delete 1 to 50 eligible Odoo records in one bounded operation. This legacy "
+        "capability name is retained for compatibility, but it is now delete-only so reversible "
+        "batch creates and updates cannot be misclassified as irreversible."
+    ),
+    input_schema=_BATCH_DELETE_INPUT,
+    output_schema=_BATCH_OUTPUT,
+    risk=CapabilityRisk.ACTION,
+    effect=CapabilityEffect.INTERNAL_IRREVERSIBLE,
+    exposure=CapabilityExposure.PLAN,
+    approval=CapabilityApproval.ALWAYS,
+    tags=("odoo", "action", "batch", "write", "delete"),
+    preview=_batch_preview,
+    verify=_batch_verify,
+    max_calls=1,
+    max_input_bytes=_MAX_BATCH_INPUT_BYTES,
+    max_output_bytes=_MAX_BATCH_OUTPUT_BYTES,
+)
 def batch_mutate(context: CapabilityContext, arguments):
+    return _execute_batch(context, arguments, expected_operation="delete")
+
+
+def _execute_batch(context: CapabilityContext, arguments, *, expected_operation):
     operation = arguments.get("operation")
+    if operation != expected_operation:
+        raise CapabilityError("batch_operation_invalid")
     model = _model_name(arguments.get("model"))
     if operation == "create":
         rows = _create_rows(context, model, arguments)
