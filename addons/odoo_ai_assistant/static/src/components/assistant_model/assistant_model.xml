@@ -139,6 +139,18 @@
                             </button>
                         </div>
                         <t t-else="">
+                            <DropdownItem t-if="reasoningAutoAvailable"
+                                class="'o_ai_assistant_picker_option'"
+                                onSelected="() => this.selectAutoReasoningEffort()">
+                                <span class="o_ai_assistant_picker_option_token">A</span>
+                                <span class="min-w-0 flex-grow-1">
+                                    <span class="d-block fw-semibold" t-esc="autoReasoningEffortLabel()"/>
+                                    <span class="d-block small text-muted"
+                                        t-esc="autoReasoningEffortDescription()"/>
+                                </span>
+                                <i t-if="state.selectedReasoningEffort === 'auto'" class="fa fa-check"
+                                    aria-hidden="true"/>
+                            </DropdownItem>
                             <DropdownItem class="'o_ai_assistant_picker_option'"
                                 onSelected="() => this.selectReasoningEffort(null)">
                                 <span class="o_ai_assistant_picker_option_icon">

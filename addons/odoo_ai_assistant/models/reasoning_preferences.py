@@ -12,6 +12,8 @@ from ..runtime.agent.model_catalog import CodexModelCatalogError
 from .user_preferences import _embedded_model_catalog
 
 _EFFORT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+_AUTO_REASONING_EFFORT = "auto"
+_AUTO_REQUIRED_EFFORTS = frozenset({"low", "medium", "high"})
 
 
 class AssistantUserReasoningPreference(models.Model):
@@ -24,7 +26,7 @@ class AssistantUserReasoningPreference(models.Model):
         for record in self:
             value = (record.reasoning_effort or "").strip()
             if value and not _EFFORT_PATTERN.fullmatch(value):
-                raise ValidationError("Invalid Codex reasoning effort.")
+                raise ValidationError("Invalid Assistant reasoning effort.")
 
     @api.model
     def current_reasoning_effort(self):
@@ -39,7 +41,7 @@ class AssistantUserReasoningPreference(models.Model):
         elif isinstance(effort, str) and _EFFORT_PATTERN.fullmatch(effort):
             normalized = effort
         else:
-            raise ValidationError("Invalid Codex reasoning effort.")
+            raise ValidationError("Invalid Assistant reasoning effort.")
         preference = self.search([("user_id", "=", self.env.uid)], limit=1)
         if preference:
             preference.write({"reasoning_effort": normalized})
@@ -58,13 +60,17 @@ class AssistantUserReasoningPreference(models.Model):
             selected_model=response.get("selected_model"),
             default_model=response.get("default_model"),
         )
-        supported = _supported_efforts(effective)
-        if (
-            selected_effort is not None
-            and _has_reasoning_metadata(effective)
-            and selected_effort not in supported
-        ):
-            selected_effort = self.set_current_reasoning_effort(None)
+        if selected_effort == _AUTO_REASONING_EFFORT:
+            if _has_reasoning_metadata(effective) and not _supports_auto_reasoning(effective):
+                selected_effort = self.set_current_reasoning_effort(None)
+        else:
+            supported = _supported_efforts(effective)
+            if (
+                selected_effort is not None
+                and _has_reasoning_metadata(effective)
+                and selected_effort not in supported
+            ):
+                selected_effort = self.set_current_reasoning_effort(None)
         return {**response, "selected_reasoning_effort": selected_effort}
 
     @api.model
@@ -82,13 +88,17 @@ class AssistantUserReasoningPreference(models.Model):
             selected_model=response.get("selected_model"),
             default_model=catalog.get("default_model"),
         )
-        supported = _supported_efforts(effective)
-        if (
-            selected_effort is not None
-            and _has_reasoning_metadata(effective)
-            and selected_effort not in supported
-        ):
-            selected_effort = self.set_current_reasoning_effort(None)
+        if selected_effort == _AUTO_REASONING_EFFORT:
+            if _has_reasoning_metadata(effective) and not _supports_auto_reasoning(effective):
+                selected_effort = self.set_current_reasoning_effort(None)
+        else:
+            supported = _supported_efforts(effective)
+            if (
+                selected_effort is not None
+                and _has_reasoning_metadata(effective)
+                and selected_effort not in supported
+            ):
+                selected_effort = self.set_current_reasoning_effort(None)
         return {**response, "selected_reasoning_effort": selected_effort}
 
     @api.model
@@ -111,8 +121,12 @@ class AssistantUserReasoningPreference(models.Model):
             selected_model=self.current_reasoning_model(),
             default_model=catalog.get("default_model"),
         )
-        supported = _supported_efforts(effective)
-        if not supported or effort not in supported:
+        if effort == _AUTO_REASONING_EFFORT:
+            allowed = _supports_auto_reasoning(effective)
+        else:
+            supported = _supported_efforts(effective)
+            allowed = bool(supported) and effort in supported
+        if not allowed:
             return _error("invalid_context")
         try:
             selected = self.set_current_reasoning_effort(effort)
@@ -170,6 +184,10 @@ def _supported_efforts(model):
         if isinstance(effort, str) and _EFFORT_PATTERN.fullmatch(effort):
             result.append(effort)
     return tuple(result)
+
+
+def _supports_auto_reasoning(model):
+    return _AUTO_REQUIRED_EFFORTS.issubset(set(_supported_efforts(model)))
 
 
 def _has_reasoning_metadata(model):

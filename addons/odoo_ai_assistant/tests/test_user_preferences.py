@@ -121,3 +121,58 @@ class TestAssistantUserPreferences(TransactionCase):
             self.assertEqual(changed["selected_model"], "gpt-model-b")
             self.assertIsNone(changed["selected_reasoning_effort"])
             self.assertIsNone(preferences.current_reasoning_effort())
+
+    def test_auto_reasoning_is_host_mode_and_requires_routable_provider_levels(self):
+        catalog = {
+            "models": [
+                {
+                    "model": "gpt-auto",
+                    "display_name": "Auto model",
+                    "description": "",
+                    "family": "gpt-auto",
+                    "variant": None,
+                    "family_alias": False,
+                    "supported_reasoning_efforts": [
+                        {"effort": "low", "description": ""},
+                        {"effort": "medium", "description": ""},
+                        {"effort": "high", "description": ""},
+                    ],
+                    "default_reasoning_effort": "medium",
+                    "is_default": True,
+                },
+                {
+                    "model": "gpt-limited",
+                    "display_name": "Limited model",
+                    "description": "",
+                    "family": "gpt-limited",
+                    "variant": None,
+                    "family_alias": False,
+                    "supported_reasoning_efforts": [
+                        {"effort": "low", "description": ""},
+                        {"effort": "medium", "description": ""},
+                    ],
+                    "default_reasoning_effort": "medium",
+                    "is_default": False,
+                },
+            ],
+            "default_model": "gpt-auto",
+        }
+        preferences = self.env["odoo.ai.user.preference"].with_user(self.user_a)
+        with patch.object(
+            user_preferences,
+            "_embedded_model_catalog",
+            return_value=catalog,
+        ), patch.object(
+            reasoning_preferences,
+            "_embedded_model_catalog",
+            return_value=catalog,
+        ):
+            selected = preferences.set_chat_reasoning_effort_preference("auto")
+            self.assertTrue(selected["ok"])
+            self.assertEqual(selected["selected_reasoning_effort"], "auto")
+            self.assertEqual(preferences.current_reasoning_effort(), "auto")
+
+            changed = preferences.set_chat_model_preference("gpt-limited")
+            self.assertTrue(changed["ok"])
+            self.assertIsNone(changed["selected_reasoning_effort"])
+            self.assertIsNone(preferences.current_reasoning_effort())

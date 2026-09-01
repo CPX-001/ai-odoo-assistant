@@ -4,14 +4,17 @@ import { _t } from "@web/core/l10n/translation";
 import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
 import {
+    AUTO_REASONING_EFFORT,
     compactModelLabel,
     groupModelOptions,
     modelFamilyLabel,
     pickerReasoningEfforts,
+    supportsAutoReasoning,
 } from "@odoo_ai_assistant/services/assistant_model_service";
 
 function reasoningEffortLabel(effort) {
     const labels = {
+        auto: _t("Auto"),
         none: _t("Ninguno"),
         minimal: _t("Mínimo"),
         low: _t("Bajo"),
@@ -25,6 +28,7 @@ function reasoningEffortLabel(effort) {
 
 function reasoningEffortDescription(effort, providerDescription = "") {
     const descriptions = {
+        auto: _t("Ajusta el esfuerzo por decisión según la complejidad y el progreso real."),
         none: _t("Prioriza la velocidad y evita razonamiento adicional."),
         minimal: _t("Usa el mínimo razonamiento adicional."),
         low: _t("Razonamiento ligero para tareas sencillas."),
@@ -61,7 +65,7 @@ function modelPillLabel(option, fallback = "") {
 }
 
 function reasoningEffortPillLabel(effort) {
-    const labels = { none: "0", minimal: "1", low: "2", medium: "3", high: "4" };
+    const labels = { auto: "A", none: "0", minimal: "1", low: "2", medium: "3", high: "4" };
     return labels[effort] || "R";
 }
 
@@ -106,6 +110,10 @@ patch(AssistantPanel.prototype, {
     get reasoningEffortOptions() {
         const options = this.reasoningModelOption?.supported_reasoning_efforts;
         return pickerReasoningEfforts(options);
+    },
+
+    get reasoningAutoAvailable() {
+        return supportsAutoReasoning(this.reasoningModelOption);
     },
 
     get defaultReasoningEffort() {
@@ -168,6 +176,14 @@ patch(AssistantPanel.prototype, {
         return reasoningEffortPillLabel(option?.effort);
     },
 
+    autoReasoningEffortLabel() {
+        return reasoningEffortLabel(AUTO_REASONING_EFFORT);
+    },
+
+    autoReasoningEffortDescription() {
+        return reasoningEffortDescription(AUTO_REASONING_EFFORT);
+    },
+
     isReasoningModelSelected(option) {
         if (!option || !this.state.selectedReasoningModel) {
             return false;
@@ -202,6 +218,10 @@ patch(AssistantPanel.prototype, {
 
     async selectReasoningEffort(effort) {
         await this.panel.setReasoningEffort(effort || null);
+    },
+
+    async selectAutoReasoningEffort() {
+        await this.panel.setReasoningEffort(AUTO_REASONING_EFFORT);
     },
 
     async retryModelPreferences() {

@@ -9,6 +9,8 @@ const EFFORT_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const MODEL_CATALOG_TTL_MS = 5 * 60 * 1000;
 const VARIANT_ORDER = Object.freeze({ sol: 0, terra: 1, luna: 2 });
 const PICKER_REASONING_EFFORTS = new Set(["none", "minimal", "low", "medium", "high"]);
+const AUTO_ROUTER_LEVELS = Object.freeze(["low", "medium", "high"]);
+export const AUTO_REASONING_EFFORT = "auto";
 
 export function compactModelLabel(value) {
     if (typeof value !== "string" || !value.trim()) {
@@ -84,6 +86,13 @@ export function pickerReasoningEfforts(options) {
     return options.filter((item) => PICKER_REASONING_EFFORTS.has(item?.effort));
 }
 
+export function supportsAutoReasoning(model) {
+    const supported = new Set(
+        model?.supported_reasoning_efforts?.map((item) => item?.effort).filter(Boolean) || []
+    );
+    return AUTO_ROUTER_LEVELS.every((effort) => supported.has(effort));
+}
+
 export function normalizeModelPreferences(response) {
     if (
         response?.ok !== true ||
@@ -109,7 +118,11 @@ export function normalizeModelPreferences(response) {
     const selectedModel = ids.has(response.selected_model) ? response.selected_model : null;
     const effectiveModelId = selectedModel || response.default_model;
     const effectiveModel = models.find((item) => item.model === effectiveModelId) || null;
-    if (
+    if (response.selected_reasoning_effort === AUTO_REASONING_EFFORT) {
+        if (!supportsAutoReasoning(effectiveModel)) {
+            return null;
+        }
+    } else if (
         response.selected_reasoning_effort != null &&
         effectiveModel?.reasoning_metadata_available &&
         !effectiveModel.supported_reasoning_efforts.some(
@@ -283,7 +296,10 @@ patch(assistantPanelService, {
             );
             if (
                 panel.state.reasoningEffortSaving ||
-                (normalized !== null && (!EFFORT_PATTERN.test(normalized) || !supported.has(normalized)))
+                (normalized === AUTO_REASONING_EFFORT && !supportsAutoReasoning(effective)) ||
+                (normalized !== null &&
+                    normalized !== AUTO_REASONING_EFFORT &&
+                    (!EFFORT_PATTERN.test(normalized) || !supported.has(normalized)))
             ) {
                 return false;
             }
@@ -309,9 +325,6 @@ patch(assistantPanelService, {
             }
         };
 
-        // Load once when the web-client service starts. P5 turn-scope patches may
-        // replace open()/toggle(), so picker readiness must not depend solely on
-        // wrapper order. Later opens still use the bounded catalog TTL.
         void loadModelPreferences();
 
         const baseOpen = panel.open.bind(panel);

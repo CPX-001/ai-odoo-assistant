@@ -2,16 +2,20 @@
 
 import { expect, test } from "@odoo/hoot";
 import {
+    AUTO_REASONING_EFFORT,
     compactModelLabel,
     groupModelOptions,
     normalizeModelPreferences,
     pickerReasoningEfforts,
+    supportsAutoReasoning,
 } from "@odoo_ai_assistant/services/assistant_model_service";
 
 const EFFORTS = Object.freeze([
-    { effort: "none", description: "Fast" },
+    { effort: "none", description: "Fastest" },
+    { effort: "low", description: "Fast" },
     { effort: "medium", description: "Balanced" },
-    { effort: "max", description: "Deep" },
+    { effort: "high", description: "Deep" },
+    { effort: "max", description: "Maximum" },
 ]);
 
 function model(modelId, variant, { alias = false, isDefault = false } = {}) {
@@ -66,15 +70,48 @@ test("model response preserves provider reasoning metadata", () => {
     expect(normalized).not.toBe(null);
     expect(normalized.selectedReasoningEffort).toBe("max");
     expect(normalized.models[0].default_reasoning_effort).toBe("medium");
-    expect(normalized.models[0].supported_reasoning_efforts).toHaveLength(3);
+    expect(normalized.models[0].supported_reasoning_efforts).toHaveLength(5);
 });
 
-test("reasoning picker exposes only levels through high", () => {
+test("reasoning picker exposes normal levels through high and Auto separately", () => {
     expect(pickerReasoningEfforts(EFFORTS).map((item) => item.effort)).toEqual([
         "none",
+        "low",
         "medium",
+        "high",
     ]);
+    expect(supportsAutoReasoning({ supported_reasoning_efforts: EFFORTS })).toBe(true);
     expect(pickerReasoningEfforts(null)).toEqual([]);
+});
+
+test("Auto is a host mode and is accepted only when low medium high are available", () => {
+    const normalized = normalizeModelPreferences({
+        ok: true,
+        models: [model("gpt-5.6-sol", "sol", { isDefault: true })],
+        default_model: "gpt-5.6-sol",
+        selected_model: null,
+        selected_reasoning_effort: AUTO_REASONING_EFFORT,
+        can_manage_settings: false,
+    });
+    expect(normalized).not.toBe(null);
+    expect(normalized.selectedReasoningEffort).toBe("auto");
+
+    const limited = model("gpt-limited", null, { isDefault: true });
+    limited.supported_reasoning_efforts = [
+        { effort: "low", description: "" },
+        { effort: "medium", description: "" },
+    ];
+    limited.default_reasoning_effort = "medium";
+    expect(
+        normalizeModelPreferences({
+            ok: true,
+            models: [limited],
+            default_model: "gpt-limited",
+            selected_model: null,
+            selected_reasoning_effort: "auto",
+            can_manage_settings: false,
+        })
+    ).toBe(null);
 });
 
 test("GPT named variants render as one family and family alias does not duplicate Sol", () => {
@@ -159,7 +196,7 @@ test("model preferences reject duplicate, malformed or inconsistent metadata", (
             models: [model("gpt-5.6-sol", "sol")],
             default_model: "gpt-5.6-sol",
             selected_model: null,
-            selected_reasoning_effort: "low",
+            selected_reasoning_effort: "minimal",
             can_manage_settings: false,
         })
     ).toBe(null);

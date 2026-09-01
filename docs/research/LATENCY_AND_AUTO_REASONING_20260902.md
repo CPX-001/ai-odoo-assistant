@@ -83,6 +83,12 @@ This is intentionally hybrid without a second LLM router call: the host chooses 
 own prior neutral decisions become evidence that can escalate later decisions. The Codex adapter maps the neutral tiers
 to `low | medium | high`. A future provider can map the same neutral tiers differently.
 
+The chat reasoning picker now exposes `Auto` separately from `Predeterminado`. `Predeterminado` still means “let the
+provider/model use its own default”. `Auto` is an Assistant host mode captured immutably on the turn; it is offered only
+when the current model advertises at least `low`, `medium` and `high`, so the current Codex adapter can route all three
+neutral tiers without inventing an unsupported provider value. This supersedes only the historical P5.7 note that Auto
+had deliberately not yet been implemented; it does not rewrite the original P5.7 acceptance evidence.
+
 ## Validation methodology
 
 The change should be promoted only after focused real measurements, not because fewer calls look better.
