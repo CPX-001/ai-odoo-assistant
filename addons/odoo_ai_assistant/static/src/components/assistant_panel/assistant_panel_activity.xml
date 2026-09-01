@@ -3,21 +3,23 @@
     <t t-name="odoo_ai_assistant.AssistantPanelPublicActivity"
        t-inherit="odoo_ai_assistant.AssistantPanel"
        t-inherit-mode="extension">
+        <xpath expr="//div[@t-foreach='state.messages']" position="attributes">
+            <attribute name="t-foreach">activityOrderedMessages</attribute>
+        </xpath>
         <xpath expr="//div[@t-if='state.loading and state.streamingText']" position="before">
             <section t-if="activityItems.length"
-                class="o_ai_assistant_activity mt-3 border rounded bg-light-subtle px-2 py-2"
+                t-att-class="'o_ai_assistant_activity mt-3 ' + (state.loading ? 'o_ai_assistant_activity_running' : 'o_ai_assistant_activity_settled')"
                 aria-label="Assistant activity">
                 <details>
                     <summary class="small d-flex align-items-center gap-2">
                         <i t-if="state.loading" class="fa fa-circle-o-notch fa-spin" aria-hidden="true"/>
                         <i t-else="" class="fa fa-check-circle-o" aria-hidden="true"/>
-                        <span class="text-break" t-esc="activitySummaryLabel"/>
+                        <span t-att-class="'text-break ' + (state.loading ? 'o_ai_assistant_activity_shimmer' : '')"
+                            t-esc="activitySummaryLabel"/>
                     </summary>
-                    <div class="mt-2 d-flex flex-column gap-1">
+                    <div class="o_ai_assistant_activity_details mt-2 d-flex flex-column gap-1">
                         <div t-if="activityReasoningSummaryParts.length"
-                            class="small border-start ps-2 mb-1">
-                            <div class="fw-semibold text-body-secondary mb-1"
-                                t-esc="activityReasoningSummaryTitle"/>
+                            class="o_ai_assistant_reasoning_summary small mb-1">
                             <div t-foreach="activityReasoningSummaryParts" t-as="part" t-key="part.key"
                                 class="text-muted text-break" t-esc="part.text"/>
                         </div>
@@ -36,40 +38,6 @@
                                 t-esc="item.progress_label"/>
                             <div t-if="item.result_summary_label" class="ms-4 mt-1 small text-body-secondary"
                                 t-esc="item.result_summary_label"/>
-                            <div t-if="item.references.length" class="ms-4 mt-1 d-flex flex-wrap gap-1">
-                                <button t-foreach="item.references" t-as="reference"
-                                    t-key="activityReferenceKey(reference)"
-                                    type="button"
-                                    class="btn btn-sm btn-outline-secondary rounded-pill py-0 px-2 text-start"
-                                    t-att-title="reference.description || reference.label"
-                                    t-att-aria-label="reference.label"
-                                    t-on-click="() => this.openActivityReference(reference)">
-                                    <i class="fa fa-external-link me-1" aria-hidden="true"/>
-                                    <t t-esc="reference.label"/>
-                                </button>
-                                <div t-if="item.reference_remaining_count"
-                                    class="d-flex flex-wrap gap-2 align-items-center w-100">
-                                    <button t-if="item.can_show_more_references" type="button"
-                                        class="btn btn-link btn-sm p-0"
-                                        t-on-click="() => this.showMoreActivityReferences(item)">
-                                        <t t-esc="activityShowMoreLabel(item)"/>
-                                    </button>
-                                    <button t-if="item.can_show_remaining_references and item.reference_remaining_count > item.reference_next_count"
-                                        type="button" class="btn btn-link btn-sm p-0"
-                                        t-on-click="() => this.showRemainingActivityReferences(item)">
-                                        <t t-esc="activityShowRemainingLabel(item)"/>
-                                    </button>
-                                </div>
-                            </div>
-                            <div t-if="item.references_over_limit" class="ms-4 mt-1 small text-muted">
-                                Not all records are shown at once to avoid overloading the browser.
-                            </div>
-                            <button t-if="item.model_reference" type="button"
-                                class="btn btn-link btn-sm p-0 ms-4 mt-1"
-                                t-on-click="() => this.openActivityReference(item.model_reference)">
-                                <i class="fa fa-list me-1" aria-hidden="true"/>
-                                Open in Odoo
-                            </button>
                         </div>
                         <div t-if="semanticActivity.truncated" class="small text-muted fst-italic">
                             Older steps have been hidden to keep the panel responsive.
@@ -77,6 +45,11 @@
                     </div>
                 </details>
             </section>
+            <div t-if="settledActivityAnswer"
+                class="o_ai_assistant_message o_ai_assistant_message_assistant mt-3">
+                <div class="small text-muted mb-1">Assistant</div>
+                <div class="o_ai_assistant_message_content text-break" t-esc="settledActivityAnswer"/>
+            </div>
         </xpath>
         <xpath expr="//div[@t-if='state.loading and !state.streamingText']" position="attributes">
             <attribute name="t-if">state.loading and !state.streamingText and !activityItems.length</attribute>
