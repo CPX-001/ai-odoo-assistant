@@ -184,9 +184,12 @@ patch(assistantPanelService, {
         const panel = super.start(env, dependencies);
         const sessionStorage = browserSessionStorage();
         const localStorage = browserLocalStorage();
-        const initialConversationId = loadRecentActiveChat(sessionStorage);
-        panel.state.conversationId = initialConversationId;
-        panel.state.historyView = !initialConversationId;
+
+        // An idle chat cached by the previous page/session is not navigation authority. New panel
+        // sessions land on history; an in-memory chat remains visible when the same panel is merely
+        // closed and reopened. Recovery has its own durable path below.
+        panel.state.conversationId = null;
+        panel.state.historyView = true;
         panel.state.recoveryPlanId = loadRecoveryPlanId(localStorage);
 
         const recoveryPending = () =>
@@ -274,22 +277,16 @@ patch(assistantPanelService, {
         };
 
         const openNormalView = () => {
-            const recentConversationId = loadRecentActiveChat(sessionStorage);
-            if (!recentConversationId) {
-                panel.newConversation();
-                panel.state.historyView = true;
-                void panel.loadHistory(null);
+            // Reopening the same live panel keeps the chat the user was already using. A fresh
+            // Assistant entry starts from the history list instead of silently selecting the last
+            // idle conversation cached in sessionStorage.
+            if (!panel.state.historyView && panel.state.conversationId) {
                 return;
             }
-            panel.state.conversationId = recentConversationId;
-            panel.state.historyView = false;
-            void panel.loadHistory(recentConversationId).then((loaded) => {
-                if (loaded) {
-                    saveRecentActiveChat(sessionStorage, panel.state.conversationId);
-                    return;
-                }
-                void showHistory();
-            });
+            clearRecentActiveChat(sessionStorage);
+            panel.newConversation();
+            panel.state.historyView = true;
+            void panel.loadHistory(null);
         };
 
         const open = () => {
