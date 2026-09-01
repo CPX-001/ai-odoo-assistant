@@ -1,7 +1,7 @@
 # Stabilization execution state
 
-State format: 51  
-Updated: 2026-08-31
+State format: 52
+Updated: 2026-09-01
 
 ## Accepted lineage
 
@@ -40,16 +40,40 @@ P8 stays blocked until P7 acceptance
 ```text
 phase: 7
 phase_name: mini-framework, feature negotiation and Assistant self-awareness
-phase_state: IMPLEMENTATION_COMPLETE_ACCEPTANCE_PENDING
+phase_state: IMPLEMENTATION_COMPLETE_ACCEPTANCE_BLOCKED_PROVIDER_CAPACITY
 active_phase_record: docs/research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md
 active_validation_runbook: docs/research/P7_CONSOLIDATED_VALIDATION_RUNBOOK.md
 current_gate_type: CONSOLIDATED_P7_AND_PRODUCT_VALIDATION
 blocking_work: no planned Phase-7 implementation slice remains before validation
-blocking_validation: Product Behavior focused + SMOKE + FULL, P7 deterministic/Odoo gates, six P7 real gates, final affected regression
+blocking_validation: current provider usageLimitExceeded; then Product Behavior current-candidate SMOKE + FULL x3 and remaining consolidated P7 gates
 latest_accepted_evidence: docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
 latest_executed_p7_evidence: docs/research/evidence/phase7/2026-08-31/P7.1-FOUNDATION-3c9e118.md
-next_action: freeze current candidate, execute P7_CONSOLIDATED_VALIDATION_RUNBOOK.md, repair every HARD failure, rerun affected gates, then accept P7
+latest_executed_product_evidence: docs/research/evidence/product_behavior/2026-09-01/PRODUCT-BEHAVIOR-BASELINE-e100dba.md
+next_action: after current provider quota returns, rerun PB-ACT-010, current-candidate SMOKE and FULL x3; then finish P7_CONSOLIDATED_VALIDATION_RUNBOOK.md
 ```
+
+## Product Behavior checkpoint — 2026-09-01
+
+The v1 real disposable-Odoo runner and diagnosed product repairs were exercised before the concurrent Phase-7
+implementation commits reached `main`. The checkpoint was then rebased onto `c8756b2` without reverting the newer
+P7 architecture. Evidence is in
+`docs/research/evidence/product_behavior/2026-09-01/PRODUCT-BEHAVIOR-BASELINE-e100dba.md`.
+
+```text
+focused deterministic/static on rebased candidate       PASS (53 pytest)
+focused Odoo on rebased candidate                       PASS (25 methods / 31 counted)
+navigation Odoo repeat                                  PASS (11 methods / 13 counted)
+canonical addon HOOT on rebased candidate               PASS (161 tests / 618 assertions)
+real SMOKE on pre-P7-integration candidate              PASS (15/15, one trial)
+initial real FULL diagnostic                            FAIL baseline (41/54 before repairs)
+post-repair focused real scenarios                      PASS (9/9 executed)
+post-repair PB-ACT-010                                  BLOCKED provider usageLimitExceeded
+current-candidate real SMOKE and FULL x3                BLOCKED provider capacity
+```
+
+Do not use the previous Codex account/session to bypass this blocker and do not consume a usage reset without user
+authorization. No scenario is marked PASS without execution. P7 remains implemented but unaccepted; P8 stays
+blocked.
 
 ## Phase summary
 
@@ -62,7 +86,7 @@ P4 COMPLETE / ACCEPTED
 P5 COMPLETE / ACCEPTED
 P6 COMPLETE / ACCEPTED
 P7 IMPLEMENTATION COMPLETE / ACCEPTANCE PENDING
-  PRE-P7 Product Behavior Evals v1   IMPLEMENTED / VALIDATION_PENDING
+  PRE-P7 Product Behavior Evals v1   IMPLEMENTED / PARTIAL_VALIDATION_BLOCKED_PROVIDER_CAPACITY
   P7.1 CapabilityProvider API        IMPLEMENTED_LIVE / VALIDATION_PENDING
   P7.2 Skill/Bundle                  IMPLEMENTED_LIVE / VALIDATION_PENDING
   P7.3 ContextProvider               IMPLEMENTED_LIVE / VALIDATION_PENDING

@@ -1,8 +1,13 @@
-from odoo import Command
+from uuid import uuid4
+
+from odoo import SUPERUSER_ID, Command
 from odoo.tests import TransactionCase, tagged
 
 from ..runtime.capabilities import CapabilityContext
-from ..runtime.capabilities.providers.odoo_navigation import resolve_navigation
+from ..runtime.capabilities.providers.odoo_navigation import (
+    _matches_specific_query_terms,
+    resolve_navigation,
+)
 
 
 @tagged("post_install", "-at_install")
@@ -17,6 +22,15 @@ class TestAssistantPublicReferences(TransactionCase):
                 "name": "AI Reference User",
                 "login": "ai-reference-user",
                 "groups_id": [Command.set([internal.id, settings.id])],
+                "company_id": cls.env.company.id,
+                "company_ids": [Command.set([cls.env.company.id])],
+            }
+        )
+        cls.normal_reference_user = cls.env["res.users"].create(
+            {
+                "name": "AI Normal Reference User",
+                "login": "ai-normal-reference-user",
+                "groups_id": [Command.set([internal.id])],
                 "company_id": cls.env.company.id,
                 "company_ids": [Command.set([cls.env.company.id])],
             }
@@ -82,6 +96,52 @@ class TestAssistantPublicReferences(TransactionCase):
         self.assertTrue(
             all(set(field) == {"name", "label", "value"} for field in reference["fields"])
         )
+
+    def test_verified_effect_receipt_projects_effective_user_record_reference(self):
+        turn = self.env["odoo.ai.turn"].with_user(SUPERUSER_ID).create(
+            {
+                "turn_uuid": str(uuid4()),
+                "user_id": self.reference_user.id,
+                "company_id": self.env.company.id,
+                "state": "running",
+                "input_message": "Update and show the contact reference",
+                "allowed_company_ids": [self.env.company.id],
+                "attempt_count": 1,
+                "max_attempts": 1,
+            }
+        )
+
+        references = turn._capture_public_navigation_references(
+            [
+                {
+                    "kind": "verified_effect_receipt",
+                    "data": {
+                        "verified": True,
+                        "steps": [
+                            {
+                                "result": {
+                                    "model": "res.partner",
+                                    "record_id": self.partner.id,
+                                }
+                            }
+                        ],
+                    },
+                }
+            ]
+        )
+
+        self.assertEqual(
+            references,
+            [
+                {
+                    "kind": "odoo_record",
+                    "model": "res.partner",
+                    "record_id": self.partner.id,
+                    "label": "Reference Acme",
+                }
+            ],
+        )
+        self.assertEqual(turn.public_reference_payload, references)
 
     def test_model_action_view_menu_and_setting_are_closed_and_revalidated(self):
         requests = [
@@ -226,6 +286,22 @@ class TestAssistantPublicReferences(TransactionCase):
         )
         self.assertTrue(all("route" not in item and "url" not in item for item in result["references"]))
 
+    def test_visible_menu_navigation_works_without_settings_metadata_acl(self):
+        env = self.env(user=self.normal_reference_user, su=False)
+        context = CapabilityContext(env=env, turn_id="navigation-turn-normal-user")
+
+        discovered = resolve_navigation(
+            context,
+            {"query": "AI Reference Contacts", "kinds": ["odoo_action", "odoo_menu"]},
+        )
+        resolved = env["odoo.ai.user.preference"].resolve_public_references(
+            [{"kind": "odoo_menu", "menu_id": self.menu.id}]
+        )
+
+        self.assertFalse(env.su)
+        self.assertTrue(discovered["references"])
+        self.assertTrue(resolved["references"][0]["ok"])
+
     def test_resolve_navigation_finds_installed_configuration_option(self):
         env = self._user_env()
         context = CapabilityContext(env=env, turn_id="navigation-turn-0002")
@@ -243,5 +319,23 @@ class TestAssistantPublicReferences(TransactionCase):
             any(
                 item["kind"] == "odoo_setting" and item["setting_field"] == "company_id"
                 for item in result["references"]
+            )
+        )
+
+    def test_navigation_drops_results_matching_only_generic_configuration_wording(self):
+        irrelevant = {
+            "kind": "odoo_menu",
+            "label": "Contact tags",
+            "description": "Visible menu in Configuration",
+            "model": "res.partner.category",
+        }
+
+        self.assertFalse(
+            _matches_specific_query_terms("configuración de impuestos", irrelevant)
+        )
+        self.assertTrue(
+            _matches_specific_query_terms(
+                "configuración de impuestos",
+                {**irrelevant, "label": "Impuestos"},
             )
         )

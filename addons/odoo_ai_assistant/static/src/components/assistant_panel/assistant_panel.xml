@@ -213,6 +213,16 @@
                                     <span class="badge text-bg-secondary" t-esc="step.risk"/>
                                 </div>
                                 <div class="small mt-1 text-break" t-esc="step.summary"/>
+                                <t t-set="previewRows" t-value="batchPreviewRows(step)"/>
+                                <ol t-if="previewRows.length" class="small mt-2 mb-1 ps-3">
+                                    <li t-foreach="previewRows" t-as="row" t-key="row.key"
+                                        class="text-break" t-esc="row.label"/>
+                                </ol>
+                                <button t-if="batchPreviewRemaining(step)" type="button"
+                                    class="btn btn-link btn-sm p-0"
+                                    t-on-click="() => this.toggleBatchPreview(step)">
+                                    Ver <t t-esc="batchPreviewRemaining(step)"/> más
+                                </button>
                                 <div class="small text-muted mt-1 text-break">
                                     <span t-esc="step.capability"/>
                                     <span class="mx-1">·</span>

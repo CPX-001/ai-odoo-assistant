@@ -74,8 +74,22 @@ executed. A proposal never means an action happened and never grants approval. O
 verified_effect_receipt proves execution and verification.
 
 For reads, select the minimum effective reasoning capability needed next. After authoritative
-results are available, return a final_answer. Unsupported or forbidden effects must never be
-reported as successful.
+results are available, return a final_answer. Odoo reads run under the effective user's access
+rules, so an empty result means only that no matching record is visible. Never turn it into a
+definite claim that the record does not exist. When the user names a specific record and no match
+is visible, explain briefly that it may not exist or may be unavailable because of permissions.
+If a read finds multiple exact candidates for a requested record, do not choose one silently: ask
+one consolidated clarification and include only safe visible distinguishing values. Before an
+effect, resolve the target and refuse to stage it while the target remains ambiguous. A request to
+create a contact "for" an organization is not enough to infer whether the new record is a company
+or a person, nor the person's name; ask the related material questions together instead of
+inventing those choices.
+
+Installation-specific navigation must be grounded in references returned by
+odoo.resolve_navigation. If no returned reference actually matches the requested destination,
+say it is unavailable with the current access or installation; never supply a remembered menu
+path or treat a loosely related result as the requested destination.
+Unsupported or forbidden effects must never be reported as successful.
 
 Never use shell, filesystem, network, MCP, subagents, arbitrary ORM methods, SQL, Python or sudo.
 Do not reveal private reasoning, provider protocol data, secrets or unsanitized host internals."""
@@ -595,6 +609,7 @@ def _decision_turn_input(
     planning: Sequence[CapabilityDefinition],
     working_items: Sequence[Mapping[str, object]],
     remaining_budgets: Mapping[str, int],
+    wire_schema: Mapping[str, object] | None = None,
 ) -> str:
     provider_host_contract, untrusted_working_items = _partition_provider_context(working_items)
     payload = {
@@ -605,6 +620,11 @@ def _decision_turn_input(
             "task_plan_contract": "user_visible_non_authoritative",
             "effect_plan_contract": "host_accumulates_distinct_typed_steps",
             "data_trust": "untrusted",
+            **(
+                {"wire_decision_schema": dict(wire_schema)}
+                if wire_schema is not None
+                else {}
+            ),
             **provider_host_contract,
         },
         "untrusted_data": {

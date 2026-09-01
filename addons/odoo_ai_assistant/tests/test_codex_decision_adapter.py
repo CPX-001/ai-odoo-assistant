@@ -10,13 +10,14 @@ from ..runtime.agent.codex import (
     _model_thread_options,
 )
 from ..runtime.agent.codex_decision import (
-    CodexDecisionEngine,
     _DECISION_INSTRUCTIONS,
+    CodexDecisionEngine,
     _codex_next_decision_schema,
     _decision_result,
     _is_simple_social_message,
     _partition_provider_context,
 )
+from ..runtime.agent.codex_streaming import _long_answer_stream_requested
 from ..runtime.agent.contracts import (
     FinalAnswer,
     ReasoningCapabilityCall,
@@ -110,6 +111,13 @@ class TestCodexDecisionAdapter(BaseCase):
             alternatives[0]["properties"]["kind"]["enum"],
             ["final_answer"],
         )
+
+    def test_only_explicitly_long_answers_use_prompt_schema_streaming(self):
+        self.assertTrue(
+            _long_answer_stream_requested("Explica en al menos ocho párrafos breves")
+        )
+        self.assertTrue(_long_answer_stream_requested("Write a detailed guide"))
+        self.assertFalse(_long_answer_stream_requested("¿Cuál es el email de Eval Acme?"))
 
     def test_task_plan_wire_schema_requires_the_exact_next_revision_and_kind(self):
         initial_schema = _codex_next_decision_schema()
@@ -242,6 +250,8 @@ class TestCodexDecisionAdapter(BaseCase):
         self.assertIn("Return final_answer immediately for greetings", instructions)
         self.assertIn("internal schema discovery plus one bounded query", instructions)
         self.assertIn("Create a TaskPlan only for a genuinely multi-phase workflow", instructions)
+        self.assertIn("no matching record is visible", instructions)
+        self.assertIn("may not exist or may be unavailable because of permissions", instructions)
 
     def test_wire_envelope_is_normalized_to_strict_next_decision(self):
         final = _decision_result(

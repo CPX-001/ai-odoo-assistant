@@ -7,6 +7,7 @@ import inspect
 import json
 import re
 import secrets
+import time
 from collections.abc import Mapping
 from dataclasses import replace
 
@@ -86,6 +87,7 @@ class CapabilityExecutor:
             failure_event="tool.preview.failed",
             title=definition.title or definition.name,
             capability=definition.name,
+            stage="preview",
             public_payload=public,
         )
         if not isinstance(raw, CapabilityPreview):
@@ -148,6 +150,7 @@ class CapabilityExecutor:
             failure_event="tool.failed",
             title=definition.title or definition.name,
             capability=definition.name,
+            stage="execute",
             public_payload=public,
         )
         if isinstance(raw, CapabilityResult):
@@ -212,6 +215,7 @@ class CapabilityExecutor:
             failure_event="tool.verify.failed",
             title=definition.title or definition.name,
             capability=definition.name,
+            stage="verify",
             public_payload=public,
         )
         if not isinstance(raw, CapabilityVerification):
@@ -273,8 +277,11 @@ class CapabilityExecutor:
         failure_event,
         title,
         capability,
+        stage,
         public_payload,
     ):
+        started_at = time.monotonic()
+        outcome = "ok"
         try:
             raw = handler(context, payload)
             if inspect.isawaitable(raw):
@@ -284,6 +291,7 @@ class CapabilityExecutor:
                     raw = await asyncio.wait_for(raw, timeout=timeout_seconds)
             return raw
         except TimeoutError as error:
+            outcome = "capability_timeout"
             context.emit(
                 failure_event,
                 title,
@@ -291,23 +299,51 @@ class CapabilityExecutor:
             )
             raise CapabilityError("capability_timeout") from error
         except CapabilityError as error:
+            outcome = error.code
             context.emit(
                 failure_event,
                 title,
                 {**public_payload, "code": error.code},
             )
             raise
-        except Exception as error:  # noqa: BLE001 - framework boundary sanitizes providers
+        except Exception as error:
+            outcome = "capability_handler_failed"
             context.emit(
                 failure_event,
                 title,
                 {**public_payload, "code": "capability_handler_failed"},
             )
             raise CapabilityError("capability_handler_failed") from error
+        finally:
+            _emit_capability_timing(
+                context,
+                capability=capability,
+                stage=stage,
+                elapsed_ms=round(max(0.0, time.monotonic() - started_at) * 1000, 3),
+                outcome=outcome,
+            )
 
 
 def _new_activity_id():
     return f"activity:v1:{secrets.token_hex(16)}"
+
+
+def _emit_capability_timing(context, *, capability, stage, elapsed_ms, outcome):
+    """Persist content-free timing without making diagnostics product authority."""
+
+    try:
+        context.emit(
+            "diagnostic.capability_timing",
+            "Capability timing checkpoint",
+            {
+                "capability": capability,
+                "stage": stage,
+                "elapsed_ms": elapsed_ms,
+                "outcome": outcome,
+            },
+        )
+    except Exception:  # noqa: BLE001 - timing diagnostics must never fail a product turn
+        return
 
 
 def _public_operation_payload(

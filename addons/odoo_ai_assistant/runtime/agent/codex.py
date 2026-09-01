@@ -322,6 +322,7 @@ class CodexReasoningEngine:
                 raise CodexAgentError("agent_cancelled")
             if turn.get("status") != "completed" or turn.get("error") not in (None, {}):
                 raise CodexAgentError("codex_turn_failed")
+            timing("provider_turn_completed")
             return (
                 _with_completed_agent_messages(
                     cast(dict[str, object], turn),
@@ -682,7 +683,7 @@ def _transport_name(logical_name):
 
 
 def _planning_transport_name(logical_name):
-    digest = hashlib.sha256(f"plan:{logical_name}".encode("utf-8")).hexdigest()[:10]
+    digest = hashlib.sha256(f"plan:{logical_name}".encode()).hexdigest()[:10]
     tail = logical_name.replace(".", "_")[-44:]
     name = f"plan_{digest}_{tail}"
     if len(name) > 64 or re.fullmatch(r"[A-Za-z0-9_-]+", name) is None:
@@ -1093,7 +1094,7 @@ async def _best_effort_interrupt(client, thread_id, turn_id):
             timeout=min(1.0, client.settings.shutdown_timeout_seconds),
         )
     except Exception:  # noqa: BLE001 - cancellation cleanup is best effort only
-        pass
+        return
 
 
 def _isolated_home(source_home):

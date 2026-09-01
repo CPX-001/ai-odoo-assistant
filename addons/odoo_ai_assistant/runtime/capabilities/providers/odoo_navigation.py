@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import re
 
+from odoo import SUPERUSER_ID
+
 from ....services.turn_context import agent_model_is_eligible, search_agent_models
 from ..contracts import CapabilityContext, CapabilityEffect, CapabilityRisk
 from ..decorators import tool
@@ -21,6 +23,53 @@ _MAX_QUERY = 160
 _MAX_DESCRIPTION = 240
 _MAX_CANDIDATES_PER_TOKEN = 48
 _MAX_TOKENS = 6
+_GENERIC_QUERY_TERMS = frozenset(
+    {
+        "a",
+        "abre",
+        "abrir",
+        "aqui",
+        "aquí",
+        "configuracion",
+        "configuración",
+        "configuracio",
+        "configuració",
+        "configuro",
+        "de",
+        "del",
+        "dels",
+        "donde",
+        "dónde",
+        "el",
+        "els",
+        "en",
+        "for",
+        "here",
+        "la",
+        "las",
+        "les",
+        "los",
+        "me",
+        "on",
+        "open",
+        "opcion",
+        "opció",
+        "opción",
+        "per",
+        "please",
+        "setting",
+        "settings",
+        "the",
+        "un",
+        "una",
+    }
+)
+_SEMANTIC_ALIASES = {
+    "impuesto": ("tax", "taxes"),
+    "impuestos": ("tax", "taxes"),
+    "impost": ("tax", "taxes"),
+    "impostos": ("tax", "taxes"),
+}
 
 _REFERENCE_SCHEMA = {
     "type": "object",
@@ -108,7 +157,7 @@ def resolve_navigation(context: CapabilityContext, arguments):
         candidates.extend(_settings(env, query))
 
     ranked = sorted(
-        candidates,
+        (item for item in candidates if _matches_specific_query_terms(query, item)),
         key=lambda item: (
             -_score(query, item["label"], item["description"], item.get("model")),
             _KIND_ORDER[item["kind"]],
@@ -134,7 +183,7 @@ _KIND_ORDER = {kind: index for index, kind in enumerate(_KINDS)}
 
 def _query(value):
     if not isinstance(value, str):
-        raise RuntimeError("navigation_request_invalid")
+        raise RuntimeError("navigation_request_invalid")  # noqa: TRY004 - capability error code
     text = " ".join(value.split())
     if not 1 <= len(text) <= _MAX_QUERY or "\x00" in text:
         raise RuntimeError("navigation_request_invalid")
@@ -143,6 +192,13 @@ def _query(value):
 
 def _tokens(query):
     return tuple(re.findall(r"[\w]+", query.casefold(), flags=re.UNICODE)[:_MAX_TOKENS])
+
+
+def _semantic_tokens(query):
+    tokens = list(_tokens(query))
+    for term in tuple(tokens):
+        tokens.extend(_SEMANTIC_ALIASES.get(term, ()))
+    return tuple(dict.fromkeys(tokens))
 
 
 def _one_line(value, *, maximum=160, fallback=""):
@@ -169,7 +225,7 @@ def _score(query, label, description, model=None):
         score += 60
     elif needle in model_cf:
         score += 50
-    for term in _tokens(query):
+    for term in _semantic_tokens(query):
         if term in label_cf:
             score += 20
         elif term in model_cf:
@@ -177,6 +233,21 @@ def _score(query, label, description, model=None):
         elif term in description_cf:
             score += 8
     return score
+
+
+def _matches_specific_query_terms(query, item):
+    """Do not surface destinations matching only generic navigation wording."""
+
+    specific = [
+        term for term in _semantic_tokens(query) if term not in _GENERIC_QUERY_TERMS
+    ]
+    if not specific:
+        return True
+    haystack = " ".join(
+        str(item.get(key) or "").casefold()
+        for key in ("label", "description", "model")
+    )
+    return any(term in haystack for term in specific)
 
 
 def _reference(
@@ -253,14 +324,14 @@ def _models(env, query, limit):
 
 
 def _candidate_records(model, query, *, extra_domain=()):
-    terms = _tokens(query)
+    terms = _semantic_tokens(query)
     seen = set()
     records = model.browse()
     for term in terms or (query,):
         domain = list(extra_domain) + [("name", "ilike", term)]
         try:
             batch = model.search(domain, limit=_MAX_CANDIDATES_PER_TOKEN)
-        except Exception:  # noqa: BLE001 - metadata source unavailable for this user
+        except Exception:  # noqa: BLE001,S112 - optional metadata source
             continue
         new_ids = [record.id for record in batch if record.id not in seen]
         if new_ids:
@@ -281,10 +352,9 @@ def _group_allowed(env, record):
 
 def _action_available(env, action):
     try:
-        action = action.exists()
+        action = action.with_user(SUPERUSER_ID).exists()
         if not action or action.type != "ir.actions.act_window":
             return False
-        action.check_access("read")
         if not _group_allowed(env, action):
             return False
         return _readable_model(
@@ -297,8 +367,17 @@ def _action_available(env, action):
 
 
 def _actions(env, query):
+    visible_ids = _visible_menu_ids(env)
+    if not visible_ids:
+        return []
     try:
-        records = _candidate_records(env["ir.actions.act_window"], query)
+        menus = env["ir.ui.menu"].browse(list(visible_ids)).exists()
+        action_ids = {
+            menu.action.id
+            for menu in menus
+            if menu.action and menu.action._name == "ir.actions.act_window"
+        }
+        records = env["ir.actions.act_window"].with_user(SUPERUSER_ID).browse(action_ids).exists()
     except Exception:  # noqa: BLE001
         return []
     result = []
@@ -306,6 +385,8 @@ def _actions(env, query):
         if not _action_available(env, action):
             continue
         label = _one_line(action.name, fallback=action.res_model)
+        if _score(query, label, f"Abrir {label} en Odoo", action.res_model) <= 0:
+            continue
         result.append(
             _reference(
                 "odoo_action",
@@ -338,7 +419,7 @@ def _views(env, query):
             ):
                 continue
             view.check_access("read")
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001,S112 - inaccessible views are omitted
             continue
         label = _one_line(view.name, fallback=model_name)
         result.append(
@@ -386,7 +467,7 @@ def _menus(env, query):
             ):
                 continue
             parent = menu.parent_id.name if menu.parent_id else ""
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001,S112 - inaccessible menus are omitted
             continue
         label = _one_line(menu.name, fallback=action.name)
         description = f"Menú visible en {parent}" if parent else "Menú visible de Odoo"
@@ -419,7 +500,7 @@ def _settings_actions(env):
                     and action.id not in action_ids
                 ):
                     action_ids.append(action.id)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001,S110 - optional metadata source
             pass
     if action_ids:
         return env["ir.actions.act_window"].browse(action_ids)

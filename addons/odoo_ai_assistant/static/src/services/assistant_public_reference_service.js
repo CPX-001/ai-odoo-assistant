@@ -6,6 +6,7 @@ const MODEL_RE = /^[A-Za-z_][A-Za-z0-9_.]{0,127}$/;
 const FIELD_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 const VIEW_TYPES = new Set(["list", "form", "kanban", "calendar", "graph", "pivot", "activity"]);
 const NAVIGATION_KINDS = new Set([
+    "odoo_record",
     "odoo_model",
     "odoo_action",
     "odoo_view",
@@ -77,6 +78,23 @@ export function resourceModelReference(resource) {
 export function normalizeHostNavigationReference(value) {
     if (!value || typeof value !== "object" || !NAVIGATION_KINDS.has(value.kind)) {
         return null;
+    }
+    if (value.kind === "odoo_record") {
+        if (
+            !exactKeys(value, ["kind", "label", "model", "record_id"]) ||
+            !validLabel(value.label, 160) ||
+            !MODEL_RE.test(value.model) ||
+            !Number.isSafeInteger(value.record_id) ||
+            value.record_id <= 0
+        ) {
+            return null;
+        }
+        return Object.freeze({
+            kind: value.kind,
+            label: value.label.trim(),
+            model: value.model,
+            record_id: value.record_id,
+        });
     }
     if (!validLabel(value.label, 160) || !validLabel(value.description, 240)) {
         return null;

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from odoo import api, models
+from odoo import SUPERUSER_ID, api, models
 from odoo.exceptions import AccessError, MissingError
 
 from ..services.turn_context import agent_model_is_eligible, visible_query_fields
@@ -189,15 +189,20 @@ def _action_record(env, action_id):
     if type(action_id) is not int or action_id <= 0:
         return None
     try:
-        action = env["ir.actions.act_window"].browse(action_id).exists()
+        action = (
+            env["ir.actions.act_window"]
+            .with_user(SUPERUSER_ID)
+            .browse(action_id)
+            .exists()
+        )
         if (
             not action
             or action.id != action_id
             or action.type != "ir.actions.act_window"
+            or not _action_metadata_allowed(env, action_id)
             or not _group_allowed(env, action)
         ):
             return None
-        action.check_access("read")
         if _model_set(
             env,
             action.res_model,
@@ -207,6 +212,31 @@ def _action_record(env, action_id):
         return action
     except (AccessError, MissingError, KeyError):
         return None
+
+
+def _visible_action_ids(env):
+    menu_ids = _visible_menu_ids(env)
+    if not menu_ids:
+        return set()
+    try:
+        menus = env["ir.ui.menu"].browse(list(menu_ids)).exists()
+        return {
+            menu.action.id
+            for menu in menus
+            if menu.action and menu.action._name == "ir.actions.act_window"
+        }
+    except (AccessError, MissingError, KeyError):
+        return set()
+
+
+def _action_metadata_allowed(env, action_id):
+    if action_id in _visible_action_ids(env):
+        return True
+    try:
+        env["ir.actions.act_window"].browse(action_id).check_access("read")
+    except (AccessError, MissingError, KeyError):
+        return False
+    return True
 
 
 def _action_reference(env, action_id, *, kind, menu_id=None):

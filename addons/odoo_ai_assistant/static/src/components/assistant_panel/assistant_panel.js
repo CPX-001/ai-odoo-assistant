@@ -11,6 +11,36 @@ const PANEL_MARGIN = 12;
 const PANEL_MIN_WIDTH = 320;
 const PANEL_MIN_HEIGHT = 320;
 const PANEL_STORAGE_VERSION = 1;
+const BATCH_PREVIEW_LIMIT = 5;
+
+export function batchPreviewRows(step, expanded = false) {
+    const rows = Array.isArray(step?.preview?.rows) ? step.preview.rows : [];
+    const visible = expanded ? rows : rows.slice(0, BATCH_PREVIEW_LIMIT);
+    return visible.map((row, index) => ({
+        key: `${step?.step_id || "preview"}:${index}`,
+        label: batchPreviewRowLabel(row, index),
+    }));
+}
+
+export function batchPreviewRemaining(step, expanded = false) {
+    const rows = Array.isArray(step?.preview?.rows) ? step.preview.rows : [];
+    return expanded ? 0 : Math.max(0, rows.length - BATCH_PREVIEW_LIMIT);
+}
+
+function batchPreviewRowLabel(row, index) {
+    if (typeof row === "string" && row.trim()) {
+        return row.trim();
+    }
+    if (row && typeof row === "object") {
+        const values = row.values && typeof row.values === "object" ? row.values : row;
+        for (const key of ["display_name", "name"]) {
+            if (typeof values[key] === "string" && values[key].trim()) {
+                return values[key].trim();
+            }
+        }
+    }
+    return `${_t("Fila")} ${index + 1}`;
+}
 
 function browserStorage() {
     try {
@@ -133,6 +163,7 @@ export class AssistantPanel extends Component {
         this.state = useState(this.panel.state);
         this.panelRef = useRef("panel");
         this.ui = useState({ isMinimized: false });
+        this.previewExpansion = useState({});
         this.layout = useState({
             initialized: false,
             x: 0,
@@ -269,6 +300,18 @@ export class AssistantPanel extends Component {
 
     get recoveryPending() {
         return this.state.result?.plan?.state === "authorized";
+    }
+
+    batchPreviewRows(step) {
+        return batchPreviewRows(step, this.previewExpansion[step.step_id] === true);
+    }
+
+    batchPreviewRemaining(step) {
+        return batchPreviewRemaining(step, this.previewExpansion[step.step_id] === true);
+    }
+
+    toggleBatchPreview(step) {
+        this.previewExpansion[step.step_id] = !this.previewExpansion[step.step_id];
     }
 
     get actionDecisionMessage() {

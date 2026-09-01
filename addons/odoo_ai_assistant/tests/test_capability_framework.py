@@ -105,8 +105,17 @@ class TestCapabilityFramework(TransactionCase):
         self.assertFalse(context.env.su)
         self.assertEqual(
             [event[0] for event in events],
-            ["tool.started", "tool.completed"],
+            ["tool.started", "diagnostic.capability_timing", "tool.completed"],
         )
+        timing = next(
+            payload
+            for event_type, _title, payload in events
+            if event_type == "diagnostic.capability_timing"
+        )
+        self.assertEqual(timing["capability"], "odoo.runtime_identity")
+        self.assertEqual(timing["stage"], "execute")
+        self.assertEqual(timing["outcome"], "ok")
+        self.assertGreaterEqual(timing["elapsed_ms"], 0)
 
     def test_schema_validation_rejects_unadvertised_arguments(self):
         executor = CapabilityExecutor(discover_capabilities(), self._context())

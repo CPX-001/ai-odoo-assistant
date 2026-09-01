@@ -8,16 +8,18 @@ provider-declared readable reasoning summaries are optional presentation channel
 from __future__ import annotations
 
 import asyncio
+import re
 
 from .answer_stream import AnswerStreamError, StructuredFinalAnswerDeltaExtractor
+from .codex import _provider_timing_recorder
 from .codex_decision import (
     _MAX_EVENTS,
     CodexAgentError,
     _best_effort_interrupt,
     _codex_next_decision_schema,
     _CodexClient,
-    _decision_result,
     _decision_instructions,
+    _decision_result,
     _decision_terminal_error,
     _decision_turn_input,
     _is_simple_social_message,
@@ -39,6 +41,12 @@ _MAX_PROVIDER_DELTA = 16 * 1024
 _MAX_PUBLIC_REASONING_DELTA = 2 * 1024
 _MAX_ITEM_ID = 256
 _MAX_SUMMARY_INDEX = 64
+_LONG_ANSWER_REQUEST = re.compile(
+    r"(?:\b(?:analiza|analitza|analy[sz]e|detalle|detallad[oa]|detailed|extens[oa]|"
+    r"extensive|gu[ií]a|guide|hundred|cien|cent|p[aá]rrafos?|paragraphs?|punts?|puntos?)\b|"
+    r"\bal menos\b|\bcom a m[ií]nim\b|\bat least\b)",
+    re.IGNORECASE,
+)
 
 
 def _streaming_thread_options(settings):
@@ -71,7 +79,14 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
     ):
         if self._cancelled():
             raise CodexAgentError("agent_cancelled")
+        timing = _provider_timing_recorder(context)
+        timing("runtime_started")
         final_answer_only = _is_simple_social_message(message)
+        wire_schema = _codex_next_decision_schema(
+            final_answer_only=final_answer_only,
+            working_items=working_items,
+        )
+        prompt_schema_streaming = _long_answer_stream_requested(message)
         turn_input = _decision_turn_input(
             message=message,
             conversation_summary=conversation_summary,
@@ -80,8 +95,9 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
             planning=planning_capabilities,
             working_items=working_items,
             remaining_budgets=remaining_budgets or {},
+            wire_schema=wire_schema if prompt_schema_streaming else None,
         )
-        client = await _CodexClient.start(self._settings)
+        client = await _CodexClient.start(self._settings, timing=timing)
         async with client:
             deadline = asyncio.get_running_loop().time() + self._settings.turn_timeout_seconds
             thread_result = await client.request(
@@ -100,25 +116,27 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                 timeout=_remaining(deadline),
             )
             thread_id = _thread_id(thread_result)
+            timing("provider_thread_started")
+            turn_params = {
+                "input": [{"type": "text", "text": turn_input}],
+                "threadId": thread_id,
+            }
+            if not prompt_schema_streaming:
+                turn_params["outputSchema"] = wire_schema
             turn_result = await client.request(
                 "turn/start",
-                {
-                    "input": [{"type": "text", "text": turn_input}],
-                    "outputSchema": _codex_next_decision_schema(
-                        final_answer_only=final_answer_only,
-                        working_items=working_items,
-                    ),
-                    "threadId": thread_id,
-                },
+                turn_params,
                 timeout=_remaining(deadline),
             )
             turn_id = _turn_id(turn_result)
+            timing("provider_turn_started")
             completed = await self._wait_for_completion_streaming(
                 client,
                 thread_id=thread_id,
                 turn_id=turn_id,
                 deadline=deadline,
                 context=context,
+                timing=timing,
             )
         return validate_next_decision(
             _decision_result(completed),
@@ -134,6 +152,7 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
         turn_id: str,
         deadline: float,
         context,
+        timing,
     ):
         completed_agent_messages: list[dict[str, object]] = []
         extractor = StructuredFinalAnswerDeltaExtractor()
@@ -147,6 +166,7 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                 await _best_effort_interrupt(client, thread_id, turn_id)
                 raise CodexAgentError("agent_cancelled")
             event = await client.next_event(timeout=_remaining(deadline))
+            timing("first_provider_event")
             if "id" in event:
                 raise CodexAgentError("codex_server_request_not_allowed")
             method = event.get("method")
@@ -179,6 +199,7 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                 # This is raw/private reasoning. It is intentionally inert and never projected.
                 continue
             if method == "item/agentMessage/delta":
+                timing("first_answer_delta")
                 item_id, delta = _agent_message_delta(
                     params,
                     thread_id=thread_id,
@@ -236,8 +257,21 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                 raise CodexAgentError("agent_cancelled")
             if turn.get("status") != "completed" or turn.get("error") not in (None, {}):
                 raise _decision_terminal_error(turn.get("error"), host_effect_safe=True)
+            timing("provider_turn_completed")
             return _with_completed_agent_messages(turn, completed_agent_messages)
         raise CodexAgentError("codex_event_budget_exceeded")
+
+
+def _long_answer_stream_requested(message: object) -> bool:
+    """Use host-validated prompt JSON only when useful answer streaming is explicitly requested.
+
+    Current App Server versions can buffer a structured-output string until it closes. For an
+    explicitly long answer, omitting provider-side ``outputSchema`` lets its normal agent-message
+    deltas arrive incrementally. The exact wire schema remains host-owned in the prompt and the
+    completed JSON still crosses the same strict parser/validator before it becomes authoritative.
+    """
+
+    return bool(isinstance(message, str) and _LONG_ANSWER_REQUEST.search(message))
 
 
 def _agent_message_delta(params, *, thread_id: str, turn_id: str) -> tuple[str, str]:

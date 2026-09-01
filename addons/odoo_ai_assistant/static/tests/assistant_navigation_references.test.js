@@ -9,6 +9,12 @@ import {
 function references() {
     return [
         {
+            kind: "odoo_record",
+            record_id: 31,
+            model: "res.partner",
+            label: "Eval Acme",
+        },
+        {
             kind: "odoo_action",
             action_id: 41,
             model: "res.partner",
@@ -52,8 +58,9 @@ function references() {
 test("final answer exposes only structured host navigation references", () => {
     const result = { answer: "Puedes encontrarlo aquí", references: references() };
     const parsed = finalAnswerReferences(result);
-    expect(parsed).toHaveLength(5);
+    expect(parsed).toHaveLength(6);
     expect(parsed.map((item) => item.kind)).toEqual([
+        "odoo_record",
         "odoo_action",
         "odoo_view",
         "odoo_menu",
@@ -67,16 +74,16 @@ test("reference keys distinguish settings sharing one action and remain type sco
     const parsed = references();
     const keys = parsed.map(referenceKey);
     expect(new Set(keys).size).toBe(keys.length);
-    expect(keys[3]).toBe("odoo_setting:71:group_use_lead");
-    expect(keys[4]).toBe("odoo_setting:71:group_use_recurring_revenues");
-    expect(referenceKey(parsed[2])).toBe("odoo_menu:61");
-    expect(referenceKey(parsed[1])).toBe("odoo_view:res.partner:51");
+    expect(keys[4]).toBe("odoo_setting:71:group_use_lead");
+    expect(keys[5]).toBe("odoo_setting:71:group_use_recurring_revenues");
+    expect(referenceKey(parsed[3])).toBe("odoo_menu:61");
+    expect(referenceKey(parsed[2])).toBe("odoo_view:res.partner:51");
 });
 
 test("final navigation labels use understandable action wording", () => {
     patchTranslations({});
     const parsed = references();
-    expect(finalReferenceActionLabel(parsed[0])).toBe("Abrir Contactos");
-    expect(finalReferenceActionLabel(parsed[2])).toBe("Ir a Contactos");
-    expect(finalReferenceActionLabel(parsed[3])).toBe("Abrir Leads");
+    expect(finalReferenceActionLabel(parsed[1])).toBe("Abrir Contactos");
+    expect(finalReferenceActionLabel(parsed[3])).toBe("Ir a Contactos");
+    expect(finalReferenceActionLabel(parsed[4])).toBe("Abrir Leads");
 });
