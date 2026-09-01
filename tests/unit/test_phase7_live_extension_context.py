@@ -172,6 +172,81 @@ def test_live_extension_wrapper_separates_trusted_skill_from_untrusted_context()
     }
 
 
+def test_turn_stable_projection_is_cached_but_jit_context_is_fresh(monkeypatch) -> None:
+    read = _definition("example.read")
+    registry = CapabilityRegistry((read,))
+    counters = {"screen": 0, "manifest": 0, "jit": 0}
+
+    def enrich(env, screen):
+        del env
+        counters["screen"] += 1
+        return {**dict(screen), "model_label": "Contacts"}
+
+    original_manifest = extension_module.build_effective_assistant_manifest
+
+    def build_manifest(**kwargs):
+        counters["manifest"] += 1
+        return original_manifest(**kwargs)
+
+    def collect(context):
+        counters["jit"] += 1
+        return {"revision": counters["jit"], "turn": context.turn_id}
+
+    monkeypatch.setattr(extension_module, "enrich_runtime_screen", enrich)
+    monkeypatch.setattr(extension_module, "build_effective_assistant_manifest", build_manifest)
+
+    context_provider = ContextProvider(
+        provider_id="example.jit",
+        description="Changing JIT fixture.",
+        collect=collect,
+    )
+    skill = SkillDefinition(
+        skill_id="example.skill",
+        description="Use changing context.",
+        capability_selectors=("example.*",),
+        context_provider_selectors=("example.jit",),
+    )
+    extensions = AssistantExtensionCatalog(
+        skills=SkillCatalog((skill,)),
+        context_providers=ContextProviderCatalog((context_provider,)),
+    )
+    provider = _CaptureProvider()
+    engine = AssistantExtensionDecisionEngine(
+        provider,
+        registry=registry,
+        extensions=extensions,
+        provider_profile=current_codex_provider_profile(),
+        config=CapabilityConfigResolver(),
+        technical_profile=TechnicalAccessProfile.BUSINESS,
+    )
+    context = CapabilityContext(
+        env=_Env(),
+        turn_id="turn-cache",
+        screen={"model": "res.partner", "selected_ids": []},
+    )
+    kwargs = {
+        "message": "inspect",
+        "conversation_summary": "",
+        "context": context,
+        "reasoning_capabilities": (read,),
+        "planning_capabilities": (),
+        "working_items": (),
+        "remaining_budgets": {},
+    }
+
+    asyncio.run(engine.next_decision(**kwargs))
+    first_items = provider.kwargs["working_items"]
+    first_jit = next(item for item in first_items if item.get("kind") == "assistant_context")
+    asyncio.run(engine.next_decision(**kwargs))
+    second_items = provider.kwargs["working_items"]
+    second_jit = next(item for item in second_items if item.get("kind") == "assistant_context")
+
+    assert counters == {"screen": 1, "manifest": 1, "jit": 2}
+    assert first_jit["data"]["revision"] == 1
+    assert second_jit["data"]["revision"] == 2
+    assert provider.kwargs["context"].screen["model_label"] == "Contacts"
+
+
 def test_manifest_never_reveals_host_only_capabilities() -> None:
     read = _definition("example.read")
     host = _definition("example.internal", exposure=CapabilityExposure.HOST)
