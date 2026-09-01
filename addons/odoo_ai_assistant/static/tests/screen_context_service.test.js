@@ -13,12 +13,12 @@ function menuService() {
     return { getCurrentApp: () => ({ id: MENU_ID }) };
 }
 
-test("form view captures the current model and record from the action controller", () => {
+test("form view captures the current model, record and bounded view hint", () => {
     const actionService = {
         currentController: {
             action: { id: ACTION_ID, res_model: "sale.order" },
             config: { actionId: ACTION_ID },
-            props: { resModel: "sale.order", resId: 41, type: "form" },
+            props: { resModel: "sale.order", resId: 41, type: "form", viewId: 314 },
             currentState: { resId: 42 },
         },
     };
@@ -28,6 +28,7 @@ test("form view captures the current model and record from the action controller
     expect(context).toEqual({
         action_id: ACTION_ID,
         menu_id: MENU_ID,
+        view_id: 314,
         view_type: "form",
         model: "sale.order",
         res_id: 42,
@@ -55,11 +56,12 @@ test("list view does not invent a current record", () => {
 
     expect(context.model).toBe("sale.order");
     expect(context.res_id).toBe(null);
+    expect(context.view_id).toBe(null);
     expect(context.selected_ids).toEqual([]);
     expect(context.allowed_context_subset).toEqual({});
 });
 
-test("captured payload contains navigation only and bounds selected ids", () => {
+test("captured payload keeps view id as a hint but excludes identity and secrets", () => {
     const actionService = {
         currentController: {
             action: { id: ACTION_ID, res_model: "sale.order" },
@@ -73,7 +75,7 @@ test("captured payload contains navigation only and bounds selected ids", () => 
     const serialized = JSON.stringify(context);
 
     expect(context.selected_ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(serialized).not.toInclude("view_id");
+    expect(context.view_id).toBe(314);
     expect(serialized).not.toInclude("uid");
     expect(serialized).not.toInclude("company");
     expect(serialized).not.toInclude("secret");
@@ -81,7 +83,7 @@ test("captured payload contains navigation only and bounds selected ids", () => 
     expect(serialized).not.toInclude("session");
 });
 
-test("current view id is resolved for developer UI without entering screen context", () => {
+test("current view id resolves from native Odoo controller and action state", () => {
     const direct = {
         currentController: {
             props: { type: "form", viewId: 314 },
