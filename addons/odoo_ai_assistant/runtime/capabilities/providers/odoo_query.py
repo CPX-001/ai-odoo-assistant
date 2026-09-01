@@ -16,6 +16,7 @@ from ....services.turn_context import (
     visible_query_fields,
 )
 from ..contracts import (
+    CapabilityActivitySpec,
     CapabilityContext,
     CapabilityEffect,
     CapabilityError,
@@ -277,6 +278,80 @@ _AGGREGATE_OUTPUT = {
 }
 
 
+def _activity_labels(context: CapabilityContext, arguments):
+    try:
+        schema = _effective_schema(context, arguments.get("model"))
+    except CapabilityError:
+        return {}, None
+    labels = {item["name"]: item["label"] for item in schema["fields"]}
+    return labels, schema["model"]
+
+
+def _joined_labels(labels, names, *, maximum_items=4):
+    result = []
+    for name in names if isinstance(names, list) else []:
+        label = labels.get(name)
+        if isinstance(label, str) and label not in result:
+            result.append(label)
+        if len(result) >= maximum_items:
+            break
+    return ", ".join(result)[:160]
+
+
+def _filter_activity_label(labels, raw_filter):
+    if not isinstance(raw_filter, dict):
+        return ""
+    conditions = raw_filter.get("conditions")
+    if not isinstance(conditions, list):
+        return ""
+    names = [
+        item.get("field")
+        for item in conditions
+        if isinstance(item, dict) and isinstance(item.get("field"), str)
+    ]
+    return _joined_labels(labels, names, maximum_items=4)
+
+
+def _search_models_activity(_context, arguments):
+    query = arguments.get("query")
+    return {"query": query} if isinstance(query, str) else {}
+
+
+def _query_records_activity(context, arguments):
+    labels, _model = _activity_labels(context, arguments)
+    if not labels:
+        return {}
+    result = {
+        "fields_label": _joined_labels(labels, arguments.get("fields"), maximum_items=4),
+        "filter_label": _filter_activity_label(labels, arguments.get("filter")),
+    }
+    limit = arguments.get("limit")
+    if type(limit) is int:
+        result["limit"] = limit
+    return {key: value for key, value in result.items() if value not in {"", None}}
+
+
+def _aggregate_records_activity(context, arguments):
+    labels, _model = _activity_labels(context, arguments)
+    if not labels:
+        return {}
+    metrics = arguments.get("metrics")
+    result = {
+        "filter_label": _filter_activity_label(labels, arguments.get("filter")),
+        "group_label": _joined_labels(labels, arguments.get("group_by"), maximum_items=2),
+    }
+    if isinstance(metrics, list):
+        result["metric_count"] = len(metrics)
+        if len(metrics) == 1 and isinstance(metrics[0], dict):
+            operation = metrics[0].get("operation")
+            field = metrics[0].get("field")
+            if isinstance(operation, str):
+                result["metric_operation"] = operation
+            if isinstance(field, str) and isinstance(labels.get(field), str):
+                result["metric_label"] = labels[field]
+    return {key: value for key, value in result.items() if value not in {"", None}}
+
+
 @tool(
     name="odoo.search_models",
     title="Search Odoo models",
@@ -318,6 +393,11 @@ _AGGREGATE_OUTPUT = {
     risk=CapabilityRisk.METADATA,
     effect=CapabilityEffect.READ_ONLY,
     tags=("odoo", "query", "discovery"),
+    activity=CapabilityActivitySpec(
+        operation="odoo.models.search",
+        headline_code="activity.search.odoo",
+        projector=_search_models_activity,
+    ),
     max_calls=8,
     max_input_bytes=2 * 1024,
     max_output_bytes=32 * 1024,
@@ -353,6 +433,10 @@ def search_models(context: CapabilityContext, arguments):
     risk=CapabilityRisk.METADATA,
     effect=CapabilityEffect.READ_ONLY,
     tags=("odoo", "query", "schema"),
+    activity=CapabilityActivitySpec(
+        operation="odoo.schema.read.inspect",
+        headline_code="activity.inspect.model",
+    ),
     max_calls=12,
     max_input_bytes=2 * 1024,
     max_output_bytes=96 * 1024,
@@ -374,6 +458,11 @@ def get_effective_schema(context: CapabilityContext, arguments):
     risk=CapabilityRisk.READ,
     effect=CapabilityEffect.READ_ONLY,
     tags=("odoo", "query", "records"),
+    activity=CapabilityActivitySpec(
+        operation="odoo.records.query",
+        headline_code="activity.query.records",
+        projector=_query_records_activity,
+    ),
     max_calls=12,
     max_input_bytes=16 * 1024,
     max_output_bytes=128 * 1024,
@@ -437,6 +526,11 @@ def query_records(context: CapabilityContext, arguments):
     risk=CapabilityRisk.READ,
     effect=CapabilityEffect.READ_ONLY,
     tags=("odoo", "query", "aggregate"),
+    activity=CapabilityActivitySpec(
+        operation="odoo.records.aggregate",
+        headline_code="activity.aggregate.records",
+        projector=_aggregate_records_activity,
+    ),
     max_calls=12,
     max_input_bytes=16 * 1024,
     max_output_bytes=128 * 1024,
