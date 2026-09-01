@@ -7,6 +7,7 @@ import inspect
 import json
 import re
 import secrets
+from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -155,6 +156,7 @@ class CapabilityPlanService:
             raise CapabilityPlanError("capability_plan_recovery_checkpoint_required")
 
         steps = [dict(item) for item in plan["steps"]]
+        _validate_execution_call_budget(self._registry, steps)
         results: list[CapabilityResult] = []
         completed_ids = {
             step["step_id"] for step in steps if step.get("state") == "completed"
@@ -320,6 +322,18 @@ class CapabilityPlanService:
             definitions[step_id] = definition
             unit_seen.add(step_id)
         return definitions
+
+
+def _validate_execution_call_budget(registry, steps):
+    """Reject an internally impossible plan before crossing the write barrier."""
+
+    pending = Counter(
+        step["capability"] for step in steps if step.get("state") != "completed"
+    )
+    for capability, count in pending.items():
+        definition = registry.resolve(capability)
+        if count > definition.max_calls:
+            raise CapabilityPlanError("capability_call_limit_exceeded")
 
 
 def _validated_plan(payload):

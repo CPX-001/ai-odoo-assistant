@@ -30,6 +30,7 @@ from .odoo_actions import (
 )
 
 _MAX_BATCH_ROWS = 50
+_MAX_BATCH_CALLS_PER_PLAN = 5
 _MAX_BATCH_INPUT_BYTES = 128 * 1024
 _MAX_BATCH_OUTPUT_BYTES = 192 * 1024
 
@@ -218,7 +219,7 @@ def _batch_verify(context: CapabilityContext, arguments):
     tags=("odoo", "action", "batch", "write", "create"),
     preview=_batch_preview,
     verify=_batch_verify,
-    max_calls=2,
+    max_calls=_MAX_BATCH_CALLS_PER_PLAN,
     max_input_bytes=_MAX_BATCH_INPUT_BYTES,
     max_output_bytes=_MAX_BATCH_OUTPUT_BYTES,
 )
@@ -243,7 +244,7 @@ def batch_create(context: CapabilityContext, arguments):
     tags=("odoo", "action", "batch", "write", "patch"),
     preview=_batch_preview,
     verify=_batch_verify,
-    max_calls=2,
+    max_calls=_MAX_BATCH_CALLS_PER_PLAN,
     max_input_bytes=_MAX_BATCH_INPUT_BYTES,
     max_output_bytes=_MAX_BATCH_OUTPUT_BYTES,
 )
@@ -268,7 +269,7 @@ def batch_patch(context: CapabilityContext, arguments):
     tags=("odoo", "action", "batch", "write", "delete"),
     preview=_batch_preview,
     verify=_batch_verify,
-    max_calls=1,
+    max_calls=_MAX_BATCH_CALLS_PER_PLAN,
     max_input_bytes=_MAX_BATCH_INPUT_BYTES,
     max_output_bytes=_MAX_BATCH_OUTPUT_BYTES,
 )

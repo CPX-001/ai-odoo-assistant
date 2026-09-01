@@ -197,6 +197,13 @@ class AssistantEffectJournal(models.Model):
             rows.write({"state": "reverted"})
 
     @api.model
+    def _all_turn_effects_rolled_back(self, turn):
+        """Return true only when the durable journal proves the whole effect rolled back."""
+
+        rows = self.with_user(SUPERUSER_ID).search([("turn_id", "=", turn.id)])
+        return bool(rows) and all(row.state == "rolled_back" for row in rows)
+
+    @api.model
     def _cron_cleanup_effect_journal(self):
         expired = self.with_user(SUPERUSER_ID).search(
             [("expires_at", "<", fields.Datetime.now())],

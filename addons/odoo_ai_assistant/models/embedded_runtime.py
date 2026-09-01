@@ -11,6 +11,12 @@ from odoo.exceptions import AccessError, ValidationError
 from ..runtime import RuntimePaths, detect_codex
 from ..runtime.agent import AgentTurnService, CapabilityPlanError, CapabilityPlanService
 from ..runtime.agent.codex import CodexAgentSettings, CodexReasoningEngine
+from ..runtime.agent.failure import (
+    FailureEnvelope,
+    FailureEnvelopeError,
+    failure_envelope_payload,
+    parse_failure_envelope,
+)
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -372,6 +378,8 @@ class AssistantTurnEmbeddedStatus(models.Model):
     @api.model
     def capability_plan_status_for_current_user(self, plan_id):
         turn = self._owned_turn(plan_id)
+        _reconcile_confirmed_atomic_rollback(turn)
+        turn.invalidate_recordset(["state", "failure_payload", "error_code"])
         response = turn.result_payload if isinstance(turn.result_payload, dict) else None
         plan = response.get("plan") if isinstance(response, dict) and isinstance(response.get("plan"), dict) else None
         envelope = _plan_envelope(turn.capability_plan_payload)
@@ -388,6 +396,47 @@ class AssistantTurnEmbeddedStatus(models.Model):
             "response": response,
             "error_code": turn.error_code or None,
         }
+
+
+def _reconcile_confirmed_atomic_rollback(turn):
+    """Resolve review mode once the journal proves that no effect survived rollback."""
+
+    if turn.state != "recovery_required" or not turn.write_barrier:
+        return False
+    journal = turn.env["odoo.ai.effect.journal"].with_user(SUPERUSER_ID)
+    if not journal._all_turn_effects_rolled_back(turn):
+        return False
+    try:
+        failure = parse_failure_envelope(turn.failure_payload)
+    except FailureEnvelopeError:
+        return False
+    resolved = FailureEnvelope(
+        code=failure.code,
+        category=failure.category,
+        stage=failure.stage,
+        component=failure.component,
+        retryability="after_change",
+        effect_state="none",
+        user_action="retry",
+        safe_summary="La operación atómica se revirtió por completo; no se confirmó ningún cambio.",
+        safe_details=dict(failure.safe_details),
+        diagnostic_id=failure.diagnostic_id,
+        provider_code=failure.provider_code,
+    )
+    technical = turn.with_user(SUPERUSER_ID)
+    technical.write(
+        {
+            "state": "failed",
+            "failure_payload": failure_envelope_payload(resolved),
+        }
+    )
+    turn.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+        turn=technical,
+        event_type="recovery.rolled_back",
+        title="La operación se revirtió por completo",
+        diagnostic_code=failure.code,
+    )
+    return True
 
 
 class EmbeddedRuntimeError(RuntimeError):

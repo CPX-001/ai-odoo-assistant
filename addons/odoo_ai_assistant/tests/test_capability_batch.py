@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 from types import SimpleNamespace
 
 from odoo import Command, fields
@@ -16,6 +17,7 @@ from ..runtime.capabilities import (
     CapabilityError,
     CapabilityExecutor,
     CapabilityPolicy,
+    CapabilityRegistry,
     clear_discovery_cache,
     discover_capabilities,
 )
@@ -392,6 +394,97 @@ class TestCapabilityBatchMutations(TransactionCase):
         executed = asyncio.run(plans.execute(authorized, human_approved=True))
         self.assertFalse(context.env["res.partner"].browse(doomed.ids).exists())
         self.assertEqual(executed.payload["steps"][0]["verification"]["count"], 2)
+
+    def test_batch_delete_executes_all_pages_in_one_approved_plan(self):
+        context, registry, plans = self._runtime()
+        doomed = self.env["res.partner"].create(
+            [{"name": f"AI DELETE PAGE {index}"} for index in range(8)]
+        )
+        requested = []
+        for index in range(4):
+            requested.append(
+                PlannedCapability(
+                    capability="odoo.records.batch_mutate",
+                    arguments={
+                        "operation": "delete",
+                        "model": "res.partner",
+                        "record_ids": doomed[index * 2 : index * 2 + 2].ids,
+                    },
+                    summary=f"Eliminar bloque {index + 1}",
+                    step_id=f"delete-page-{index + 1}",
+                    depends_on=(f"delete-page-{index}",) if index else (),
+                )
+            )
+
+        self.assertGreaterEqual(
+            registry.resolve("odoo.records.batch_mutate").max_calls, len(requested)
+        )
+        prepared = asyncio.run(plans.prepare(tuple(requested)))
+        authorized = dict(prepared)
+        authorized["state"] = "authorized"
+        executed = asyncio.run(plans.execute(authorized, human_approved=True))
+
+        self.assertFalse(context.env["res.partner"].browse(doomed.ids).exists())
+        self.assertEqual(
+            [step["state"] for step in executed.payload["steps"]],
+            ["completed"] * 4,
+        )
+
+    def test_impossible_batch_plan_is_rejected_before_write_barrier(self):
+        context, registry, _plans = self._runtime()
+        limited_registry = CapabilityRegistry(
+            tuple(
+                replace(definition, max_calls=1)
+                if definition.name == "odoo.records.batch_mutate"
+                else definition
+                for definition in registry.definitions
+            )
+        )
+        limited_executor = CapabilityExecutor(
+            limited_registry,
+            context,
+            policy=CapabilityPolicy(),
+            config=CapabilityConfigResolver(),
+        )
+        plans = CapabilityPlanService(
+            registry=limited_registry,
+            executor=limited_executor,
+        )
+        doomed = self.env["res.partner"].create(
+            [{"name": f"AI DELETE OVER BUDGET {index}"} for index in range(2)]
+        )
+        requested = tuple(
+            PlannedCapability(
+                capability="odoo.records.batch_mutate",
+                arguments={
+                    "operation": "delete",
+                    "model": "res.partner",
+                    "record_ids": [record.id],
+                },
+                summary=f"Eliminar bloque {index + 1}",
+                step_id=f"over-budget-{index + 1}",
+                depends_on=(f"over-budget-{index}",) if index else (),
+            )
+            for index, record in enumerate(doomed)
+        )
+        prepared = asyncio.run(plans.prepare(requested))
+        authorized = dict(prepared)
+        authorized["state"] = "authorized"
+        barrier_calls = []
+
+        with self.assertRaisesRegex(
+            CapabilityPlanError, "capability_call_limit_exceeded"
+        ):
+            asyncio.run(
+                plans.execute(
+                    authorized,
+                    human_approved=True,
+                    before_effect=lambda: barrier_calls.append(True),
+                )
+            )
+
+        self.assertEqual(barrier_calls, [])
+        self.assertEqual(len(context.env["res.partner"].browse(doomed.ids).exists()), 2)
 
     def test_batch_rejects_more_than_fifty_rows(self):
         _context, _registry, plans = self._runtime()

@@ -6,6 +6,7 @@ from odoo.exceptions import AccessError
 from odoo.tests.common import TransactionCase
 
 from ..runtime.agent import CapabilityPlanService, PlannedCapability
+from ..runtime.agent.failure import FailureEnvelope, failure_envelope_payload
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -207,6 +208,36 @@ class TestAssistantEffectJournal(TransactionCase):
         )
         journal._mark_turn_failure(internal_turn)
         internal_row = journal.search([("turn_id", "=", internal_turn.id)], limit=1)
+        self.assertEqual(internal_row.state, "rolled_back")
+
+        failure = FailureEnvelope(
+            code="capability_call_limit_exceeded",
+            category="internal",
+            stage="execution",
+            component="capability",
+            retryability="never",
+            effect_state="unknown",
+            user_action="review",
+            safe_summary="La ejecución necesita revisión.",
+            safe_details={},
+            diagnostic_id="diag-atomic-rollback-test",
+        )
+        internal_turn.with_user(SUPERUSER_ID).write(
+            {
+                "state": "recovery_required",
+                "write_barrier": True,
+                "error_code": failure.code,
+                "failure_payload": failure_envelope_payload(failure),
+            }
+        )
+        status = env["odoo.ai.turn"].capability_plan_status_for_current_user(
+            internal_turn.turn_uuid
+        )
+        internal_turn.invalidate_recordset(["state", "failure_payload"])
+        self.assertEqual(status["turn_state"], "failed")
+        self.assertEqual(internal_turn.state, "failed")
+        self.assertEqual(internal_turn.failure_payload["effect_state"], "none")
+        self.assertEqual(internal_turn.failure_payload["user_action"], "retry")
         self.assertEqual(internal_row.state, "rolled_back")
 
         external_turn = self._turn(env, "external-failure", target.id)

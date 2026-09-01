@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { useState } from "@odoo/owl";
+import { onPatched, useRef, useState } from "@odoo/owl";
 import { _t } from "@web/core/l10n/translation";
 import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
@@ -287,13 +287,32 @@ function activitySummaryLabel(activity, running) {
     return activity.step_count ? _t("Worked for %s", durationLabel(activity.duration_ms)) : "";
 }
 
+const ACTIVITY_SCROLL_END_TOLERANCE = 4;
+
+function activityScrollAtEnd(element, tolerance = ACTIVITY_SCROLL_END_TOLERANCE) {
+    if (!element) {
+        return true;
+    }
+    return element.scrollHeight - element.clientHeight - element.scrollTop <= tolerance;
+}
+
+function scrollActivityToEnd(element) {
+    if (element) {
+        element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+    }
+}
+
 patch(AssistantPanel.prototype, {
     setup() {
         super.setup(...arguments);
         this.semanticReferenceUi = useState({ visibleByKey: {} });
+        this.activityDetailsRef = useRef("activityDetails");
+        this.activityScrollFollowing = true;
+        this.activityScrollTurnId = null;
         if (typeof this.state.publicReferenceNotice !== "string") {
             this.state.publicReferenceNotice = "";
         }
+        onPatched(() => this.syncActivityScroll());
     },
 
     get semanticActivity() {
@@ -413,6 +432,21 @@ patch(AssistantPanel.prototype, {
         return `--o-ai-assistant-activity-visible-lines: ${this.activityExpandedLineCount}`;
     },
 
+    syncActivityScroll() {
+        const turnId = activeReasoningScope(this.state)?.turnId || null;
+        if (turnId !== this.activityScrollTurnId) {
+            this.activityScrollTurnId = turnId;
+            this.activityScrollFollowing = true;
+        }
+        if (this.activityScrollFollowing) {
+            scrollActivityToEnd(this.activityDetailsRef.el);
+        }
+    },
+
+    onActivityDetailsScroll(event) {
+        this.activityScrollFollowing = activityScrollAtEnd(event?.currentTarget);
+    },
+
     activityShowMoreLabel(item) {
         if (!item?.reference_next_count) {
             return "";
@@ -494,9 +528,11 @@ patch(AssistantPanel.prototype, {
 });
 
 export {
+    activityScrollAtEnd,
     durationLabel,
     plainReasoningText,
     resultSummaryLabel,
+    scrollActivityToEnd,
     semanticLabel,
     visibleReasoningParts,
 };

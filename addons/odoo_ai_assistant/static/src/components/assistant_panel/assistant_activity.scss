@@ -47,13 +47,21 @@
 
     .o_ai_assistant_activity_details {
         margin-right: 0.15rem;
-        padding: 0.1rem 0.4rem 0.1rem 0.05rem;
+        padding: 0.45rem 0.55rem;
         line-height: 1.4rem;
         max-height: calc(var(--o-ai-assistant-activity-visible-lines, 5) * 1.4rem);
         overflow-y: auto;
         overscroll-behavior: contain;
+        scrollbar-gutter: stable;
         scrollbar-width: thin;
         scrollbar-color: color-mix(in srgb, currentColor 28%, transparent) transparent;
+        border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+        border-radius: 0.5rem;
+        background: color-mix(in srgb, var(--o-ai-surface) 97%, currentColor 3%);
+        box-shadow:
+            inset 0 1px 0 color-mix(in srgb, white 55%, transparent),
+            inset 0 -1px 0 color-mix(in srgb, currentColor 6%, transparent),
+            0 0.18rem 0.5rem color-mix(in srgb, currentColor 7%, transparent);
     }
 
     .o_ai_assistant_reasoning_summary {

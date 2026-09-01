@@ -4,7 +4,11 @@ import {
     reduceSemanticActivity,
     semanticActivityPresentation,
 } from "@odoo_ai_assistant/services/assistant_semantic_activity";
-import { plainReasoningText } from "@odoo_ai_assistant/components/assistant_panel/assistant_semantic_activity_component";
+import {
+    activityScrollAtEnd,
+    plainReasoningText,
+    scrollActivityToEnd,
+} from "@odoo_ai_assistant/components/assistant_panel/assistant_semantic_activity_component";
 
 const FIRST = "activity:v1:11111111111111111111111111111111";
 const SECOND = "activity:v1:22222222222222222222222222222222";
@@ -347,4 +351,22 @@ test("raw isolated Markdown planning headings are not rendered as public reasoni
     expect(plainReasoningText("Revisé **los contactos** disponibles.")).toBe(
         "Revisé los contactos disponibles."
     );
+});
+
+test("live activity scroll follows only while the user remains at the end", () => {
+    const viewport = { scrollHeight: 300, clientHeight: 100, scrollTop: 200 };
+
+    expect(activityScrollAtEnd(viewport)).toBe(true);
+    viewport.scrollTop = 120;
+    expect(activityScrollAtEnd(viewport)).toBe(false);
+    viewport.scrollTop = 197;
+    expect(activityScrollAtEnd(viewport)).toBe(true);
+});
+
+test("live activity scroll advances to the newest summary", () => {
+    const viewport = { scrollHeight: 360, clientHeight: 100, scrollTop: 0 };
+
+    scrollActivityToEnd(viewport);
+
+    expect(viewport.scrollTop).toBe(260);
 });

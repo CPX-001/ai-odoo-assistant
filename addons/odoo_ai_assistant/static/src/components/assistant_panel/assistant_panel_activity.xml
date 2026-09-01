@@ -74,6 +74,7 @@
                             aria-hidden="true">›</span>
                     </summary>
                     <div class="o_ai_assistant_activity_details mt-2 d-flex flex-column gap-1"
+                        t-ref="activityDetails" t-on-scroll="onActivityDetailsScroll"
                         t-att-style="activityDetailsStyle">
                         <div t-if="activityReasoningSummaryParts.length"
                             class="o_ai_assistant_reasoning_summary small mb-1">
