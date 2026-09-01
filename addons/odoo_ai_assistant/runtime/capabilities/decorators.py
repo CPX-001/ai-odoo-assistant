@@ -21,6 +21,39 @@ from .contracts import (
 _DEFINITION_ATTR = "__odoo_ai_capability_definition__"
 
 
+def _query_hint(_context, payload):
+    query = payload.get("query")
+    return {"query": query} if isinstance(query, str) else {}
+
+
+def _default_activity_from_tags(tags: tuple[str, ...]) -> CapabilityActivitySpec | None:
+    """Compatibility semantics for broad capability roles, never capability-name routing.
+
+    New or specialized providers should declare ``activity=`` explicitly. These defaults keep
+    existing generic providers readable while allowing third-party addons to use the same contract
+    without editing the central executor.
+    """
+
+    values = set(tags)
+    if {"odoo", "navigation"} <= values:
+        return CapabilityActivitySpec(
+            operation="odoo.navigation.resolve",
+            headline_code="activity.navigation.resolve",
+            projector=_query_hint,
+        )
+    if {"odoo", "action", "schema"} <= values:
+        return CapabilityActivitySpec(
+            operation="odoo.schema.write.inspect",
+            headline_code="activity.prepare.model",
+        )
+    if {"odoo", "query", "schema"} <= values:
+        return CapabilityActivitySpec(
+            operation="odoo.schema.read.inspect",
+            headline_code="activity.inspect.model",
+        )
+    return None
+
+
 def tool(
     *,
     name: str,
@@ -79,7 +112,7 @@ def tool(
             help_text=help_text,
             audit_metadata=deepcopy(audit_metadata or {}),
             developer_metadata=deepcopy(developer_metadata or {}),
-            activity=activity,
+            activity=activity or _default_activity_from_tags(tags),
             preview_handler=preview,
             verify_handler=verify,
             guard=guard,
