@@ -8,11 +8,6 @@
         <xpath expr="//button[contains(@class, 'o_ai_assistant_history_item_open')]" position="attributes">
             <attribute name="t-att-disabled">isNavigationBusy</attribute>
         </xpath>
-        <xpath expr="//span[contains(@class, 'text-muted')][t[@t-esc='formatUpdatedAt(conversation.updated_at)']]" position="after">
-            <span t-if="conversationRuntimeLabel(conversation.conversation_id)"
-                class="badge rounded-pill text-bg-light border mt-1"
-                t-esc="conversationRuntimeLabel(conversation.conversation_id)"/>
-        </xpath>
     </t>
 
     <t t-name="odoo_ai_assistant.AssistantPanelMultiChatNavigation"
