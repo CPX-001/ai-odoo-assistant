@@ -35,6 +35,7 @@ from . import test_public_references as test_public_references
 from . import test_reasoning_summary_projection as test_reasoning_summary_projection
 from . import test_runtime_account as test_runtime_account
 from . import test_runtime_account_gate as test_runtime_account_gate
+from . import test_screen_context_enrichment as test_screen_context_enrichment
 from . import test_turn_control as test_turn_control
 from . import test_turn_failure as test_turn_failure
 from . import test_turn_interventions as test_turn_interventions
