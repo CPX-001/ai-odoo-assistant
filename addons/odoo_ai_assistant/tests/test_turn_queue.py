@@ -2,11 +2,15 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from odoo import SUPERUSER_ID, Command, api, fields
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, ValidationError
 from odoo.modules.registry import Registry
 from odoo.tests.common import TransactionCase
 
-from ..models.turn_queue import _NON_RETRYABLE_TURN_ERRORS, _recover_stale_turns
+from ..models.turn_queue import (
+    _NON_RETRYABLE_TURN_ERRORS,
+    _recover_stale_turns,
+    _runtime_error_code,
+)
 from ..models.turn_working_transcript import persist_working_transcript
 from ..runtime.agent.working_transcript import append_working_item
 
@@ -58,6 +62,13 @@ class TestAssistantTurnQueue(TransactionCase):
                 "agent_task_plan_revision_invalid",
             }.issubset(_NON_RETRYABLE_TURN_ERRORS)
         )
+
+    def test_runtime_contract_validation_error_is_not_requeued(self):
+        self.assertEqual(
+            _runtime_error_code(ValidationError("invalid internal event payload")),
+            "runtime_contract_invalid",
+        )
+        self.assertIn("runtime_contract_invalid", _NON_RETRYABLE_TURN_ERRORS)
 
     def test_enqueue_persists_user_turn_and_initial_event(self):
         env = self.env(user=self.user_a, su=False)
@@ -170,6 +181,32 @@ class TestAssistantTurnQueue(TransactionCase):
         status = env["odoo.ai.turn"].status_for_current_user(result["turn_id"], after_sequence=1)
         self.assertEqual(len(status["events"]), 1)
         self.assertEqual(status["events"][0]["payload"], {"count": 2, "detail": "bounded"})
+
+    def test_event_payload_accepts_complete_bounded_query_page(self):
+        env = self.env(user=self.user_a, su=False)
+        result = env["odoo.ai.turn"].enqueue_for_current_user(
+            message="Consulta una pagina completa",
+            screen=self._screen(),
+            client_request_id="request.queue.page.0001",
+        )
+        turn = env["odoo.ai.turn"]._owned_turn(result["turn_id"])
+        record_ids = list(range(1, 51))
+        display_names = [f"Contacto {record_id}" for record_id in record_ids]
+
+        self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            turn=turn.with_user(SUPERUSER_ID),
+            event_type="tool.completed",
+            title="50 contactos encontrados",
+            payload={"record_ids": record_ids, "display_names": display_names},
+        )
+
+        status = env["odoo.ai.turn"].status_for_current_user(
+            result["turn_id"], after_sequence=1
+        )
+        self.assertEqual(status["events"][0]["payload"]["record_ids"], record_ids)
+        self.assertEqual(
+            status["events"][0]["payload"]["display_names"], display_names
+        )
 
     def test_primary_cursor_commits_event_and_working_checkpoint_without_row_collision(self):
         """Durable transcript checkpoints must not update the turn from a competing cursor."""

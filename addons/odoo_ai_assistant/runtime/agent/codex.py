@@ -73,6 +73,9 @@ and stop when the user also requested dependent records. When an available workf
 capability represents the dependency, prefer that single workflow tool over separate writes; its
 typed references are the only allowed way to use records created by an earlier workflow step.
 Use ordinary batch capabilities for independent rows on one model.
+When odoo.query_records returns truncated=true, continue from next_offset if the request requires
+all matching records. Split more than 50 independent mutations into ordered batches of at most 50
+records and include every required batch; never ask the user to manage technical batch limits.
 
 The user describes the business outcome, not the database graph. Infer the minimum required
 relational prerequisites from the effective schema even when the user did not name them. For

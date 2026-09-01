@@ -50,6 +50,7 @@ _NON_RETRYABLE_TURN_ERRORS = frozenset(
         "capability_plan_precondition_changed",
         "capability_plan_version_mismatch",
         "capability_verification_failed",
+        "runtime_contract_invalid",
     }
 )
 
@@ -665,6 +666,10 @@ def _runtime_error_code(error):
         return code
     if isinstance(error, AccessError):
         return "access_denied"
+    if isinstance(error, ValidationError):
+        # A deterministic host/runtime contract violation cannot recover by
+        # replaying the complete provider turn. Surface it once for diagnosis.
+        return "runtime_contract_invalid"
     return "runtime_unavailable"
 
 

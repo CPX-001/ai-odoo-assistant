@@ -27,7 +27,7 @@ in `research/EXECUTION_STATE.md`. No blocked provider run is represented as PASS
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux target.
-- Supported addon: `addons/odoo_ai_assistant`, current manifest version `18.0.13.13.0`.
+- Supported addon: `addons/odoo_ai_assistant`, current manifest version `18.0.13.14.0`.
 - Embedded runtime; browser talks only to Odoo.
 - Odoo/PostgreSQL own conversations, messages, immutable turn settings, working checkpoints, effects, recovery
   state, EffectJournal and browser-safe live state.
@@ -51,6 +51,10 @@ execution, verification and recovery. Provider output is untrusted input, not ex
 
 Codex-specific code remains below that boundary and owns transport/schema translation, App Server lifecycle,
 model/reasoning settings, safe readable-summary handling and provider error mapping.
+
+Bounded record queries expose deterministic continuation offsets. When an all-record outcome exceeds one page,
+the reasoning contract requires the agent to enumerate subsequent pages and stage independent mutations in
+ordered batches of at most 50 without asking the user to manage those internal limits.
 
 ## 3. Current planning behavior
 

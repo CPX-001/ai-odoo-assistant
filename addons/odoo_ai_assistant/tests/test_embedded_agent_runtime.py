@@ -146,6 +146,55 @@ class TestEmbeddedAgentRuntime(TransactionCase):
         )
         self.assertFalse(context.env.su)
 
+    def test_query_provider_exposes_deterministic_continuation_pages(self):
+        self.env["res.partner"].create(
+            [{"name": f"AI PAGED QUERY {index:03d}"} for index in range(55)]
+        )
+        context = self._context()
+        executor = CapabilityExecutor(
+            discover_capabilities(),
+            context,
+            policy=CapabilityPolicy(),
+            config=CapabilityConfigResolver(),
+        )
+        schema = asyncio.run(
+            executor.execute("odoo.get_effective_schema", {"model": "res.partner"})
+        )
+        base_arguments = {
+            "model": "res.partner",
+            "schema_id": schema.data["schema_id"],
+            "fields": ["name"],
+            "filter": {
+                "match": "all",
+                "conditions": [
+                    {
+                        "field": "name",
+                        "operator": "contains",
+                        "value": "AI PAGED QUERY",
+                    }
+                ],
+            },
+            "order": [{"field": "name", "direction": "asc"}],
+            "limit": 30,
+        }
+
+        first = asyncio.run(executor.execute("odoo.query_records", base_arguments))
+        second = asyncio.run(
+            executor.execute(
+                "odoo.query_records",
+                {**base_arguments, "offset": first.data["next_offset"]},
+            )
+        )
+
+        names = [item["fields"]["name"] for item in first.data["records"]]
+        names += [item["fields"]["name"] for item in second.data["records"]]
+        self.assertEqual(names, [f"AI PAGED QUERY {index:03d}" for index in range(55)])
+        self.assertTrue(first.data["truncated"])
+        self.assertEqual(first.data["next_offset"], 30)
+        self.assertEqual(second.data["offset"], 30)
+        self.assertFalse(second.data["truncated"])
+        self.assertIsNone(second.data["next_offset"])
+
     def test_aggregate_count_contract_is_explicit_for_the_model(self):
         definition = discover_capabilities().resolve("odoo.aggregate_records")
         metric_schema = definition.input_schema["properties"]["metrics"]["items"]

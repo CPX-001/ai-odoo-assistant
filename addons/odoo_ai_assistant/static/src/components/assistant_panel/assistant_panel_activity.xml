@@ -104,7 +104,9 @@
             </section>
             <div t-if="settledActivityAnswer"
                 class="o_ai_assistant_message o_ai_assistant_message_assistant mt-3">
-                <div class="o_ai_assistant_message_content text-break" t-esc="settledActivityAnswer"/>
+                <div class="o_ai_assistant_message_content text-break">
+                    <AssistantMarkdown content="settledActivityAnswer"/>
+                </div>
             </div>
             <div t-if="settledActivityAnswer and finalNavigationReferencesVisible"
                 class="o_ai_assistant_final_references d-flex flex-wrap gap-2 pt-1"

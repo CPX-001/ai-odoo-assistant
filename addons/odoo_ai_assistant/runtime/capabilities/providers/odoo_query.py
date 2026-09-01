@@ -29,6 +29,7 @@ _MAX_FIELDS = 16
 _MAX_CONDITIONS = 8
 _MAX_SORTS = 3
 _MAX_RECORDS = 50
+_MAX_OFFSET = 10_000
 _MAX_GROUP_BY = 2
 _MAX_METRICS = 8
 _MAX_GROUPS = 50
@@ -160,6 +161,7 @@ _QUERY_INPUT = {
             },
         },
         "limit": {"type": "integer", "minimum": 1, "maximum": _MAX_RECORDS},
+        "offset": {"type": "integer", "minimum": 0, "maximum": _MAX_OFFSET},
     },
     "required": ["model", "schema_id", "fields"],
     "additionalProperties": False,
@@ -184,6 +186,8 @@ _QUERY_OUTPUT = {
         },
         "returned_count": {"type": "integer"},
         "limit": {"type": "integer"},
+        "offset": {"type": "integer"},
+        "next_offset": {"type": ["integer", "null"]},
         "truncated": {"type": "boolean"},
         "captured_at": {"type": "string"},
         "content_trust": {"type": "string", "enum": ["untrusted"]},
@@ -194,6 +198,8 @@ _QUERY_OUTPUT = {
         "records",
         "returned_count",
         "limit",
+        "offset",
+        "next_offset",
         "truncated",
         "captured_at",
         "content_trust",
@@ -477,10 +483,16 @@ def query_records(context: CapabilityContext, arguments):
     domain = _domain(arguments.get("filter"), metadata)
     order = _order(arguments.get("order"), metadata)
     limit = _bounded_int(arguments.get("limit", 20), 1, _MAX_RECORDS)
+    offset = _bounded_int(arguments.get("offset", 0), 0, _MAX_OFFSET)
     model_set = _model_set(context, schema["model"])
     try:
         model_set.browse().check_access("read")
-        records = model_set.search(domain, order=order, limit=limit + 1)
+        # Always add a unique tie-breaker so offset pages cannot duplicate or
+        # omit equal sort values while the underlying result set is unchanged.
+        stable_order = f"{order}, id asc" if order else "id asc"
+        records = model_set.search(
+            domain, order=stable_order, limit=limit + 1, offset=offset
+        )
         truncated = len(records) > limit
         records = records[:limit]
         rows = records.read(list(fields), load=None)
@@ -506,6 +518,8 @@ def query_records(context: CapabilityContext, arguments):
         "records": normalized,
         "returned_count": len(normalized),
         "limit": limit,
+        "offset": offset,
+        "next_offset": offset + len(normalized) if truncated else None,
         "truncated": truncated,
         "captured_at": _now(),
         "content_trust": "untrusted",

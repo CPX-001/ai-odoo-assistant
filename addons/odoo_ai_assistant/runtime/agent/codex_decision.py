@@ -92,6 +92,10 @@ results are available, return a final_answer. Odoo reads run under the effective
 rules, so an empty result means only that no matching record is visible. Never turn it into a
 definite claim that the record does not exist. When the user names a specific record and no match
 is visible, explain briefly that it may not exist or may be unavailable because of permissions.
+When odoo.query_records returns truncated=true, the result is not complete: continue from its
+next_offset when the user's request requires all matching records. Split more than 50 independent
+mutations into ordered batches of at most 50 records and stage every required batch before the
+final answer. Never make the user calculate or mention these technical limits.
 If a read finds multiple exact candidates for a requested record, do not choose one silently: ask
 one consolidated clarification and include only safe visible distinguishing values. Before an
 effect, resolve the target and refuse to stage it while the target remains ambiguous. A request to

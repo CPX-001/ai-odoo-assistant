@@ -10,7 +10,10 @@ from odoo.exceptions import ValidationError
 
 _MAX_EVENT_PAYLOAD_BYTES = 16 * 1024
 _MAX_EVENT_STRING = 2_048
-_MAX_EVENT_ITEMS = 32
+# Public capability results may contain up to 50 bounded record references. Keep
+# the event envelope compatible with that executable contract while the byte
+# limit below remains the final payload-size guard.
+_MAX_EVENT_ITEMS = 64
 _MAX_EVENT_DEPTH = 6
 _EVENT_TYPE = re.compile(r"^[a-z][a-z0-9_.:-]{0,63}$")
 _DIAGNOSTIC_CODE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
