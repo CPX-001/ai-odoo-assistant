@@ -4,6 +4,7 @@ import {
     reduceSemanticActivity,
     semanticActivityPresentation,
 } from "@odoo_ai_assistant/services/assistant_semantic_activity";
+import { plainReasoningText } from "@odoo_ai_assistant/components/assistant_panel/assistant_semantic_activity_component";
 
 const FIRST = "activity:v1:11111111111111111111111111111111";
 const SECOND = "activity:v1:22222222222222222222222222222222";
@@ -338,4 +339,12 @@ test("presentation preferences fail to bounded defaults", () => {
     expect(normalized.reasoning_summary).toBe("concise");
     expect(normalized.limits.max_rendered_activity_items).toBe(100);
     expect(normalized.limits.max_reasoning_summary_chars).toBe(8000);
+});
+
+test("raw isolated Markdown planning headings are not rendered as public reasoning", () => {
+    expect(plainReasoningText("**Planning model discovery**")).toBe("");
+    expect(plainReasoningText("**Planning**\n\n**Exploring schema**")).toBe("");
+    expect(plainReasoningText("Revisé **los contactos** disponibles.")).toBe(
+        "Revisé los contactos disponibles."
+    );
 });

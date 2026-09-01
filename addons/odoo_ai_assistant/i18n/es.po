@@ -290,6 +290,12 @@ msgstr "Razonando · %s"
 #. module: odoo_ai_assistant
 #. odoo-javascript
 #: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
+msgid "Worked for %s"
+msgstr "Ha trabajado durante %s"
+
+#. module: odoo_ai_assistant
+#. odoo-javascript
+#: code:addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js:0
 msgid "Thought for %s · 1 step"
 msgstr "Ha pensado durante %s · 1 paso"
 

@@ -6,7 +6,7 @@
         <xpath expr="//div[@t-foreach='state.messages']" position="attributes">
             <attribute name="t-foreach">activityOrderedMessages</attribute>
         </xpath>
-        <xpath expr="//div[contains(@class, 'd-flex flex-column gap-3')]" position="after">
+        <xpath expr="//div[contains(@class, 'o_ai_assistant_conversation')]" position="after">
             <div t-if="!settledActivityAnswer and finalNavigationReferencesVisible"
                 class="o_ai_assistant_final_references d-flex flex-wrap gap-2 pt-1"
                 role="group" aria-label="Enlaces de Odoo relacionados con la respuesta">
@@ -21,16 +21,57 @@
                 </button>
             </div>
         </xpath>
+        <xpath expr="//div[contains(@t-att-class, 'o_ai_assistant_message_role')]" position="after">
+            <t t-if="message.role === 'assistant' and message.activity">
+                <t t-set="historyActivity" t-value="messageActivity(message)"/>
+                <section t-if="historyActivity and (historyActivity.items.length or historyActivity.reasoning_parts.length)"
+                    class="o_ai_assistant_activity o_ai_assistant_activity_history mb-2"
+                    aria-label="Actividad guardada del Assistant">
+                    <details t-key="historyActivity.key">
+                    <summary class="small d-flex align-items-center">
+                        <span class="text-break" t-esc="historyActivity.summary_label"/>
+                        <span class="o_ai_assistant_activity_caret" aria-hidden="true">›</span>
+                    </summary>
+                    <div class="o_ai_assistant_activity_details mt-2 d-flex flex-column gap-1"
+                        t-att-style="activityDetailsStyle">
+                        <div t-if="historyActivity.reasoning_parts.length"
+                            class="o_ai_assistant_reasoning_summary small mb-1">
+                            <div t-foreach="historyActivity.reasoning_parts" t-as="part" t-key="part.key"
+                                class="text-muted text-break" t-esc="part.text"/>
+                        </div>
+                        <div t-foreach="historyActivity.items" t-as="item" t-key="item.key"
+                            class="o_ai_assistant_activity_item small text-muted">
+                            <div class="d-flex gap-2 align-items-start">
+                                <i t-if="item.status === 'failed'" class="fa fa-exclamation-circle mt-1" aria-hidden="true"/>
+                                <i t-elif="item.status === 'blocked'" class="fa fa-pause-circle-o mt-1" aria-hidden="true"/>
+                                <i t-elif="item.status === 'cancelled'" class="fa fa-ban mt-1" aria-hidden="true"/>
+                                <i t-else="" class="fa fa-check mt-1" aria-hidden="true"/>
+                                <span class="text-break flex-grow-1" t-esc="item.display_label"/>
+                                <small t-if="item.duration_label" class="text-nowrap" t-esc="item.duration_label"/>
+                            </div>
+                            <div t-if="item.progress_label" class="ms-4 mt-1 small text-body-secondary"
+                                t-esc="item.progress_label"/>
+                            <div t-if="item.result_summary_label" class="ms-4 mt-1 small text-body-secondary"
+                                t-esc="item.result_summary_label"/>
+                        </div>
+                        <div t-if="historyActivity.truncated" class="small text-muted fst-italic">
+                            Older steps have been hidden to keep the panel responsive.
+                        </div>
+                    </div>
+                    </details>
+                </section>
+            </t>
+        </xpath>
         <xpath expr="//div[@t-if='state.loading and state.streamingText']" position="before">
             <section t-if="activityItems.length"
                 t-att-class="'o_ai_assistant_activity mt-3 ' + (state.loading ? 'o_ai_assistant_activity_running' : 'o_ai_assistant_activity_settled')"
                 aria-label="Assistant activity">
-                <details>
+                <details t-key="activityDisclosureKey">
                     <summary class="small d-flex align-items-center">
                         <span t-att-class="'text-break ' + (state.loading ? 'o_ai_assistant_activity_shimmer' : '')"
                             t-esc="activitySummaryLabel"/>
                         <span t-att-class="'o_ai_assistant_activity_caret ' + (state.loading ? 'o_ai_assistant_activity_shimmer' : '')"
-                            aria-hidden="true">⌄</span>
+                            aria-hidden="true">›</span>
                     </summary>
                     <div class="o_ai_assistant_activity_details mt-2 d-flex flex-column gap-1"
                         t-att-style="activityDetailsStyle">
@@ -40,7 +81,7 @@
                                 class="text-muted text-break" t-esc="part.text"/>
                         </div>
                         <div t-foreach="activityItems" t-as="item" t-key="item.key"
-                            class="small text-muted">
+                            class="o_ai_assistant_activity_item small text-muted">
                             <div class="d-flex gap-2 align-items-start">
                                 <i t-if="item.status === 'failed'" class="fa fa-exclamation-circle mt-1" aria-hidden="true"/>
                                 <i t-elif="item.status === 'blocked'" class="fa fa-pause-circle-o mt-1" aria-hidden="true"/>
@@ -63,7 +104,6 @@
             </section>
             <div t-if="settledActivityAnswer"
                 class="o_ai_assistant_message o_ai_assistant_message_assistant mt-3">
-                <div class="small text-muted mb-1">Assistant</div>
                 <div class="o_ai_assistant_message_content text-break" t-esc="settledActivityAnswer"/>
             </div>
             <div t-if="settledActivityAnswer and finalNavigationReferencesVisible"

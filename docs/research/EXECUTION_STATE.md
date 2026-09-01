@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 53
+State format: 54
 Updated: 2026-09-01
 
 ## Accepted lineage
@@ -51,6 +51,16 @@ latest_executed_p7_evidence: docs/research/evidence/phase7/2026-09-01/P7-CONSOLI
 latest_executed_product_evidence: docs/research/evidence/product_behavior/2026-09-01/PRODUCT-BEHAVIOR-BASELINE-e100dba.md
 next_action: after current provider quota returns, rerun Product Behavior FULL x3 from the beginning; if green run the final periodic regression and publish P7 acceptance
 ```
+
+## Chat workflow/activity repair checkpoint — 2026-09-01
+
+Evidence: `docs/research/CHAT_WORKFLOW_ACTIVITY_REPAIR_20260901.md`.
+
+This post-checkpoint repair adds a bounded transactional related-record creation workflow, guarantees an approved
+turn another queue claim, excludes terminal turns from active-turn restoration, and persists settled public activity
+with each Assistant message. Focused Odoo and HOOT validation is green; no real provider request was made against the
+user's changed Codex account. This repair does not change the P7 acceptance cursor or convert the blocked FULL x3 gate
+into PASS.
 
 ## Phase-7 consolidated validation checkpoint — 2026-09-01
 

@@ -21,13 +21,13 @@ P6 final acceptance through 0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0
 Phase 5 and Phase 6 are **COMPLETE**. The final Phase-6 regression evidence is
 `research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md`.
 
-Phase 7 has started only at the provider-extension foundation. Live Phase-7 capability-provider integration is
-currently paused behind the Product Behavior Evals v1 gate described in `research/PRODUCT_BEHAVIOR_EVALS_V1.md`.
+Phase 7 is implemented but remains acceptance-blocked by the incomplete real-provider Product Behavior gate described
+in `research/EXECUTION_STATE.md`. No blocked provider run is represented as PASS.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux target.
-- Supported addon: `addons/odoo_ai_assistant`, current manifest version `18.0.13.4.0`.
+- Supported addon: `addons/odoo_ai_assistant`, current manifest version `18.0.13.12.0`.
 - Embedded runtime; browser talks only to Odoo.
 - Odoo/PostgreSQL own conversations, messages, immutable turn settings, working checkpoints, effects, recovery
   state, EffectJournal and browser-safe live state.
@@ -87,6 +87,7 @@ This is not yet an implementation claim. It is a required pre-live-P7 product ch
 odoo_query       schema-first live records/aggregates
 odoo_actions     bounded create/patch/archive/delete + explicit sale-order confirmation
 odoo_batch       bounded multi-record mutation
+odoo_workflows   bounded transactional related-record creation graphs
 odoo_runtime     narrow effective runtime identity facts
 odoo_navigation  host-resolved Odoo record/model/action/view/menu/setting references
 odoo_unarchive   explicit unarchive action
@@ -186,6 +187,9 @@ Current accepted product path includes:
 - approval/recovery UX;
 - safe reversion when host-declared compensation is available;
 - answer-delta live channel plus authoritative final reconciliation.
+- one live activity disclosure per conversation and persisted per-answer settled activity;
+- collapsed-by-default settled reasoning with a configurable five-line detail viewport;
+- history-first entry unless the same browser session has an active conversation to resume.
 
 ## 11. Streaming: implemented path, current regression hypothesis
 
@@ -218,8 +222,9 @@ verifying results. Raw capability ids/arguments and provider-private reasoning a
 Accepted detail profiles include compact/normal/detailed/diagnostic. Diagnostic may expose structural metadata and
 timings but still must not expose private reasoning/secrets.
 
-The Product Behavior contract further freezes that settled activity belongs **above** the final answer it explains,
-and zero-tool direct answers should not leave a fake settled reasoning artifact.
+Settled activity belongs **above** the final answer it explains, survives history reload, closes by default with a
+right-pointing caret and expands into a bounded scroll area. The normal surface omits spinners and raw provider
+planning headings. Zero-tool direct answers do not leave a fake settled reasoning artifact.
 
 ## 13. Permissions/personas
 
@@ -253,12 +258,13 @@ duplicate provider/capability conflict rejection
 The marker is trusted installed Odoo model code, not arbitrary Python-package discovery. The foundation is documented
 in `research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md`.
 
-At the current cursor it has not yet been wired into the live effective capability catalog and its focused local
-deterministic test has not yet been recorded PASS.
+The provider boundary, Skills, ContextProviders, ProviderProfile and EffectiveAssistantManifest are wired into the
+live effective catalog. Their deterministic and focused real checks are recorded in `research/EXECUTION_STATE.md`;
+overall P7 acceptance is still blocked by the unfinished Product Behavior FULL x3 gate.
 
-## 15. Pre-live-P7 Product Behavior gate
+## 15. P7 Product Behavior acceptance gate
 
-Before live P7 catalog integration resumes, implement and execute:
+The permanent product gate is defined by:
 
 ```text
 research/PRODUCT_BEHAVIOR_EVALS_V1.md
@@ -270,6 +276,8 @@ facts, ACLs, navigation, writes, approvals, batch UX, streaming, activity order,
 preferences and no-overclaim self-description.
 
 It also requires per-provider/per-capability timing so tool anomalies are visible independently from model latency.
+The latest FULL x3 attempt stopped at provider capacity after 76/162 successful trials; it must restart from the
+beginning on the current account before P7 can be accepted.
 
 ## 16. Future module/source HOW_TO
 
@@ -290,11 +298,11 @@ P3 COMPLETE
 P4 COMPLETE
 P5 COMPLETE
 P6 COMPLETE
-P7 IN_PROGRESS / LIVE INTEGRATION PAUSED
-  P7.1 provider extension foundation LANDED / LOCAL VALIDATION REQUIRED
-  Product Behavior Evals v1 IMPLEMENTATION + REAL BASELINE REQUIRED
-  P7.1 live catalog wiring BLOCKED
-  P7.2+ NOT STARTED
+P7 IMPLEMENTATION COMPLETE / ACCEPTANCE PENDING
+  provider extensions + Skills + ContextProviders LIVE
+  Product Behavior focused and real SMOKE PASS
+  Product Behavior FULL x3 BLOCKED by provider capacity
+P8 NOT ELIGIBLE
 ```
 
 Use `research/EXECUTION_STATE.md` for the exact next action and stop rule.

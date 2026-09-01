@@ -74,6 +74,84 @@ class TestAssistantNativeStorage(TransactionCase):
         self.assertFalse(store.search([("conversation_uuid", "=", conversation_id)]))
         self.assertFalse(env_a["odoo.ai.message"].search([("id", "in", message_ids)]))
 
+    def test_completed_answer_history_keeps_its_public_activity_and_readable_summary(self):
+        env_a = self.env(user=self.user_a, su=False)
+        store = env_a["odoo.ai.conversation"]
+        conversation_id = store.append_exchange(
+            conversation_uuid=None,
+            user_message="Crea datos relacionados",
+            assistant_message="Datos creados y verificados.",
+        )
+        conversation = store._owned_conversation(conversation_id)
+        assistant_message = conversation.message_ids.filtered(
+            lambda message: message.role == "assistant"
+        )
+        turn = self.env["odoo.ai.turn"].create(
+            {
+                "conversation_id": conversation.id,
+                "user_id": self.user_a.id,
+                "company_id": self.user_a.company_id.id,
+                "state": "completed",
+                "input_message": "Crea datos relacionados",
+                "assistant_message_id": assistant_message.id,
+            }
+        )
+        binding = {
+            "turn_ref_id": turn.id,
+            "turn_uuid": turn.turn_uuid,
+            "user_id": self.user_a.id,
+            "company_id": self.user_a.company_id.id,
+        }
+        live = self.env["odoo.ai.turn.live.event"]
+        live.create(
+            {
+                **binding,
+                "sequence": 1,
+                "channel": "activity",
+                "kind": "capability.completed",
+                "phase": "capability",
+                "status": "completed",
+                "label": "Registros creados",
+                "capability": "odoo.workflow.batch_create_graph",
+            }
+        )
+        live.create(
+            {
+                **binding,
+                "sequence": 2,
+                "channel": "reasoning",
+                "reasoning_summary_delta": "Resumen legible",
+                "reasoning_item_id": "reasoning-item-1",
+                "reasoning_summary_index": 0,
+            }
+        )
+
+        history = store.history_payload(conversation_uuid=conversation_id)
+        activity = history["messages"][1]["activity"]
+
+        self.assertIsNone(history["active_turn"])
+        self.assertEqual(activity["turn_id"], turn.turn_uuid)
+        self.assertEqual(activity["events"][0]["kind"], "capability.completed")
+        self.assertEqual(
+            activity["reasoning_summary_parts"],
+            [{"key": "reasoning-item-1:0", "text": "Resumen legible"}],
+        )
+
+        queued = self.env["odoo.ai.turn"].create(
+            {
+                "conversation_id": conversation.id,
+                "user_id": self.user_a.id,
+                "company_id": self.user_a.company_id.id,
+                "state": "queued",
+                "input_message": "Continua con la operación",
+            }
+        )
+        history = store.history_payload(conversation_uuid=conversation_id)
+        self.assertEqual(
+            history["active_turn"],
+            {"turn_id": queued.turn_uuid, "state": "queued"},
+        )
+
 
 class TestAssistantRuntimeLayout(TransactionCase):
     def test_runtime_root_is_below_odoo_data_dir(self):

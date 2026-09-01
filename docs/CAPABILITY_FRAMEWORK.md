@@ -244,8 +244,19 @@ Current generic providers remain semantic/bounded rather than arbitrary escape h
 - query/schema capabilities for live Odoo data;
 - explicit typed actions;
 - bounded batch operations;
+- bounded related-record workflows;
 - runtime/navigation helpers;
 - compensation helpers.
+
+`odoo.workflow.batch_create_graph` is the first generic workflow capability. It accepts two to five ordered create
+steps and lets a later many2one value reference a record created by an earlier step. The entire graph is still one
+`CapabilityDefinition`: Odoo validates every model, field, relation, ACL and reference, executes it in the current
+transaction as the effective user, and verifies every created record. This reduces model round trips for dependent
+work such as “create contacts, then use those exact contacts in quotations” without adding a second action registry
+or model-authored executable program.
+
+Independent rows should continue to use the ordinary batch capability. A workflow is appropriate when a dependency
+edge exists; it is not a reason to wrap every CRUD call in orchestration.
 
 There is no generic arbitrary SQL, Python, shell, sudo or unrestricted ORM-method execution surface.
 

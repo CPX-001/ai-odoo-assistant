@@ -95,35 +95,46 @@
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-gutter: stable;
-        scroll-padding-block: var(--o-ai-space-4);
+        scroll-padding-block: var(--o-ai-space-3);
+        padding: 0.9rem 1rem !important;
     }
 
     .o_ai_assistant_message,
     .o_ai_assistant_action_preview,
     .o_ai_assistant_messages > details,
     .o_ai_assistant_messages > .alert {
-        scroll-margin-block: var(--o-ai-space-4);
+        scroll-margin-block: var(--o-ai-space-3);
     }
 
     .o_ai_assistant_message {
-        max-width: 92%;
+        max-width: 88%;
     }
 
     .o_ai_assistant_message_user {
         align-self: flex-end;
         margin-left: auto;
-        padding: var(--o-ai-space-3) var(--o-ai-space-4);
-        border-radius: 0.9rem 0.9rem 0.2rem 0.9rem;
+        padding: 0.5rem 0.7rem;
+        border-radius: 0.75rem 0.75rem 0.2rem 0.75rem;
         background-color: var(--o-ai-gray-200);
     }
 
     .o_ai_assistant_message_assistant {
+        width: 100%;
+        max-width: 100%;
         align-self: flex-start;
         margin-right: auto;
-        padding: var(--o-ai-space-3) var(--o-ai-space-4);
-        border: 1px solid var(--o-ai-gray-200);
-        border-radius: 0.9rem 0.9rem 0.9rem 0.2rem;
-        background-color: var(--o-ai-gray-100);
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+    }
+
+    .o_ai_assistant_conversation {
+        gap: 1rem;
+    }
+
+    .o_ai_assistant_message_role {
+        margin-bottom: 0.2rem;
     }
 
     .o_ai_assistant_message_content {
@@ -156,7 +167,7 @@
             var(--o-ai-surface) 97%,
             var(--o-ai-gray-200) 3%
         ) !important;
-        box-shadow: 0 -0.35rem 0.8rem color-mix(in srgb, var(--bs-body-color) 7%, transparent);
+        box-shadow: 0 -0.2rem 0.55rem color-mix(in srgb, var(--bs-body-color) 5%, transparent);
     }
 
     .o_ai_assistant_composer textarea {
@@ -182,6 +193,12 @@
 
     .min-w-0 {
         min-width: 0;
+    }
+
+    .o_ai_assistant_execution_status {
+        padding: 0.55rem 0.7rem;
+        border-left: 2px solid color-mix(in srgb, var(--o-ai-accent) 42%, transparent);
+        background: color-mix(in srgb, var(--o-ai-accent) 3%, transparent);
     }
 }
 

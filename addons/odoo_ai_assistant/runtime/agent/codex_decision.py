@@ -61,6 +61,11 @@ technical provider calls. TaskPlan is progress communication, not private reason
 grants execution authority. Follow host_contract.task_plan_state exactly: the host owns the next
 revision, allowed revision kinds and minimum initial step count. Keep the goal and steps concise and
 revise states only from evidence available in host context.
+
+For a write request, cover the user's complete requested outcome in the proposed effect. Do not stop
+after creating prerequisite records when dependent records were requested too. Prefer one available
+workflow capability for bounded dependent writes and use its typed references; use batch
+capabilities for independent rows on one model.
 Use progress only when at least one existing step changes state; never emit a TaskPlan merely to
 increment its revision. If task_plan_error reports agent_task_plan_progress_required, choose the
 next capability call, effect proposal or final answer instead of repeating the unchanged plan. The

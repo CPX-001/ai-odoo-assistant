@@ -136,6 +136,17 @@ class AssistantConversation(models.Model):
                 [
                     ("conversation_id", "=", selected.id),
                     ("user_id", "=", self.env.uid),
+                    (
+                        "state",
+                        "in",
+                        [
+                            "queued",
+                            "running",
+                            "cancel_requested",
+                            "awaiting_confirmation",
+                            "recovery_required",
+                        ],
+                    ),
                 ],
                 order="id desc",
                 limit=1,
@@ -143,18 +154,81 @@ class AssistantConversation(models.Model):
             if selected
             else self.env["odoo.ai.turn"].browse()
         )
+        activity_by_message = self._history_activity_by_message(messages)
         return {
             "active_conversation_id": (
                 selected.conversation_uuid if selected else None
             ),
             "conversations": [item._history_view() for item in conversations],
-            "messages": [item._history_view() for item in messages],
+            "messages": [
+                item._history_view(activity=activity_by_message.get(item.id))
+                for item in messages
+            ],
             "active_turn": (
                 {"turn_id": latest_turn.turn_uuid, "state": latest_turn.state}
                 if latest_turn
                 else None
             ),
         }
+
+    def _history_activity_by_message(self, messages):
+        """Project the public, persisted activity that belongs to each Assistant answer.
+
+        Live rows are already the browser-safe projection used while a turn runs. Reusing those
+        rows keeps chat history aligned with the live UI without persisting private reasoning or
+        introducing a second activity store.
+        """
+
+        assistant_ids = [item.id for item in messages if item.role == "assistant"]
+        if not assistant_ids:
+            return {}
+        turns = self.env["odoo.ai.turn"].search(
+            [
+                ("assistant_message_id", "in", assistant_ids),
+                ("user_id", "=", self.env.uid),
+                ("conversation_id", "in", messages.mapped("conversation_id").ids),
+            ],
+            order="id asc",
+        )
+        live_model = self.env["odoo.ai.turn.live.event"]
+        rows_by_turn = {}
+        for row in live_model.search(
+            [
+                ("turn_ref_id", "in", turns.ids),
+                ("channel", "in", ["activity", "reasoning"]),
+            ],
+            order="turn_ref_id, sequence",
+        ):
+            bucket = rows_by_turn.setdefault(row.turn_ref_id, [])
+            if len(bucket) < 192:
+                bucket.append(row)
+        result = {}
+        for turn in turns:
+            events = []
+            reasoning_parts = {}
+            for row in rows_by_turn.get(turn.id, []):
+                if row.turn_uuid != turn.turn_uuid:
+                    continue
+                if row.channel == "activity":
+                    events.append(row.activity_browser_view())
+                    continue
+                item = row.live_browser_view()
+                key = f"{item['item_id']}:{item['summary_index']}"
+                reasoning_parts[key] = (
+                    reasoning_parts.get(key, "") + item["text"]
+                )[:8_192]
+            if not events and not reasoning_parts:
+                continue
+            result[turn.assistant_message_id.id] = {
+                "turn_id": turn.turn_uuid,
+                "events": events[:100],
+                "reasoning_summary_parts": [
+                    {"key": key, "text": text}
+                    for key, text in reasoning_parts.items()
+                    if text
+                ],
+            }
+        return result
 
     @api.model
     def recent_text(self, conversation_uuid, *, max_messages=8, max_chars=5_000):
@@ -274,14 +348,17 @@ class AssistantMessage(models.Model):
         ),
     ]
 
-    def _history_view(self):
+    def _history_view(self, *, activity=None):
         self.ensure_one()
-        return {
+        result = {
             "message_id": self.message_uuid,
             "role": self.role,
             "content": self.content,
             "created_at": _iso_utc(self.create_date),
         }
+        if self.role == "assistant" and isinstance(activity, dict):
+            result["activity"] = activity
+        return result
 
 
 class AssistantTurn(models.Model):

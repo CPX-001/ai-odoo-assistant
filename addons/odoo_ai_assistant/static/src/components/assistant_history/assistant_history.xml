@@ -154,7 +154,7 @@
             <AssistantHistory t-if="!ui.isMinimized and state.runtimeState === 'authenticated' and state.historyView"/>
         </xpath>
         <xpath expr="//div[contains(@class, 'o_ai_assistant_messages')]" position="attributes">
-            <attribute name="t-if">!ui.isMinimized and !state.historyView</attribute>
+            <attribute name="t-if">!ui.isMinimized and (!state.historyView or state.runtimeState !== 'authenticated')</attribute>
         </xpath>
         <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]" position="attributes">
             <attribute name="t-if">!ui.isMinimized and state.runtimeState === 'authenticated' and !state.historyView</attribute>

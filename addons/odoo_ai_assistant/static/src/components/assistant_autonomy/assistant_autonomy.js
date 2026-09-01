@@ -28,8 +28,16 @@ patch(AssistantPanel.prototype, {
     },
 
     get recoveryPending() {
+        return this.executionPending || this.recoveryReviewRequired;
+    },
+
+    get executionPending() {
+        return ["authorized", "executing"].includes(this.state.result?.plan?.state);
+    },
+
+    get recoveryReviewRequired() {
         return (
-            ["authorized", "executing"].includes(this.state.result?.plan?.state) ||
+            this.state.actionReceipt?.state === "recovery_required" ||
             typeof this.state.recoveryPlanId === "string"
         );
     },
@@ -41,7 +49,7 @@ patch(AssistantPanel.prototype, {
     get actionDecisionMessage() {
         const messages = {
             authorized: _t(
-                "El resultado del lote quedó pendiente de recuperar. Se conserva el mismo intento y no se crea una nueva autorización."
+                "La acción aprobada está en cola. Odoo conserva el mismo plan y no crea una autorización nueva."
             ),
             executing: _t(
                 "La ejecución sigue en curso. El Assistant sólo comprobará su estado hasta que Odoo confirme un resultado o habilite una recuperación segura."

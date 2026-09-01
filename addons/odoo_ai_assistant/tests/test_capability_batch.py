@@ -262,6 +262,112 @@ class TestCapabilityBatchMutations(TransactionCase):
             "2026-09-01 15:04:04",
         )
 
+    def test_related_create_workflow_resolves_prior_batch_records_in_one_plan_step(self):
+        context, registry, plans = self._runtime()
+        self.assertIsNotNone(registry.resolve("odoo.workflow.batch_create_graph"))
+        plan = (
+            PlannedCapability(
+                capability="odoo.workflow.batch_create_graph",
+                arguments={
+                    "operation": "create_graph",
+                    "steps": [
+                        {
+                            "step_id": "contacts",
+                            "model": "res.partner",
+                            "rows": [
+                                {"name": "AI WORKFLOW CONTACT A"},
+                                {"name": "AI WORKFLOW CONTACT B"},
+                            ],
+                        },
+                        {
+                            "step_id": "quotations",
+                            "model": "sale.order",
+                            "rows": [
+                                {
+                                    "partner_id": {
+                                        "$ref": {"step": "contacts", "record_index": 0}
+                                    }
+                                },
+                                {
+                                    "partner_id": {
+                                        "$ref": {"step": "contacts", "record_index": 1}
+                                    }
+                                },
+                                {
+                                    "partner_id": {
+                                        "$ref": {"step": "contacts", "record_index": 0}
+                                    }
+                                },
+                            ],
+                        },
+                    ],
+                },
+                summary="Crear contactos y presupuestos relacionados",
+            ),
+        )
+
+        prepared = asyncio.run(plans.prepare(plan))
+        preview = prepared["steps"][0]["preview"]
+        self.assertEqual(preview["operation"], "create_graph")
+        self.assertEqual(preview["count"], 5)
+        self.assertEqual(
+            [(step["model"], step["count"]) for step in preview["steps"]],
+            [("res.partner", 2), ("sale.order", 3)],
+        )
+        self.assertFalse(
+            context.env["res.partner"].search([("name", "like", "AI WORKFLOW CONTACT %")])
+        )
+
+        authorized = dict(prepared)
+        authorized["state"] = "authorized"
+        executed = asyncio.run(plans.execute(authorized, human_approved=True))
+        outcome = executed.results[0].data
+        contact_ids = outcome["steps"][0]["record_ids"]
+        quotation_ids = outcome["steps"][1]["record_ids"]
+        quotations = context.env["sale.order"].browse(quotation_ids).exists()
+
+        self.assertEqual(outcome["total_count"], 5)
+        self.assertEqual(quotations.mapped("partner_id").ids, [contact_ids[0], contact_ids[1]])
+        self.assertEqual(
+            quotations.mapped("partner_id").mapped("name"),
+            ["AI WORKFLOW CONTACT A", "AI WORKFLOW CONTACT B"],
+        )
+        self.assertEqual(executed.payload["steps"][0]["verification"]["count"], 5)
+
+    def test_related_create_workflow_rejects_forward_and_wrong_relation_references(self):
+        _context, _registry, plans = self._runtime()
+        invalid = (
+            PlannedCapability(
+                capability="odoo.workflow.batch_create_graph",
+                arguments={
+                    "operation": "create_graph",
+                    "steps": [
+                        {
+                            "step_id": "contacts",
+                            "model": "res.partner",
+                            "rows": [{"name": "AI INVALID WORKFLOW CONTACT"}],
+                        },
+                        {
+                            "step_id": "orders",
+                            "model": "sale.order",
+                            "rows": [
+                                {
+                                    "pricelist_id": {
+                                        "$ref": {"step": "contacts", "record_index": 0}
+                                    }
+                                }
+                            ],
+                        },
+                    ],
+                },
+                summary="No ejecutar una referencia incompatible",
+            ),
+        )
+
+        with self.assertRaises(CapabilityError) as captured:
+            asyncio.run(plans.prepare(invalid))
+        self.assertEqual(captured.exception.code, "workflow_reference_invalid")
+
     def test_batch_delete_requires_preview_and_verifies_absence(self):
         context, _registry, plans = self._runtime()
         doomed = self.env["res.partner"].create(

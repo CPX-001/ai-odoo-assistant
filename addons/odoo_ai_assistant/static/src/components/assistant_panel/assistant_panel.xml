@@ -156,10 +156,10 @@
                         </p>
                     </div>
 
-                    <div class="d-flex flex-column gap-3">
+                    <div class="o_ai_assistant_conversation d-flex flex-column">
                         <div t-foreach="state.messages" t-as="message" t-key="message.message_id"
                             t-att-class="'o_ai_assistant_message ' + (message.role === 'user' ? 'o_ai_assistant_message_user' : 'o_ai_assistant_message_assistant')">
-                            <div class="small text-muted mb-1">
+                            <div t-att-class="'o_ai_assistant_message_role small text-muted ' + (message.role === 'user' ? '' : 'visually-hidden')">
                                 <t t-if="message.role === 'user'">Tú</t>
                                 <t t-else="">Assistant</t>
                             </div>
@@ -243,18 +243,32 @@
                         </div>
                     </section>
 
-                    <section t-if="recoveryPending" class="alert alert-warning mt-3 mb-0" role="status">
+                    <section t-if="executionPending and !recoveryReviewRequired"
+                        class="o_ai_assistant_execution_status mt-3" role="status">
                         <div class="fw-semibold mb-1">
-                            <t t-if="recoveryExecuting">Ejecución en curso</t>
-                            <t t-else="">Revisión de ejecución pendiente</t>
+                            <t t-if="recoveryExecuting">Ejecutando la acción</t>
+                            <t t-else="">Acción aprobada en cola</t>
                         </div>
-                        <div class="small mb-2">
+                        <div class="small text-muted mb-2">
                             <t t-if="recoveryExecuting">
-                                El plan sigue ejecutándose. El navegador sólo consulta su estado; no puede volver a lanzar la acción.
+                                Odoo está ejecutando el plan una sola vez y verificará el resultado.
                             </t>
                             <t t-else="">
-                                El worker cruzó la barrera de escritura y el resultado no es concluyente. No se repetirá la acción automáticamente.
+                                El plan aprobado espera al worker; todavía no implica que se haya escrito ningún dato.
                             </t>
+                        </div>
+                        <button type="button" class="btn btn-link btn-sm p-0"
+                            t-att-disabled="state.decisionLoading" t-on-click="retryAction">
+                            <i t-if="state.decisionLoading" class="fa fa-spinner fa-spin me-1"
+                                aria-hidden="true"/>
+                            Actualizar estado
+                        </button>
+                    </section>
+
+                    <section t-if="recoveryReviewRequired" class="alert alert-warning mt-3 mb-0" role="status">
+                        <div class="fw-semibold mb-1">Revisión de ejecución pendiente</div>
+                        <div class="small mb-2">
+                            Odoo sí cruzó la barrera de escritura y no puede confirmar el resultado. No se repetirá la acción a ciegas.
                         </div>
                         <button type="button" class="btn btn-warning btn-sm"
                             t-att-disabled="state.decisionLoading" t-on-click="retryAction">

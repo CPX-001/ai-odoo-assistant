@@ -232,19 +232,59 @@ function visibleReasoningParts(state, preferences) {
         : 2000;
     const maximum =
         preferences.reasoning_summary === "concise" ? Math.min(serverLimit, 600) : serverLimit;
+    return boundedReasoningParts(scope.reasoningSummaryParts, preferences, maximum);
+}
+
+function boundedReasoningParts(parts, preferences, explicitMaximum = null) {
+    if (preferences?.reasoning_summary === "off" || !Array.isArray(parts)) {
+        return [];
+    }
+    const serverLimit = Number.isSafeInteger(preferences?.limits?.max_reasoning_summary_chars)
+        ? preferences.limits.max_reasoning_summary_chars
+        : 2000;
+    const maximum = Number.isSafeInteger(explicitMaximum)
+        ? explicitMaximum
+        : preferences.reasoning_summary === "concise"
+          ? Math.min(serverLimit, 600)
+          : serverLimit;
     const result = [];
     let remaining = Math.max(0, maximum);
-    for (const part of scope.reasoningSummaryParts) {
+    for (const part of parts) {
         if (!remaining || typeof part?.text !== "string" || !part.text) {
             continue;
         }
-        const text = part.text.slice(0, remaining);
+        const text = plainReasoningText(part.text).slice(0, remaining);
         if (text) {
             result.push({ key: part.key, text });
             remaining -= text.length;
         }
     }
     return result;
+}
+
+function plainReasoningText(value) {
+    const source = String(value || "");
+    // Codex can emit terse internal headings as isolated bold Markdown fragments.  They are
+    // presentation scaffolding, not useful user-facing reasoning, so the UI keeps the host-owned
+    // semantic activity rows and suppresses these raw fragments entirely.
+    const nonEmptyLines = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (
+        nonEmptyLines.length &&
+        nonEmptyLines.every((line) => /^\*\*[^*]+\*\*$/.test(line))
+    ) {
+        return "";
+    }
+    return source
+        .replace(/\*\*([^*]+)\*\*/g, "$1")
+        .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+        .trim();
+}
+
+function activitySummaryLabel(activity, running) {
+    if (running) {
+        return semanticLabel(activity.headline);
+    }
+    return activity.step_count ? _t("Worked for %s", durationLabel(activity.duration_ms)) : "";
 }
 
 patch(AssistantPanel.prototype, {
@@ -264,7 +304,10 @@ patch(AssistantPanel.prototype, {
     },
 
     get activityItems() {
-        const activity = this.semanticActivity;
+        return this.presentActivityItems(this.semanticActivity);
+    },
+
+    presentActivityItems(activity) {
         return activity.items.map((item) => {
             const navigationReferences =
                 normalizeHostNavigationReferences(item.references || [], 12) || [];
@@ -305,18 +348,37 @@ patch(AssistantPanel.prototype, {
     },
 
     get activitySummaryLabel() {
-        const activity = this.semanticActivity;
-        if (this.state.loading) {
-            return semanticLabel(activity.headline);
+        return activitySummaryLabel(this.semanticActivity, Boolean(this.state.loading));
+    },
+
+    get activityDisclosureKey() {
+        const scope = activeReasoningScope(this.state);
+        if (scope?.turnId) {
+            return `live:${scope.turnId}:${this.state.loading ? "running" : "settled"}`;
         }
-        if (!activity.step_count) {
-            return "";
+        const messages = Array.isArray(this.state.messages) ? this.state.messages : [];
+        return `pending:${messages.at(-1)?.message_id || "idle"}`;
+    },
+
+    messageActivity(message) {
+        const stored = message?.activity;
+        if (!stored || !Array.isArray(stored.events)) {
+            return null;
         }
-        const duration = durationLabel(activity.duration_ms);
-        if (activity.step_count === 1) {
-            return _t("Thought for %s · 1 step", duration);
-        }
-        return _t("Thought for %s · %s steps", duration, activity.step_count);
+        const activity = semanticActivityPresentation(stored.events, {
+            running: false,
+            preferences: this.state.activityPresentation,
+        });
+        return {
+            key: `history:${message.message_id}:${stored.turn_id}`,
+            summary_label: activitySummaryLabel(activity, false),
+            items: this.presentActivityItems(activity),
+            reasoning_parts: boundedReasoningParts(
+                stored.reasoning_summary_parts,
+                activity.preferences
+            ),
+            truncated: activity.truncated,
+        };
     },
 
     get settledActivityAnswer() {
@@ -431,4 +493,10 @@ patch(AssistantPanel.prototype, {
     },
 });
 
-export { durationLabel, resultSummaryLabel, semanticLabel, visibleReasoningParts };
+export {
+    durationLabel,
+    plainReasoningText,
+    resultSummaryLabel,
+    semanticLabel,
+    visibleReasoningParts,
+};

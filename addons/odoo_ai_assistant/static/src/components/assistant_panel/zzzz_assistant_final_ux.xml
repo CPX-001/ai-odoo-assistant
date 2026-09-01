@@ -6,15 +6,14 @@
 
         <xpath expr="//div[contains(@t-if, 'state.loading') and contains(@t-if, '!state.streamingText')]" position="replace">
             <div t-if="state.loading and !state.streamingText and !state.currentActivity"
-                class="o_ai_assistant_turn_status small text-muted mt-3 d-flex align-items-center gap-2"
+                class="o_ai_assistant_turn_status small text-muted mt-3"
                 role="status" aria-label="Estado del Assistant">
-                <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
-                <span>Preparando respuesta…</span>
+                <span class="o_ai_assistant_activity_shimmer">Preparando respuesta…</span>
             </div>
         </xpath>
 
         <xpath expr="//div[@t-if='state.errorCode']" position="replace">
-            <div t-if="state.errorCode"
+            <div t-if="state.errorCode and !executionPending and !recoveryReviewRequired"
                 class="o_ai_assistant_failure alert alert-danger mt-3 mb-0"
                 role="alert" aria-label="Fallo del Assistant">
                 <div class="fw-semibold mb-1">No se pudo completar la petición</div>

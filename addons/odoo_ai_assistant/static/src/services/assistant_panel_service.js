@@ -3,6 +3,7 @@
 import { registry } from "@web/core/registry";
 import { rpc } from "@web/core/network/rpc";
 import { reactive } from "@odoo/owl";
+import { normalizePublicTurnEvent } from "@odoo_ai_assistant/services/assistant_public_activity_contract";
 
 const CHAT_WORKFLOWS = new Set(["AGENT"]);
 const PLAN_STATES = new Set([
@@ -378,17 +379,78 @@ export function normalizeHistoryResponse(response) {
         ) &&
         Array.isArray(response.messages) &&
         response.messages.length <= 80 &&
-        response.messages.every(
-            (item) =>
-                typeof item?.message_id === "string" &&
-                ["user", "assistant"].includes(item?.role) &&
-                typeof item?.content === "string" &&
-                typeof item?.created_at === "string"
-        )
+        response.messages.every(validHistoryMessage)
     ) {
-        return { history: response, errorCode: null };
+        return {
+            history: {
+                ...response,
+                messages: response.messages.map((item) => ({
+                    ...item,
+                    ...(item.activity
+                        ? { activity: normalizeHistoryActivity(item.activity) }
+                        : {}),
+                })),
+            },
+            errorCode: null,
+        };
     }
     return { history: null, errorCode: errorCode(response) };
+}
+
+function validHistoryMessage(item) {
+    if (
+        typeof item?.message_id !== "string" ||
+        !["user", "assistant"].includes(item?.role) ||
+        typeof item?.content !== "string" ||
+        typeof item?.created_at !== "string"
+    ) {
+        return false;
+    }
+    if (!Object.hasOwn(item, "activity")) {
+        return true;
+    }
+    return item.role === "assistant" && normalizeHistoryActivity(item.activity) !== null;
+}
+
+function normalizeHistoryActivity(value) {
+    if (
+        !exactKeys(value, ["turn_id", "events", "reasoning_summary_parts"]) ||
+        typeof value.turn_id !== "string" ||
+        !Array.isArray(value.events) ||
+        value.events.length > 100 ||
+        !Array.isArray(value.reasoning_summary_parts) ||
+        value.reasoning_summary_parts.length > 65
+    ) {
+        return null;
+    }
+    const events = value.events.map(normalizePublicTurnEvent);
+    if (events.some((event) => !event || event.turn_id !== value.turn_id)) {
+        return null;
+    }
+    let total = 0;
+    const parts = [];
+    for (const part of value.reasoning_summary_parts) {
+        if (
+            !exactKeys(part, ["key", "text"]) ||
+            typeof part.key !== "string" ||
+            !/^[A-Za-z0-9_.:-]{3,320}$/.test(part.key) ||
+            typeof part.text !== "string" ||
+            !part.text ||
+            part.text.includes("\u0000")
+        ) {
+            return null;
+        }
+        total += part.text.length;
+        if (total > 8 * 1024) {
+            return null;
+        }
+        parts.push(Object.freeze({ key: part.key, text: part.text }));
+    }
+    return Object.freeze({
+        turn_id: value.turn_id,
+        events: Object.freeze(events),
+        reasoning_summary_parts: Object.freeze(parts),
+    });
 }
 
 export function normalizeRuntimeStatus(response) {

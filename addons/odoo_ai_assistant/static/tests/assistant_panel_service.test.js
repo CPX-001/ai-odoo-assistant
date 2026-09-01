@@ -4,6 +4,7 @@ import {
     loadDraft,
     loadRuntimeStatus,
     normalizeChatResponse,
+    normalizeHistoryResponse,
     normalizeRuntimeStatus,
     recoveryPending,
     resetForNewConversation,
@@ -328,6 +329,63 @@ test("history hydrates conversations and messages", async () => {
     expect(loaded).toBe(true);
     expect(panelState.conversations).toHaveLength(1);
     expect(panelState.messages[0].role).toBe("user");
+});
+
+test("history keeps bounded public activity attached to its assistant answer", () => {
+    const response = {
+        ok: true,
+        active_turn: null,
+        active_conversation_id: "22345678-1234-5678-9234-567812345678",
+        conversations: [
+            {
+                conversation_id: "22345678-1234-5678-9234-567812345678",
+                title: "Crear contactos",
+                updated_at: "2026-09-01T17:30:00Z",
+            },
+        ],
+        messages: [
+            {
+                message_id: "32345678-1234-5678-9234-567812345678",
+                role: "assistant",
+                content: "Se crearon los contactos.",
+                created_at: "2026-09-01T17:30:00Z",
+                activity: {
+                    turn_id: "42345678-1234-5678-9234-567812345678",
+                    events: [
+                        {
+                            sequence: 1,
+                            turn_id: "42345678-1234-5678-9234-567812345678",
+                            kind: "capability.completed",
+                            phase: "capability",
+                            status: "completed",
+                            label: "Created records",
+                            resource: null,
+                            references: [],
+                            capability: "odoo.records.batch_create",
+                            progress: null,
+                            diagnostic_code: null,
+                            occurred_at: "2026-09-01T17:29:59.000000Z",
+                            activity_id: "activity:v1:11111111111111111111111111111111",
+                            semantic: null,
+                        },
+                    ],
+                    reasoning_summary_parts: [
+                        { key: "summary:item:0", text: "Resumen legible" },
+                    ],
+                },
+            },
+        ],
+    };
+
+    const parsed = normalizeHistoryResponse(response);
+
+    expect(parsed.errorCode).toBe(null);
+    expect(parsed.history.messages[0].activity.events).toHaveLength(1);
+    expect(parsed.history.messages[0].activity.reasoning_summary_parts[0].text).toBe(
+        "Resumen legible"
+    );
+    response.messages[0].activity.events[0].turn_id = "wrong-turn";
+    expect(normalizeHistoryResponse(response).history).toBe(null);
 });
 
 test("loading guard prevents simultaneous chat turns", async () => {

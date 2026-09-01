@@ -336,10 +336,16 @@ class AssistantTurnEmbeddedStatus(models.Model):
         envelope = dict(envelope)
         envelope["plan"] = plan
         envelope["human_approved"] = True
+        # Approval resumes the already-prepared host plan; it must always have one queue claim
+        # available even when transient provider/runtime failures consumed the original reasoning
+        # budget.  Otherwise a valid approved plan can be left in ``queued`` forever because the
+        # queue predicate requires ``attempt_count < max_attempts``.
+        resume_attempt_ceiling = max(turn.max_attempts, turn.attempt_count + 1)
         technical.write(
             {
                 "state": "queued",
                 "queued_at": fields.Datetime.now(),
+                "max_attempts": resume_attempt_ceiling,
                 "capability_plan_payload": envelope,
                 "result_payload": False,
                 "error_code": False,

@@ -16,7 +16,7 @@
             </button>
         </xpath>
 
-        <xpath expr="//section[@t-if='recoveryPending']" position="after">
+        <xpath expr="//section[@t-if='recoveryReviewRequired']" position="after">
             <section t-if="performedActionsVisible"
                 class="o_ai_assistant_performed_actions border rounded p-3 mt-3" role="status">
                 <div class="d-flex align-items-start justify-content-between gap-2">

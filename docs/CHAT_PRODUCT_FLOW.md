@@ -240,6 +240,17 @@ A compact live line follows the latest meaningful step. A direct model answer cr
 
 Readable provider summaries accept bounded `summaryTextDelta`; raw reasoning `textDelta` never enters public state.
 
+Activity belongs to the Assistant answer that it explains. Odoo persists the public semantic activity and bounded
+readable summaries with that historical message, so leaving the panel, reloading or opening the conversation later
+does not remove it. While a turn runs there is exactly one live disclosure for that conversation; once the final
+answer is reconciled it becomes the historical disclosure above that answer and closes by default. The closed caret
+points right (`>`); opening it rotates the same caret and reveals a scrollable detail area whose visible line count
+comes from the activity presentation setting (five by default).
+
+The normal surface deliberately avoids a spinner, nested Assistant cards and provider-authored Markdown planning
+headings. Only the current semantic text receives the subtle wave animation. Isolated raw headings such as
+`**Planning model discovery**` are presentation noise and are not rendered as public reasoning.
+
 Running status separately projects the latest validated TaskPlan when Plan mode is in use. The UI chooses the newest valid revision and prefers the authoritative final response on equal revisions, so a stale final live poll cannot hide the terminal plan.
 
 ## 11. Answer streaming
@@ -336,6 +347,9 @@ P5.6 `ConversationContextManager` remains accepted. Complete Odoo messages/turns
 
 Intervention messages are stored in chat history but excluded from duplicated ordinary-history projection when they are already supplied as explicit current-turn intervention context.
 
+Opening the Assistant normally enters conversation history. A conversation may open directly only when the current
+browser session already has an active conversation to resume; a terminal turn is never restored as the active turn.
+
 ## 18. Error/recovery behavior
 
 Structured distinctions remain visible:
@@ -362,5 +376,10 @@ The chat should eventually invoke the same host contracts for JIT installation c
 MCP, automations, AI fields and launchers may reuse the same capabilities later with different effective catalogs/policies, but not independent authority stacks.
 
 Future reference kinds may include source/document/web evidence only when those entities can be grounded and revalidated safely.
+
+RAG/JIT context is an optimization for discovery and grounding, not execution authority. A future Odoo knowledge
+provider may retrieve likely models, fields, views, domains and company documentation under the current ACL/company
+scope, with provenance, freshness and cache identity. This can remove repeated schema-search calls and shorten the
+reasoning prompt. It cannot approve an effect, bypass live validation, or replace a `CapabilityDefinition` handler.
 
 See `PRODUCT_VISION.md`, `CAPABILITY_FRAMEWORK.md`, `research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md`, `research/P5.8_IMPLEMENTATION.md`, `research/P6_PLANNING_EFFECTPLAN_IMPLEMENTATION.md`, `research/P6_EFFECT_RECOVERY_JOURNAL_IMPLEMENTATION.md`, `research/P6_ADAPTIVE_PLANNING_IMPLEMENTATION.md` and `research/PERIODIC_FULL_REGRESSION_RUNBOOK.md`.

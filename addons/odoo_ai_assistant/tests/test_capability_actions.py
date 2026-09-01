@@ -334,8 +334,12 @@ class TestCapabilityActions(TransactionCase):
                 "state": "awaiting_confirmation",
                 "capability_plan_payload": envelope,
                 "result_payload": response,
+                # Reproduce the production edge case: transient failures consumed every
+                # reasoning claim before the user approved the already-prepared plan.
+                "attempt_count": turn.max_attempts,
             }
         )
+        exhausted_attempts = turn.max_attempts
 
         preference.set_current_reasoning_model("approval-model-b")
         preference.set_current_agent_profile("full_access")
@@ -357,6 +361,8 @@ class TestCapabilityActions(TransactionCase):
         self.assertEqual(decision["state"], "authorized")
         self.assertEqual(turn.turn_uuid, original_turn_uuid)
         self.assertEqual(turn.state, "queued")
+        self.assertEqual(turn.max_attempts, exhausted_attempts + 1)
+        self.assertLess(turn.attempt_count, turn.max_attempts)
         self.assertFalse(turn.result_payload)
         self.assertTrue(turn.capability_plan_payload["human_approved"])
         self.assertEqual(turn.capability_plan_payload["plan"]["state"], "authorized")
