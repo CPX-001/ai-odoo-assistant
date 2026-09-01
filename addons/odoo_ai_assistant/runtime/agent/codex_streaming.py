@@ -8,7 +8,6 @@ provider-declared readable reasoning summaries are optional presentation channel
 from __future__ import annotations
 
 import asyncio
-import re
 
 from .answer_stream import AnswerStreamError, StructuredFinalAnswerDeltaExtractor
 from .codex import _provider_timing_recorder
@@ -41,12 +40,6 @@ _MAX_PROVIDER_DELTA = 16 * 1024
 _MAX_PUBLIC_REASONING_DELTA = 2 * 1024
 _MAX_ITEM_ID = 256
 _MAX_SUMMARY_INDEX = 64
-_LONG_ANSWER_REQUEST = re.compile(
-    r"(?:\b(?:analiza|analitza|analy[sz]e|detalle|detallad[oa]|detailed|extens[oa]|"
-    r"extensive|gu[ií]a|guide|hundred|cien|cent|p[aá]rrafos?|paragraphs?|punts?|puntos?)\b|"
-    r"\bal menos\b|\bcom a m[ií]nim\b|\bat least\b)",
-    re.IGNORECASE,
-)
 
 
 def _streaming_thread_options(settings):
@@ -263,15 +256,19 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
 
 
 def _long_answer_stream_requested(message: object) -> bool:
-    """Use host-validated prompt JSON only when useful answer streaming is explicitly requested.
+    """Use the prompt-carried host schema for every real product turn.
 
-    Current App Server versions can buffer a structured-output string until it closes. For an
-    explicitly long answer, omitting provider-side ``outputSchema`` lets its normal agent-message
-    deltas arrive incrementally. The exact wire schema remains host-owned in the prompt and the
-    completed JSON still crosses the same strict parser/validator before it becomes authoritative.
+    The legacy helper name is retained because tests and downstream code import it. App Server can
+    buffer a provider-side structured-output string until the JSON object closes, which makes a
+    normal short turn look completely non-streaming. Keeping the exact wire schema inside the
+    host-authored prompt lets ordinary ``item/agentMessage/delta`` notifications arrive while the
+    completed message still crosses the same strict JSON parser and ``NextDecision`` validator.
+
+    This is presentation/transport only: the model gains no execution authority, and malformed
+    completed output still fails closed.
     """
 
-    return bool(isinstance(message, str) and _LONG_ANSWER_REQUEST.search(message))
+    return isinstance(message, str) and bool(message.strip())
 
 
 def _agent_message_delta(params, *, thread_id: str, turn_id: str) -> tuple[str, str]:
