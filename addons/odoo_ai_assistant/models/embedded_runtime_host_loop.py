@@ -9,6 +9,7 @@ from odoo import SUPERUSER_ID, api, models
 from odoo.exceptions import AccessError, ValidationError
 
 from ..runtime.agent import (
+    AgentTurnResult,
     AgentTurnService,
     AssistantExtensionDecisionEngine,
     CapabilityPlanError,
@@ -19,6 +20,7 @@ from ..runtime.agent import (
 from ..runtime.agent.interactive_codex import InteractiveCodexDecisionEngine
 from ..runtime.agent.planning import PlanningDecisionEngine
 from ..runtime.agent.provider_failure import FailureNormalizingDecisionEngine
+from ..runtime.agent.social import simple_social_answer
 from ..runtime.agent.turn_effect_boundary import acquire_turn_effect_lock
 from ..runtime.agent.working_transcript import (
     WorkingTranscriptError,
@@ -62,6 +64,18 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             raise AccessError("Assistant turn binding is no longer valid")
 
         policy_snapshot = resolve_capability_policy(turn.policy_payload or {})
+        social_answer = simple_social_answer(turn.input_message, lang=turn.lang)
+        if social_answer is not None:
+            _ensure_turn_control_current(turn)
+            return self._read_only_response(
+                turn,
+                AgentTurnResult(
+                    answer=social_answer,
+                    confidence="high",
+                    plan=(),
+                ),
+                policy_snapshot,
+            )
         registry = discover_capabilities_for_env(self.env)
         resolver = CapabilityConfigResolver.from_env(self.env)
         enablement = resolver.enablement_overrides(registry.definitions)

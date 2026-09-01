@@ -6,7 +6,7 @@ from odoo.exceptions import AccessError
 from odoo.modules.registry import Registry
 from odoo.tests.common import TransactionCase
 
-from ..models.turn_queue import _recover_stale_turns
+from ..models.turn_queue import _NON_RETRYABLE_TURN_ERRORS, _recover_stale_turns
 from ..models.turn_working_transcript import persist_working_transcript
 from ..runtime.agent.working_transcript import append_working_item
 
@@ -47,6 +47,17 @@ class TestAssistantTurnQueue(TransactionCase):
             "selected_ids": [],
             "view_type": "list",
         }
+
+    def test_deterministic_agent_budget_and_task_plan_errors_are_not_requeued(self):
+        self.assertTrue(
+            {
+                "agent_capability_call_budget_exceeded",
+                "agent_correctable_failure_budget_exceeded",
+                "agent_provider_decision_budget_exceeded",
+                "agent_task_plan_invalid",
+                "agent_task_plan_revision_invalid",
+            }.issubset(_NON_RETRYABLE_TURN_ERRORS)
+        )
 
     def test_enqueue_persists_user_turn_and_initial_event(self):
         env = self.env(user=self.user_a, su=False)

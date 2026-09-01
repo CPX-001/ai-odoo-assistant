@@ -4,6 +4,10 @@ from odoo import Command
 from odoo.tests.common import TransactionCase
 
 from ..runtime.agent.contracts import FinalAnswer, PlanStepProposal, TaskPlanUpdate
+from ..runtime.agent.decision_validation import (
+    NextDecisionValidationError,
+    RejectedTaskPlanUpdate,
+)
 from ..runtime.agent.plan import CapabilityPlanService
 from ..runtime.agent.planning import PlanningDecisionEngine, resolve_planning_strategy
 from ..runtime.agent.service import AgentTurnError, AgentTurnService
@@ -29,6 +33,21 @@ class _PlanDecisionEngine:
         if not self.decisions:
             raise AssertionError("unexpected provider decision request")
         return self.decisions.pop(0)
+
+
+class _MalformedPlanThenAnswerEngine:
+    def __init__(self):
+        self.calls = 0
+
+    async def next_decision(self, **kwargs):
+        del kwargs
+        self.calls += 1
+        if self.calls == 1:
+            raise NextDecisionValidationError(
+                "agent_task_plan_revision_invalid",
+                RejectedTaskPlanUpdate(rejected_revision=2),
+            )
+        return FinalAnswer("final_answer", "Respuesta corregida", "high")
 
 
 class TestCanonicalPlanHostLoop(TransactionCase):
@@ -93,6 +112,31 @@ class TestCanonicalPlanHostLoop(TransactionCase):
             allow_plan_proposals=True,
         )
         return engine, service
+
+    def test_unparseable_task_plan_revision_is_corrected_in_the_same_service_loop(self):
+        context, registry, executor, _plans = self._runtime()
+        engine = _MalformedPlanThenAnswerEngine()
+        service = AgentTurnService(
+            registry=registry,
+            context=context,
+            executor=executor,
+            decision_engine=engine,
+            allow_plan_proposals=True,
+        )
+
+        result = asyncio.run(service.run(message="Crea 30 presupuestos"))
+
+        self.assertEqual(result.answer, "Respuesta corregida")
+        self.assertEqual(engine.calls, 2)
+        errors = [item for item in service.working_items if item.kind == "task_plan_error"]
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(
+            errors[0].data,
+            {
+                "code": "agent_task_plan_revision_invalid",
+                "rejected_revision": 2,
+            },
+        )
 
     def test_patch_proposal_is_stage_only_until_approved_then_executes_once_and_verifies(self):
         context, registry, executor, plans = self._runtime()

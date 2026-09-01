@@ -165,11 +165,17 @@ TaskPlan is a separate product-plan artifact. Phase 6 does not turn private reas
 
 The first provider decision is also the semantic route: it may answer directly, request the minimum authoritative Odoo reads, or begin bounded effect work. Direct model answers publish no generic "Thought" activity. Short Odoo lookups and short action chains may use several tightly scoped capabilities without creating a TaskPlan; public work starts only after the host accepts a non-final decision.
 
-Exact social messages such as a greeting, thanks, or farewell additionally use a final-answer-only provider contract. The constraint stays deliberately narrow: a greeting combined with a business request still enters the normal semantic route.
+Exact social messages such as a greeting, thanks, or farewell use a bounded provider-free fast path
+before capability discovery and activity setup. The constraint stays deliberately narrow: a
+greeting combined with a business request still enters the normal semantic route.
 
 ## Latency note
 
-Removing artificial TaskPlans avoids extra orchestration, but it does not by itself make provider generation instantaneous. The current one-`NextDecision` host loop may still require several provider round-trips for schema/read/effect chains, and the Codex adapter currently starts an ephemeral App Server/thread for each decision. Optimize that boundary from measured timings and evals rather than reintroducing a rigid intent router or making TaskPlan automatic again.
+Exact social messages do not incur provider startup. For all other requests, removing artificial
+TaskPlans avoids extra orchestration but does not make provider generation instantaneous. The
+current one-`NextDecision` host loop may still require several provider round-trips for
+schema/read/effect chains. Optimize that boundary from measured timings and evals rather than
+reintroducing a rigid intent router or making TaskPlan automatic again.
 
 ## Failure semantics
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from ..capabilities.contracts import CapabilityDefinition, CapabilityError
 from ..capabilities.validation import validate_payload
 from .contracts import (
@@ -14,8 +16,19 @@ from .contracts import (
 from .task_plan import parse_task_plan
 
 
+@dataclass(frozen=True, slots=True)
+class RejectedTaskPlanUpdate:
+    """Bounded metadata retained when an invalid TaskPlan cannot be parsed."""
+
+    rejected_revision: int | None
+
+
 class NextDecisionValidationError(RuntimeError):
-    def __init__(self, code: str, decision: NextDecision | None = None) -> None:
+    def __init__(
+        self,
+        code: str,
+        decision: NextDecision | RejectedTaskPlanUpdate | None = None,
+    ) -> None:
         super().__init__(code)
         self.code = code
         self.decision = decision

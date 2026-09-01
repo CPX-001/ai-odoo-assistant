@@ -33,6 +33,11 @@ _ERROR_CODE = re.compile(r"^[a-z0-9_]{1,128}$")
 _NON_RETRYABLE_TURN_ERRORS = frozenset(
     {
         "access_denied",
+        "agent_capability_call_budget_exceeded",
+        "agent_correctable_failure_budget_exceeded",
+        "agent_provider_decision_budget_exceeded",
+        "agent_task_plan_invalid",
+        "agent_task_plan_revision_invalid",
         "capability_authority_mismatch",
         "capability_not_available",
         "capability_plan_approval_required",

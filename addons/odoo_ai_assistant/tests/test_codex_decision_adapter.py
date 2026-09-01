@@ -23,6 +23,10 @@ from ..runtime.agent.contracts import (
     ReasoningCapabilityCall,
     TaskPlanUpdate,
 )
+from ..runtime.agent.decision_validation import (
+    NextDecisionValidationError,
+    RejectedTaskPlanUpdate,
+)
 
 
 class _EventClient:
@@ -112,12 +116,13 @@ class TestCodexDecisionAdapter(BaseCase):
             ["final_answer"],
         )
 
-    def test_only_explicitly_long_answers_use_prompt_schema_streaming(self):
+    def test_all_nonempty_turns_use_prompt_schema_streaming(self):
         self.assertTrue(
             _long_answer_stream_requested("Explica en al menos ocho párrafos breves")
         )
         self.assertTrue(_long_answer_stream_requested("Write a detailed guide"))
-        self.assertFalse(_long_answer_stream_requested("¿Cuál es el email de Eval Acme?"))
+        self.assertTrue(_long_answer_stream_requested("¿Cuál es el email de Eval Acme?"))
+        self.assertFalse(_long_answer_stream_requested("  "))
 
     def test_task_plan_wire_schema_requires_the_exact_next_revision_and_kind(self):
         initial_schema = _codex_next_decision_schema()
@@ -252,6 +257,45 @@ class TestCodexDecisionAdapter(BaseCase):
         self.assertIn("Create a TaskPlan only for a genuinely multi-phase workflow", instructions)
         self.assertIn("no matching record is visible", instructions)
         self.assertIn("may not exist or may be unavailable because of permissions", instructions)
+
+    def test_malformed_task_plan_is_returned_to_the_bounded_correction_loop(self):
+        with self.assertRaises(NextDecisionValidationError) as captured:
+            _decision_result(
+                {
+                    "items": [
+                        {
+                            "type": "agentMessage",
+                            "text": json.dumps(
+                                {
+                                    "decision": {
+                                        "kind": "task_plan_update",
+                                        "task_plan": {
+                                            "goal": "Crear presupuestos",
+                                            "revision": 2,
+                                            "revision_kind": "initial",
+                                            "revision_summary": "",
+                                            "steps": [
+                                                {
+                                                    "step_id": "prepare",
+                                                    "title": "Preparar",
+                                                    "state": "in_progress",
+                                                    "depends_on": [],
+                                                }
+                                            ],
+                                        },
+                                    }
+                                }
+                            ),
+                        }
+                    ]
+                }
+            )
+
+        self.assertEqual(captured.exception.code, "agent_task_plan_revision_invalid")
+        self.assertEqual(
+            captured.exception.decision,
+            RejectedTaskPlanUpdate(rejected_revision=2),
+        )
 
     def test_wire_envelope_is_normalized_to_strict_next_decision(self):
         final = _decision_result(

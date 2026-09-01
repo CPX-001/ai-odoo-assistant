@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import cast
@@ -23,19 +22,23 @@ from .codex import (
     _validate_notification,
     _with_completed_agent_messages,
 )
-from .contracts import NextDecision, next_decision_schema, parse_next_decision
-from .decision_validation import validate_next_decision
+from .contracts import (
+    NextDecision,
+    NextDecisionError,
+    next_decision_schema,
+    parse_next_decision,
+)
+from .decision_validation import (
+    NextDecisionValidationError,
+    RejectedTaskPlanUpdate,
+    validate_next_decision,
+)
+from .social import is_simple_social_message
 
 _MAX_EVENTS = 2048
 _MAX_DECISION_CONTEXT_BYTES = 128 * 1024
 _MAX_PROVIDER_FAILURE_TOKEN = 64
 _RETRYABLE_PROVIDER_CATEGORIES = frozenset({"serverOverloaded"})
-_SIMPLE_SOCIAL_MESSAGE = re.compile(
-    r"^[.!¡?¿ ]*(?:hola|hello|hi|hey|buenos d[ií]as|buenas tardes|buenas noches|"
-    r"gracias|muchas gracias|adi[oó]s|hasta luego)"
-    r"(?:[,.!¡?¿ ]*(?:qu[eé] tal|c[oó]mo est[aá]s|how are you))?[,.!¡?¿ ]*$",
-    re.IGNORECASE,
-)
 _DECISION_INSTRUCTIONS = """You are the isolated reasoning component of Odoo AI Assistant.
 Return exactly one decision inside the root decision field, matching one branch of the supplied
 schema. For a capability call or effect-plan proposal, encode the arguments object as JSON in the
@@ -269,12 +272,9 @@ class CodexDecisionEngine:
 
 
 def _is_simple_social_message(message: object) -> bool:
-    return bool(
-        isinstance(message, str)
-        and 1 <= len(message.strip()) <= 80
-        and "\x00" not in message
-        and _SIMPLE_SOCIAL_MESSAGE.fullmatch(" ".join(message.split()))
-    )
+    """Compatibility alias retained for streaming and adapter tests."""
+
+    return is_simple_social_message(message)
 
 
 def _decision_instructions(final_answer_only: bool) -> str:
@@ -668,12 +668,33 @@ def _decision_result(turn: Mapping[str, object]) -> NextDecision:
     if not messages:
         raise CodexAgentError("codex_answer_missing")
     try:
-        return parse_next_decision(_provider_decision(json.loads(messages[-1])))
+        raw_decision = _provider_decision(json.loads(messages[-1]))
     except (TypeError, ValueError):
         raise CodexAgentError("codex_answer_invalid") from None
-    except Exception as error:
-        code = getattr(error, "code", "agent_next_decision_invalid")
-        raise CodexAgentError(code) from error
+    try:
+        return parse_next_decision(raw_decision)
+    except NextDecisionError as error:
+        rejected = _rejected_task_plan_update(raw_decision)
+        if rejected is not None:
+            code = (
+                error.code
+                if error.code.startswith("agent_task_plan_")
+                else "agent_task_plan_invalid"
+            )
+            raise NextDecisionValidationError(code, rejected) from error
+        raise CodexAgentError(error.code) from error
+
+
+def _rejected_task_plan_update(
+    decision: Mapping[str, object],
+) -> RejectedTaskPlanUpdate | None:
+    if decision.get("kind") != "task_plan_update":
+        return None
+    task_plan = decision.get("task_plan")
+    revision = task_plan.get("revision") if isinstance(task_plan, Mapping) else None
+    return RejectedTaskPlanUpdate(
+        rejected_revision=revision if type(revision) is int and revision > 0 else None
+    )
 
 
 def _provider_decision(value: object) -> dict[str, object]:

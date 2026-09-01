@@ -31,7 +31,11 @@ from .contracts import (
     TaskPlanUpdate,
     decision_payload,
 )
-from .decision_validation import NextDecisionValidationError, validate_next_decision
+from .decision_validation import (
+    NextDecisionValidationError,
+    RejectedTaskPlanUpdate,
+    validate_next_decision,
+)
 from .task_plan import TaskPlan, TaskPlanError, parse_task_plan
 from .working_transcript import (
     WorkingItem,
@@ -308,14 +312,24 @@ class AgentTurnService:
                 rejected = getattr(error, "decision", None)
                 if not isinstance(
                     rejected,
-                    (ReasoningCapabilityCall, PlanStepProposal, TaskPlanUpdate),
+                    (
+                        ReasoningCapabilityCall,
+                        PlanStepProposal,
+                        TaskPlanUpdate,
+                        RejectedTaskPlanUpdate,
+                    ),
                 ):
                     raise AgentTurnError(error.code) from error
                 if isinstance(rejected, ReasoningCapabilityCall):
                     capability_calls += 1
                     if capability_calls > budgets.exploration.max_capability_calls:
                         raise AgentTurnError("agent_capability_call_budget_exceeded") from error
-                if isinstance(rejected, TaskPlanUpdate):
+                if isinstance(rejected, RejectedTaskPlanUpdate):
+                    await self._record_rejected_task_plan_revision(
+                        rejected.rejected_revision,
+                        error.code,
+                    )
+                elif isinstance(rejected, TaskPlanUpdate):
                     await self._record_rejected_task_plan(rejected.task_plan, error.code)
                 else:
                     await self._record_rejected_decision(rejected, error.code)
@@ -565,6 +579,18 @@ class AgentTurnService:
             self._working_items,
             "task_plan_error",
             {"code": code, "rejected_revision": plan.revision},
+        )
+        await self._persist()
+
+    async def _record_rejected_task_plan_revision(
+        self,
+        revision: int | None,
+        code: str,
+    ) -> None:
+        self._working_items = append_working_item(
+            self._working_items,
+            "task_plan_error",
+            {"code": code, "rejected_revision": revision},
         )
         await self._persist()
 
