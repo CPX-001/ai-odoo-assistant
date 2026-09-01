@@ -6,6 +6,21 @@
         <xpath expr="//div[@t-foreach='state.messages']" position="attributes">
             <attribute name="t-foreach">activityOrderedMessages</attribute>
         </xpath>
+        <xpath expr="//div[contains(@class, 'd-flex flex-column gap-3')]" position="after">
+            <div t-if="!settledActivityAnswer and finalNavigationReferencesVisible"
+                class="o_ai_assistant_final_references d-flex flex-wrap gap-2 pt-1"
+                role="group" aria-label="Enlaces de Odoo relacionados con la respuesta">
+                <button t-foreach="finalNavigationReferences" t-as="reference"
+                    t-key="activityReferenceKey(reference)"
+                    type="button" class="btn btn-sm btn-outline-secondary rounded-pill"
+                    t-att-title="reference.description || finalReferenceLabel(reference)"
+                    t-att-aria-label="finalReferenceLabel(reference)"
+                    t-on-click="() => this.openFinalReference(reference)">
+                    <i class="fa fa-external-link me-1" aria-hidden="true"/>
+                    <span t-esc="finalReferenceLabel(reference)"/>
+                </button>
+            </div>
+        </xpath>
         <xpath expr="//div[@t-if='state.loading and state.streamingText']" position="before">
             <section t-if="activityItems.length"
                 t-att-class="'o_ai_assistant_activity mt-3 ' + (state.loading ? 'o_ai_assistant_activity_running' : 'o_ai_assistant_activity_settled')"
@@ -50,6 +65,22 @@
                 <div class="small text-muted mb-1">Assistant</div>
                 <div class="o_ai_assistant_message_content text-break" t-esc="settledActivityAnswer"/>
             </div>
+            <div t-if="settledActivityAnswer and finalNavigationReferencesVisible"
+                class="o_ai_assistant_final_references d-flex flex-wrap gap-2 pt-1"
+                role="group" aria-label="Enlaces de Odoo relacionados con la respuesta">
+                <button t-foreach="finalNavigationReferences" t-as="reference"
+                    t-key="activityReferenceKey(reference)"
+                    type="button" class="btn btn-sm btn-outline-secondary rounded-pill"
+                    t-att-title="reference.description || finalReferenceLabel(reference)"
+                    t-att-aria-label="finalReferenceLabel(reference)"
+                    t-on-click="() => this.openFinalReference(reference)">
+                    <i class="fa fa-external-link me-1" aria-hidden="true"/>
+                    <span t-esc="finalReferenceLabel(reference)"/>
+                </button>
+            </div>
+            <div t-if="state.publicReferenceNotice"
+                class="small text-muted o_ai_assistant_reference_notice" role="status"
+                t-esc="state.publicReferenceNotice"/>
         </xpath>
         <xpath expr="//div[@t-if='state.loading and !state.streamingText']" position="attributes">
             <attribute name="t-if">state.loading and !state.streamingText and !activityItems.length</attribute>
