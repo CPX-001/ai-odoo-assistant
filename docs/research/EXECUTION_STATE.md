@@ -1,7 +1,7 @@
 # Stabilization execution state
 
-State format: 54
-Updated: 2026-09-01
+State format: 55
+Updated: 2026-09-02
 
 ## Accepted lineage
 
@@ -51,6 +51,37 @@ latest_executed_p7_evidence: docs/research/evidence/phase7/2026-09-01/P7-CONSOLI
 latest_executed_product_evidence: docs/research/evidence/product_behavior/2026-09-01/PRODUCT-BEHAVIOR-BASELINE-e100dba.md
 next_action: after current provider quota returns, rerun Product Behavior FULL x3 from the beginning; if green run the final periodic regression and publish P7 acceptance
 ```
+
+## Latency / Auto optimization checkpoint — 2026-09-02
+
+Design and implementation note: `docs/research/LATENCY_AND_AUTO_REASONING_20260902.md`.
+
+Post-P7-checkpoint work on `main` now includes:
+
+```text
+turn-scoped Codex App Server process/initialize reuse
+late completed-thread notification isolation
+Stop/redirect preservation on the reusable streaming path
+provider-neutral Auto reasoning tiers with Codex mapping below the provider boundary
+narrow 500-record identity/bulk-delete fast path for uncommon exact large selections
+Codex transport cleanup so business/tool-routing rules stay outside the provider adapter
+turn-stable screen/config-health/Assistant-manifest memoization
+fresh JIT ContextProvider collection on every provider decision
+```
+
+The high-volume fast path is explicitly **not** the future file-import architecture. CSV/XLSX or other attachment
+imports should later use reusable artifact ingestion, schema mapping, deterministic validation, preview, typed effect
+execution and verification through the same capability/policy boundary.
+
+The next candidate latency change is provider-neutral grouping of genuinely independent READ calls while keeping host
+execution policy separate. It has **not** been implemented in this checkpoint. Same-cursor Odoo ORM work should start
+serial even if model calls can be emitted together; dependent reads, writes and approval-bearing actions stay
+sequential.
+
+Focused dependency-light coverage was added for the turn-stable projection cache, but this ChatGPT/GitHub-only run did
+not execute that test or a real Odoo/Codex/browser gate. Therefore these optimizations remain
+`IMPLEMENTED / FOCUSED_REAL_VALIDATION_PENDING`. They do not change the P7 acceptance cursor, do not replace the
+blocked Product Behavior FULL x3, and do not create new PASS evidence.
 
 ## Chat workflow/activity repair checkpoint — 2026-09-01
 
