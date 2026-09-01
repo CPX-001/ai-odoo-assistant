@@ -29,7 +29,7 @@ PASS.
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux target.
-- Supported addon: `addons/odoo_ai_assistant`, current manifest version `18.0.13.17.0`.
+- Supported addon: `addons/odoo_ai_assistant`, current manifest version `18.0.13.18.0`.
 - Embedded runtime; browser talks only to Odoo.
 - Odoo/PostgreSQL own conversations, messages, immutable turn settings, working checkpoints, effects, recovery
   state, EffectJournal and browser-safe live state.
@@ -66,6 +66,9 @@ complete per-capability call budget before crossing the write barrier, and an Od
 settled as having no surviving effect only when every durable EffectJournal row proves rollback. Live reasoning detail
 follows newly appended summaries while the user remains at the bottom; manual upward scrolling suspends following
 until the user returns to the end.
+
+The `18.0.13.18.0` upgrade normalizes legacy nullable conversation-autonomy overrides to their declared false
+default before Odoo enforces the required Boolean column contract.
 
 ### Current latency optimization checkpoint
 
