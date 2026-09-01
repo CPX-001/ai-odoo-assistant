@@ -22,12 +22,14 @@ Phase 5 and Phase 6 are **COMPLETE**. The final Phase-6 regression evidence is
 `research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md`.
 
 Phase 7 is implemented but remains acceptance-blocked by the incomplete real-provider Product Behavior gate described
-in `research/EXECUTION_STATE.md`. No blocked provider run is represented as PASS.
+in `research/EXECUTION_STATE.md`. Post-checkpoint latency/Auto optimizations on `main` are implementation claims only
+until their focused real-environment validation is executed. No blocked or unexecuted provider run is represented as
+PASS.
 
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux target.
-- Supported addon: `addons/odoo_ai_assistant`, current manifest version `18.0.13.14.0`.
+- Supported addon: `addons/odoo_ai_assistant`, current manifest version `18.0.13.16.0`.
 - Embedded runtime; browser talks only to Odoo.
 - Odoo/PostgreSQL own conversations, messages, immutable turn settings, working checkpoints, effects, recovery
   state, EffectJournal and browser-safe live state.
@@ -37,7 +39,7 @@ in `research/EXECUTION_STATE.md`. No blocked provider run is represented as PASS
 
 ## 2. Provider-neutral host loop
 
-The reasoning provider returns one strict `NextDecision` at a time:
+The reasoning provider currently returns one strict `NextDecision` at a time:
 
 ```text
 final_answer
@@ -50,11 +52,30 @@ The host owns capability resolution, schemas, budgets, planning rules, EffectPla
 execution, verification and recovery. Provider output is untrusted input, not execution authority.
 
 Codex-specific code remains below that boundary and owns transport/schema translation, App Server lifecycle,
-model/reasoning settings, safe readable-summary handling and provider error mapping.
+model/reasoning settings, safe readable-summary handling and provider error mapping. Business/tool-selection guidance
+must not be hard-coded into the Codex transport adapter; it belongs in provider-neutral capability/Skill metadata and
+host contracts.
 
-Bounded record queries expose deterministic continuation offsets. When an all-record outcome exceeds one page,
-the reasoning contract requires the agent to enumerate subsequent pages and stage independent mutations in
-ordered batches of at most 50 without asking the user to manage those internal limits.
+Bounded record queries expose deterministic continuation offsets. Ordinary batch mutations remain bounded at 50 rows.
+A narrow high-volume fast path can select up to 500 record identities and prepare an explicitly approved bulk delete
+without serializing unused fields through the model. That fast path is for uncommon exact large selections, not a
+future file-import subsystem.
+
+### Current latency optimization checkpoint
+
+The current Codex adapter reuses one initialized App Server process/stdio connection across the sequence of model
+decisions inside one host decision loop. Each decision still starts a fresh ephemeral Codex thread, so provider-private
+thread history is not durable business state. Late notifications from already-completed threads are isolated while
+server requests still fail closed. Stop/redirect and provisional streaming remain on the active path.
+
+`AssistantExtensionDecisionEngine` also memoizes turn-stable host projections (screen/view semantic enrichment,
+sanitary configuration health and the derived manifest) instead of reparsing/resolving them before every provider
+decision. JIT `ContextProvider` contributions remain fresh on every decision.
+
+The next candidate optimization is provider-neutral grouping of genuinely independent READ requests in one model turn,
+while keeping host execution policy separate. It is **not implemented yet**: same-cursor Odoo reads should initially
+stay serial even if the model can emit them together, and writes/approval/dependent calls remain sequential.
+See `research/LATENCY_AND_AUTO_REASONING_20260902.md`.
 
 ## 3. Current planning behavior
 
@@ -88,9 +109,10 @@ This is not yet an implementation claim. It is a required pre-live-P7 product ch
 `CapabilityDefinition` remains the atomic executable contract. Core provider families include:
 
 ```text
-odoo_query       schema-first live records/aggregates
+odoo_query       schema-first live records/aggregates and bounded identity selection
 odoo_actions     bounded create/patch/archive/delete + explicit sale-order confirmation
 odoo_batch       bounded multi-record mutation
+odoo_bulk        uncommon high-volume exact-selection/delete fast path
 odoo_workflows   bounded transactional related-record creation graphs
 odoo_runtime     narrow effective runtime identity facts
 odoo_navigation  host-resolved Odoo record/model/action/view/menu/setting references
@@ -104,10 +126,14 @@ No unrestricted ORM method, SQL, Python, filesystem, shell or sudo authority is 
 Generic CRUD is a fallback. When an explicit semantic business capability exists, the agent should prefer it; sale
 order confirmation is the current canonical example.
 
+A future CSV/XLSX chat import should reuse this authority layer but should be modeled as artifact ingestion + schema
+mapping + deterministic validation + preview + typed import execution + verification. It should not be implemented by
+raising normal batch limits or turning the existing bulk-delete capability into a generic import engine.
+
 ## 5. Reads and current-installation truth
 
 Frequently changing Odoo business truth is read live under current ACLs and record rules. The query path supports
-bounded model discovery, effective schema, record reads and server-side aggregation.
+bounded model discovery, effective schema, record reads, identity-only selection and server-side aggregation.
 
 A general question that does not depend on this installation can be answered directly without Odoo tools. A claim
 about this installation should be grounded in current local evidence.
@@ -178,11 +204,12 @@ Provider-visible remaining values are context only. Enforcement remains host-sid
 
 ## 10. User-facing chat behavior already implemented
 
-Current accepted product path includes:
+Current product path includes:
 
 - durable conversations/turns and non-blocking multichat;
 - per-turn model/reasoning/planning/policy settings snapshots;
 - model family/variant + reasoning effort + autonomy controls;
+- provider-neutral `Auto` reasoning selection mapped by the current Codex adapter to low/medium/high per decision;
 - conversation language/autonomy preference capabilities;
 - semantic public activity and bounded readable reasoning summaries;
 - typed Odoo navigation references with fresh revalidation;
@@ -190,10 +217,13 @@ Current accepted product path includes:
 - partial interrupted answer preservation;
 - approval/recovery UX;
 - safe reversion when host-declared compensation is available;
-- answer-delta live channel plus authoritative final reconciliation.
+- answer-delta live channel plus authoritative final reconciliation;
 - one live activity disclosure per conversation and persisted per-answer settled activity;
 - collapsed-by-default settled reasoning with a configurable five-line detail viewport;
 - history-first entry unless the same browser session has an active conversation to resume.
+
+The Auto/router and latency checkpoint remain pending focused real validation and do not retroactively change accepted
+P5/P6 evidence.
 
 ## 11. Streaming: implemented path, current regression hypothesis
 
@@ -248,7 +278,7 @@ may return visible records and state that additional matching data could not be 
 
 ## 14. P7 provider-extension foundation
 
-An isolated P7.1 foundation now exists:
+The Phase-7 foundation includes:
 
 ```text
 CapabilityProvider
@@ -257,6 +287,9 @@ Odoo-registry provider discovery
 registry composition + provider provenance
 optional-provider failure isolation
 duplicate provider/capability conflict rejection
+SkillDefinition / ContextProvider
+ProviderProfile / EffectiveAssistantManifest
+progressive-disclosure state model
 ```
 
 The marker is trusted installed Odoo model code, not arbitrary Python-package discovery. The foundation is documented
@@ -283,7 +316,7 @@ It also requires per-provider/per-capability timing so tool anomalies are visibl
 The latest FULL x3 attempt stopped at provider capacity after 76/162 successful trials; it must restart from the
 beginning on the current account before P7 can be accepted.
 
-## 16. Future module/source HOW_TO
+## 16. Future module/source HOW_TO and artifact ingestion
 
 The product target remains installation-aware support for third-party/custom addons: the Assistant should eventually
 be able to answer whether an installed module supports a function and how to use it by inspecting current module,
@@ -291,6 +324,10 @@ source/XML/runtime evidence rather than relying on hard-coded knowledge.
 
 That source/module diagnosis is intentionally not a v1 executable product eval yet because the planned Phase-8
 source/XML evidence layer is not implemented.
+
+Future attachments/files should follow the same evidence-first principle. CSV/XLSX imports in particular should have
+a reusable artifact parser/profile/mapping layer feeding typed capabilities, not provider-specific parsing code or a
+second write framework.
 
 ## 17. Current formal status
 
@@ -306,6 +343,7 @@ P7 IMPLEMENTATION COMPLETE / ACCEPTANCE PENDING
   provider extensions + Skills + ContextProviders LIVE
   Product Behavior focused and real SMOKE PASS
   Product Behavior FULL x3 BLOCKED by provider capacity
+  post-checkpoint latency/Auto optimizations IMPLEMENTED / FOCUSED REAL VALIDATION PENDING
 P8 NOT ELIGIBLE
 ```
 
