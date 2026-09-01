@@ -4,6 +4,7 @@ import re
 from odoo.tests.common import TransactionCase
 
 from ..runtime.capabilities import (
+    CapabilityActivitySpec,
     CapabilityConfigResolver,
     CapabilityContext,
     CapabilityDefinition,
@@ -20,7 +21,7 @@ _SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
 
 
 class TestCapabilityActivityCorrelation(TransactionCase):
-    def _executor(self, handler):
+    def _executor(self, handler, *, activity=None):
         events = []
 
         def sink(event_type, title, payload):
@@ -36,6 +37,7 @@ class TestCapabilityActivityCorrelation(TransactionCase):
             effect=CapabilityEffect.READ_ONLY,
             exposure=CapabilityExposure.REASONING,
             handler=handler,
+            activity=activity,
             max_calls=4,
         )
         context = CapabilityContext(
@@ -64,6 +66,52 @@ class TestCapabilityActivityCorrelation(TransactionCase):
         self.assertEqual(semantic["operation"], "odoo.records.query")
         self.assertEqual(semantic["headline_code"], "activity.query.odoo")
         self.assertNotIn("Activity probe", repr(semantic))
+
+    def test_capability_owned_projector_can_describe_non_core_addon_activity(self):
+        activity = CapabilityActivitySpec(
+            operation="custom.records.inspect",
+            headline_code="activity.custom.inspect",
+            projector=lambda _context, _payload: {
+                "headline_text": "Inspecting custom workflow records",
+                "object_label": "Custom workflow",
+            },
+        )
+        executor, events = self._executor(
+            lambda _context, _payload: {},
+            activity=activity,
+        )
+
+        asyncio.run(executor.execute("test.activity_probe", {}))
+        started = next(payload for event, _title, payload in events if event == "tool.started")
+        semantic = started["semantic"]
+
+        self.assertEqual(semantic["operation"], "custom.records.inspect")
+        self.assertEqual(semantic["headline_code"], "activity.custom.inspect")
+        self.assertEqual(
+            semantic["headline_args"]["headline_text"],
+            "Inspecting custom workflow records",
+        )
+        self.assertEqual(semantic["headline_args"]["object_label"], "Custom workflow")
+
+    def test_activity_projector_failure_never_fails_business_operation(self):
+        def fail_projection(_context, _payload):
+            raise RuntimeError("presentation-only failure")
+
+        activity = CapabilityActivitySpec(
+            operation="custom.records.inspect",
+            headline_code="activity.custom.inspect",
+            projector=fail_projection,
+        )
+        executor, events = self._executor(
+            lambda _context, _payload: {},
+            activity=activity,
+        )
+
+        asyncio.run(executor.execute("test.activity_probe", {}))
+        completed = next(payload for event, _title, payload in events if event == "tool.completed")
+
+        self.assertEqual(completed["semantic"]["operation"], "custom.records.inspect")
+        self.assertEqual(completed["semantic"]["headline_args"], {})
 
     def test_independent_calls_never_merge_by_capability_name(self):
         executor, events = self._executor(lambda _context, _payload: {})
