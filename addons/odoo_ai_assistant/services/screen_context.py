@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -42,6 +43,7 @@ ScreenValue = str | int | list[int] | dict[str, ContextHint] | None
 _MODEL_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
 _MODULE_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _FIELD_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+_logger = logging.getLogger(__name__)
 
 
 class ScreenContextValidationError(ValueError):
@@ -121,8 +123,8 @@ def enrich_runtime_screen(env, screen: Mapping[str, object]) -> dict[str, object
     if model_label and callable(translator):
         try:
             model_label = _one_line(translator(model_label), maximum=160) or model_label
-        except Exception:  # noqa: BLE001 - localization must not affect the turn
-            pass
+        except Exception:
+            _logger.debug("Could not localize the Assistant screen model label", exc_info=True)
     if model_label:
         result["model_label"] = model_label
     model_module = getattr(model_set, "_module", None)
@@ -132,6 +134,16 @@ def enrich_runtime_screen(env, screen: Mapping[str, object]) -> dict[str, object
     view_id = screen.get("view_id")
     view_type = screen.get("view_type")
     if type(view_id) is not int or view_id <= 0 or view_type not in ALLOWED_VIEW_TYPES:
+        return result
+
+    view_identity = {}
+    if not _enrich_view_identity(
+        env,
+        view_identity,
+        model=model,
+        view_id=view_id,
+        view_type=view_type,
+    ):
         return result
 
     try:
@@ -147,7 +159,7 @@ def enrich_runtime_screen(env, screen: Mapping[str, object]) -> dict[str, object
     if type(resolved_id) is int and resolved_id > 0 and resolved_id != view_id:
         return result
 
-    _enrich_view_identity(env, result, model=model, view_id=view_id, view_type=view_type)
+    result.update(view_identity)
     arch = resolved.get("arch")
     if not isinstance(arch, str) or not arch.strip() or len(arch) > 512 * 1024:
         return result
@@ -189,16 +201,16 @@ def enrich_runtime_screen(env, screen: Mapping[str, object]) -> dict[str, object
     return result
 
 
-def _enrich_view_identity(env, result, *, model, view_id, view_type):
+def _enrich_view_identity(env, result, *, model, view_id, view_type) -> bool:
     try:
         view = env["ir.ui.view"].browse(view_id).exists()
         if not view:
-            return
+            return False
         row = view.read(["key", "model", "name", "type"], load=None)[0]
     except Exception:  # noqa: BLE001 - get_view remains the primary revalidation boundary
-        return
+        return False
     if row.get("model") != model or row.get("type") != view_type:
-        return
+        return False
     label = _one_line(row.get("name"), maximum=160)
     if label:
         result["view_label"] = label
@@ -208,6 +220,7 @@ def _enrich_view_identity(env, result, *, model, view_id, view_type):
         module = key.partition(".")[0]
         if _MODULE_PATTERN.fullmatch(module):
             result["view_module"] = module
+    return True
 
 
 def _view_field_names(root) -> tuple[str, ...]:

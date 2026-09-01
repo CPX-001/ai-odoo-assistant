@@ -240,7 +240,7 @@ class AgentTurnService:
             )
         except (AgentTurnError, CapabilityError):
             raise
-        except Exception as error:  # noqa: BLE001 - provider boundary is sanitized
+        except Exception as error:
             raise AgentTurnError("agent_reasoning_failed") from error
         if not isinstance(result, AgentReasoningResult):
             raise AgentTurnError("agent_reasoning_result_invalid")
@@ -339,7 +339,7 @@ class AgentTurnService:
                 continue
             except (AgentTurnError, CapabilityError):
                 raise
-            except Exception as error:  # noqa: BLE001 - provider boundary stays sanitized
+            except Exception as error:
                 code = getattr(error, "code", None)
                 if isinstance(code, str):
                     raise AgentTurnError(code) from error
@@ -690,7 +690,7 @@ class AgentTurnService:
                 await pending
         except AgentTurnError:
             raise
-        except Exception as error:  # noqa: BLE001 - persistence boundary stays sanitized
+        except Exception as error:
             code = getattr(error, "code", None)
             if code == "agent_turn_lease_lost" or str(error) == "agent_turn_lease_lost":
                 raise AgentTurnError("agent_turn_lease_lost") from error

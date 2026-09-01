@@ -14,7 +14,10 @@ from odoo import SUPERUSER_ID, api, fields, models
 from odoo.exceptions import AccessError, ValidationError
 from odoo.modules.registry import Registry
 
-from ..services.screen_context import ScreenContextValidationError, validate_query_screen
+from ..services.screen_context import (
+    ScreenContextValidationError,
+    validate_query_screen,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -240,7 +243,7 @@ class AssistantTurnQueue(models.Model):
         turn_id, lease_token = claimed
         try:
             _execute_claimed_turn(dbname, turn_id, lease_token)
-        except Exception as error:  # noqa: BLE001 - cron boundary must stay sanitized
+        except Exception as error:
             code = _runtime_error_code(error)
             _logger.exception("Embedded Assistant turn %s crashed: %s", turn_id, code)
             _fail_claimed_turn(dbname, turn_id, lease_token, code)

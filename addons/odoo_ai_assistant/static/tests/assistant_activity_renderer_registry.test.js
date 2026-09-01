@@ -1,8 +1,11 @@
-import { expect, test } from "@odoo/hoot";
+import { beforeEach, expect, test } from "@odoo/hoot";
+import { patchTranslations } from "@web/../tests/web_test_helpers";
 import {
     activityRendererRegistry,
     renderActivityLabel,
 } from "@odoo_ai_assistant/services/assistant_activity_renderer_registry";
+
+beforeEach(() => patchTranslations({}));
 
 function item(semanticCode, headlineArgs) {
     return {

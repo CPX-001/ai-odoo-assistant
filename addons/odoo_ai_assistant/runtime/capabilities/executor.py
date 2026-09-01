@@ -545,9 +545,7 @@ def _normalize_semantic_args(value):
         if isinstance(item, str):
             normalized = " ".join(item.split())[:160]
             result[key] = normalized
-        elif type(item) is bool:
-            result[key] = item
-        elif type(item) is int and 0 <= item <= 1_000_000:
+        elif type(item) is bool or type(item) is int and 0 <= item <= 1_000_000:
             result[key] = item
     return result
 
