@@ -124,6 +124,14 @@ export function normalizeRuntimeAccount(response) {
     };
 }
 
+export function runtimeFailureRequiresAccountRefresh(state) {
+    return Boolean(
+        ["authentication_failed", "codex_not_connected", "codex_unavailable"].includes(
+            state?.errorCode
+        ) || ["authentication", "provider_capacity"].includes(state?.failure?.category)
+    );
+}
+
 function applyRuntimeAccount(state, payload) {
     state.runtimeState = payload.state;
     state.runtimeCanConfigure = payload.can_configure;
@@ -292,12 +300,7 @@ patch(assistantPanelService, {
         };
         service.submit = async (message) => {
             const sent = await baseSubmit(message);
-            if (
-                !sent &&
-                ["authentication_failed", "codex_not_connected", "codex_unavailable"].includes(
-                    state.errorCode
-                )
-            ) {
+            if (!sent && runtimeFailureRequiresAccountRefresh(state)) {
                 await refreshRuntimeAccount();
                 scheduleAccountPoll();
             }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest.mock import patch
 from uuid import uuid4
 
 from odoo import SUPERUSER_ID, api, fields
@@ -21,7 +22,14 @@ class _ProviderError(RuntimeError):
 
 
 class TestAssistantTurnFailurePersistence(TransactionCase):
-    def _create_running_turn(self, *, lease_token, write_barrier=False):
+    def _create_running_turn(
+        self,
+        *,
+        lease_token,
+        write_barrier=False,
+        attempt_count=3,
+        max_attempts=3,
+    ):
         dbname = self.env.cr.dbname
         with Registry(dbname).cursor() as cr:
             env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
@@ -38,8 +46,8 @@ class TestAssistantTurnFailurePersistence(TransactionCase):
                     "heartbeat_at": fields.Datetime.now(),
                     "lease_expires_at": fields.Datetime.now() + timedelta(minutes=5),
                     "lease_token": lease_token,
-                    "attempt_count": 3,
-                    "max_attempts": 3,
+                    "attempt_count": attempt_count,
+                    "max_attempts": max_attempts,
                     "write_barrier": write_barrier,
                     "allowed_company_ids": [admin.company_id.id],
                 }
@@ -133,6 +141,90 @@ class TestAssistantTurnFailurePersistence(TransactionCase):
                 self.assertEqual(turn.failure_payload["effect_state"], "unknown")
                 self.assertEqual(turn.failure_payload["retryability"], "never")
                 self.assertEqual(turn.failure_payload["user_action"], "review")
+        finally:
+            self._cleanup_turn(turn_id)
+
+    def test_usage_limit_is_terminal_without_automatic_retry(self):
+        dbname = self.env.cr.dbname
+        turn_id = self._create_running_turn(
+            lease_token="p2-usage-limit",
+            attempt_count=1,
+            max_attempts=3,
+        )
+        try:
+            failure = FailureEnvelope(
+                code="codex_turn_failed",
+                category="provider_capacity",
+                stage="provider",
+                component="codex",
+                retryability="after_change",
+                effect_state="none",
+                user_action="retry",
+                safe_summary="El proveedor alcanzó un límite de uso.",
+                safe_details={},
+                diagnostic_id="diag-p2-usage-limit-01",
+                provider_code="usageLimitExceeded",
+            )
+            with patch(
+                "odoo.addons.odoo_ai_assistant.models.turn_failure._trigger_turn_crons"
+            ) as trigger:
+                _fail_claimed_turn_with_failure(
+                    dbname,
+                    turn_id,
+                    "p2-usage-limit",
+                    _ProviderError(failure),
+                    "codex_turn_failed",
+                )
+
+            with Registry(dbname).cursor() as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+                turn = env["odoo.ai.turn"].browse(turn_id).exists()
+                self.assertEqual(turn.state, "failed")
+                self.assertEqual(turn.attempt_count, 1)
+                self.assertEqual(turn.failure_payload["provider_code"], "usageLimitExceeded")
+                trigger.assert_not_called()
+        finally:
+            self._cleanup_turn(turn_id)
+
+    def test_explicitly_safe_overload_can_requeue_before_write_barrier(self):
+        dbname = self.env.cr.dbname
+        turn_id = self._create_running_turn(
+            lease_token="p2-safe-overload",
+            attempt_count=1,
+            max_attempts=3,
+        )
+        try:
+            failure = FailureEnvelope(
+                code="codex_turn_failed",
+                category="provider_capacity",
+                stage="provider",
+                component="codex",
+                retryability="safe",
+                effect_state="none",
+                user_action="retry",
+                safe_summary="El proveedor está temporalmente saturado.",
+                safe_details={"provider_retryable": True},
+                diagnostic_id="diag-p2-safe-overload-01",
+                provider_code="serverOverloaded",
+            )
+            with patch(
+                "odoo.addons.odoo_ai_assistant.models.turn_failure._trigger_turn_crons"
+            ) as trigger:
+                _fail_claimed_turn_with_failure(
+                    dbname,
+                    turn_id,
+                    "p2-safe-overload",
+                    _ProviderError(failure),
+                    "codex_turn_failed",
+                )
+
+            with Registry(dbname).cursor() as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+                turn = env["odoo.ai.turn"].browse(turn_id).exists()
+                self.assertEqual(turn.state, "queued")
+                self.assertFalse(turn.error_code)
+                self.assertFalse(turn.failure_payload)
+                trigger.assert_called_once_with(dbname)
         finally:
             self._cleanup_turn(turn_id)
 

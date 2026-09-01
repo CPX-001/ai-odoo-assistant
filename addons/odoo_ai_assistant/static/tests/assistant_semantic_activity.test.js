@@ -48,6 +48,30 @@ test("a running turn is visible immediately before the first server activity", (
     expect(presentation.headline.status).toBe("running");
 });
 
+test("filtered queue retries never make running request analysis disappear", () => {
+    const presentation = semanticActivityPresentation(
+        [
+            event(1, {
+                phase: "queue",
+                kind: "turn.started",
+                activity_id: null,
+                label: "Procesando petición",
+            }),
+            event(2, {
+                phase: "queue",
+                kind: "turn.started",
+                activity_id: null,
+                label: "Procesando petición",
+            }),
+        ],
+        { running: true }
+    );
+
+    expect(presentation.items).toHaveLength(1);
+    expect(presentation.headline.semantic_code).toBe("request.analysis");
+    expect(presentation.headline.status).toBe("running");
+});
+
 test("a new semantic step settles the previous running step", () => {
     const items = reduceSemanticActivity([
         event(1, { phase: "provider", kind: "provider.started" }),

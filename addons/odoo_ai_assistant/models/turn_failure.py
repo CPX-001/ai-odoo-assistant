@@ -15,7 +15,6 @@ from ..runtime.agent.failure import (
 )
 from ..runtime.agent.terminal_failure import terminal_failure_envelope
 from .turn_queue import (
-    _NON_RETRYABLE_TURN_ERRORS,
     _append_event,
     _claim_next_turn,
     _execute_claimed_turn,
@@ -54,7 +53,7 @@ class AssistantTurnFailurePersistence(models.Model):
 
         if values.get("state") == "queued" or values.get("error_code") is False:
             values["failure_payload"] = False
-        elif "failure_payload" in values and values["failure_payload"]:
+        elif values.get("failure_payload"):
             failure = parse_failure_envelope(values["failure_payload"])
             if target_state not in _TERMINAL_FAILURE_STATES:
                 raise FailureEnvelopeError()
@@ -105,7 +104,7 @@ class AssistantTurnFailurePersistence(models.Model):
         turn_id, lease_token = claimed
         try:
             _execute_claimed_turn(dbname, turn_id, lease_token)
-        except Exception as error:  # noqa: BLE001 - queue boundary stays sanitized
+        except Exception as error:
             code = _runtime_error_code(error)
             _logger.exception("Embedded Assistant turn %s crashed: %s", turn_id, code)
             if isinstance(getattr(error, "failure", None), FailureEnvelope):
@@ -150,7 +149,7 @@ def _fail_claimed_turn_with_failure(
     error,
     error_code,
 ):
-    """Preserve a carried provider envelope without changing queue retry semantics."""
+    """Preserve provider failure semantics and retry only explicitly safe failures."""
 
     with Registry(dbname).cursor() as cr:
         env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
@@ -172,7 +171,16 @@ def _fail_claimed_turn_with_failure(
             _append_event(dbname, turn_id, "cancelled", "Petición cancelada")
             return
 
-        retryable = error_code not in _NON_RETRYABLE_TURN_ERRORS
+        failure = terminal_failure_envelope(
+            error,
+            error_code=error_code,
+            write_barrier=bool(turn.write_barrier),
+        )
+        retryable = bool(
+            failure.retryability == "safe"
+            and failure.effect_state in {"none", "not_started"}
+            and failure.user_action == "retry"
+        )
         if retryable and not turn.write_barrier and turn.attempt_count < turn.max_attempts:
             turn.write(
                 {
@@ -196,11 +204,6 @@ def _fail_claimed_turn_with_failure(
             return
 
         target_state = "recovery_required" if turn.write_barrier else "failed"
-        failure = terminal_failure_envelope(
-            error,
-            error_code=error_code,
-            write_barrier=bool(turn.write_barrier),
-        )
         turn.write(
             {
                 "state": target_state,

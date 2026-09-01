@@ -181,6 +181,10 @@ reintroducing a rigid intent router or making TaskPlan automatic again.
 
 Provider failures are normalized into bounded product state. Preserve useful category/status/retryability facts, but never make raw provider output the public failure contract.
 
+The queue retries a structured provider failure only when the carried envelope explicitly marks it
+`safe`, no effect has started and the requested user action is `retry`. Account usage limits and
+other `after_change` failures terminate the current attempt without an automatic replay.
+
 After an effect becomes ambiguous, do not convert a provider/runtime error into “safe to retry.” Effect certainty is owned by Odoo.
 
 ## Extending/replacing the agent layer

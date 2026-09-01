@@ -98,6 +98,11 @@ function nextStep(failure) {
     if (failureRequiresReview(failure)) {
         return _t("Comprueba los datos afectados o el estado del plan antes de realizar otra acción.");
     }
+    if (failure.provider_code === "usageLimitExceeded") {
+        return _t(
+            "Revisa los límites de la cuenta de ChatGPT conectada o conecta una cuenta con capacidad disponible antes de volver a intentarlo."
+        );
+    }
     const actions = {
         retry: failureCanRetry(failure)
             ? _t("Puedes reintentar esta petición de forma segura.")
@@ -125,8 +130,12 @@ export function failurePresentation(failure, compatibilityCode = null) {
             canRetry: false,
         };
     }
+    const body =
+        failure.provider_code === "usageLimitExceeded"
+            ? _t("La cuenta de ChatGPT conectada ha alcanzado su límite de uso.")
+            : (CATEGORY_BODY[failure.category] || CATEGORY_BODY.internal)();
     return {
-        body: (CATEGORY_BODY[failure.category] || CATEGORY_BODY.internal)(),
+        body,
         effect: effectNotice(failure),
         next: nextStep(failure),
         technical: _t("Código: %s · Diagnóstico: %s", failure.code, failure.diagnostic_id),

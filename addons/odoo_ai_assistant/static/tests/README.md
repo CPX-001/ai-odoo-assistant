@@ -13,6 +13,8 @@ Frontend tests should prove that:
 - public activity, provisional answer and readable-summary channels remain separate;
 - a submitted turn shows request analysis immediately, and only the latest semantic step remains
   visually active while earlier steps settle in sequence;
+- filtered queue/retry events never create a blank gap in the running analysis projection;
+- authentication and provider-capacity failures trigger an immediate account-status refresh;
 - a fresh authenticated Assistant entry opens on history rather than an empty chat;
 - final state reconciles provisional UI state;
 - model/autonomy controls do not mutate settings already captured by a queued/running turn;

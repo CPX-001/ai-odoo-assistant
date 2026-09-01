@@ -2,7 +2,10 @@
 
 import { expect, test } from "@odoo/hoot";
 
-import { normalizeRuntimeAccount } from "@odoo_ai_assistant/services/zz_assistant_auth_service";
+import {
+    normalizeRuntimeAccount,
+    runtimeFailureRequiresAccountRefresh,
+} from "@odoo_ai_assistant/services/zz_assistant_auth_service";
 
 test("runtime account accepts an authenticated admin profile", () => {
     const payload = {
@@ -55,4 +58,25 @@ test("runtime account rejects account details for non administrators", () => {
             },
         })
     ).toBe(null);
+});
+
+test("provider account and capacity failures force an immediate account refresh", () => {
+    expect(
+        runtimeFailureRequiresAccountRefresh({
+            errorCode: "codex_turn_failed",
+            failure: { category: "provider_capacity" },
+        })
+    ).toBe(true);
+    expect(
+        runtimeFailureRequiresAccountRefresh({
+            errorCode: "codex_turn_failed",
+            failure: { category: "authentication" },
+        })
+    ).toBe(true);
+    expect(
+        runtimeFailureRequiresAccountRefresh({
+            errorCode: "capability_handler_failed",
+            failure: { category: "capability_execution" },
+        })
+    ).toBe(false);
 });

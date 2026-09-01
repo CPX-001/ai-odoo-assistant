@@ -143,6 +143,22 @@ test("auth, ACL, timeout, tool failure and recovery produce distinct determinist
     }
 });
 
+test("usage limit failure names the account limit and requires a change before retry", () => {
+    patchTranslations();
+    const raw = failure({
+        category: "provider_capacity",
+        retryability: "after_change",
+        user_action: "retry",
+        provider_code: "usageLimitExceeded",
+    });
+
+    const view = failurePresentation(normalizeFailureEnvelope(raw), raw.code);
+
+    expect(view.body).toInclude("límite de uso");
+    expect(view.next).toInclude("cuenta de ChatGPT conectada");
+    expect(view.canRetry).toBe(false);
+});
+
 test("unknown stream errors retain a bounded real code instead of universal service_unavailable", () => {
     const parsed = failureFromError(new Error("connection_lost"));
     expect(parsed.code).toBe("connection_lost");

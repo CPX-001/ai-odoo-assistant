@@ -407,6 +407,42 @@ export function semanticActivityPresentation(
         ? normalVisible
         : presentable.filter((item) => MEANINGFUL_PHASES.has(item.phase));
     const selected = selectByDetail(presentable, normalizedPreferences);
+    if (running && !selected.length) {
+        const initial = freezeItem({
+            key: "activity:pending-request-analysis",
+            activity_id: null,
+            first_sequence: 0,
+            last_sequence: 0,
+            kind: "provider.pending",
+            phase: "provider",
+            status: "running",
+            label: "",
+            resource: null,
+            references: [],
+            capability: null,
+            progress: null,
+            semantic_group_key: null,
+            parent_activity_id: null,
+            operation: null,
+            headline_code: "request.analysis",
+            headline_args: {},
+            progress_detail: null,
+            result_summary: null,
+            lifecycle_activity_ids: [],
+            diagnostic_code: null,
+            started_at: reduced[0]?.started_at || null,
+            ended_at: null,
+        });
+        return Object.freeze({
+            items: Object.freeze([initial]),
+            headline: initial,
+            step_count: 1,
+            duration_ms: Math.max(0, activityDurationMs(reduced)),
+            running: true,
+            truncated: false,
+            preferences: normalizedPreferences,
+        });
+    }
     const maxItems = normalizedPreferences.limits.max_rendered_activity_items;
     const truncated = selected.length > maxItems;
     const items = Object.freeze(selected.slice(-maxItems));
