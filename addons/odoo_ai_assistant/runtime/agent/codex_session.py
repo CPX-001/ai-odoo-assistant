@@ -1,9 +1,9 @@
 """Turn-scoped Codex App Server session reuse and adaptive effort mapping.
 
-Odoo remains the durable host. This adapter only keeps one ephemeral App Server process alive for
-the sequence of provider decisions made inside one AgentTurnService decision loop. Each decision
-still starts a fresh ephemeral Codex thread and receives the complete host-authored bounded working
-state, so provider-private thread history is not business durability.
+Odoo remains the durable host. This adapter keeps one ephemeral App Server process alive for the
+sequence of provider decisions made inside one AgentTurnService decision loop. Provider-specific
+transport lifecycle and reasoning-effort mapping stay here; business/tool-selection guidance stays
+in provider-neutral capability and Skill metadata.
 """
 
 from __future__ import annotations
@@ -37,15 +37,6 @@ from .reasoning_effort import AutoReasoningRoute, resolve_auto_reasoning_route
 
 _INSTALLED = False
 _CODEX_AUTO_EFFORT = {"light": "low", "balanced": "medium", "deep": "high"}
-_EFFICIENCY_INSTRUCTIONS = """
-
-For large exact record selections, prefer odoo.query_record_ids when it is available and the
-filter/schema are already grounded; it returns bounded identities without spending model context
-on fields that are not needed. For irreversible deletion of more than 50 explicit targets, prefer
-odoo.records.bulk_delete when available. The older 50-row chunking rule applies to the ordinary
-odoo.records.batch_mutate capability, not to the dedicated bounded bulk-delete capability. Continue
-query_record_ids from next_offset only when more than its own bulk page is required.
-"""
 
 
 class _CompletedTurnEventFilter:
@@ -280,8 +271,6 @@ def install_codex_session_reuse() -> None:
         return
     codex_decision.CodexDecisionEngine = ReusableCodexDecisionEngine
     codex._model_thread_options = _legacy_model_thread_options
-    if _EFFICIENCY_INSTRUCTIONS.strip() not in codex_decision._DECISION_INSTRUCTIONS:
-        codex_decision._DECISION_INSTRUCTIONS += _EFFICIENCY_INSTRUCTIONS
     _INSTALLED = True
 
 
