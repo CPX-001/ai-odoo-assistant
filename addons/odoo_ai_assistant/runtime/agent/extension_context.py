@@ -1,14 +1,16 @@
 """Provider-neutral projection of active Skills and JIT context into one model decision.
 
-This wrapper is deliberately non-authoritative.  Skills are trusted behavior guidance from
-installed code, JIT context is untrusted data, and the EffectiveAssistantManifest is a derived
-host projection.  Executable authority remains the CapabilityRegistry/Executor/Policy path.
+This wrapper is deliberately non-authoritative. Skills are trusted behavior guidance from
+installed code, JIT context and current-screen semantics are data, and the EffectiveAssistantManifest
+is a derived host projection. Executable authority remains the CapabilityRegistry/Executor/Policy path.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 
+from ...services.screen_context import enrich_runtime_screen
 from ..capabilities import (
     AssistantExtensionCatalog,
     CapabilityConfigResolver,
@@ -51,6 +53,14 @@ class AssistantExtensionDecisionEngine:
             raise CapabilityError("assistant_extension_context_invalid")
         if not isinstance(working_items, tuple):
             working_items = tuple(working_items)
+
+        # The browser screen is only a relevance hint. Re-resolve its model/view through the
+        # effective Odoo user before every model decision so custom addons, inherited views and
+        # localized field labels can inform reasoning without granting any new authority.
+        context = replace(
+            context,
+            screen=enrich_runtime_screen(context.env, context.screen),
+        )
 
         model_visible_names = tuple(
             sorted(
@@ -97,6 +107,7 @@ class AssistantExtensionDecisionEngine:
             ],
         }
         provider_kwargs = dict(kwargs)
+        provider_kwargs["context"] = context
         provider_kwargs["working_items"] = (
             *working_items,
             {
