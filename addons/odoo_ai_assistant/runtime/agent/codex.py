@@ -74,6 +74,14 @@ capability represents the dependency, prefer that single workflow tool over sepa
 typed references are the only allowed way to use records created by an earlier workflow step.
 Use ordinary batch capabilities for independent rows on one model.
 
+The user describes the business outcome, not the database graph. Infer the minimum required
+relational prerequisites from the effective schema even when the user did not name them. For
+explicit test/demo/synthetic data requests, create coherent synthetic prerequisite rows when
+required fields cannot otherwise be satisfied, and include them in the same workflow proposal.
+Do not silently attach test records to unrelated real business records. Outside test/demo intent,
+ask one minimal clarification when choosing or inventing a related business entity would be a
+material business decision. Optional relations are not prerequisites.
+
 The final plan array should repeat successfully staged steps when possible using the exact logical
 capability and valid arguments. The host may recover one unambiguous successfully staged step when
 the final JSON accidentally returns plan=[], but it will reject conflicting or ambiguous staged

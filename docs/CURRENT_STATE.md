@@ -27,7 +27,7 @@ in `research/EXECUTION_STATE.md`. No blocked provider run is represented as PASS
 ## 1. Product/deployment baseline
 
 - Odoo 18 Community, self-hosted Linux target.
-- Supported addon: `addons/odoo_ai_assistant`, current manifest version `18.0.13.12.0`.
+- Supported addon: `addons/odoo_ai_assistant`, current manifest version `18.0.13.13.0`.
 - Embedded runtime; browser talks only to Odoo.
 - Odoo/PostgreSQL own conversations, messages, immutable turn settings, working checkpoints, effects, recovery
   state, EffectJournal and browser-safe live state.

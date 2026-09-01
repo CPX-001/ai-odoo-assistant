@@ -255,6 +255,11 @@ transaction as the effective user, and verifies every created record. This reduc
 work such as “create contacts, then use those exact contacts in quotations” without adding a second action registry
 or model-authored executable program.
 
+Users are not expected to describe that graph. For explicit test/demo data, the reasoning layer derives the minimum
+mandatory relational prerequisites from effective schema and may create coherent synthetic dependencies in the same
+workflow. For ordinary business data it must not invent a material customer/vendor/etc.; ambiguity at that boundary
+still requires one concise clarification. Optional relations never justify extra synthetic records.
+
 Independent rows should continue to use the ordinary batch capability. A workflow is appropriate when a dependency
 edge exists; it is not a reason to wrap every CRUD call in orchestration.
 

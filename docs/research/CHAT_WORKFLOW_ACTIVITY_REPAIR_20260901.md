@@ -17,6 +17,12 @@ This checkpoint addresses a general product failure, not a contacts/quotations s
 models, fields, types, relation targets and reference indices, executes the graph transactionally as the effective
 user (`su=False`) and verifies every record. Independent bulk writes still use the existing batch capability.
 
+The public request is an outcome, not an ORM recipe. An explicit prompt such as “create 10 test quotations” is
+therefore expected to derive mandatory related records from effective schema and create the minimum coherent
+synthetic prerequisites in the same workflow without requiring the user to mention contacts. The agent must not
+reuse unrelated real records for test data; outside an explicit test/demo context, a material related-party choice
+still requires clarification.
+
 Approved turns receive at least one subsequent worker claim. Historical chat restoration returns only genuinely
 nonterminal turns as active. Every settled Assistant message carries its own browser-safe semantic activity/readable
 summary; it is rendered immediately above the answer, collapsed by default, and expands to a settings-driven

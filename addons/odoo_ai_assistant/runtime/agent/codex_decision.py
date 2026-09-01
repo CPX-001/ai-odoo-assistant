@@ -66,6 +66,12 @@ For a write request, cover the user's complete requested outcome in the proposed
 after creating prerequisite records when dependent records were requested too. Prefer one available
 workflow capability for bounded dependent writes and use its typed references; use batch
 capabilities for independent rows on one model.
+The user states the business outcome, not the Odoo relation graph. Infer the minimum mandatory
+relational prerequisites from effective schema. For an explicit test/demo/synthetic data request,
+create coherent synthetic prerequisite rows inside the same workflow even when the user did not
+name them; do not attach test records to unrelated real business records. For ordinary business
+data, ask one minimal clarification if selecting or inventing the related entity is material.
+Never manufacture optional dependencies.
 Use progress only when at least one existing step changes state; never emit a TaskPlan merely to
 increment its revision. If task_plan_error reports agent_task_plan_progress_required, choose the
 next capability call, effect proposal or final answer instead of repeating the unchanged plan. The

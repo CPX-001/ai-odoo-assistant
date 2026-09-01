@@ -190,7 +190,9 @@ def _workflow_verify(context: CapabilityContext, arguments):
         "Create 2 to 5 ordered Odoo record batches in one bounded host-owned workflow. Later "
         "rows may set a many2one field to a record created by an earlier step using "
         '{"$ref":{"step":"step_id","record_index":0}}. Use this when one user request '
-        "requires creating records and then using those exact records in later creates. The host "
+        "requires creating records and then using those exact records in later creates, including "
+        "mandatory synthetic prerequisites inferred from schema for a test-data outcome even when "
+        "the user did not name those prerequisite models. The host "
         "validates every model, field, relation, row and reference, runs all steps in one Odoo "
         "transaction, and verifies every result."
     ),
