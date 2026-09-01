@@ -66,16 +66,16 @@ test("recent active chat cache is restored only while fresh", () => {
     expect(storage.getItem(activeChatStorageKey())).toBe(null);
 });
 
-test("a recent conversation in this tab starts as active", () => {
+test("fresh Assistant entry ignores the cached idle chat and starts on history", () => {
     clearRecentActiveChat(globalThis.sessionStorage);
     clearRecoveryPlanId(globalThis.localStorage);
     saveRecentActiveChat(globalThis.sessionStorage, CONVERSATION_ID);
 
     const panel = assistantPanelService.start({}, { odoo_ai_screen_context: SCREEN_CONTEXT });
 
-    expect(panel.state.historyView).toBe(false);
-    expect(panel.state.conversationId).toBe(CONVERSATION_ID);
-    clearRecentActiveChat(globalThis.sessionStorage);
+    expect(panel.state.historyView).toBe(true);
+    expect(panel.state.conversationId).toBe(null);
+    expect(globalThis.sessionStorage.getItem(activeChatStorageKey())).toBe(null);
 });
 
 test("pending recovery plan cache survives browser sessions while bounded", () => {
