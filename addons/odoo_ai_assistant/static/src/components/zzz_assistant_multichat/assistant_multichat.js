@@ -30,8 +30,4 @@ patch(AssistantHistory.prototype, {
         }
         await this.panel.selectConversation(conversationId);
     },
-
-    conversationRuntimeLabel(conversationId) {
-        return this.panel.conversationRuntimeLabel?.(conversationId) || "";
-    },
 });
