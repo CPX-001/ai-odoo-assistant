@@ -1,4 +1,4 @@
-"""Strict validation of untrusted browser navigation hints."""
+"""Strict validation and bounded enrichment of Assistant screen context."""
 
 from __future__ import annotations
 
@@ -8,10 +8,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
+from lxml import etree
+
 MAX_ODOO_ID: Final = 2_147_483_647
 MAX_SELECTED_IDS: Final = 8
 MAX_SCREEN_AGE_SECONDS: Final = 300
 MAX_FUTURE_SKEW_SECONDS: Final = 30
+MAX_VIEW_FIELDS: Final = 16
+MAX_VIEW_LABELS: Final = 8
 ALLOWED_VIEW_TYPES: Final = frozenset(
     {"activity", "calendar", "form", "graph", "kanban", "list", "pivot"}
 )
@@ -25,6 +29,7 @@ SCREEN_KEYS: Final = frozenset(
         "model",
         "res_id",
         "selected_ids",
+        "view_id",
         "view_type",
     }
 )
@@ -35,6 +40,8 @@ IDENTITY_KEYS: Final = frozenset(
 ContextHint = str | int | list[int]
 ScreenValue = str | int | list[int] | dict[str, ContextHint] | None
 _MODEL_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
+_MODULE_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+_FIELD_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 
 
 class ScreenContextValidationError(ValueError):
@@ -51,6 +58,7 @@ class ValidatedScreenContext:
 
     action_id: int | None
     menu_id: int | None
+    view_id: int | None
     view_type: str | None
     model: str | None
     res_id: int | None
@@ -67,6 +75,7 @@ class ValidatedScreenContext:
             "model": self.model,
             "res_id": self.res_id,
             "selected_ids": list(self.selected_ids),
+            "view_id": self.view_id,
             "view_type": self.view_type,
         }
 
@@ -84,6 +93,156 @@ def validate_query_screen(
         require_record=False,
         require_model=False,
     )
+
+
+def enrich_runtime_screen(env, screen: Mapping[str, object]) -> dict[str, object]:
+    """Add current-user semantic view facts without turning screen hints into authority.
+
+    The browser-provided model/view identifiers have already passed the enqueue contract. This
+    function re-resolves them against the effective non-sudo Environment and only contributes
+    bounded labels from the *resolved* Odoo model/view. It deliberately omits raw XML, domains,
+    button method names and other executable/technical details.
+    """
+
+    if not isinstance(screen, Mapping):
+        return {}
+    result = dict(screen)
+    model = screen.get("model")
+    if not isinstance(model, str) or _MODEL_PATTERN.fullmatch(model) is None:
+        return result
+    try:
+        model_set = env[model]
+        model_set.browse().check_access("read")
+    except Exception:  # noqa: BLE001 - screen enrichment is non-authoritative and fail-soft
+        return result
+
+    model_label = _one_line(getattr(model_set, "_description", ""), maximum=160)
+    translator = getattr(env, "_", None)
+    if model_label and callable(translator):
+        try:
+            model_label = _one_line(translator(model_label), maximum=160) or model_label
+        except Exception:  # noqa: BLE001 - localization must not affect the turn
+            pass
+    if model_label:
+        result["model_label"] = model_label
+    model_module = getattr(model_set, "_module", None)
+    if isinstance(model_module, str) and _MODULE_PATTERN.fullmatch(model_module):
+        result["model_module"] = model_module
+
+    view_id = screen.get("view_id")
+    view_type = screen.get("view_type")
+    if type(view_id) is not int or view_id <= 0 or view_type not in ALLOWED_VIEW_TYPES:
+        return result
+
+    try:
+        resolved = model_set.get_view(view_id=view_id, view_type=view_type)
+    except Exception:  # noqa: BLE001 - inaccessible/invalid views simply contribute no detail
+        return result
+    if not isinstance(resolved, Mapping):
+        return result
+    resolved_model = resolved.get("model")
+    if isinstance(resolved_model, str) and resolved_model != model:
+        return result
+    resolved_id = resolved.get("id")
+    if type(resolved_id) is int and resolved_id > 0 and resolved_id != view_id:
+        return result
+
+    _enrich_view_identity(env, result, model=model, view_id=view_id, view_type=view_type)
+    arch = resolved.get("arch")
+    if not isinstance(arch, str) or not arch.strip() or len(arch) > 512 * 1024:
+        return result
+    try:
+        parser = etree.XMLParser(resolve_entities=False, no_network=True, recover=False)
+        root = etree.fromstring(arch.encode("utf-8"), parser=parser)
+    except (ValueError, etree.XMLSyntaxError):
+        return result
+
+    field_names = _view_field_names(root)
+    if field_names:
+        try:
+            descriptions = model_set.fields_get(
+                allfields=list(field_names),
+                attributes=["string"],
+            )
+        except Exception:  # noqa: BLE001 - field labels are presentation context only
+            descriptions = {}
+        labels = []
+        if isinstance(descriptions, Mapping):
+            for name in field_names:
+                description = descriptions.get(name)
+                label = (
+                    _one_line(description.get("string"), maximum=120)
+                    if isinstance(description, Mapping)
+                    else ""
+                )
+                if label and label not in labels:
+                    labels.append(label)
+        if labels:
+            result["view_fields"] = labels[:MAX_VIEW_FIELDS]
+
+    actions = _xml_string_labels(root, "button", maximum=MAX_VIEW_LABELS)
+    if actions:
+        result["view_actions"] = actions
+    sections = _xml_string_labels(root, "page", maximum=MAX_VIEW_LABELS)
+    if sections:
+        result["view_sections"] = sections
+    return result
+
+
+def _enrich_view_identity(env, result, *, model, view_id, view_type):
+    try:
+        view = env["ir.ui.view"].browse(view_id).exists()
+        if not view:
+            return
+        row = view.read(["key", "model", "name", "type"], load=None)[0]
+    except Exception:  # noqa: BLE001 - get_view remains the primary revalidation boundary
+        return
+    if row.get("model") != model or row.get("type") != view_type:
+        return
+    label = _one_line(row.get("name"), maximum=160)
+    if label:
+        result["view_label"] = label
+    key = _one_line(row.get("key"), maximum=160)
+    if key and re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", key):
+        result["view_key"] = key
+        module = key.partition(".")[0]
+        if _MODULE_PATTERN.fullmatch(module):
+            result["view_module"] = module
+
+
+def _view_field_names(root) -> tuple[str, ...]:
+    names = []
+    for node in root.iter("field"):
+        name = node.get("name")
+        if (
+            isinstance(name, str)
+            and _FIELD_PATTERN.fullmatch(name)
+            and name not in names
+        ):
+            names.append(name)
+        if len(names) >= MAX_VIEW_FIELDS:
+            break
+    return tuple(names)
+
+
+def _xml_string_labels(root, tag: str, *, maximum: int) -> list[str]:
+    labels = []
+    for node in root.iter(tag):
+        label = _one_line(node.get("string"), maximum=120)
+        if label and label not in labels:
+            labels.append(label)
+        if len(labels) >= maximum:
+            break
+    return labels
+
+
+def _one_line(value: object, *, maximum: int) -> str:
+    if not isinstance(value, str):
+        return ""
+    normalized = " ".join(value.split())
+    if not normalized or "\x00" in normalized:
+        return ""
+    return normalized[:maximum]
 
 
 def _validate_screen(
@@ -130,6 +289,7 @@ def _validate_screen(
     return ValidatedScreenContext(
         action_id=_optional_positive_id(payload.get("action_id")),
         menu_id=_optional_positive_id(payload.get("menu_id")),
+        view_id=_optional_positive_id(payload.get("view_id")),
         view_type=view_type,
         model=model,
         res_id=res_id,
