@@ -273,16 +273,11 @@ class InteractiveCodexDecisionEngine(CodexDecisionEngine):
             return decision
         raise CodexAgentError("agent_redirect_budget_exceeded")
 
-    async def _wait_for_completion(self, client, *, thread_id, turn_id, deadline):
+    def _interactive_proxy(self, client, *, thread_id, turn_id):
         context = self._interactive_context
         if context is None:
-            return await super()._wait_for_completion(
-                client,
-                thread_id=thread_id,
-                turn_id=turn_id,
-                deadline=deadline,
-            )
-        proxy = _InteractiveClientProxy(
+            return client
+        return _InteractiveClientProxy(
             client,
             context=context,
             baseline_sequence=self._interactive_sequence,
@@ -290,9 +285,34 @@ class InteractiveCodexDecisionEngine(CodexDecisionEngine):
             turn_id=turn_id,
             on_steered=self._record_steered_sequence,
         )
+
+    async def _wait_for_completion(self, client, *, thread_id, turn_id, deadline):
+        """Legacy/non-streaming path retained for rollback and conformance callers."""
+
         return await super()._wait_for_completion(
-            proxy,
+            self._interactive_proxy(client, thread_id=thread_id, turn_id=turn_id),
             thread_id=thread_id,
             turn_id=turn_id,
             deadline=deadline,
+        )
+
+    async def _wait_for_completion_streaming(
+        self,
+        client,
+        *,
+        thread_id,
+        turn_id,
+        deadline,
+        context,
+        timing,
+    ):
+        """Keep live Stop/redirect polling on the active streaming/session-reuse path."""
+
+        return await super()._wait_for_completion_streaming(
+            self._interactive_proxy(client, thread_id=thread_id, turn_id=turn_id),
+            thread_id=thread_id,
+            turn_id=turn_id,
+            deadline=deadline,
+            context=context,
+            timing=timing,
         )

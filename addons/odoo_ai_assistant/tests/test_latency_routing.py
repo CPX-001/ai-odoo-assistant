@@ -10,6 +10,10 @@ from ..runtime.agent.codex_session import (
     _CompletedTurnEventFilter,
     _settings_for_decision,
 )
+from ..runtime.agent.interactive_codex import (
+    InteractiveCodexDecisionEngine,
+    _InteractiveClientProxy,
+)
 from ..runtime.agent.provider_lifecycle import close_reasoning_provider
 from ..runtime.agent.reasoning_effort import resolve_auto_reasoning_route
 
@@ -119,3 +123,33 @@ class TestProviderSessionLifecycle(TestCase):
             completed_turns={"turn-old"},
         )
         self.assertEqual(asyncio.run(filtered.next_event(timeout=1.0)), server_request)
+
+    def test_interactive_streaming_path_still_wraps_the_reused_client(self):
+        settings = CodexAgentSettings(
+            executable=Path("/tmp/codex"),
+            codex_home=Path("/tmp/codex-home"),
+        )
+        engine = InteractiveCodexDecisionEngine(settings)
+        engine._interactive_context = SimpleNamespace()
+        fake_client = SimpleNamespace()
+
+        async def exercise():
+            with patch.object(
+                ReusableCodexDecisionEngine,
+                "_wait_for_completion_streaming",
+                new=AsyncMock(return_value={"status": "completed"}),
+            ) as wait:
+                result = await engine._wait_for_completion_streaming(
+                    fake_client,
+                    thread_id="thread-new",
+                    turn_id="turn-new",
+                    deadline=1.0,
+                    context=SimpleNamespace(),
+                    timing=lambda _point: None,
+                )
+                self.assertEqual(result, {"status": "completed"})
+                wrapped = wait.await_args.args[0]
+                self.assertIsInstance(wrapped, _InteractiveClientProxy)
+                self.assertIs(wrapped._client, fake_client)
+
+        asyncio.run(exercise())

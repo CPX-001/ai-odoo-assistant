@@ -58,7 +58,9 @@ before validating the next decision. JSON-RPC server requests (frames with an `i
 closed on this provider boundary.
 
 The lifecycle close is generic: `AgentTurnService` closes the first inner provider that exposes `aclose`, through the
-existing provider-neutral wrapper stack. Codex-specific lifecycle stays in the Codex adapter.
+existing provider-neutral wrapper stack. Codex-specific lifecycle stays in the Codex adapter. The active streaming path
+also preserves the existing interactive Stop/redirect proxy; session reuse must not trade latency for loss of live turn
+control.
 
 ### 2. Deterministic high-volume selection/deletion
 
