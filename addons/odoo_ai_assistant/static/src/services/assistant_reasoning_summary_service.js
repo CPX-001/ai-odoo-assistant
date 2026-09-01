@@ -73,6 +73,20 @@ function projectReasoningSummary(state, scope) {
         : [];
 }
 
+function seedScopeFromPrebindSummary(state, scope, turnId) {
+    if (
+        state.reasoningSummaryTurnId !== turnId ||
+        !Array.isArray(state.reasoningSummaryParts) ||
+        !state.reasoningSummaryParts.length
+    ) {
+        return [];
+    }
+    return state.reasoningSummaryParts.map((part) => ({
+        ...part,
+        sequences: Array.isArray(part.sequences) ? [...part.sequences] : [],
+    }));
+}
+
 patch(assistantPanelService, {
     start(env, dependencies) {
         const panel = super.start(env, dependencies);
@@ -88,7 +102,11 @@ patch(assistantPanelService, {
             if (scope) {
                 if (scope.reasoningSummaryTurnId !== event.turn_id) {
                     scope.reasoningSummaryTurnId = event.turn_id;
-                    scope.reasoningSummaryParts = [];
+                    scope.reasoningSummaryParts = seedScopeFromPrebindSummary(
+                        state,
+                        scope,
+                        event.turn_id
+                    );
                 }
                 scope.reasoningSummaryParts = reduceReasoningSummaryParts(
                     scope.reasoningSummaryParts,
