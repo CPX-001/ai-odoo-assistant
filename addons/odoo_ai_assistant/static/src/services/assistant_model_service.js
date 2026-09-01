@@ -119,7 +119,10 @@ export function normalizeModelPreferences(response) {
     const effectiveModelId = selectedModel || response.default_model;
     const effectiveModel = models.find((item) => item.model === effectiveModelId) || null;
     if (response.selected_reasoning_effort === AUTO_REASONING_EFFORT) {
-        if (!supportsAutoReasoning(effectiveModel)) {
+        if (
+            effectiveModel?.reasoning_metadata_available &&
+            !supportsAutoReasoning(effectiveModel)
+        ) {
             return null;
         }
     } else if (

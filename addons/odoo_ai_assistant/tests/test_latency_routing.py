@@ -5,7 +5,11 @@ from unittest import TestCase
 from unittest.mock import AsyncMock, patch
 
 from ..runtime.agent.codex import CodexAgentSettings
-from ..runtime.agent.codex_session import ReusableCodexDecisionEngine, _settings_for_decision
+from ..runtime.agent.codex_session import (
+    ReusableCodexDecisionEngine,
+    _CompletedTurnEventFilter,
+    _settings_for_decision,
+)
 from ..runtime.agent.provider_lifecycle import close_reasoning_provider
 from ..runtime.agent.reasoning_effort import resolve_auto_reasoning_route
 
@@ -83,3 +87,35 @@ class TestProviderSessionLifecycle(TestCase):
         wrapped = SimpleNamespace(_provider=SimpleNamespace(_provider=inner))
         asyncio.run(close_reasoning_provider(wrapped))
         self.assertEqual(inner.aclose.await_count, 1)
+
+    def test_reused_connection_drops_only_notifications_from_completed_turns(self):
+        old_status = {
+            "method": "thread/status/changed",
+            "params": {"threadId": "thread-old", "status": {"type": "idle"}},
+        }
+        current = {
+            "method": "turn/started",
+            "params": {"threadId": "thread-new", "turnId": "turn-new"},
+        }
+        fake_client = SimpleNamespace(next_event=AsyncMock(side_effect=[old_status, current]))
+        filtered = _CompletedTurnEventFilter(
+            fake_client,
+            completed_threads={"thread-old"},
+            completed_turns={"turn-old"},
+        )
+        result = asyncio.run(filtered.next_event(timeout=1.0))
+        self.assertEqual(result, current)
+        self.assertEqual(fake_client.next_event.await_count, 2)
+
+        server_request = {
+            "id": 7,
+            "method": "item/tool/call",
+            "params": {"threadId": "thread-old", "turnId": "turn-old"},
+        }
+        fake_client.next_event = AsyncMock(return_value=server_request)
+        filtered = _CompletedTurnEventFilter(
+            fake_client,
+            completed_threads={"thread-old"},
+            completed_turns={"turn-old"},
+        )
+        self.assertEqual(asyncio.run(filtered.next_event(timeout=1.0)), server_request)

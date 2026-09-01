@@ -48,6 +48,36 @@ query_record_ids from next_offset only when more than its own bulk page is requi
 """
 
 
+class _CompletedTurnEventFilter:
+    """Ignore late notifications only after their provider turn is already terminal.
+
+    App Server subscriptions can emit thread status/token/lifecycle notifications after
+    ``turn/completed``. They belong to an already-settled provider turn and must not poison identity
+    validation for the next fresh thread on the reused connection. Server requests are never
+    discarded: an event carrying an ``id`` still crosses the normal fail-closed boundary.
+    """
+
+    def __init__(self, client, *, completed_threads: set[str], completed_turns: set[str]) -> None:
+        self._client = client
+        self._completed_threads = completed_threads
+        self._completed_turns = completed_turns
+
+    def __getattr__(self, name):
+        return getattr(self._client, name)
+
+    async def next_event(self, *, timeout: float):
+        deadline = asyncio.get_running_loop().time() + timeout
+        while True:
+            event = await self._client.next_event(timeout=_remaining(deadline))
+            if _late_completed_notification(
+                event,
+                completed_threads=self._completed_threads,
+                completed_turns=self._completed_turns,
+            ):
+                continue
+            return event
+
+
 class ReusableCodexDecisionEngine(StreamingCodexDecisionEngine):
     """Reuse process+initialize within one host decision loop; preserve fresh decision threads."""
 
@@ -55,6 +85,8 @@ class ReusableCodexDecisionEngine(StreamingCodexDecisionEngine):
         super().__init__(*args, **kwargs)
         self._session_client = None
         self._session_decisions = 0
+        self._completed_threads: set[str] = set()
+        self._completed_turns: set[str] = set()
 
     async def _client_for_decision(self, timing):
         if self._session_client is not None:
@@ -65,6 +97,8 @@ class ReusableCodexDecisionEngine(StreamingCodexDecisionEngine):
     async def aclose(self) -> None:
         client = self._session_client
         self._session_client = None
+        self._completed_threads.clear()
+        self._completed_turns.clear()
         if client is not None:
             await client.close()
 
@@ -146,19 +180,42 @@ class ReusableCodexDecisionEngine(StreamingCodexDecisionEngine):
         )
         turn_id = _turn_id(turn_result)
         timing("provider_turn_started")
-        completed = await self._wait_for_completion_streaming(
+        filtered_client = _CompletedTurnEventFilter(
             client,
+            completed_threads=self._completed_threads,
+            completed_turns=self._completed_turns,
+        )
+        completed = await self._wait_for_completion_streaming(
+            filtered_client,
             thread_id=thread_id,
             turn_id=turn_id,
             deadline=deadline,
             context=context,
             timing=timing,
         )
+        self._completed_threads.add(thread_id)
+        self._completed_turns.add(turn_id)
         return validate_next_decision(
             _decision_result(completed),
             reasoning_capabilities=reasoning_capabilities,
             planning_capabilities=planning_capabilities,
         )
+
+
+def _late_completed_notification(event, *, completed_threads, completed_turns) -> bool:
+    if not isinstance(event, dict) or "id" in event or not isinstance(event.get("method"), str):
+        return False
+    params = event.get("params")
+    if not isinstance(params, dict):
+        return False
+    thread_id = params.get("threadId")
+    turn_id = params.get("turnId")
+    return (
+        isinstance(thread_id, str)
+        and thread_id in completed_threads
+        or isinstance(turn_id, str)
+        and turn_id in completed_turns
+    )
 
 
 def _settings_for_decision(settings, *, message, screen, working_items):

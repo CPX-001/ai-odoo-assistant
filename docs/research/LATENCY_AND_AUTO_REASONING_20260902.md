@@ -27,8 +27,9 @@ Research was rechecked on 2026-09-02 against current public sources:
   cost and context rot; lower reasoning efforts can retain strong quality.
   https://openai.com/index/builders-guide-to-gpt-5-6/
 - Codex App Server protocol: initialization is connection-scoped, a thread contains turns, and the protocol supports
-  multiple `turn/start` operations after one initialized connection. Reusing a client connection therefore does not
-  require moving business authority into Codex.
+  multiple `turn/start` operations after one initialized connection. The same protocol documents connection-level
+  subscriptions and `thread/status/changed` notifications, so a reused connection must isolate late notifications from
+  a completed old thread instead of applying the next thread's identity checks to them.
   https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md
 - Anthropic tool-use guidance independently recommends parallel/combined execution for tool calls without data
   dependencies instead of unnecessary sequential model round-trips.
@@ -50,6 +51,11 @@ receives the complete host-authored bounded working state.
 This first step removes repeated process + initialize overhead while preserving the current durability rule:
 provider thread history is never business state. Reusing one Codex thread and incremental context is intentionally
 left for a later eval because it changes context/caching semantics more substantially.
+
+Because App Server subscriptions may deliver thread lifecycle/status notifications after `turn/completed`, the reusable
+adapter remembers only successfully completed provider thread/turn ids and filters their later notification-only frames
+before validating the next decision. JSON-RPC server requests (frames with an `id`) are never filtered and still fail
+closed on this provider boundary.
 
 The lifecycle close is generic: `AgentTurnService` closes the first inner provider that exposes `aclose`, through the
 existing provider-neutral wrapper stack. Codex-specific lifecycle stays in the Codex adapter.
