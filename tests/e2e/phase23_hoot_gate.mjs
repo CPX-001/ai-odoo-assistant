@@ -32,7 +32,11 @@ const url =
     process.env.ODOO_AI_HOOT_URL?.trim() ||
     `${base}/web/tests?db=${encodeURIComponent(database)}&mod=odoo_ai_assistant&headless&loglevel=2&preset=desktop&timeout=15000${selection}`;
 
-const browser = await chromium.launch({ headless: true });
+const browserExecutable = process.env.ODOO_AI_HOOT_EXECUTABLE?.trim();
+const browser = await chromium.launch({
+    headless: true,
+    ...(browserExecutable ? { executablePath: browserExecutable } : {}),
+});
 try {
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     const errors = [];

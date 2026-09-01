@@ -234,9 +234,12 @@ class CapabilityDefinition:
             raise CapabilityError("capability_reasoning_authority_invalid")
         if self.exposure is CapabilityExposure.HOST and self.approval is CapabilityApproval.ALWAYS:
             raise CapabilityError("capability_host_approval_invalid")
-        if self.exposure is CapabilityExposure.PLAN and self.effect is not CapabilityEffect.READ_ONLY:
-            if self.preview_handler is None or self.verify_handler is None:
-                raise CapabilityError("capability_plan_lifecycle_incomplete")
+        if (
+            self.exposure is CapabilityExposure.PLAN
+            and self.effect is not CapabilityEffect.READ_ONLY
+            and (self.preview_handler is None or self.verify_handler is None)
+        ):
+            raise CapabilityError("capability_plan_lifecycle_incomplete")
         if self.exposure is not CapabilityExposure.PLAN and (
             self.preview_handler is not None or self.verify_handler is not None
         ):

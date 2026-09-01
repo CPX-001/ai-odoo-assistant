@@ -1,6 +1,4 @@
 from odoo import Command
-from odoo.tests.common import TransactionCase
-
 from odoo.addons.odoo_ai_assistant.runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -8,6 +6,7 @@ from odoo.addons.odoo_ai_assistant.runtime.capabilities import (
     discover_assistant_extensions_for_env,
     discover_capabilities_for_env,
 )
+from odoo.tests.common import TransactionCase
 
 
 class TestPhase7Fixture(TransactionCase):
@@ -77,7 +76,12 @@ class TestPhase7Fixture(TransactionCase):
             "configured",
         )
         limited_env = self.env(user=self.limited_user, su=False)
+        self.assertFalse(limited_env.su)
+        self.assertFalse(limited_env.user.has_group("base.group_system"))
         registry, context = self._context(limited_env)
+        plan_probe = registry.resolve("fixture.phase7_plan_probe")
+        self.assertEqual(plan_probe.required_groups, ("base.group_system",))
+        self.assertFalse(plan_probe.available_for(context))
 
         self.assertIn(
             "fixture.phase7_read_identity",

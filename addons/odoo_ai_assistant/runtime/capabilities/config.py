@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
-from .contracts import CapabilityDefinition, CapabilityError, CapabilitySettingType, JsonValue
+from .contracts import (
+    CapabilityDefinition,
+    CapabilityError,
+    CapabilitySettingType,
+    JsonValue,
+)
 
 _CONFIG_PREFIX = "odoo_ai_assistant.capability."
 _ENABLED_PREFIX = "odoo_ai_assistant.capability_enabled."

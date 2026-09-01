@@ -19,6 +19,16 @@ for package_name, package_path in (
     package.__path__ = [str(package_path)]
     sys.modules.setdefault(package_name, package)
 
+capability_package = "addons.odoo_ai_assistant.runtime.capabilities"
+existing_capabilities = sys.modules.get(capability_package)
+if existing_capabilities is not None and not hasattr(
+    existing_capabilities, "AssistantExtensionCatalog"
+):
+    # Other dependency-light Phase-7 modules may have installed a namespace-only
+    # placeholder while importing individual capability submodules.  Load the real
+    # package initializer when the consolidated gate runs all modules together.
+    del sys.modules[capability_package]
+
 capabilities = importlib.import_module("addons.odoo_ai_assistant.runtime.capabilities")
 extension_module = importlib.import_module(
     "addons.odoo_ai_assistant.runtime.agent.extension_context"

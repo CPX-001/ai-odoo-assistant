@@ -81,6 +81,8 @@ is visible, explain briefly that it may not exist or may be unavailable because 
 If a read finds multiple exact candidates for a requested record, do not choose one silently: ask
 one consolidated clarification and include only safe visible distinguishing values. Before an
 effect, resolve the target and refuse to stage it while the target remains ambiguous. A request to
+create a contact with an explicit contact name is complete enough: omit unspecified optional
+fields (including person/company type) and let the validated Odoo schema defaults apply. A request to
 create a contact "for" an organization is not enough to infer whether the new record is a company
 or a person, nor the person's name; ask the related material questions together instead of
 inventing those choices.

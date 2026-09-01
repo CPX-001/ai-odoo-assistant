@@ -42,9 +42,12 @@ class CapabilityPolicy:
             return CapabilityPolicyDecision(False, reason="capability_authority_mismatch")
         if definition.approval is CapabilityApproval.ALWAYS and not approved:
             return CapabilityPolicyDecision(False, True, "capability_approval_required")
-        if definition.approval is CapabilityApproval.POLICY and not approved:
-            if self._policy_requires_approval(definition, context):
-                return CapabilityPolicyDecision(False, True, "capability_approval_required")
+        if (
+            definition.approval is CapabilityApproval.POLICY
+            and not approved
+            and self._policy_requires_approval(definition, context)
+        ):
+            return CapabilityPolicyDecision(False, True, "capability_approval_required")
         return CapabilityPolicyDecision(True)
 
     @staticmethod

@@ -21,7 +21,7 @@ for package_name, package_path in (
     package.__path__ = [str(package_path)]
     sys.modules[package_name] = package
 
-from _next_decision_fixture.runtime.agent import contracts as module  # noqa: E402
+from _next_decision_fixture.runtime.agent import contracts as module
 
 
 class TestNextDecisionContract(unittest.TestCase):
@@ -139,6 +139,7 @@ class TestNextDecisionContract(unittest.TestCase):
         self.assertIn("final_answer_only=final_answer_only", source)
         self.assertNotIn("executor.execute", source)
         self.assertIn("return validate_next_decision(", source)
+        self.assertIn("omit unspecified optional", source)
         self.assertIn("decision = validate_next_decision(", host)
         self.assertIn("TaskPlan is progress data only", host)
 

@@ -32,6 +32,7 @@ registry_module = importlib.import_module(
 )
 
 CapabilityDefinition = contracts.CapabilityDefinition
+CapabilityContext = contracts.CapabilityContext
 CapabilityDependency = contracts.CapabilityDependency
 CapabilityEffect = contracts.CapabilityEffect
 CapabilityError = contracts.CapabilityError
@@ -240,3 +241,36 @@ def test_odoo_registry_marker_discovery_is_deterministic_and_direct_only() -> No
     env = types.SimpleNamespace(registry=registry)
 
     assert discover_odoo_capability_providers(env) == (first, second)
+
+
+def test_odoo_registry_marker_discovery_inspects_synthesized_model_sources() -> None:
+    provider = CapabilityProvider(provider_id="example.installed")
+
+    class InstalledSource:
+        _odoo_ai_capability_provider = provider
+
+    class SynthesizedModel:
+        _model_classes__ = (InstalledSource, object)
+
+    registry = types.SimpleNamespace(models={"example.installed": SynthesizedModel})
+    env = types.SimpleNamespace(registry=registry)
+
+    assert discover_odoo_capability_providers(env) == (provider,)
+
+
+def test_registry_excludes_capability_when_required_group_is_missing() -> None:
+    definition = CapabilityDefinition(
+        name="example.admin_probe",
+        description="Read-only capability restricted to administrators.",
+        input_schema=_EMPTY_SCHEMA,
+        output_schema={"type": "object"},
+        risk=CapabilityRisk.READ,
+        effect=CapabilityEffect.READ_ONLY,
+        handler=_handler,
+        required_groups=("base.group_system",),
+    )
+    user = types.SimpleNamespace(has_group=lambda group: False)
+    env = types.SimpleNamespace(user=user)
+    context = CapabilityContext(env=env, turn_id="limited-user")
+
+    assert CapabilityRegistry((definition,)).available(context) == ()

@@ -163,7 +163,9 @@ class CapabilityRegistry:
         if definition.name in memo:
             return memo[definition.name]
         enabled = _enabled_by_context(definition, context)
-        if enabled and definition.available_for(context):
+        if enabled:
+            enabled = definition.available_for(context)
+        if enabled:
             enabled = all(
                 self._available(self.resolve(dep.name), context, memo)
                 for dep in definition.dependencies

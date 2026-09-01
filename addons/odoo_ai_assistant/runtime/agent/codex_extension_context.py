@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from .codex import CodexAgentError
 from . import codex_decision
+from .codex import CodexAgentError
 
 _EXTENSION_HOST_KEYS = {
     "host_assistant_extensions": "assistant_extensions",

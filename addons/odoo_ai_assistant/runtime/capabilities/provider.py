@@ -148,15 +148,25 @@ def discover_odoo_capability_providers(env) -> tuple[CapabilityProvider, ...]:
         return ()
 
     providers: list[CapabilityProvider] = []
+    marker_classes: set[type] = set()
     for model_name in sorted(models):
         model_class = models[model_name]
-        namespace = vars(model_class)
-        if _PROVIDER_MARKER_ATTR not in namespace:
-            continue
-        provider = namespace[_PROVIDER_MARKER_ATTR]
-        if not isinstance(provider, CapabilityProvider):
-            raise CapabilityError("capability_provider_marker_invalid")
-        providers.append(provider)
+        # Odoo's registry class is synthesized and does not retain custom class
+        # attributes in its own namespace.  `_model_classes__` is the ordered set of
+        # installed source classes used to construct it; inspect each namespace
+        # directly so ordinary Python inheritance still cannot duplicate a marker.
+        source_classes = getattr(model_class, "_model_classes__", (model_class,))
+        for source_class in source_classes:
+            namespace = vars(source_class)
+            if _PROVIDER_MARKER_ATTR not in namespace:
+                continue
+            if source_class in marker_classes:
+                continue
+            provider = namespace[_PROVIDER_MARKER_ATTR]
+            if not isinstance(provider, CapabilityProvider):
+                raise CapabilityError("capability_provider_marker_invalid")
+            providers.append(provider)
+            marker_classes.add(source_class)
     return tuple(providers)
 
 
