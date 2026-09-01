@@ -14,6 +14,9 @@ type JsonValue = (
 type CapabilityEventSink = Callable[[str, str, Mapping[str, JsonValue]], None]
 type CapabilityHandler = Callable[["CapabilityContext", Mapping[str, JsonValue]], Any]
 type CapabilityGuard = Callable[["CapabilityContext"], bool]
+type CapabilityActivityProjector = Callable[
+    ["CapabilityContext", Mapping[str, JsonValue]], Mapping[str, JsonValue]
+]
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _VERSION_RE = re.compile(r"^[1-9][0-9]*$")
@@ -173,6 +176,29 @@ class CapabilityContext:
 
 
 @dataclass(frozen=True, slots=True)
+class CapabilityActivitySpec:
+    """Non-authoritative public presentation owned by trusted capability code.
+
+    ``projector`` may derive bounded semantic arguments from already validated capability
+    input and the effective Odoo Environment. It never grants capability availability or
+    execution authority. Projector failures are presentation failures and the executor must
+    fall back to generic host activity instead of failing the business operation.
+    """
+
+    operation: str
+    headline_code: str
+    projector: CapabilityActivityProjector | None = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if not _NAME_RE.fullmatch(self.operation):
+            raise CapabilityError("capability_activity_operation_invalid")
+        if not _NAME_RE.fullmatch(self.headline_code):
+            raise CapabilityError("capability_activity_headline_invalid")
+        if self.projector is not None and not callable(self.projector):
+            raise CapabilityError("capability_activity_projector_invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class CapabilityDefinition:
     """Stable source of truth for one executable capability."""
 
@@ -199,6 +225,7 @@ class CapabilityDefinition:
     help_text: str = ""
     audit_metadata: Mapping[str, JsonValue] = field(default_factory=dict)
     developer_metadata: Mapping[str, JsonValue] = field(default_factory=dict)
+    activity: CapabilityActivitySpec | None = None
     preview_handler: CapabilityHandler | None = field(default=None, repr=False, compare=False)
     verify_handler: CapabilityHandler | None = field(default=None, repr=False, compare=False)
     guard: CapabilityGuard | None = field(default=None, repr=False, compare=False)
@@ -218,6 +245,8 @@ class CapabilityDefinition:
             raise CapabilityError("capability_input_schema_invalid")
         if self.output_schema.get("type") != "object":
             raise CapabilityError("capability_output_schema_invalid")
+        if self.activity is not None and not isinstance(self.activity, CapabilityActivitySpec):
+            raise CapabilityError("capability_activity_invalid")
         if self.effect is CapabilityEffect.READ_ONLY and self.risk in {
             CapabilityRisk.WRITE,
             CapabilityRisk.ACTION,
@@ -280,6 +309,7 @@ class CapabilityDefinition:
     def wire_descriptor(self) -> dict[str, JsonValue]:
         """Transport-neutral, MCP-shaped descriptor; adapters may further translate it."""
 
+        activity = self.activity
         return {
             "name": self.name,
             "title": self.title or self.name,
@@ -295,5 +325,13 @@ class CapabilityDefinition:
                 "exposure": self.exposure.value,
                 "approval": self.approval.value,
                 "tags": list(self.tags),
+                "activity": (
+                    {
+                        "operation": activity.operation,
+                        "headline_code": activity.headline_code,
+                    }
+                    if activity is not None
+                    else None
+                ),
             },
         }
