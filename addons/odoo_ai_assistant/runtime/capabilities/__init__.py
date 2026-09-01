@@ -14,6 +14,8 @@ from .context import (
     ContextProviderStatus,
 )
 from .contracts import (
+    CapabilityActivityProjector,
+    CapabilityActivitySpec,
     CapabilityApproval,
     CapabilityContext,
     CapabilityDefinition,
@@ -75,6 +77,8 @@ __all__ = [
     "ActiveAssistantExtensions",
     "AssistantExtensionCatalog",
     "AssistantExtensionStatus",
+    "CapabilityActivityProjector",
+    "CapabilityActivitySpec",
     "CapabilityApproval",
     "CapabilityConfigResolver",
     "CapabilityContext",
