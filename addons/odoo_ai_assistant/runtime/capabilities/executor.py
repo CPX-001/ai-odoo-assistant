@@ -29,9 +29,12 @@ _PUBLIC_MODEL = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
 _PUBLIC_FIELD = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _PUBLIC_ACTIVITY_ID = re.compile(r"^activity:v1:[0-9a-f]{32}$")
 _PUBLIC_SEMANTIC_GROUP = re.compile(r"^semantic:v1:[0-9a-f]{32}$")
+_PUBLIC_SEMANTIC_CODE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _MAX_PUBLIC_RECORD_REFS = 50
 _MAX_PUBLIC_DISPLAY_NAME = 160
 _MAX_PUBLIC_NAV_REFS = 12
+_MAX_PUBLIC_SEMANTIC_ARGS = 8
+_MAX_PUBLIC_SEMANTIC_BYTES = 2048
 _PUBLIC_NAV_KINDS = frozenset(
     {"odoo_model", "odoo_action", "odoo_view", "odoo_menu", "odoo_setting"}
 )
@@ -382,8 +385,8 @@ def _public_result_payload(context, public, output):
     """Project bounded identities only after output-schema validation.
 
     Navigation references are projected only from the installed ``odoo.resolve_navigation``
-    capability result.  Their identifiers are therefore host-resolved output, never model-supplied
-    authority.  Record identities retain the existing same-user display-name re-read.
+    capability result. Their identifiers are therefore host-resolved output, never model-supplied
+    authority. Record identities retain the existing same-user display-name re-read.
     """
 
     result = dict(public)
@@ -463,12 +466,16 @@ def _semantic_activity(context, definition, payload, *, stage, group_key):
     model_label = _public_model_label(context, model)
     operation = payload.get("operation") if isinstance(payload.get("operation"), str) else None
     count = _input_count(payload)
-    name = definition.name
     args = {}
     if model_label:
         args["model_label"] = model_label
     if count is not None:
         args["count"] = count
+
+    activity = definition.activity
+    if activity is not None and activity.projector is not None:
+        projected = _safe_activity_projection(activity.projector, context, payload)
+        args = _merge_semantic_args(args, projected)
 
     if stage == "verify":
         semantic_operation = "capability.verify"
@@ -476,24 +483,9 @@ def _semantic_activity(context, definition, payload, *, stage, group_key):
     elif stage == "prepare":
         semantic_operation = "capability.prepare"
         headline_code = _mutation_headline("prepare", operation or _operation_from_tags(definition.tags))
-    elif name == "odoo.get_effective_write_schema":
-        semantic_operation = "odoo.schema.write.inspect"
-        headline_code = "activity.prepare.model"
-    elif name == "odoo.get_effective_schema":
-        semantic_operation = "odoo.schema.read.inspect"
-        headline_code = "activity.inspect.model"
-    elif name in {"odoo.query_records", "odoo.aggregate_records"}:
-        semantic_operation = "odoo.records.query"
-        headline_code = "activity.query.records"
-    elif name == "odoo.search_models":
-        semantic_operation = "odoo.models.search"
-        headline_code = "activity.search.odoo"
-        query = payload.get("query")
-        if isinstance(query, str):
-            args["query"] = " ".join(query.split())[:160]
-    elif name == "odoo.resolve_navigation":
-        semantic_operation = "odoo.navigation.resolve"
-        headline_code = "activity.navigation.resolve"
+    elif activity is not None:
+        semantic_operation = activity.operation
+        headline_code = activity.headline_code
     elif definition.effect.value != "read-only":
         semantic_operation = "capability.execute"
         headline_code = _mutation_headline("execute", operation or _operation_from_tags(definition.tags))
@@ -515,6 +507,49 @@ def _semantic_activity(context, definition, payload, *, stage, group_key):
         "progress": None,
         "result_summary": None,
     }
+
+
+def _safe_activity_projection(projector, context, payload):
+    """Fail isolated: presentation code must never become business-operation authority."""
+
+    try:
+        value = projector(context, payload)
+    except Exception:  # noqa: BLE001 - capability remains executable without presentation hints
+        return {}
+    if not isinstance(value, Mapping):
+        return {}
+    return _normalize_semantic_args(value)
+
+
+def _merge_semantic_args(base, extra):
+    merged = dict(base)
+    for key, value in extra.items():
+        if len(merged) >= _MAX_PUBLIC_SEMANTIC_ARGS and key not in merged:
+            break
+        merged[key] = value
+    normalized = _normalize_semantic_args(merged)
+    while len(json.dumps(normalized, ensure_ascii=False).encode("utf-8")) > _MAX_PUBLIC_SEMANTIC_BYTES:
+        if not normalized:
+            break
+        normalized.pop(next(reversed(normalized)))
+    return normalized
+
+
+def _normalize_semantic_args(value):
+    result = {}
+    for key, item in value.items():
+        if len(result) >= _MAX_PUBLIC_SEMANTIC_ARGS:
+            break
+        if not isinstance(key, str) or _PUBLIC_FIELD.fullmatch(key) is None:
+            continue
+        if isinstance(item, str):
+            normalized = " ".join(item.split())[:160]
+            result[key] = normalized
+        elif type(item) is bool:
+            result[key] = item
+        elif type(item) is int and 0 <= item <= 1_000_000:
+            result[key] = item
+    return result
 
 
 def _operation_from_tags(tags):
@@ -577,7 +612,7 @@ def _semantic_result(semantic, output, *, verified):
             expected = args.get("count")
             if type(expected) is int and expected == count and expected > 0:
                 result["progress"] = {"current": count, "total": expected}
-        elif result.get("operation") == "odoo.records.query":
+        elif result.get("operation") in {"odoo.records.query", "odoo.records.aggregate"}:
             code = "activity.result.records_found"
         else:
             return result
