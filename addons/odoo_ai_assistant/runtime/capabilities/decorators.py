@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from .contracts import (
+    CapabilityActivitySpec,
     CapabilityApproval,
     CapabilityDefinition,
     CapabilityDependency,
@@ -44,6 +45,7 @@ def tool(
     help_text: str = "",
     audit_metadata: dict[str, JsonValue] | None = None,
     developer_metadata: dict[str, JsonValue] | None = None,
+    activity: CapabilityActivitySpec | None = None,
     preview: CapabilityHandler | None = None,
     verify: CapabilityHandler | None = None,
     guard: CapabilityGuard | None = None,
@@ -77,6 +79,7 @@ def tool(
             help_text=help_text,
             audit_metadata=deepcopy(audit_metadata or {}),
             developer_metadata=deepcopy(developer_metadata or {}),
+            activity=activity,
             preview_handler=preview,
             verify_handler=verify,
             guard=guard,
