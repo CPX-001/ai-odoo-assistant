@@ -189,6 +189,23 @@ function technicalSuffix(item, preferences) {
 function activeReasoningScope(state) {
     const scoped = state.turnScopes?.[state.activeTurnScopeKey];
     if (scoped) {
+        const scopedReady =
+            scoped.turnId &&
+            scoped.reasoningSummaryTurnId === scoped.turnId &&
+            Array.isArray(scoped.reasoningSummaryParts) &&
+            scoped.reasoningSummaryParts.length > 0;
+        const prebindReady =
+            scoped.turnId &&
+            state.reasoningSummaryTurnId === scoped.turnId &&
+            Array.isArray(state.reasoningSummaryParts) &&
+            state.reasoningSummaryParts.length > 0;
+        if (!scopedReady && prebindReady) {
+            return {
+                ...scoped,
+                reasoningSummaryTurnId: state.reasoningSummaryTurnId,
+                reasoningSummaryParts: state.reasoningSummaryParts,
+            };
+        }
         return scoped;
     }
     return {
@@ -290,7 +307,7 @@ patch(AssistantPanel.prototype, {
     get activitySummaryLabel() {
         const activity = this.semanticActivity;
         if (this.state.loading) {
-            return _t("Reasoning · %s", semanticLabel(activity.headline));
+            return semanticLabel(activity.headline);
         }
         if (!activity.step_count) {
             return "";
@@ -300,6 +317,22 @@ patch(AssistantPanel.prototype, {
             return _t("Thought for %s · 1 step", duration);
         }
         return _t("Thought for %s · %s steps", duration, activity.step_count);
+    },
+
+    get settledActivityAnswer() {
+        if (!this.activityItems.length || typeof this.state.result?.answer !== "string") {
+            return "";
+        }
+        const messages = Array.isArray(this.state.messages) ? this.state.messages : [];
+        const last = messages.at(-1);
+        return last?.role === "assistant" && last.content === this.state.result.answer
+            ? this.state.result.answer
+            : "";
+    },
+
+    get activityOrderedMessages() {
+        const messages = Array.isArray(this.state.messages) ? this.state.messages : [];
+        return this.settledActivityAnswer ? messages.slice(0, -1) : messages;
     },
 
     get activityDetailLevel() {
