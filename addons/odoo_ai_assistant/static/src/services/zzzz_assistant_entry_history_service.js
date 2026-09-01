@@ -1,24 +1,13 @@
 /** @odoo-module **/
 
 import { patch } from "@web/core/utils/patch";
-import {
-    assistantPanelService,
-    resetForNewConversation,
-} from "@odoo_ai_assistant/services/assistant_panel_service";
+import { assistantPanelService } from "@odoo_ai_assistant/services/assistant_panel_service";
 import { clearRecentActiveChat } from "@odoo_ai_assistant/services/assistant_history_service";
 import { createConversationTurnScope } from "@odoo_ai_assistant/services/zzz_assistant_turn_scope_service";
 
 function browserSessionStorage() {
     try {
         return globalThis.sessionStorage || null;
-    } catch {
-        return null;
-    }
-}
-
-function browserLocalStorage() {
-    try {
-        return globalThis.localStorage || null;
     } catch {
         return null;
     }
@@ -32,10 +21,27 @@ function browserLocalStorage() {
  */
 export function prepareFreshAssistantEntry(
     state,
-    { sessionStorage = browserSessionStorage(), localStorage = browserLocalStorage() } = {}
+    { sessionStorage = browserSessionStorage() } = {}
 ) {
     clearRecentActiveChat(sessionStorage);
-    resetForNewConversation(state, localStorage);
+
+    // Reset only volatile presentation state. Stored per-conversation drafts and recovery handles
+    // remain untouched; a user can reopen that conversation from history without losing anything.
+    state.conversationId = null;
+    state.activeTurn = null;
+    state.messages = [];
+    state.draft = "";
+    state.result = null;
+    state.actionReceipt = null;
+    state.errorCode = null;
+    state.failure = null;
+    state.streamingText = "";
+    state.activityEvents = [];
+    state.currentActivity = null;
+    state.lastSubmittedMessage = "";
+    state.loading = false;
+    state.decisionLoading = false;
+    state.publicReferenceNotice = "";
     state.historyView = true;
 
     state.turnScopes =
