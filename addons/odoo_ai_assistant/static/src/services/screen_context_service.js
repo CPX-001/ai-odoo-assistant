@@ -51,9 +51,10 @@ function selectedIds(value) {
 }
 
 /**
- * Resolve the concrete Odoo view id for developer-facing UI only.
- * It is deliberately kept out of buildScreenContext(), so it is never promoted from a
- * browser hint into Assistant authority or sent to the Assistant Service.
+ * Resolve the concrete Odoo view id as a bounded browser hint.
+ *
+ * The id may be submitted in screen context, but it is never authority: Odoo revalidates the
+ * model/view/type under the effective user before deriving any semantic context from it.
  */
 export function currentViewId(actionService, routerState = {}) {
     const controller = actionService?.currentController;
@@ -131,6 +132,7 @@ export function buildScreenContext(
     const currentApp = menuService.getCurrentApp?.();
     const menuId = positiveId(routerState.menu_id) || positiveId(currentApp?.id);
     const actionId = positiveId(controller?.config?.actionId) || positiveId(action.id);
+    const viewId = currentViewId(actionService, routerState);
     const allowedContextSubset = {};
     if (model && resId) {
         allowedContextSubset.active_model = model;
@@ -140,6 +142,7 @@ export function buildScreenContext(
     return {
         action_id: actionId,
         menu_id: menuId,
+        view_id: viewId,
         view_type: viewType,
         model,
         res_id: resId,
