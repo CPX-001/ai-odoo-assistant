@@ -12,6 +12,7 @@ P5.1-P5.8 accepted
 P6 COMPLETE / ACCEPTED
 P7 COMPLETE / ACCEPTED at 092ac57fe58a3a36765b115e78b2eca687f5dbbc
 P8 COMPLETE / ACCEPTED at e370af8acb7df175c0a90c8e17520c8576b4c6ce
+P9 first coherent slice IMPLEMENTED / NOT YET ACCEPTED
 ```
 
 P7 acceptance is recorded in
@@ -22,15 +23,19 @@ accepted regression in
 P8 acceptance evidence is recorded in
 `research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md`.
 
+P9 implementation and its blocking validation runbook are recorded in
+`research/P9_KNOWLEDGE_FIRST_SLICE.md` and
+`research/P9_FOCUSED_VALIDATION_RUNBOOK.md`. No P9 PASS is claimed yet.
+
 ## 1. Product/deployment baseline
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Supported product: `addons/odoo_ai_assistant`.
-- Current addon manifest version: `18.0.13.19.0`.
+- Current addon manifest version: `18.0.13.20.0`.
 - Current manifest dependencies remain `account`, `base`, `sale`, `web`.
 - Runtime is embedded in Odoo; the browser talks only to authenticated Odoo routes.
-- Odoo/PostgreSQL own conversation, turn, queue, effect/recovery and live-event state.
-- Long turns are claimed by native `ir.cron` workers.
+- Odoo/PostgreSQL own conversation, turn, queue, effect/recovery, Evidence and Knowledge state.
+- Long turns and bounded Knowledge ingestion are scheduled by native `ir.cron` workers.
 - Business operations run as the effective Odoo user with `su=False`.
 - Codex App Server is the current concrete reasoning provider and remains an ephemeral/provider-owned runtime boundary.
 - The retired FastAPI/Uvicorn Assistant sidecar is not part of the supported product.
@@ -60,10 +65,13 @@ EffectPlan preparation
 write barrier / execution
 verification / recovery / receipts
 public progress projection
+Evidence access / freshness / trust
+Knowledge source ownership / indexing lifecycle
 ```
 
 `CapabilityDefinition` remains the atomic executable unit. There is no arbitrary
 SQL, Python, shell, sudo or unrestricted `execute_method`/ORM-method escape hatch.
+The P9 FTS SQL is fixed, parameterized host code and is not exposed as a capability.
 
 Effects follow the existing host-owned lifecycle:
 
@@ -98,7 +106,7 @@ The accepted P5/P6 runtime remains current:
 - public activity, answer-delta streaming and final reconciliation;
 - per-turn immutable model/reasoning/autonomy/planning settings.
 
-P8 does not replace this runtime or add another scheduler/database/agent loop.
+P8/P9 do not replace this runtime or add another scheduler/database/agent loop.
 
 ## 4. P7 extension framework — accepted and P8-hardened
 
@@ -125,6 +133,10 @@ P8 hardens this same framework rather than creating another tool/plugin system:
 - capability/group guards fail closed on exceptions;
 - capability/context/Skill/provider JSON contracts are deeply immutable while preserving normal `dict`/`list` type checks;
 - trusted installed extensions may contribute capabilities, Skills, ContextProviders and EvidenceProviders through the same accepted provider boundary.
+
+P9 reuses this extension/Evidence framework. `assistant.company_knowledge` is another
+EvidenceProvider and `assistant.knowledge.ingest_attachment` is another
+CapabilityDefinition; no Knowledge-specific registry is introduced.
 
 ## 5. Public product profiles
 
@@ -180,8 +192,8 @@ there is no second Evidence manifest/registry.
 
 ## 7. Runtime/source/log Evidence and live projection
 
-`assistant.runtime_inventory` derives a
-bounded projection from the effective Odoo Environment containing:
+`assistant.runtime_inventory` derives a bounded projection from the effective Odoo
+Environment containing:
 
 ```text
 Odoo release/edition
@@ -202,7 +214,7 @@ installed-addon roots, using logical locators, line citations and fingerprints.
 logfile with secret redaction and opaque byte locators. Both are Technical resources
 and neither creates execution authority.
 
-The first live provider-neutral retrieval path is also implemented:
+The live provider-neutral retrieval path is:
 
 ```text
 AssistantExtensionDecisionEngine
@@ -220,34 +232,83 @@ diagnosis questions can retrieve Evidence. Codex only adapts the existing trust
 partition; it does not gain an Evidence-specific authority path. Retrieved text,
 including prompt-injection text, remains untrusted data.
 
-## 8. Explicit follow-up scope after P8
+## 8. P9 company Knowledge first slice — implemented, awaiting validation
 
-The current checkpoint is not the complete Evidence product. Still pending are:
+P9 now adds Odoo-native company Knowledge on top of that accepted Evidence path:
 
+```text
+odoo.ai.knowledge.source
+  uploaded -> processing -> indexed -> active
+                      \-> error
+
+odoo.ai.knowledge.chunk
+  derived host-owned lexical index rows
+
+odoo.ai.knowledge.attachment
+  temporary owner/company-bound chat upload
+
+assistant.company_knowledge
+  DOCUMENT EvidenceProvider
+
+assistant.knowledge.ingest_attachment
+  explicit-user-request plan capability
+```
+
+Initial ingestion is deterministic and bounded to TXT/Markdown/RST/CSV/JSON/XML,
+8 MiB per source, 6,000 characters per chunk and 2,048 chunks per source. PostgreSQL
+`simple` FTS plus a GIN expression index and bounded substring fallback form the
+lexical baseline. Embeddings/vector storage are intentionally absent until evals
+prove they materially improve retrieval.
+
+Company Knowledge uses effective Odoo ACL/record rules before FTS. `company` sources
+are visible only in active allowed companies; `private` sources are owner-only.
+Source owner/company/lifecycle metadata is host-owned, and ordinary users cannot
+mutate derived chunks. Search/fetch returns `USER_CONTENT` Evidence with source,
+version, chunk and fingerprint citations. Reindex/version change makes old refs stale;
+disabled sources are revoked.
+
+The Assistant composer can upload a bounded temporary file. Upload alone does not
+persist the file as Knowledge. When the user explicitly asks to add it, an opaque
+marker is validated/stripped server-side, a host-only descriptor is bound to the
+durable turn, and `assistant.knowledge.ingest_attachment` may create the persistent
+source through the same plan/capability runtime. Raw base64 never enters the model
+prompt.
+
+This implementation is **not accepted yet**. Its focused tests and real gate runner
+are prepared but unexecuted.
+
+## 9. Explicit follow-up scope after this P9 slice
+
+Still pending are:
+
+- execute/repair/record P9 focused and seven real acceptance gates;
 - durable reconnect restoration of the Evidence ledger through the existing Odoo working transcript;
 - richer citation navigation beyond persisted final-result metadata;
 - runtime/schema/configuration/security/navigation providers beyond inventory;
 - full host-owned observability spans/self-inspection capabilities;
 - secret-value masked/copy/reveal UI;
-- company Knowledge/RAG and uploaded Sources;
+- PDF/OCR/XLSX-specific Knowledge parsing;
+- semantic/vector retrieval only if evals justify it;
 - repository/module acquisition and the Technical host privilege broker;
 - domain-addon split and its clean install/update/uninstall proof.
 
-These are P9/P10 follow-ups and must not be inferred from P8 acceptance.
+These are later P9/P10 follow-ups and must not be inferred from P8 acceptance or the
+unvalidated P9 implementation.
 
-## 9. Evidence/source scope
+## 10. Evidence/source scope
 
-P8 uses an explicit current-source policy. Current addon/Odoo/install evidence is
+P8/P9 use an explicit current-source policy. Current addon/Odoo/install evidence is
 preferred; retired sidecar/installer/migration/task/evidence history is excluded from
 normal current-answer context by default without deleting history.
 
 See:
 
 - `EVIDENCE_ARCHITECTURE.md`
+- `KNOWLEDGE_INDEX.md`
 - `CONTEXT_SOURCE_POLICY.md`
 - `runtime/context_source_policy.json`
 
-## 10. Observability and secrets
+## 11. Observability and secrets
 
 ADR-023 and `OBSERVABILITY_ARCHITECTURE.md` define host-owned observability:
 correlated turn/provider/capability/evidence/effect timing and outcomes, with detailed
@@ -259,7 +320,10 @@ should receive a warning without unnecessary re-emission. Assistant-presented
 secrets require masked/copy/reveal UI before that product behavior can be claimed
 complete.
 
-## 11. Future technical/module operations
+Knowledge/source content is also untrusted data. A document cannot redefine
+system/tool policy or grant execution authority.
+
+## 12. Future technical/module operations
 
 The product direction is **universal discovery + typed promotion**, not generic method
 or shell execution. Installation/module operations will use bounded Evidence and
@@ -272,13 +336,19 @@ policy-driven execution. Allowlists may be positive trust signals or customer po
 not universal product authority.
 
 ADR-024 remains **Proposed**. No privileged broker, repository acquisition, host
-package installation or service operation is implemented by this P8 foundation.
+package installation or service operation is implemented by P8/P9.
 
-## 12. Validation truth and next action
+## 13. Validation truth and next action
 
 P8 passed `61` focused dependency-light tests, `20` focused Odoo tests and all six
-real Odoo/Codex Evidence gates with effective-user `su=False`. The broad repository,
-addon, HOOT/browser and Product Behavior FULL suites remain unexecuted periodic debt.
+real Odoo/Codex Evidence gates with effective-user `su=False`.
 
-P9 is eligible. The next action is the largest coherent company Knowledge/RAG and
-source-lifecycle slice described by `research/EXECUTION_STATE.md`.
+P9 code/tests/runbook are implemented on main, but no P9 test or real gate has been
+executed in this connector session. The blocking next action is exactly
+`research/P9_FOCUSED_VALIDATION_RUNBOOK.md`: run focused static/dependency-light,
+focused Odoo, focused browser smoke and the seven P9 real Knowledge gates; repair any
+failures; then record immutable P9 acceptance evidence. Until that happens, P10 is
+not eligible.
+
+The broad repository/addon/HOOT/Product Behavior FULL regressions remain periodic debt
+unless focused P9 failures require widening the validation scope.
