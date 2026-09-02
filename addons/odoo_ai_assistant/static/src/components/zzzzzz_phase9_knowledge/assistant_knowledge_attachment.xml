@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
+        <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]/div[contains(@class, 'o_ai_assistant_composer_row')]" position="before">
+            <div t-if="(state.pendingKnowledgeUploads || []).length"
+                class="o_ai_assistant_knowledge_uploads d-flex flex-wrap gap-1 mb-2">
+                <div t-foreach="state.pendingKnowledgeUploads || []" t-as="attachment"
+                    t-key="attachment.token"
+                    class="o_ai_assistant_knowledge_upload badge rounded-pill text-bg-light border d-inline-flex align-items-center gap-1">
+                    <i class="fa fa-file-text-o" aria-hidden="true"/>
+                    <span class="text-truncate" t-att-title="attachment.name" t-esc="attachment.name"/>
+                    <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-reset"
+                        title="Quitar archivo" aria-label="Quitar archivo"
+                        t-att-disabled="state.loading or state.decisionLoading or recoveryPending"
+                        t-on-click="() => this.removeKnowledgeUpload(attachment.token)">
+                        <i class="fa fa-times" aria-hidden="true"/>
+                    </button>
+                </div>
+                <div class="w-100 small text-muted mt-1">
+                    El archivo sólo se añadirá a Knowledge si lo pides explícitamente en el mensaje.
+                </div>
+            </div>
+            <div t-if="state.knowledgeUploadError" class="small text-danger mb-2" role="status"
+                t-esc="state.knowledgeUploadError"/>
+        </xpath>
+
+        <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]//textarea[@id='o_ai_assistant_question']" position="before">
+            <label class="btn btn-outline-secondary o_ai_assistant_knowledge_attach_button mb-0"
+                title="Adjuntar archivo" aria-label="Adjuntar archivo">
+                <i t-if="state.knowledgeUploadBusy" class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                <i t-else="" class="fa fa-paperclip" aria-hidden="true"/>
+                <input type="file" class="d-none"
+                    accept=".txt,.md,.markdown,.rst,.csv,.json,.xml,text/plain,text/markdown,text/x-rst,text/csv,application/json,application/xml,text/xml"
+                    t-att-disabled="state.loading or state.decisionLoading or recoveryPending or state.knowledgeUploadBusy"
+                    t-on-change="onKnowledgeFileSelected"/>
+            </label>
+        </xpath>
+    </t>
+</templates>
