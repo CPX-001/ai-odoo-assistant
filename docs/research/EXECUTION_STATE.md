@@ -47,9 +47,9 @@ current_gate_type: CONSOLIDATED_P7_AND_PRODUCT_VALIDATION
 blocking_work: no planned Phase-7 implementation slice remains before validation
 blocking_validation: Product Behavior FULL x3 stopped at 76/162 PASS by current provider usage limit; then final periodic regression
 latest_accepted_evidence: docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
-latest_executed_p7_evidence: docs/research/evidence/phase7/2026-09-01/P7-CONSOLIDATED-2992214.md
+latest_executed_p7_evidence: docs/research/evidence/phase7/2026-09-02/P7-ACCEPTANCE-3787cb6.md
 latest_executed_product_evidence: docs/research/evidence/product_behavior/2026-09-01/PRODUCT-BEHAVIOR-BASELINE-e100dba.md
-next_action: after current provider quota returns, rerun Product Behavior FULL x3 from the beginning; if green run the final periodic regression and publish P7 acceptance
+next_action: after current provider quota returns, rerun Product Behavior SMOKE from the beginning on the corrected disposable fixture, then all six P7 real gates and Product Behavior FULL x3; if green run the final periodic regression and publish P7 acceptance
 ```
 
 ## Latency / Auto optimization checkpoint — 2026-09-02

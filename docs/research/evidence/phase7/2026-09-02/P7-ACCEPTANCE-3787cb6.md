@@ -1,9 +1,9 @@
 # Phase 7 acceptance validation — 2026-09-02
 
-Status: IN_PROGRESS; no Phase-7 acceptance or Phase-8 eligibility claimed.
+Status: BLOCKED_PROVIDER_CAPACITY; no Phase-7 acceptance or Phase-8 eligibility claimed.
 
 BASE_SHA: `f410bd0dcb17f7fe7b2ac3839b6bd27472c4079c`
-TESTED_SHA: `3787cb68d967e022260a096ba4bd6fdc0f0f0822`
+TESTED_SHA: `6b0db24` (validation checkpoint; prior implementation candidate `3787cb6`)
 
 ## Environment and scope
 
@@ -25,7 +25,7 @@ TESTED_SHA: `3787cb68d967e022260a096ba4bd6fdc0f0f0822`
 | Clean core install | PASS | addon installed without fixture dependency |
 | Focused HOOT | PASS | 10 tests / 32 assertions; planning 4/15, one-shot submit 2/6, live stream 4/11 |
 | P7-REAL-PROVIDER-DISCOVERY | PASS | install/uninstall restores identical core catalog: 25 core vs 27 installed capabilities; no stale Skill/context provider |
-| Current SMOKE | IN_PROGRESS | fresh 15-case run after environment corrections |
+| Current SMOKE | BLOCKED | second fresh run reached 5/15; provider returned `provider_usage_limit` at `PB-HOW-002`; 5 completed cases passed, remaining 10 unexecuted |
 | Other P7 real gates | NOT EXECUTED | pending current-candidate rerun |
 | FULL x3 | NOT EXECUTED | pending prerequisites |
 | Final periodic regression | NOT EXECUTED | requires green FULL |
@@ -51,4 +51,6 @@ TESTED_SHA: `3787cb68d967e022260a096ba4bd6fdc0f0f0822`
    form succeeded. HOOT ran against the correct database, with no JavaScript errors. Streaming/one-shot checks used
    the desktop viewport; planning's first check reported a viewport-size warning but all assertions passed.
 
-Exact final commands, completed matrix and continuation will be recorded when this run reaches its outcome.
+The deterministic gate was rerun after the checkpoint repairs: 323 unit tests, 14 failure-contract assertions and 12
+public-activity assertions PASS. The provider-capacity blocker is external to product behavior; no reset credit was
+used. Exact continuation is to rerun the complete SMOKE and then FULL x3 from the beginning after quota returns.
