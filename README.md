@@ -10,7 +10,7 @@ intent chatbot.
 ```text
 P0-P7 COMPLETE / ACCEPTED
 P8.0 architecture hardening IMPLEMENTED
-P8.1/P8.2 Evidence foundation IMPLEMENTED
+P8.1/P8.2 Evidence foundation + first live projection IMPLEMENTED
 focused P8 validation PENDING
 P8 real gates NOT EXECUTED / NOT ACCEPTED
 ```
@@ -36,11 +36,11 @@ The customer experiences one Odoo AI Assistant product. Internal domain/link add
 may be added later and auto-installed when appropriate; they must not create manual
 packaging friction.
 
-Product-facing profiles are limited to:
+Product-facing profile values are limited to:
 
 ```text
-User / non-technical
-Technical
+user
+technical
 ```
 
 Internal compatibility names do not create extra human roles. Any future host
@@ -54,7 +54,8 @@ flowchart TB
     TURN --> HOST[Provider-neutral host loop]
     HOST <--> MODEL[Codex App Server adapter]
     HOST --> EXT[Skills + JIT Context + Manifest]
-    HOST --> EVIDENCE[EvidenceProviderCatalog + bounded ledger]
+    HOST --> EVIDENCE[EvidenceProviderCatalog + bounded turn ledger]
+    EVIDENCE --> EDATA[Host metadata + untrusted Evidence working data]
     HOST --> CAPS[Effective CapabilityRegistry]
     CAPS --> POLICY[Schema + ACL + policy + budgets]
     POLICY --> EFFECT[Preview / approval when required / execute / verify]
@@ -89,13 +90,21 @@ Odoo method execution.
 ### P8 Evidence foundation
 
 The repository now contains provider-neutral Evidence contracts, access/freshness
-checks, logical locators, canonical fingerprints, optional-provider isolation,
-question-sensitive routing, secret-safe projections and a bounded turn ledger.
+checks, logical locators, canonical fingerprints, fine-grained optional-provider
+isolation, question-sensitive routing, secret-safe projections and a bounded turn
+ledger. Capability/context/Skill/provider JSON contracts are deeply immutable through
+`FrozenDict`/`FrozenList` while preserving normal `dict`/`list` compatibility.
+
 The first provider exposes sanitized installation/module/registry facts from Odoo.
+Relevant model decisions can now search/fetch that Evidence through the existing
+provider-neutral extension wrapper. Host structural Evidence metadata is kept
+separate from retrieved untrusted content; generic/social turns do not receive a
+mandatory retrieval dump.
 
 Evidence is data. It cannot enable tools, waive approval, change profile or grant
-permissions. Mutable business facts continue to use live ORM. See
-[`docs/EVIDENCE_ARCHITECTURE.md`](docs/EVIDENCE_ARCHITECTURE.md).
+permissions. Mutable business facts continue to use live ORM. The current ledger is
+turn-scoped; durable reconnect restoration and richer citation UI remain later work.
+See [`docs/EVIDENCE_ARCHITECTURE.md`](docs/EVIDENCE_ARCHITECTURE.md).
 
 ## Writes and autonomy
 
@@ -119,9 +128,10 @@ Historical `service/`, `installer/`, root migration and old task/evidence materi
 may remain for lineage but are not current runtime sources by default.
 
 The obsolete GitHub Actions workflow, the `auth="none"` machine-secret inventory
-callback and the addon-local machine-auth primitive used only by that callback have
-been removed. Supported Assistant controllers authenticate through Odoo. Installation
-inventory is consumed in process through Evidence.
+callback, the addon-local machine-auth primitive and the residual addon inventory
+service have been removed. Supported Assistant controllers authenticate through
+Odoo. Installation inventory is collected in process by
+`assistant.runtime_inventory`.
 
 Source relevance defaults are documented in
 [`docs/CONTEXT_SOURCE_POLICY.md`](docs/CONTEXT_SOURCE_POLICY.md).
@@ -160,14 +170,19 @@ tests/unit/test_phase8_evidence_runtime.py
 tests/unit/test_phase8_extension_evidence.py
 tests/unit/test_phase8_supported_surface.py
 tests/unit/test_phase8_product_profiles.py
+tests/unit/test_capability_provider_extensions.py
+tests/unit/test_phase7_feature_negotiation.py
+tests/unit/test_phase7_live_extension_context.py
 tests/addon/test_phase8_runtime_evidence.py
 tests/addon/test_addon_boundaries.py
+addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py
 ```
 
-They cover bounded contracts, deep immutability, secret redaction, provider failure
-isolation, access recheck, ledger restore/overflow, routing, public User/Technical
-profile mapping, supported HTTP/security surface and live Odoo inventory/freshness.
-They must be executed in the appropriate local/Codex Odoo environment before P8
+They cover bounded contracts, deep immutability, secret redaction, fine-grained
+provider failure isolation, access recheck, ledger restore/overflow, routing, Skill
+Evidence selectors, live host/untrusted Evidence projection, public `user`/`technical`
+profile mapping, supported HTTP/security surface and Odoo inventory/freshness. They
+must be executed in the appropriate local/Codex Odoo environment before P8
 acceptance; GitHub repository writes do not execute them.
 
 ## Development rules
