@@ -39,10 +39,30 @@ class AssistantTurnKnowledgeAttachments(models.Model):
         attachments = self.env["odoo.ai.knowledge.attachment"].browse()
         if tokens:
             attachments = self.env["odoo.ai.knowledge.attachment"].owned_by_tokens(tokens)
-            if any(item.turn_id for item in attachments):
-                bound_turns = {item.turn_id.turn_uuid for item in attachments if item.turn_id}
-                if len(bound_turns) != 1:
+            bound = attachments.filtered("turn_id")
+            if bound:
+                # A browser retry may replay the same marker payload after the durable turn was
+                # already created. Return that same turn only when the idempotency key matches;
+                # otherwise fail before creating a second turn or partially rebinding files.
+                bound_turn_ids = set(bound.mapped("turn_id").ids)
+                if len(bound) != len(attachments) or len(bound_turn_ids) != 1:
                     raise AccessError("Assistant attachment already bound")
+                existing_turn = bound[0].turn_id
+                if (
+                    not client_request_id
+                    or existing_turn.client_request_id != client_request_id
+                    or existing_turn.user_id.id != self.env.uid
+                    or (
+                        conversation_uuid
+                        and (
+                            not existing_turn.conversation_id
+                            or existing_turn.conversation_id.conversation_uuid
+                            != conversation_uuid
+                        )
+                    )
+                ):
+                    raise AccessError("Assistant attachment already bound")
+                return existing_turn.browser_status(after_sequence=0)
 
         result = super().enqueue_for_current_user(
             message=effective_message,
@@ -59,9 +79,6 @@ class AssistantTurnKnowledgeAttachments(models.Model):
             raise ValidationError("Assistant turn was not persisted")
         turn = self._owned_turn(turn_uuid)
 
-        for attachment in attachments:
-            if attachment.turn_id and attachment.turn_id.id != turn.id:
-                raise AccessError("Assistant attachment already bound")
         descriptors = [
             {
                 "attachment_id": attachment.id,
