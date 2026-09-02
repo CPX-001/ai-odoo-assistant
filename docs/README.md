@@ -7,7 +7,7 @@ direction and validation evidence.
 
 ```text
 P0-P7 COMPLETE / ACCEPTED
-P8.0 hardening + P8.1/P8.2 Evidence foundation IMPLEMENTED
+P8.0 hardening + P8.1/P8.2 Evidence foundation/live projection IMPLEMENTED
 P8 focused validation PENDING
 P8 real gates NOT EXECUTED / NOT ACCEPTED
 P9+ NOT ELIGIBLE
@@ -37,7 +37,8 @@ flowchart TB
     HOST <--> MODEL[Codex App Server adapter today]
     HOST --> EXT[Effective Skills + JIT Context + Manifest]
     HOST --> EVC[Effective EvidenceProviderCatalog]
-    EVC --> LEDGER[Bounded EvidenceLedger]
+    EVC --> LEDGER[Bounded turn EvidenceLedger]
+    EVC --> EDATA[Host structure + untrusted Evidence data]
     HOST --> CAT[Effective CapabilityRegistry]
     CAT --> EXEC[CapabilityExecutor + policy]
     EXEC --> ORM[Effective-user Odoo ORM]
@@ -49,7 +50,9 @@ flowchart TB
 
 `CapabilityDefinition` remains executable authority. `CapabilityProvider`, Skills,
 ContextProviders, EvidenceProviders, manifests and ledgers enrich discovery/reasoning
-but cannot bypass registry/executor/policy.
+but cannot bypass registry/executor/policy. Relevant live decisions now use bounded
+question-sensitive Evidence search/fetch through the same provider-neutral decision
+wrapper; generic turns may retrieve nothing.
 
 ## Current subsystem documents
 
@@ -92,9 +95,10 @@ but cannot bypass registry/executor/policy.
 ## Supported-path cleanup
 
 The embedded Odoo addon is the product runtime. The obsolete GitHub Actions workflow,
-the unauthenticated sidecar inventory callback and its now-unused addon-local
-machine-auth primitive are removed from the supported tree. Installation inventory is
-consumed in process through Evidence.
+the unauthenticated sidecar inventory callback, its addon-local machine-auth primitive
+and the residual addon inventory service are removed from the supported tree.
+Installation inventory is owned directly by the in-process
+`assistant.runtime_inventory` Evidence provider.
 
 Historical `service/`, `installer/`, migration/task/evidence records may remain for
 lineage, but are excluded from current source context by
