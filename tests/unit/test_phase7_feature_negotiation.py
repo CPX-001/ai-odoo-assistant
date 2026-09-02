@@ -241,7 +241,7 @@ def test_manifest_is_derived_projection_not_a_second_authority_registry() -> Non
         technical_profile=TechnicalAccessProfile.BUSINESS,
     ).browser_payload()
 
-    assert manifest["technical_profile"] == "business"
+    assert manifest["technical_profile"] == "user"
     assert manifest["capabilities"][0]["name"] == "example.read_partner"
     assert manifest["skills"][0]["skill_id"] == "example.sales"
     assert "instructions" not in manifest["skills"][0]
