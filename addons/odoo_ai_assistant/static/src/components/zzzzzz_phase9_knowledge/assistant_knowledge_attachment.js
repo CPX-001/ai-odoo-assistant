@@ -94,37 +94,39 @@ patch(AssistantPanel.prototype, {
     },
 
     async submit() {
-        const draft = this.state.draft;
-        const question = draft.trim();
-        if (
-            !question ||
-            this.state.loading ||
-            this.state.decisionLoading ||
-            this.recoveryPending
-        ) {
+        const uploads = pendingUploads(this.state);
+        if (!uploads.length) {
+            return super.submit(...arguments);
+        }
+        if (this.composerActionMode && this.composerActionMode !== "send") {
+            this.state.knowledgeUploadError = _t(
+                "Los archivos adjuntos sólo se pueden enviar al iniciar un turno nuevo."
+            );
             return false;
         }
-        const uploads = pendingUploads(this.state);
+
+        const draft = this.state.draft;
+        const question = draft.trim();
+        if (!question) {
+            return false;
+        }
         const markers = uploads.map((item) => `\n[[odoo_ai_attachment:${item.token}]]`).join("");
-        const message = `${question}${markers}`;
-        if (message.length > 4000) {
+        const markedDraft = `${question}${markers}`;
+        if (markedDraft.length > 4000) {
             this.state.knowledgeUploadError = _t(
                 "El mensaje y las referencias de archivos superan el límite del turno."
             );
             return false;
         }
 
-        this.panel.setDraft("");
-        let sent = false;
-        try {
-            sent = await this.panel.submit(message);
-        } catch {
-            if (!this.state.errorCode) {
-                this.state.errorCode = "service_unavailable";
-            }
-        }
+        this.panel.setDraft(markedDraft);
+        const sent = await super.submit(...arguments);
         if (!sent) {
-            this.panel.setDraft(draft);
+            // The turn-control layer may have restored the marked draft. Restore only when the
+            // user did not type a newer message while the request was in flight.
+            if (this.state.draft === markedDraft) {
+                this.panel.setDraft(draft);
+            }
             return false;
         }
         this.state.pendingKnowledgeUploads = [];
