@@ -276,6 +276,21 @@ class AssistantTurnControl(models.Model):
     def cancel_for_current_user(self, turn_uuid):
         turn = self._owned_turn(turn_uuid)
         turn.invalidate_recordset(["state", "write_barrier"])
+        if turn.state == "queued":
+            # Serialize direct queued cancellation with the scheduler claim. SKIP LOCKED keeps
+            # Stop responsive when a worker won the race; its independent control flag remains
+            # authoritative and that worker will settle the turn as cancelled.
+            self.env.cr.execute(
+                "SELECT state FROM odoo_ai_turn WHERE id = %s FOR UPDATE SKIP LOCKED",
+                [turn.id],
+            )
+            locked = self.env.cr.fetchone()
+            if locked is None:
+                result = turn.browser_status(after_sequence=0)
+                result["state"] = "cancel_requested"
+                result["answer"] = _interrupted_content(self.env, turn)
+                return result
+            turn.invalidate_recordset(["state", "write_barrier"])
         if turn.state in {"completed", "failed", "cancelled", "recovery_required"}:
             return turn.browser_status(after_sequence=0)
         if turn.state == "queued":

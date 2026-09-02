@@ -80,7 +80,12 @@ class AssistantTurnEvent(models.Model):
         payload=None,
         diagnostic_code=None,
     ):
-        """Append one bounded event while the caller holds the turn row lock."""
+        """Append one bounded event under the authoritative turn row lock.
+
+        Most worker paths already own the lock. Acquiring it again is cheap and also protects
+        browser-control paths that observed a queued turn immediately before a worker claimed it.
+        Invalidating the sequence after the lock prevents a stale ORM cache from reusing a value.
+        """
 
         if not isinstance(event_type, str) or not _EVENT_TYPE.fullmatch(event_type):
             raise ValidationError("Invalid Assistant event type")
@@ -102,6 +107,11 @@ class AssistantTurnEvent(models.Model):
             raise ValidationError("Invalid Assistant diagnostic code")
 
         turn.ensure_one()
+        self.env.cr.execute(
+            "SELECT id FROM odoo_ai_turn WHERE id = %s FOR UPDATE",
+            [turn.id],
+        )
+        turn.invalidate_recordset(["last_event_sequence"])
         sequence = int(turn.last_event_sequence or 0) + 1
         turn.write({"last_event_sequence": sequence})
         return self.create(

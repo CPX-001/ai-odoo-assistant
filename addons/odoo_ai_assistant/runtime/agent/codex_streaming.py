@@ -201,7 +201,13 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                 if answer_item_id is None:
                     answer_item_id = item_id
                 elif item_id != answer_item_id:
-                    raise CodexAgentError("codex_answer_delta_item_mismatch")
+                    # App Server may start a second agent-message item in the same turn (for
+                    # example while an interactive redirect is arriving). The completed turn's
+                    # last validated agent message remains authoritative. Provisional streaming
+                    # is presentation-only, so stop projecting deltas instead of failing an
+                    # otherwise valid provider decision.
+                    answer_item_id = item_id
+                    streaming_enabled = False
                 if delta and not provider_delta_observed:
                     provider_delta_observed = True
                     _emit_streaming_diagnostic(

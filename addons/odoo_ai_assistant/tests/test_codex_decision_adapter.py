@@ -256,7 +256,10 @@ class TestCodexDecisionAdapter(BaseCase):
         self.assertIn("internal schema discovery plus one bounded query", instructions)
         self.assertIn("Create a TaskPlan only for a genuinely multi-phase workflow", instructions)
         self.assertIn("no matching record is visible", instructions)
-        self.assertIn("may not exist or may be unavailable because of permissions", instructions)
+        self.assertIn("may not exist or may be unavailable", instructions)
+        self.assertIn("current access or permissions", instructions)
+        self.assertIn("safe visible business values such as email", instructions)
+        self.assertIn("never use raw database IDs alone", instructions)
 
     def test_malformed_task_plan_is_returned_to_the_bounded_correction_loop(self):
         with self.assertRaises(NextDecisionValidationError) as captured:

@@ -17,7 +17,9 @@ from ..runtime.agent.terminal_failure import terminal_failure_envelope
 from .turn_queue import (
     _append_event,
     _claim_next_turn,
+    _control_cancel_requested_in_env,
     _execute_claimed_turn,
+    _finalize_interrupted_answer,
     _fail_claimed_turn,
     _recover_stale_turns,
     _runtime_error_code,
@@ -157,7 +159,8 @@ def _fail_claimed_turn_with_failure(
         if not turn or turn.lease_token != lease_token:
             return
 
-        if turn.state == "cancel_requested":
+        if turn.state == "cancel_requested" or _control_cancel_requested_in_env(env, turn):
+            _finalize_interrupted_answer(turn)
             turn.write(
                 {
                     "state": "cancelled",

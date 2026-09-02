@@ -10,6 +10,7 @@ from odoo import SUPERUSER_ID, api, fields
 from odoo.modules.registry import Registry
 from odoo.tests.common import TransactionCase
 
+from ..models.turn_control import _control_for_turn
 from ..models.turn_failure import _fail_claimed_turn_with_failure
 from ..runtime.agent.failure import FailureEnvelope
 
@@ -183,6 +184,56 @@ class TestAssistantTurnFailurePersistence(TransactionCase):
                 self.assertEqual(turn.attempt_count, 1)
                 self.assertEqual(turn.failure_payload["provider_code"], "usageLimitExceeded")
                 trigger.assert_not_called()
+        finally:
+            self._cleanup_turn(turn_id)
+
+    def test_independent_control_cancellation_settles_provider_failure_as_cancelled(self):
+        dbname = self.env.cr.dbname
+        turn_id = self._create_running_turn(lease_token="p7-independent-cancel")
+        try:
+            with Registry(dbname).cursor() as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+                turn = env["odoo.ai.turn"].browse(turn_id)
+                control = _control_for_turn(env, turn, create=True)
+                control.write(
+                    {
+                        "cancel_requested": True,
+                        "cancel_requested_at": fields.Datetime.now(),
+                    }
+                )
+                cr.commit()
+
+            failure = FailureEnvelope(
+                code="agent_cancelled",
+                category="cancellation",
+                stage="cancellation",
+                component="codex",
+                retryability="never",
+                effect_state="none",
+                user_action="none",
+                safe_summary="La petición fue cancelada.",
+                safe_details={},
+                diagnostic_id="diag-p7-cancel-control",
+                provider_code=None,
+            )
+            _fail_claimed_turn_with_failure(
+                dbname,
+                turn_id,
+                "p7-independent-cancel",
+                _ProviderError(failure),
+                "agent_cancelled",
+            )
+
+            with Registry(dbname).cursor() as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+                turn = env["odoo.ai.turn"].browse(turn_id)
+                self.assertEqual(turn.state, "cancelled")
+                self.assertFalse(turn.error_code)
+                self.assertFalse(turn.failure_payload)
+                event = env["odoo.ai.turn.event"].search(
+                    [("turn_id", "=", turn_id)], order="sequence desc", limit=1
+                )
+                self.assertEqual(event.event_type, "cancelled")
         finally:
             self._cleanup_turn(turn_id)
 

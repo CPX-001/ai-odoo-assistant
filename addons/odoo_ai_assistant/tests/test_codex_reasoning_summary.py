@@ -126,6 +126,7 @@ class TestCodexReasoningSummary(BaseCase):
                 turn_id="turn-1",
                 deadline=10**12,
                 context=context,
+                timing=lambda _stage: None,
             )
         )
 
@@ -151,3 +152,60 @@ class TestCodexReasoningSummary(BaseCase):
                 text="Readable summary",
             )
         )
+
+    def test_second_agent_message_disables_provisional_stream_without_failing_turn(self):
+        context = _Context()
+        final_text = '{"decision":{"kind":"final_answer","answer":"Hecho"}}'
+        client = _EventClient(
+            {
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "delta": '{"decision":{"kind":"final_answer","answer":"Preparando',
+                    "itemId": "message-1",
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                },
+            },
+            {
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "delta": final_text,
+                    "itemId": "message-2",
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                },
+            },
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "item": {"id": "message-2", "type": "agentMessage", "text": final_text},
+                },
+            },
+            {
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turn": {
+                        "id": "turn-1",
+                        "status": "completed",
+                        "error": None,
+                        "items": [],
+                    },
+                },
+            },
+        )
+
+        completed = asyncio.run(
+            self._engine()._wait_for_completion_streaming(
+                client,
+                thread_id="thread-1",
+                turn_id="turn-1",
+                deadline=10**12,
+                context=context,
+                timing=lambda _stage: None,
+            )
+        )
+
+        self.assertEqual(completed["items"][-1]["text"], final_text)
