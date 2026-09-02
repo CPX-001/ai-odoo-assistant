@@ -23,8 +23,8 @@ Odoo 18 + odoo_ai_assistant
 
 The supported product requires no FastAPI/Uvicorn Assistant sidecar, second Assistant
 database, internal sidecar HTTP port or shared machine secret. The obsolete
-`auth="none"` inventory callback and its addon-local machine-auth primitive are
-removed.
+`auth="none"` inventory callback, addon-local machine-auth primitive and residual
+addon inventory service are removed.
 
 Future host-level privilege may require a narrow local broker. ADR-024 is proposed
 only; that broker must not become a general sidecar or passwordless-root Odoo process.
@@ -52,6 +52,9 @@ The model proposes. It cannot grant permissions, approve itself, reveal hidden t
 or turn Evidence into authority.
 
 Normal business operations use the effective Odoo `Environment` with `su=False`.
+Narrow host facts such as the installed-module set may use Odoo-owned internal host
+metadata helpers; that does not create a generic sudo/business-record path and the
+resulting Evidence is still bound to the requesting user/company scope.
 
 ## 3. Durable turn runtime
 
@@ -103,8 +106,9 @@ CapabilityProvider
 ```
 
 The current provider API is versioned (`CAPABILITY_PROVIDER_API_VERSION = "1"`).
-Core namespaces are reserved. Optional provider/guard/Evidence failures are isolated;
-required authority can fail closed.
+Core provider/resource namespaces are reserved. API mismatch, loader/collision,
+dependency/cycle, guard and Evidence failures are isolated to attributable optional
+providers; required authority fails closed.
 
 The same registry/executor is the intended authority source for future chat,
 automation, AI-field and MCP projections. No parallel tool registry is introduced.
@@ -124,7 +128,8 @@ immutable turn settings
 ```
 
 `ContextProvider`s add just-in-time contextual data selected by active Skills. Their
-content is untrusted data and cannot change permissions/policy/tool authority.
+content is deeply immutable untrusted data and cannot change permissions/policy/tool
+authority.
 
 Global installation knowledge is not dumped into every prompt.
 
@@ -145,14 +150,33 @@ EvidenceProvider
 
 `EvidenceProviderCatalog` handles availability/search/fetch isolation and
 `EvidenceRoutingPolicy` prioritizes source classes according to the question without
-becoming a rigid intent router.
+becoming a rigid intent router. Generic/social turns can select no provider.
 
 Evidence is always data. Search/fetch access is checked against the current context;
-fetch revalidates access and freshness.
+fetch revalidates access and freshness. Retrieved prompt-injection text remains in the
+untrusted-data partition.
 
 The first real provider, `assistant.runtime_inventory`, exposes bounded current
 installation facts (release, sanitized DB identity, installed modules, registry
-fingerprint). Mutable business truth remains live ORM authority.
+fingerprint). The installed module set comes from Odoo's own narrow host metadata
+primitive so normal users do not need `ir.module.module` read ACL. It exposes no
+business records, addon roots or credentials. Mutable business truth remains live ORM
+authority.
+
+The first live retrieval seam is implemented:
+
+```text
+AssistantExtensionDecisionEngine
+ -> effective Evidence providers
+ -> question-sensitive routing
+ -> bounded search/fetch
+ -> bounded turn EvidenceLedger
+ -> host structural metadata + untrusted Evidence data
+ -> reasoning provider
+```
+
+The current live ledger is turn-scoped. Durable reconnect restoration and richer
+end-user citation rendering are not claimed yet.
 
 See `EVIDENCE_ARCHITECTURE.md`.
 
@@ -185,19 +209,21 @@ configuration/availability summaries
 ```
 
 Retrieved Evidence content, secrets and host-only details do not belong in the
-manifest.
+manifest. Settings/admin projection derives the same effective available Evidence
+provider IDs rather than maintaining a separate list.
 
 ## 10. Product profiles and autonomy
 
-Product-facing profiles are exactly:
+Product-facing profile values are exactly:
 
 ```text
-User / non-technical
-Technical
+user
+technical
 ```
 
-Internal historical names may map to these two values for compatibility. The future
-Technical/host broker is an execution boundary, not another human profile.
+Internal historical `business`/`developer` names may map to these two values for
+compatibility. The future Technical/host broker is an execution boundary, not another
+human profile.
 
 Autonomy is independent of technical reach. Full-control can suppress redundant
 confirmation only when trusted policy allows an effect the effective user is already
@@ -318,9 +344,10 @@ changed contract
  -> periodic full regression only when the runbook/user requires it
 ```
 
-P7 is accepted. P8.0 + P8.1/P8.2 foundation is implemented but focused
-P8 dependency-light/Odoo tests and P8 real gates remain pending. Do not treat a
-committed test or implementation as PASS.
+P7 is accepted. The reconciled P8.0 + P8.1/P8.2 checkpoint, including the first live
+provider-neutral Evidence projection, is implemented but focused P8 dependency-light/
+Odoo tests and P8 real gates remain pending. Do not treat a committed test or
+implementation as PASS.
 
 See `research/P8_FOCUSED_VALIDATION_RUNBOOK.md` and
 `research/EXECUTION_STATE.md`.
