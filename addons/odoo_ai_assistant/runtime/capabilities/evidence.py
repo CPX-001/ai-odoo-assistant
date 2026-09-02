@@ -15,10 +15,15 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
-from types import MappingProxyType
 from typing import Any, TypeAlias
 
-from .contracts import CapabilityContext, CapabilityError, JsonValue
+from .contracts import (
+    CapabilityContext,
+    CapabilityError,
+    FrozenDict,
+    FrozenList,
+    JsonValue,
+)
 
 EVIDENCE_FORMAT_VERSION = 1
 DEFAULT_MAX_RESULTS = 20
@@ -94,7 +99,7 @@ def redact_secrets(value: str) -> str:
 def thaw_json(value: Any) -> JsonValue:
     if isinstance(value, Mapping):
         return {str(key): thaw_json(item) for key, item in value.items()}
-    if isinstance(value, tuple):
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [thaw_json(item) for item in value]
     return value
 
@@ -127,7 +132,7 @@ def freeze_json_mapping(
     max_bytes: int = MAX_JSON_BYTES,
 ) -> Mapping[str, JsonValue]:
     frozen = freeze_json(dict(value or {}), max_bytes=max_bytes)
-    if not isinstance(frozen, Mapping):
+    if not isinstance(frozen, dict):
         raise CapabilityError("evidence_mapping_invalid")
     return frozen
 
@@ -170,7 +175,7 @@ def _freeze_json(
                 counters=counters,
                 secret_key=bool(_SECRET_KEY_RE.search(key)),
             )
-        return MappingProxyType(result)
+        return FrozenDict(result)
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         result = []
         for item in value:
@@ -185,7 +190,7 @@ def _freeze_json(
                     secret_key=False,
                 )
             )
-        return tuple(result)
+        return FrozenList(result)
     raise CapabilityError("evidence_json_type_invalid")
 
 
@@ -623,6 +628,36 @@ class EvidenceSearchBatch:
 class EvidenceRoutingPolicy:
     """Prioritize source classes without reintroducing a rigid intent router."""
 
+    def should_retrieve(self, request: EvidenceSearchRequest) -> bool:
+        """Skip pre-retrieval for generic turns unless the caller explicitly scopes it."""
+
+        if request.kinds or request.provider_ids:
+            return True
+        query = request.query.casefold()
+        return any(
+            token in query
+            for token in (
+                "odoo",
+                "traceback",
+                "error",
+                "fall",
+                "excep",
+                "latenc",
+                "módulo",
+                "modulo",
+                "module",
+                "repo",
+                "instal",
+                "version",
+                "cómo",
+                "como",
+                "how",
+                "configur",
+                "usar",
+                " use ",
+            )
+        )
+
     def preferred_kinds(self, request: EvidenceSearchRequest) -> tuple[EvidenceKind, ...]:
         if request.kinds:
             return request.kinds
@@ -667,6 +702,8 @@ class EvidenceRoutingPolicy:
         if request.provider_ids:
             by_id = {item.provider_id: item for item in ordered}
             return tuple(by_id[item] for item in request.provider_ids if item in by_id)
+        if not self.should_retrieve(request):
+            return ()
         rank = {
             kind: index
             for index, kind in enumerate(self.preferred_kinds(request))
