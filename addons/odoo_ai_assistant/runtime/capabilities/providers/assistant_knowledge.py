@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from odoo import fields
+from odoo import SUPERUSER_ID, fields
 from odoo.exceptions import AccessError, ValidationError
 
 from ..contracts import (
@@ -156,7 +156,7 @@ def ingest_attachment(context: CapabilityContext, arguments):
                 "conversation_id": attachment.conversation_id.id or False,
             }
         )
-        attachment.write(
+        attachment.with_user(SUPERUSER_ID).write(
             {
                 "knowledge_source_id": source.id,
                 "consumed_at": fields.Datetime.now(),
