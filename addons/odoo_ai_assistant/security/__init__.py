@@ -1,15 +1,8 @@
-"""Security primitives owned by the current Odoo addon trust boundary."""
+"""Assistant-owned Odoo security package.
 
-from .machine_auth import (
-    SHARED_SECRET_FILE_ENV,
-    SHARED_SECRET_HEADER,
-    MachineAuthenticationError,
-    require_machine_secret,
-)
+The supported embedded product no longer exposes a machine-authenticated sidecar
+callback. Authority is provided by authenticated Odoo users, ACL/record rules,
+company/field access and host-owned capability policy.
+"""
 
-__all__ = [
-    "SHARED_SECRET_FILE_ENV",
-    "SHARED_SECRET_HEADER",
-    "MachineAuthenticationError",
-    "require_machine_secret",
-]
+__all__: list[str] = []
