@@ -1,236 +1,176 @@
 # Odoo AI Assistant
 
-**A host-authorized AI agent embedded in Odoo 18 Community.**
+Odoo AI Assistant is an Odoo 18 Community addon that embeds a durable, provider-
+neutral agent host inside Odoo. It is intended to behave more like a modern
+ChatGPT/Claude-style agent integrated with the real installation than a rigid
+intent chatbot.
 
-The goal is not to bolt a chatbot onto Odoo. The goal is to make an assistant that can understand the real installation, inspect and query Odoo safely, propose controlled changes, explain what it is doing, and grow through reusable capabilities without turning the model into the security boundary.
+## Current state
 
-> **Current state (2026-08-30):** Phase 5 is fully accepted. Phase 6 is implemented as a candidate across P6.1-P6.6: provider-neutral TaskPlan planning modes/replans, bounded multi-step EffectPlan, recovery units, separate budget families and a short-lived EffectJournal. Phase 6 is **not accepted yet**; one consolidated periodic full regression plus the accumulated real-product gates remains the blocker before Phase 7. See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) and [`docs/research/EXECUTION_STATE.md`](docs/research/EXECUTION_STATE.md).
-
-## What this project is
-
-Odoo remains the application, database, identity provider, permission system, scheduler and execution authority. Codex is currently the reasoning provider and runs as an **ephemeral App Server subprocess** for product turns.
-
-```mermaid
-flowchart LR
-    U[Odoo user] --> UI[OWL Assistant UI]
-    UI --> C[Odoo controllers]
-    C --> T[(Conversation + Turn state)]
-    T --> Q[Odoo cron turn queue]
-    Q --> H[Host-owned AgentTurnService]
-    H --> R[Reasoning provider<br/>Codex today]
-    H --> K[Effective capability catalog]
-    K --> E[CapabilityExecutor]
-    E --> O[Odoo ORM / bounded host services]
-    O --> H
-    H --> P[Public activity + answer projection]
-    P --> UI
-
-    classDef authority stroke-width:2px;
-    class O,T,Q,H,K,E authority;
+```text
+P0-P7 COMPLETE / ACCEPTED
+P8.0 architecture hardening IMPLEMENTED
+P8.1/P8.2 Evidence foundation IMPLEMENTED
+focused P8 validation PENDING
+P8 real gates NOT EXECUTED / NOT ACCEPTED
 ```
 
-The important boundary is simple:
+The exact cursor is
+[`docs/research/EXECUTION_STATE.md`](docs/research/EXECUTION_STATE.md). Code or a
+prepared test never counts as PASS evidence by itself.
 
-- **The model reasons and proposes.**
-- **The host decides what is actually available and valid.**
-- **Odoo permissions decide what the user may see or change.**
-- **Effects are previewed, authorized, executed and verified by deterministic code.**
+## Product direction
 
-This is intentionally different from giving an LLM unrestricted ORM, SQL, Python or shell access.
+The Assistant should be able to:
 
-## A turn, in plain language
+- understand the current user, company, screen, record and installed modules;
+- discover effective models, fields, relations, capabilities and configuration;
+- query Odoo under real ACLs, record rules and field access;
+- ground installation-specific answers in runtime/source/XML/log/document Evidence;
+- prepare and execute controlled effects with policy, approval when required and
+  post-write verification;
+- show useful public progress without exposing private reasoning or secrets;
+- extend through installed-addon providers without editing the core registry.
 
-A user message becomes a durable Odoo turn instead of a long blocking HTTP request.
+The customer experiences one Odoo AI Assistant product. Internal domain/link addons
+may be added later and auto-installed when appropriate; they must not create manual
+packaging friction.
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Browser
-    participant Odoo
-    participant Cron
-    participant Agent as AgentTurnService
-    participant Model as Reasoning provider
-    participant Cap as CapabilityExecutor
+Product-facing profiles are limited to:
 
-    User->>Browser: Ask something
-    Browser->>Odoo: Enqueue message + screen context
-    Odoo-->>Browser: turn_id
-    Odoo->>Cron: Trigger queued work
-    Cron->>Agent: Claim turn
-    loop Until final answer / effect plan / failure
-        Agent->>Model: Context + effective capabilities + working state
-        Model-->>Agent: One NextDecision
-        alt TaskPlan update
-            Agent-->>Odoo: Persist bounded visible planning progress
-        else Reasoning capability
-            Agent->>Cap: Validate + execute bounded call
-            Cap-->>Agent: Typed result/error
-        else Final answer
-            Agent-->>Odoo: Persist final result
-        else Effect proposal
-            Agent-->>Odoo: Accumulate bounded typed EffectPlan step
-        end
-    end
-    Odoo-->>Browser: Public progress / provisional answer / final state
+```text
+User / non-technical
+Technical
 ```
 
-A provider decision is **not** an instruction to blindly execute. The host resolves the requested capability again, validates arguments and applies the appropriate authority path.
+Internal compatibility names do not create extra human roles. Any future host
+privilege broker is a technical boundary, not a Developer/Operator/Admin-AI group.
 
-## Safe writes
-
-Business changes follow a stronger lifecycle than normal read-only reasoning:
-
-```mermaid
-flowchart LR
-    A[Model proposes typed effects] --> B[Resolve CapabilityDefinition]
-    B --> C[Prepare all bounded steps]
-    C --> D[Preview + preconditions]
-    D --> E[Policy]
-    E --> F{Approval required?}
-    F -->|yes| G[User approval bound to proposal]
-    F -->|no| H[Revalidate]
-    G --> H
-    H --> I[Recovery-unit checkpoint / write barrier]
-    I --> J[Execute as effective user<br/>su=False]
-    J --> K[Verify each step]
-    K --> L[Receipt + EffectJournal / recovery state]
-```
-
-A write that becomes ambiguous after an execution checkpoint is **not automatically retried**. The runtime records effect certainty and recovery state instead of guessing.
-
-## The capability model
-
-`CapabilityDefinition` is the atomic executable contract. A definition describes one operation: schemas, risk/effect metadata, availability constraints, budgets and the trusted handler.
-
-Current core providers include:
-
-| Provider | Purpose |
-|---|---|
-| `odoo_query` | schema-first bounded Odoo reads and aggregates |
-| `odoo_actions` | explicit supported business effects |
-| `odoo_batch` | bounded collection/batch effects through the same authority path |
-| `odoo_runtime` | narrow runtime facts; not a shell/filesystem back door |
-| `odoo_navigation` | bounded contextual Odoo navigation references |
-| `odoo_compensations` / `odoo_unarchive` | HOST-only safe compensation support for eligible verified effects |
-
-The long-term composition model is deliberately layered **above** the atomic definition:
+## Architecture
 
 ```mermaid
 flowchart TB
-    CP[CapabilityProvider<br/>target extension point] --> S[Skill / Bundle<br/>target semantic grouping]
-    CP --> D1[CapabilityDefinition]
-    CP --> D2[CapabilityDefinition]
-    S -. selects .-> D1
-    S -. selects .-> D2
-    CR[CapabilityRegistry] --> EC[Effective catalog]
-    D1 --> CR
-    D2 --> CR
-    EC --> EX[CapabilityExecutor]
+    UI[OWL chat / future surfaces] --> TURN[Odoo conversation + durable turn]
+    TURN --> HOST[Provider-neutral host loop]
+    HOST <--> MODEL[Codex App Server adapter]
+    HOST --> EXT[Skills + JIT Context + Manifest]
+    HOST --> EVIDENCE[EvidenceProviderCatalog + bounded ledger]
+    HOST --> CAPS[Effective CapabilityRegistry]
+    CAPS --> POLICY[Schema + ACL + policy + budgets]
+    POLICY --> EFFECT[Preview / approval when required / execute / verify]
+    EFFECT --> ORM[Effective Odoo Environment, su=False]
+    HOST --> PUBLIC[Sanitized activity / answer / final]
+    PUBLIC --> UI
 ```
 
-`Skill/Bundle`, external `CapabilityProvider`, `ContextProvider`, `EvidenceProvider` and progressive disclosure are **target architecture**, not current product claims. See [`docs/CAPABILITY_FRAMEWORK.md`](docs/CAPABILITY_FRAMEWORK.md).
+Odoo is persistence and operational authority. Codex App Server is an ephemeral
+provider subprocess, not a product daemon. Credentials remain provider-owned in the
+host-configured `CODEX_HOME`; they are not copied into PostgreSQL, prompts or logs.
 
-## Current vs target
+## Capability and Evidence framework
 
-| Area | Current | Direction |
-|---|---|---|
-| Deployment | Embedded Odoo addon + ephemeral Codex | Keep Odoo as operational authority |
-| Agent loop | Host-owned iterative `NextDecision` loop with TaskPlan strategy | Richer context/evidence and capability breadth without a rigid intent router |
-| Effects | Bounded typed EffectPlan up to 5 steps, host-derived recovery units, verification and short-lived EffectJournal | Validate the candidate and extend typed effect families/external recovery only behind explicit contracts |
-| Frontend | Durable multi-chat, activity/answer/reasoning projection, planning selector, live TaskPlan, approval/recovery/navigation UX | Continue product polish and future evidence/knowledge surfaces |
-| Capabilities | Core auto-discovered definitions inside this addon | Trusted addon providers + Skills/Bundles + progressive disclosure |
-| Context | Screen/conversation/runtime Odoo context with immutable turn settings | Extensible per-model/context providers |
-| Evidence/RAG | No general active RAG layer | Source/runtime/log/document/web evidence routed by type |
-| Knowledge | Not a complete product subsystem yet | Company knowledge + hybrid retrieval + provenance |
-| MCP/automations/AI fields | Not product surfaces yet | Thin consumers of the same capability/policy host |
-| Providers | Codex product provider | Add another only when a real case justifies it |
+`CapabilityDefinition` is the atomic executable contract. It declares a bounded
+schema, handler, risk/effect semantics, guards and budgets. The model proposes a
+call; the host validates and executes it.
 
-This distinction matters: roadmap documents describe intended product behavior; [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) describes what is actually available now.
+P7/P8 compose resources around that unit:
 
-## Repository map
+```text
+CapabilityProvider
+  -> CapabilityDefinition[]  executable authority after host validation
+  -> SkillDefinition[]       trusted installed-code guidance
+  -> ContextProvider[]       bounded JIT untrusted context
+  -> EvidenceProvider[]      bounded cited untrusted evidence
+```
 
-The local READMEs are meant to make each boundary understandable without reading the whole codebase.
+The framework explicitly rejects arbitrary SQL, Python, shell, sudo and unrestricted
+Odoo method execution.
 
-| Path | What lives there |
-|---|---|
-| [`addons/odoo_ai_assistant/`](addons/odoo_ai_assistant/) | installable Odoo addon and end-to-end component map |
-| [`addons/odoo_ai_assistant/controllers/`](addons/odoo_ai_assistant/controllers/) | short browser/internal HTTP boundaries |
-| [`addons/odoo_ai_assistant/models/`](addons/odoo_ai_assistant/models/) | durable Odoo state, queue, policy and lifecycle coordination |
-| [`addons/odoo_ai_assistant/services/`](addons/odoo_ai_assistant/services/) | small application services for context/account/inventory |
-| [`addons/odoo_ai_assistant/runtime/`](addons/odoo_ai_assistant/runtime/) | reasoning runtime, Codex lifecycle and capability host |
-| [`addons/odoo_ai_assistant/runtime/agent/`](addons/odoo_ai_assistant/runtime/agent/) | provider-neutral host-owned agent loop |
-| [`addons/odoo_ai_assistant/runtime/capabilities/`](addons/odoo_ai_assistant/runtime/capabilities/) | capability contracts, registry, policy and executor |
-| [`addons/odoo_ai_assistant/runtime/capabilities/providers/`](addons/odoo_ai_assistant/runtime/capabilities/providers/) | current core Odoo capabilities |
-| [`addons/odoo_ai_assistant/static/src/`](addons/odoo_ai_assistant/static/src/) | OWL/web-client product UI |
-| [`addons/odoo_ai_assistant/security/`](addons/odoo_ai_assistant/security/) | Odoo ACL/record-rule definitions and a residual bounded compatibility boundary |
-| [`addons/odoo_ai_assistant/tests/`](addons/odoo_ai_assistant/tests/) | Odoo/Python contract and runtime tests |
-| [`addons/odoo_ai_assistant/static/tests/`](addons/odoo_ai_assistant/static/tests/) | frontend HOOT tests |
-| [`docs/`](docs/) | current architecture, product vision, ADRs, roadmap and validation evidence |
-| [`service/`](service/) | **retired** standalone Assistant Service lineage |
-| [`installer/`](installer/) | **retired** sidecar installer lineage |
+### P8 Evidence foundation
 
-## Install and try it
+The repository now contains provider-neutral Evidence contracts, access/freshness
+checks, logical locators, canonical fingerprints, optional-provider isolation,
+question-sensitive routing, secret-safe projections and a bounded turn ledger.
+The first provider exposes sanitized installation/module/registry facts from Odoo.
 
-The supported baseline is Odoo 18 Community.
+Evidence is data. It cannot enable tools, waive approval, change profile or grant
+permissions. Mutable business facts continue to use live ORM. See
+[`docs/EVIDENCE_ARCHITECTURE.md`](docs/EVIDENCE_ARCHITECTURE.md).
 
-1. Add this repository's `addons` directory to Odoo's `addons_path`.
-2. Update Apps and install **Odoo AI Assistant**.
-3. Ensure Odoo cron processing is enabled; long turns depend on native cron workers/threads.
-4. Open Odoo Settings and connect the Codex runtime account.
-5. Configure the assistant model, reasoning effort, planning mode and autonomy policy as appropriate.
-6. Open the Assistant from the web client and submit a turn.
+## Writes and autonomy
 
-The Codex executable is a host-level dependency. The addon discovers it from `PATH` or the configured override; it does not download or bundle the binary by default.
+The effect lifecycle is:
 
-For operational details use [`docs/DEPLOYMENT_CONFIG.md`](docs/DEPLOYMENT_CONFIG.md) and [`docs/codex/`](docs/codex/).
+```text
+discover -> inspect schema -> prepare -> preview -> policy
+ -> approval only when required -> execute -> verify -> receipt/recovery
+```
 
-## How to extend the project without fighting the architecture
+Approval is policy/autonomy-driven rather than a confirmation on every write. In
+full-control, a permitted auto-executable operation may proceed without redundant
+confirmation when the user already gave explicit intent. The Assistant still has
+no more authority than the effective Odoo user, and ambiguous writes are not
+retried automatically.
 
-Use the smallest existing boundary that owns the problem:
+## Supported runtime boundary
 
-- **New bounded Odoo read/action:** add a `CapabilityDefinition`; do not add a parallel tool registry.
-- **New vertical domain pack:** keep semantic business operations as capabilities and, when the layer exists, group them with a Skill/Bundle.
-- **New reasoning provider:** implement the provider seam; do not duplicate Odoo authority or effect execution.
-- **New UI surface:** call the same Odoo turn/capability runtime; do not create a second agent backend.
-- **New retrieval source:** target the Evidence/Context contracts and keep retrieved content non-authoritative.
-- **New high-risk host operation:** define a separate technical authority profile, explicit schemas, policy, verification and recovery. Do not expose a generic shell for convenience.
-- **Architecture-changing deployment or authority decision:** write/update an ADR first.
+The supported application is `addons/odoo_ai_assistant` plus the embedded runtime.
+Historical `service/`, `installer/`, root migration and old task/evidence material
+may remain for lineage but are not current runtime sources by default.
 
-If a piece is replaced, preserve the contract on both sides. For example, a different frontend may replace OWL presentation, but it should still treat Odoo turns/events as authoritative. A different model provider may replace Codex, but it must still return untrusted decisions to the host-owned loop.
+The obsolete GitHub Actions workflow that validated retired sidecar components and
+the `auth="none"` machine-secret inventory callback have been removed. Supported
+Assistant controllers authenticate through Odoo. Installation inventory is consumed
+in process through Evidence.
 
-## Documentation: where to start
+Source relevance defaults are documented in
+[`docs/CONTEXT_SOURCE_POLICY.md`](docs/CONTEXT_SOURCE_POLICY.md).
 
-- **New to the project:** [`docs/README.md`](docs/README.md)
-- **What exists today:** [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md)
-- **What the product is trying to become:** [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md)
-- **Architecture and boundaries:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- **Capability model:** [`docs/CAPABILITY_FRAMEWORK.md`](docs/CAPABILITY_FRAMEWORK.md)
-- **Current agent runtime:** [`docs/UNIFIED_AGENT_RUNTIME.md`](docs/UNIFIED_AGENT_RUNTIME.md)
-- **Accepted architecture decisions:** [`docs/adr/`](docs/adr/)
-- **Roadmap execution state:** [`docs/research/EXECUTION_STATE.md`](docs/research/EXECUTION_STATE.md)
-- **Real-environment validation protocol:** [`docs/research/REAL_ENV_VALIDATION_PROTOCOL.md`](docs/research/REAL_ENV_VALIDATION_PROTOCOL.md)
+## Installation and deployment
 
-### Source-of-truth rule
+Add the repository's `addons` directory to the Odoo 18 addons path and install the
+`odoo_ai_assistant` addon using normal Odoo module management. Configure the Codex
+provider and its private `CODEX_HOME` according to
+[`docs/DEPLOYMENT_CONFIG.md`](docs/DEPLOYMENT_CONFIG.md) and
+[`docs/codex/README.md`](docs/codex/README.md).
 
-When documents disagree, use this order:
+Do not deploy the historical sidecar as part of the supported product. Long-running
+turns are persisted in Odoo and claimed by configured `ir.cron` workers.
 
-1. current code + accepted ADRs;
-2. current-state/current architecture docs;
-3. deterministic and real-environment tests/evidence;
-4. research/roadmap documents;
-5. dated reports, external references and historical code.
+## Documentation
 
-The `service/` and `installer/` trees are intentionally historical. A small machine-authenticated inventory callback still exists in the current addon as residual compatibility plumbing; it is **not** the normal product runtime and should not be used as the template for new features.
+Start with:
 
-## Design principles in one screen
+1. [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md)
+2. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+3. [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md)
+4. [`docs/CAPABILITY_FRAMEWORK.md`](docs/CAPABILITY_FRAMEWORK.md)
+5. [`docs/EVIDENCE_ARCHITECTURE.md`](docs/EVIDENCE_ARCHITECTURE.md)
+6. [`docs/OBSERVABILITY_ARCHITECTURE.md`](docs/OBSERVABILITY_ARCHITECTURE.md)
+7. [`docs/research/EXECUTION_STATE.md`](docs/research/EXECUTION_STATE.md)
 
-- Odoo is the authority.
-- Business capabilities run as the effective user with `su=False`.
-- The model may propose; the host validates.
-- Reads can be broad but bounded. Effects are explicit and verifiable.
-- Persistence belongs in Odoo.
-- Long work is durable, cancelable and recoverable.
-- Public progress is sanitized product state, not private chain-of-thought.
-- Retrieved text is evidence/data, never policy.
-- Extend the capability host before inventing another tools/plugins/actions system.
-- Prefer a small embedded solution over another operational service or framework unless a measured need proves otherwise.
+The documentation index explains current, target and historical status:
+[`docs/README.md`](docs/README.md).
+
+## Tests prepared for this checkpoint
+
+```text
+tests/unit/test_phase8_evidence_contracts.py
+tests/unit/test_phase8_evidence_runtime.py
+tests/unit/test_phase8_extension_evidence.py
+tests/unit/test_phase8_supported_surface.py
+tests/addon/test_phase8_runtime_evidence.py
+```
+
+They cover bounded contracts, deep immutability, secret redaction, provider failure
+isolation, access recheck, ledger restore/overflow, routing, supported HTTP surface
+and live Odoo inventory/freshness. They must be executed in the appropriate local/
+Codex Odoo environment before P8 acceptance; GitHub repository writes do not execute
+them.
+
+## Development rules
+
+Read [`AGENTS.md`](AGENTS.md) before changing architecture. Extend the current
+capability/turn framework rather than adding a parallel agent, registry, database,
+scheduler or general sidecar. Run the smallest focused validation that proves the
+changed contract, and record unexecuted real gates honestly.
