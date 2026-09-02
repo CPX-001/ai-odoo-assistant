@@ -1,23 +1,25 @@
 # Capability Framework
 
-The Capability Framework is the host-owned contract between probabilistic reasoning and deterministic Odoo/host
-execution. `PRODUCT_VISION.md` defines the target product; this document defines the current capability boundary.
+The Capability Framework is the host-owned contract between probabilistic reasoning
+and deterministic Odoo/host execution. `PRODUCT_VISION.md` defines the target
+product; `CURRENT_STATE.md` and current code define what exists now.
 
-## 1. Core principle
+## 1. Core rule
 
-Declare an executable operation once as a `CapabilityDefinition`, then derive reasoning, planning, diagnostics,
-Settings and future invocation-surface views from the same trusted definition.
+Declare an executable operation once as a `CapabilityDefinition`, then derive the
+views needed by reasoning, planning, diagnostics, Settings and future invocation
+surfaces from that trusted definition.
 
-Do not create separate registries for chat tools, MCP, automations or AI fields when they represent the same operation.
-The model may reason broadly, but **authority remains explicit and host-owned**.
+Do not create parallel tool/action registries for chat, MCP, automations or AI fields.
+The model can propose; the host validates and executes.
 
 ## 2. Atomic executable definition
 
-`CapabilityDefinition` is the only Phase-7 unit that can represent an executable operation. It includes:
+`CapabilityDefinition` remains the only atomic executable unit. It carries:
 
 ```text
 stable name + version
-title / description
+title / semantic description
 input + output JSON Schema
 risk + effect classification
 exposure: reasoning | plan | host
@@ -29,55 +31,56 @@ optional preview / verification
 safe public activity metadata
 ```
 
-Handlers are registered only by trusted installed code or a separately designed declarative mechanism. Model-generated
-text never becomes executable code merely because it names a function, ORM method, SQL statement or shell command.
+Definitions are deeply normalized/copied when registered so nested mutable schema or
+metadata cannot change the accepted contract after registration.
 
-## 3. Current provider composition
+There is no generic arbitrary SQL, Python, shell, sudo or unrestricted ORM-method
+execution surface.
 
-Current core capability modules remain under:
+## 3. Provider extension boundary
+
+Trusted installed Odoo addons may contribute a `CapabilityProvider` discovered from
+the active Odoo registry marker. The provider API is versioned:
 
 ```text
-runtime/capabilities/providers/
+CAPABILITY_PROVIDER_API_VERSION = "1"
 ```
 
-Trusted installed Odoo addons may additionally contribute a `CapabilityProvider` marker through the active Odoo
-registry. Effective composition is:
+A provider with an incompatible API version fails closed. Core namespaces such as
+`odoo.*`, `assistant.*` and `host.*` are reserved unless the provider is explicitly
+owned by core.
+
+Current provider composition can include:
 
 ```text
-cached core registry
+CapabilityProvider
+  +-- CapabilityDefinition(s)
+  +-- SkillDefinition(s)
+  +-- ContextProvider(s)
+  +-- EvidenceProvider(s)
+  +-- immutable provider metadata
+```
+
+Provider identity/capability collisions fail closed. Optional-provider dependency,
+guard or Evidence failures are attributed and isolated so a broken optional extension
+does not remove healthy providers or the core catalog. Required providers may fail
+closed.
+
+## 4. Effective registry and executor
+
+The effective path is:
+
+```text
+core definitions
  + trusted installed CapabilityProvider(s)
  -> deterministic CapabilityRegistry
- -> effective user/context filtering
+ -> user/context/configuration filtering
  -> CapabilityExecutor
 ```
 
-Provider identity/capability/executor collisions fail closed. An optional provider failure is sanitized and isolated;
-it cannot shadow or remove the core catalog.
-
-The live Odoo-owned host loop, capability Settings/diagnostics and reversion/compensation paths use
-`discover_capabilities_for_env(env)`.
-
-## 4. Effective registry and authority
-
-`CapabilityRegistry` is the authority for effective identity and availability. It evaluates host-known state such as:
-
-```text
-installed provider/module
-enablement
-user/groups/companies
-guards/dependencies
-current run context
-invocation exposure
-```
-
-Declarative configuration readiness is resolved by `CapabilityConfigResolver`; runtime availability may suppress a
-definition the host already knows cannot satisfy its required configuration while keeping it visible to Settings for
-diagnosis.
-
-A hidden, disabled, missing-config or unauthorized operation does not become executable because the user/model knows
-its name.
-
-## 5. Executor
+`CapabilityRegistry` owns effective identity and availability. A hidden, disabled,
+missing-config or unauthorized operation does not become executable because the user
+or model knows its name.
 
 `CapabilityExecutor` performs the shared lifecycle:
 
@@ -92,134 +95,158 @@ resolve
  -> emit safe host-known activity
 ```
 
-Business handlers use the effective Odoo user and `su=False`. `sudo()` is not a convenience shortcut for model-visible
-business authority.
+Business handlers use the effective Odoo user with `su=False`.
 
-## 6. Reads and effects
+## 5. Reads and effects
 
-READ/analysis operations may be iterative but remain bounded by exploration/call/latency/output budgets and Odoo ACLs.
+READ/analysis calls may iterate under exploration/cost/latency/output budgets and
+current Odoo ACLs.
 
 Effects remain host controlled:
 
 ```text
 model proposes typed step
- -> host resolves definition
- -> validate arguments
+ -> host resolves CapabilityDefinition
+ -> validate args + eligibility
  -> preview/preconditions
- -> policy/approval
+ -> policy
+ -> approval when policy requires it
  -> durable write barrier
  -> execute
  -> verify
- -> receipt/recovery state
+ -> receipt/recovery
 ```
 
-Multi-step EffectPlans are compositions of typed `CapabilityDefinition` steps, not provider-authored programs.
+Approval is policy/autonomy-driven. A full-control mode can avoid redundant
+confirmation for an operation already permitted to the effective user when its
+trusted policy allows auto-execution. Autonomy never expands ACLs/record rules,
+field access, companies or capability authority.
 
-## 7. CapabilityProvider
+Ambiguous effects are not retried blindly.
 
-`CapabilityProvider` is the trusted installed-addon extension boundary. A provider may contribute:
+## 6. Skills / Bundles
 
-```text
-CapabilityDefinition(s)
-SkillDefinition(s)
-ContextProvider(s)
-provider metadata
-```
-
-Future EvidenceProvider resources may join the same provider layer without changing executable authority.
-
-Provider discovery uses the active Odoo registry marker `_odoo_ai_capability_provider`; it does not scan arbitrary host
-packages/filesystem paths.
-
-## 8. Skill / Bundle
-
-`SkillDefinition` groups semantic behavior above atomic capabilities. It may contain:
+`SkillDefinition` groups semantic behavior above atomic executable capabilities. It
+may contain:
 
 ```text
 description/title/version
 trusted instructions/examples
 capability selectors
 ContextProvider selectors
-future EvidenceProvider selectors
+EvidenceProvider selectors
 activation/configuration metadata
 eval ownership
 ```
 
-Skills **never execute** and never own ACL/policy/approval. Active Skill instructions are trusted installed-code
-behavior guidance only. Every actual operation still resolves through the effective capability registry/executor.
+Skills never execute and never own ACL/policy/approval. Active Skill instructions are
+trusted installed-code guidance; every operation still resolves through the effective
+capability registry/executor.
 
-There remains one global user-facing Assistant; Skills are not a forced collection of separate bots.
+The product exposes one global Assistant; Skills are not separate user-facing bots.
 
-## 9. ContextProvider
+## 7. ContextProvider
 
-A `ContextProvider` supplies bounded just-in-time contextual data such as current module/view/domain state.
+A `ContextProvider` supplies bounded just-in-time contextual data. Its output is
+untrusted contextual data and cannot:
 
-The Phase-7 live path activates only providers selected by active Skills. Their output is validated/bounded and passed
-to the reasoning provider as **untrusted contextual data**. Retrieved/contextual text cannot:
-
-- register capabilities;
+- register or reveal hidden capabilities;
 - change policy;
-- grant a group/permission;
-- approve an effect;
+- grant groups/permissions;
+- approve effects;
 - convert itself into trusted instructions.
 
-## 10. ProviderProfile
+Context is resolved progressively instead of dumping the whole installation into
+every model call.
 
-`ProviderProfile` describes what the configured reasoning integration actually exposes through this addon:
+## 8. EvidenceProvider
 
-```text
-structured_output
-tool_calling
-answer_streaming
-vision
-file_input
-web
-large_context
-```
+P8 adds `EvidenceProvider` as a first-class non-executable resource on the same
+extension boundary.
 
-Each feature is explicit:
+The shared Evidence layer includes:
 
 ```text
-native | emulated | unavailable
+EvidenceKind / Trust / Freshness
+EvidenceAccessScope / Locator
+EvidenceRef / EvidenceItem
+EvidenceSearchRequest / EvidenceSearchResult
+EvidenceProvider / EvidenceProviderStatus
+EvidenceProviderCatalog
+EvidenceRoutingPolicy
+EvidenceLedger / EvidenceLedgerSnapshot
 ```
 
-Capacity metadata is recorded only when host-known/measured; it is not guessed from provider marketing.
+Search returns bounded refs. Fetch resolves a logical ref and rechecks provider
+identity, current access scope, fingerprint/freshness and output bounds.
 
-The current Codex App Server profile is intentionally conservative. This metadata affects feature negotiation and
-self-awareness, not Odoo execution authority.
+Evidence is data. It can support a conclusion but never changes capability
+availability, product profile, policy or approval.
+
+The initial ledger is bounded to 64 refs, 16 selected excerpts, 8 KiB per excerpt and
+64 KiB total. It stores enough provenance/freshness for continuation and citations,
+not a second corpus or raw log/source dump.
+
+## 9. Evidence routing
+
+`EvidenceRoutingPolicy` prioritizes evidence classes without recreating a rigid
+GENERAL/QUERY/HOW_TO/ACTION router.
+
+Current direction:
+
+```text
+business/current state      -> live ORM before snapshots/docs
+installation behavior       -> runtime/schema/source/XML/config
+standard HOW_TO              -> official/versioned docs + local verification
+error diagnosis              -> turn trace + logs + source/XML/runtime
+company policy               -> Knowledge/document providers
+module/repository HOW_TO     -> README/docs/manifest/source/scripts + install state
+current external fact        -> web when policy/context allows
+repository preflight         -> web/repo metadata + bounded static inspection
+```
+
+The model may request another source; the host may require local evidence for
+installation-specific or safety-critical claims.
+
+## 10. Runtime inventory Evidence
+
+The first real provider is `assistant.runtime_inventory`. It derives bounded current
+installation Evidence from the effective Odoo Environment:
+
+```text
+Odoo release/edition
+sanitized database identity
+installed modules + safe version metadata
+registry fingerprint
+visibility = user | technical
+```
+
+It exposes no absolute source roots, credentials, commands or mutable business
+snapshots. A changed fingerprint is returned as stale Evidence.
 
 ## 11. EffectiveAssistantManifest
 
-`EffectiveAssistantManifest` is derived from current effective host state:
+`EffectiveAssistantManifest` is a projection of current effective host state, not an
+authority registry. It includes effective provider/features, active Skills,
+model-visible capabilities, ContextProviders and the existing
+`evidence_provider_ids` seam plus sanitized health/availability metadata.
+
+Do not place retrieved Evidence content or host-only details in the manifest.
+
+## 12. Product profiles
+
+Product-facing profile semantics are exactly:
 
 ```text
-provider profile/features
-technical access profile
-active Skills
-model-visible REASONING/PLAN capabilities
-ContextProviders
-provider/configuration health
-known unavailable features
-disclosure state
+User / non-technical
+Technical
 ```
 
-Host-only capabilities are excluded from the model/user self-description projection.
+Older internal `business`/`developer`-style values may remain as compatibility
+implementation detail but map unambiguously to those two public profiles.
 
-The manifest powers natural questions such as `¿qué puedes hacer?` and is also available through admin diagnostics. It
-is a projection of the real authority/configuration graph, never a second registry that grants authority.
-
-## 12. Technical access profile
-
-Phase 7 defines descriptive technical profiles:
-
-```text
-Business/User
-Developer/Operator
-```
-
-They separate how much technical reach may eventually be exposed from how autonomously an operation may run. Phase 7
-does **not** grant privileged host operations. Filesystem/service/Postgres/source-write capabilities remain later work
-behind explicit privilege boundaries and ADRs.
+The future Technical/host broker is a privilege execution boundary, not a third human
+profile. Profile projection itself grants no permission.
 
 ## 13. Progressive disclosure
 
@@ -229,102 +256,71 @@ The framework models:
 discovered -> available -> revealed -> active
 ```
 
-The current product remains eager by default. A large catalog is not enough reason to hide schemas blindly.
-Progressive/lazy disclosure may be promoted only when the permanent eval suite and `P7-REAL-DISCLOSURE` show
-acceptable/equal-or-better task and tool-selection quality plus useful latency/token characteristics.
+The current product may remain eager for ordinary capability schemas. Lazy/on-demand
+disclosure is promoted only when evals show equal-or-better task/tool-selection
+quality and a useful context/latency/cost improvement.
 
-Skills/namespaces provide the semantic grouping needed for that future promotion. OpenAI Agents tool-search/namespaces
-are a useful reference for deferred long-tail schemas, but the addon does not introduce the Agents SDK as a second
-runtime dependency.
+Pydantic AI/FastMCP style provider/bundle/disclosure patterns remain references, not
+runtime dependencies.
 
-## 14. Generic Odoo providers
+## 14. Invocation surfaces
 
-Current generic providers remain semantic/bounded rather than arbitrary escape hatches:
-
-- query/schema capabilities for live Odoo data;
-- explicit typed actions;
-- bounded batch operations;
-- bounded related-record workflows;
-- runtime/navigation helpers;
-- compensation helpers.
-
-`odoo.workflow.batch_create_graph` is the first generic workflow capability. It accepts two to five ordered create
-steps and lets a later many2one value reference a record created by an earlier step. The entire graph is still one
-`CapabilityDefinition`: Odoo validates every model, field, relation, ACL and reference, executes it in the current
-transaction as the effective user, and verifies every created record. This reduces model round trips for dependent
-work such as “create contacts, then use those exact contacts in quotations” without adding a second action registry
-or model-authored executable program.
-
-Users are not expected to describe that graph. For explicit test/demo data, the reasoning layer derives the minimum
-mandatory relational prerequisites from effective schema and may create coherent synthetic dependencies in the same
-workflow. For ordinary business data it must not invent a material customer/vendor/etc.; ambiguity at that boundary
-still requires one concise clarification. Optional relations never justify extra synthetic records.
-
-Independent rows should continue to use the ordinary batch capability. A workflow is appropriate when a dependency
-edge exists; it is not a reason to wrap every CRUD call in orchestration.
-
-There is no generic arbitrary SQL, Python, shell, sudo or unrestricted ORM-method execution surface.
-
-## 15. Future technical/host capabilities
-
-The framework is not permanently limited to CRUD. Future explicit capabilities may encapsulate source/log/module,
-configuration, service or network operations if they define:
-
-```text
-authority profile
-input/output schema
-path/target allowlists where relevant
-preview/preconditions
-policy/approval
-verification
-recovery/audit
-budgets
-```
-
-Prefer high-level semantic capabilities over generic shell. Direct source modification belongs to a staged
-patch/diff/test/deploy/verify lifecycle, not unrestricted production editing.
-
-## 16. Invocation surfaces
-
-Chat is one invocation surface over the same contract. Future MCP, automation, AI fields or context launchers should
-reuse:
+Chat is one consumer of the same contract. Future MCP, automations, AI fields,
+context launchers or other surfaces should reuse:
 
 ```text
 CapabilityDefinition
-CapabilityRegistry
-CapabilityExecutor
-policy/ACL/technical profile
-Context/Evidence contracts
+CapabilityRegistry / CapabilityExecutor
+Skill / Context / Evidence contracts
+policy / ACL / profile / budgets
+turn/effect/audit infrastructure where applicable
 ```
 
-Each surface may receive a different effective projection, but should not maintain a divergent authority list.
+A new surface may have a different effective projection, but not a divergent authority
+list.
 
-Apexive's reuse of one Odoo tool framework for built-in chat and MCP and OCA's cross-surface `ai_tool` direction are
-useful implementation references for this principle.
+## 15. Future operation breadth
 
-## 17. Security checklist for a new executable capability
+The long-term goal is **universal discovery + typed promotion**, not giving the model
+the ORM or shell.
 
-Every new capability must answer:
+Future discovery may inventory menus/actions/views/buttons/wizards/server actions and
+observable model methods as non-executable descriptors. Reviewed operations can then
+be promoted to typed `CapabilityDefinition`s or contributed by the owning addon.
+
+Repository/module/service operations similarly require explicit contracts,
+preconditions, risk/policy, verification and recovery. Arbitrary repositories may be
+candidates after bounded preflight; an allowlist is optional policy/trust input, not a
+universal execution authority.
+
+## 16. Security checklist
+
+Every new executable capability must answer:
 
 1. What exact operation is allowed?
 2. What schemas and byte/record/time/call limits bound it?
-3. What effective user/company/groups/technical profile apply?
-4. Is returned content trusted host fact or untrusted evidence/data?
+3. What effective user/company/groups/profile apply?
+4. Is returned content host fact or untrusted Evidence/data?
 5. What risk/effect class applies?
-6. What preview/approval is required?
+6. What preview/approval policy applies at each autonomy level?
 7. How is success verified?
 8. What happens on timeout/cancel/restart?
-9. Can it be retried/reconstructed/reverted or only reviewed?
+9. Is retry/reconstruction/reversion actually safe?
 10. What public activity is safe to expose?
 11. What deterministic/product/real gates block promotion?
 
-## 18. Phase-7 validation status
+## 17. Validation status
 
-The Phase-7 implementation is present, but acceptance remains pending. The trusted fixture addon and deterministic
-coverage are prepared; the consolidated Product Behavior + P7 real gates are defined in:
+P7 is **COMPLETE / ACCEPTED** at `092ac57`.
 
-```text
-docs/research/P7_CONSOLIDATED_VALIDATION_RUNBOOK.md
-```
+P8.0 plus the P8.1/P8.2 Evidence foundation is implemented on `main`, but its focused
+dependency-light/Odoo checks and P8 real gates remain unexecuted. Implementation
+presence is not P8 acceptance.
 
-Do not treat implementation presence as evidence that the Phase-7 real/provider/product behavior gates pass.
+See:
+
+- `EVIDENCE_ARCHITECTURE.md`
+- `OBSERVABILITY_ARCHITECTURE.md`
+- `research/P8_EVIDENCE_CORE_IMPLEMENTATION.md`
+- `research/P8_FOCUSED_VALIDATION_RUNBOOK.md`
+- `research/EXECUTION_STATE.md`
