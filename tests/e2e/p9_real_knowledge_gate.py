@@ -223,7 +223,7 @@ def acl_gate() -> None:
 
     def inspect(user_env):
         sources = user_env["odoo.ai.knowledge.source"]
-        assert sources.browse(company_id).exists()
+        assert sources.search([("id", "=", company_id)])
         assert not sources.search([("id", "=", private_id)])
         assert sources.lexical_search("P9_COMPANY_VISIBLE_MARKER")
         assert not sources.lexical_search("P9_PRIVATE_HIDDEN_MARKER")
