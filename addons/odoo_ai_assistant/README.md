@@ -1,27 +1,25 @@
 # Odoo AI Assistant addon
 
 The supported product is an Odoo 18 Community addon with an embedded, durable
-agent runtime. The browser talks to Odoo; Codex App Server is an ephemeral provider
-subprocess rather than a product daemon.
+agent runtime. The browser talks to Odoo; Codex App Server is a provider subprocess,
+not a product daemon.
 
 ## Product model
 
-The customer installs one Odoo AI Assistant product. Internal link/domain addons
-may be introduced later to reduce `sale`/`account` coupling, but they must remain
-transparent through normal Odoo dependency/auto-install behavior. This checkpoint
-does not yet split the addon.
+The customer installs one Odoo AI Assistant product. Internal link/domain addons may
+be introduced later to reduce domain coupling, but normal customers should not need
+to understand or assemble that internal split.
 
-There are two product-facing profiles:
+There are exactly two product-facing profiles for now:
 
 ```text
 User / non-technical
 Technical
 ```
 
-Internal `BUSINESS`/`DEVELOPER` names may remain temporarily for compatibility, but
-`DEVELOPER` maps to the Technical product profile; it is not a third human role.
-Any future host privilege broker is a technical execution boundary, not another
-profile.
+Historical/internal `business`/`developer`-style values may remain for compatibility,
+but they map to those two public profiles. A future Technical/host broker is an
+execution boundary, not a third human role.
 
 ## Runtime flow
 
@@ -51,8 +49,8 @@ execution and verification. The model proposes; it never grants itself authority
 - `EvidenceProvider` — bounded search/fetch with provenance/access/freshness;
 - `EvidenceLedger` — turn-scoped refs and selected excerpts only.
 
-The framework does not expose arbitrary SQL, Python, shell, sudo or unrestricted
-Odoo method invocation.
+The framework does not expose arbitrary SQL, Python, shell, sudo or unrestricted Odoo
+method invocation.
 
 ## P8 Evidence foundation
 
@@ -70,11 +68,12 @@ runtime/installation inventory provider
 secret-safe untrusted projections
 ```
 
-Installation inventory is internal. The retired unauthenticated sidecar callback
-and obsolete GitHub Actions workflow have been removed.
+Installation inventory is in-process. The obsolete GitHub Actions workflow, retired
+`auth="none"` sidecar callback and the addon-local machine-auth primitive used only by
+that callback have been removed from the supported tree.
 
 Evidence never grants a capability or approval. Live mutable business facts remain
-ORM queries; source/XML/log/docs/web providers are added in later P8/P9 slices.
+ORM queries; source/XML/log/docs/web providers are later P8/P9 slices.
 
 ## Autonomy and writes
 
@@ -85,29 +84,29 @@ discover -> inspect -> prepare -> preview -> policy
  -> approval only when required -> execute -> verify
 ```
 
-A full-control policy may execute permitted auto-executable effects without a
-redundant confirmation when the user has already expressed intent. It cannot bypass
-ACLs, record rules, companies, field access or hard safety stops. Ambiguous writes
-are not retried automatically.
+A full-control policy may execute permitted auto-executable effects without redundant
+confirmation when the user has already expressed intent. It cannot bypass ACLs,
+record rules, companies, field access or hard safety stops. Ambiguous writes are not
+retried automatically.
 
 ## Source scope
 
 Current source intelligence uses
 `../../docs/CONTEXT_SOURCE_POLICY.md` and
 `runtime/context_source_policy.json`. Historical `service/`, `installer/`, old
-migrations/tasks/evidence and secret-bearing roots are excluded by default but
-remain available for explicit lineage analysis where authorized.
+migrations/tasks/evidence and secret-bearing roots are excluded by default but remain
+available for explicit lineage analysis where authorized.
 
-## Controller boundary
+## Controller/security boundary
 
-All supported Assistant routes authenticate through Odoo. There is no
-`auth="none"` Assistant route and no machine-secret HTTP inventory callback.
+All supported Assistant routes authenticate through Odoo. There is no supported
+`auth="none"` Assistant route and no addon machine-secret HTTP inventory callback.
 Controllers are transport adapters; they do not own policy or provider credentials.
 
 ## Validation state
 
 P0-P7 are accepted. P8.0 plus the P8.1/P8.2 foundation is implemented with focused
-tests prepared, but those tests and all six P8 real gates remain pending. See:
+tests prepared, but those tests and P8 real gates remain pending. See:
 
 ```text
 docs/research/EXECUTION_STATE.md
@@ -117,15 +116,17 @@ tests/unit/test_phase8_evidence_contracts.py
 tests/unit/test_phase8_evidence_runtime.py
 tests/unit/test_phase8_extension_evidence.py
 tests/unit/test_phase8_supported_surface.py
+tests/unit/test_phase8_product_profiles.py
 tests/addon/test_phase8_runtime_evidence.py
+tests/addon/test_addon_boundaries.py
 ```
 
-Do not interpret code presence as PASS evidence.
+Do not interpret code or committed tests as PASS evidence.
 
 ## Extension rule
 
-Before adding another tool/action/retrieval system, extend this framework. A trusted
-addon should contribute a versioned provider rather than edit the core catalog.
-Skills and Evidence may improve reasoning, but every executable operation still
-resolves to a host-validated `CapabilityDefinition` or a separately reviewed future
-host-broker operation.
+Before adding another tool/action/retrieval system, extend the current framework. A
+trusted installed addon should contribute a versioned provider rather than edit the
+core catalog. Skills and Evidence may improve reasoning, but every executable
+operation still resolves to a host-validated `CapabilityDefinition` or a separately
+reviewed future host-broker operation.
