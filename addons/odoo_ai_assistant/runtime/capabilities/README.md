@@ -1,146 +1,128 @@
-# Capability host
+# Capability and Evidence framework
 
-The capability host is the security and extensibility boundary between **“the model wants to do X”** and **“the product has a trusted, bounded operation that may do X.”**
+This package is the host-owned extension boundary of Odoo AI Assistant.
 
-`CapabilityDefinition` is the atomic executable unit.
+## Authority model
 
-```mermaid
-flowchart LR
-    DEF[CapabilityDefinition<br/>schema + metadata + handler] --> REG[CapabilityRegistry]
-    CTX[User/company/config/run context] --> REG
-    REG --> EFF[Effective catalog]
-    EFF --> MODEL[Reasoning/planning projection]
-    MODEL --> CALL[Requested call]
-    CALL --> EX[CapabilityExecutor]
-    EX --> DEF
-    EX --> OUT[Typed result/error]
-```
-
-## Files
-
-| File | Responsibility |
-|---|---|
-| `contracts.py` | capability/context/metadata contracts |
-| `decorators.py` | trusted declaration helper (`@tool(...)`) |
-| `registry.py` | deterministic discovery and effective availability |
-| `executor.py` | resolved execution with schema/budget/policy checks |
-| `validation.py` | bounded schema/input/output validation |
-| `policy.py` | capability/effect policy integration |
-| `config.py` | capability configuration helpers |
-| `providers/` | current executable core definitions |
-| `adapters/` | projections/adapters for a consumer such as Codex |
-
-See [`providers/README.md`](providers/README.md) and [`adapters/README.md`](adapters/README.md).
-
-## What a definition means
-
-Conceptually, one definition owns:
+`CapabilityDefinition` remains the only atomic executable contract. A model may
+propose a call, but the host still owns discovery, schema validation, effective
+user identity, ACL/record rules, policy, approval, execution and verification.
+Skills, context, manifests and Evidence never grant authority.
 
 ```text
-stable name/version
-model-facing + user-facing description
-input/output JSON Schema
-risk and effect classification
-reasoning/planning/host exposure
-approval semantics
-groups / guards / dependencies / configuration
-budgets / record-byte-time limits
-trusted handler
-optional preview/preconditions/verification/public activity
+CapabilityProvider
+  -> CapabilityDefinition[]       executable, host validated
+  -> SkillDefinition[]            trusted installed-code guidance
+  -> ContextProvider[]            bounded JIT contextual data
+  -> EvidenceProvider[]           bounded, cited, untrusted evidence
 ```
 
-The exact dataclass in current code is authoritative.
+Business operations continue to use the effective Odoo `Environment` with
+`su=False`. The framework does not expose arbitrary SQL, Python, shell, sudo or
+unrestricted model methods.
 
-## Reads and effects use the same framework
+## Capability providers
 
-There is no separate “tool system” for reads and “action system” for writes. They are capabilities with different effect/risk metadata and lifecycle requirements.
+Installed trusted addons declare `CapabilityProvider` markers through the Odoo
+registry. The provider API is versioned by
+`CAPABILITY_PROVIDER_API_VERSION = "1"`.
 
-This matters because future chat, MCP, automation or AI-field surfaces should project the **same definitions**, not synchronize multiple registries.
+Provider rules:
 
-## Effective catalog
+- IDs are stable and globally unique.
+- Third parties use an addon-owned or reverse-domain namespace.
+- `odoo.*`, `assistant.*` and `host.*` are reserved for core declarations carrying
+  `metadata={"namespace_owner": "core"}`.
+- Incompatible API versions fail closed with a sanitized code.
+- Optional provider/resource failures are isolated; required providers fail closed.
+- Schemas and metadata are normalized at construction rather than retained as
+  mutable caller-owned dictionaries.
 
-Discovery is not permission. `CapabilityRegistry` determines what is actually available for a run using trusted host facts: installed code, configuration, user/groups/companies, guards/dependencies, invocation context and other runtime constraints.
+Adding Evidence to an existing provider does not add a second executable registry:
 
-A capability can exist in code and still be absent from the model's effective catalog.
-
-## Executor rule
-
-Only execute a resolved effective definition with validated arguments.
-
-For normal business capabilities:
-
-```text
-effective Odoo user
-+ allowed companies
-+ ACLs / record rules / field access
-+ su=False
+```python
+CapabilityProvider(
+    provider_id="vendor.sales_assistant",
+    definitions=(...),
+    skills=(...),
+    context_providers=(...),
+    evidence_providers=(...),
+)
 ```
 
-`sudo()` is not a fallback for an agent operation that fails authorization.
+## Skills and JIT context
 
-## Safe effects
+`SkillDefinition` supplies trusted procedural guidance and selectors. It cannot
+create, reveal or authorize a capability absent from the effective registry.
+`ContextProvider` contributions are projected as untrusted data and collected just
+in time for the current decision.
 
-Effect-capable definitions feed the host-owned lifecycle:
-
-```mermaid
-flowchart LR
-    P[Proposal] --> V[Validate definition + args]
-    V --> PRE[Preview / preconditions]
-    PRE --> POL[Policy / approval]
-    POL --> WB[Write barrier]
-    WB --> EX[Execute]
-    EX --> VER[Verify]
-    VER --> REC[Receipt / recovery]
-```
-
-The LLM does not generate its own authority token or decide that verification is unnecessary.
-
-## Adding a capability
-
-A new core capability should normally require one trusted provider definition/handler plus tests, not edits to multiple manual registries.
-
-Before adding it, define:
-
-1. exact intent and scope;
-2. input/output schema;
-3. user/company authority;
-4. risk/effect classification;
-5. record/byte/call/time bounds;
-6. preview/approval if it mutates;
-7. verification and recovery;
-8. safe public activity;
-9. deterministic and, where model selection matters, agentic/real tests.
-
-Prefer semantic operations (`confirm_sale_order`) for frequent business workflows over generic arbitrary method execution.
-
-## Target extension architecture
-
-Not all of this is implemented yet:
-
-```mermaid
-flowchart TB
-    P[CapabilityProvider<br/>target] --> B[Skill / Bundle<br/>target]
-    P --> D[CapabilityDefinition<br/>current atomic authority]
-    P --> C[ContextProvider<br/>target]
-    P --> E[EvidenceProvider<br/>target]
-    B -. selects/instructs .-> D
-    D --> R[Global effective registry]
-```
-
-Target lifecycle for large catalogs:
+The lifecycle remains:
 
 ```text
 discovered -> available -> revealed -> active
 ```
 
-A Skill/Bundle groups behavior and instructions; it **does not execute** and **does not grant permissions**.
+The eager default remains in force until product evals demonstrate that lazy
+progressive disclosure preserves tool-selection quality.
 
-## Do not add these shortcuts
+## Evidence foundation (P8)
 
-- unrestricted `execute_method` / `execute_kw`;
-- arbitrary SQL/Python/shell as normal agent tools;
-- a second tool registry for MCP/automation/chat;
-- permissions encoded only in prompt text;
-- a provider that can self-register model-generated code as trusted execution.
+`evidence.py` defines a provider-neutral Evidence contract:
 
-For the deeper contract and future direction see [`../../../../docs/CAPABILITY_FRAMEWORK.md`](../../../../docs/CAPABILITY_FRAMEWORK.md).
+- `EvidenceKind`, `EvidenceTrust` and `EvidenceFreshness`;
+- logical `EvidenceLocator` values rather than model-authored paths;
+- `EvidenceRef` provenance, fingerprint, capture time, access scope and conflict
+  grouping;
+- bounded `EvidenceItem` excerpts/data;
+- `EvidenceProvider` search/fetch and `EvidenceProviderCatalog` isolation;
+- a question-sensitive `EvidenceRoutingPolicy` that prioritizes source classes
+  without reintroducing rigid intent routing;
+- `EvidenceLedger`, limited to 64 refs, 16 retained excerpts, 8 KiB per excerpt
+  and 64 KiB total.
+
+Access scope is checked while collecting a ref and again when fetching it.
+Fingerprint changes are explicit as `stale`; they are not silently accepted.
+Provider output is deeply copied/frozen, canonicalized and bounded. Common secret
+shapes are redacted as a final safety layer, while collection code must still avoid
+sensitive fields by design.
+
+Evidence reaches the model only as structured data:
+
+```json
+{
+  "source": "evidence",
+  "trust_boundary": "untrusted_data",
+  "reference": {"...": "host-owned metadata"},
+  "excerpt": "bounded content",
+  "data": {"...": "bounded content"}
+}
+```
+
+It never enters the Skill/system instruction partition and cannot alter policy,
+approval, capability availability or technical profile.
+
+## Runtime inventory provider
+
+`runtime_evidence.py` supplies the first built-in provider:
+`assistant.runtime_inventory`. It derives a sanitized installation fingerprint and
+bounded installed-module projection from the effective Odoo registry/ORM. It does
+not expose credentials, absolute roots, commands or mutable business-record
+snapshots. Technical metadata is bound to the Technical profile and Odoo group
+checks.
+
+## Current validation boundary
+
+Dependency-light and Odoo-focused tests for the P8 foundation live in:
+
+```text
+tests/unit/test_phase8_evidence_contracts.py
+tests/unit/test_phase8_evidence_runtime.py
+tests/unit/test_phase8_extension_evidence.py
+tests/unit/test_phase8_supported_surface.py
+tests/addon/test_phase8_runtime_evidence.py
+```
+
+The tests are part of the checkpoint, but a GitHub connector write does not count
+as execution evidence. P8 real gates remain pending until run in the prescribed
+Odoo/Codex environment and recorded under `docs/research/evidence/`.
