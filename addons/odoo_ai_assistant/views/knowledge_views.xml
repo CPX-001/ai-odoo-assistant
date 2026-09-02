@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_odoo_ai_knowledge_source_list" model="ir.ui.view">
+        <field name="name">odoo.ai.knowledge.source.list</field>
+        <field name="model">odoo.ai.knowledge.source</field>
+        <field name="arch" type="xml">
+            <list string="AI Knowledge Sources" default_order="write_date desc">
+                <field name="name"/>
+                <field name="state" widget="badge"/>
+                <field name="access_mode"/>
+                <field name="owner_user_id"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="version"/>
+                <field name="chunk_count"/>
+                <field name="indexed_at"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_odoo_ai_knowledge_source_form" model="ir.ui.view">
+        <field name="name">odoo.ai.knowledge.source.form</field>
+        <field name="model">odoo.ai.knowledge.source</field>
+        <field name="arch" type="xml">
+            <form string="AI Knowledge Source">
+                <header>
+                    <button name="action_queue_processing" type="object" string="Queue indexing" class="btn-primary" invisible="state == 'processing'"/>
+                    <button name="action_process_now" type="object" string="Process now" groups="base.group_system" invisible="state == 'processing'"/>
+                    <button name="action_disable" type="object" string="Disable" invisible="state != 'active'"/>
+                    <button name="action_activate" type="object" string="Activate" invisible="state != 'indexed'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="uploaded,processing,indexed,active,error"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group>
+                        <group string="Source">
+                            <field name="source_uuid" readonly="1"/>
+                            <field name="filename"/>
+                            <field name="mimetype"/>
+                            <field name="data" filename="filename"/>
+                            <field name="file_size" readonly="1"/>
+                            <field name="content_fingerprint" readonly="1"/>
+                        </group>
+                        <group string="Access and lifecycle">
+                            <field name="access_mode"/>
+                            <field name="enabled"/>
+                            <field name="owner_user_id" readonly="1"/>
+                            <field name="company_id" readonly="1" groups="base.group_multi_company"/>
+                            <field name="conversation_id" readonly="1"/>
+                            <field name="version" readonly="1"/>
+                            <field name="chunk_count" readonly="1"/>
+                            <field name="indexed_at" readonly="1"/>
+                            <field name="indexed_fingerprint" readonly="1"/>
+                            <field name="error_code" readonly="1" invisible="not error_code"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_odoo_ai_knowledge_source" model="ir.actions.act_window">
+        <field name="name">AI Knowledge</field>
+        <field name="res_model">odoo.ai.knowledge.source</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" eval="False"/>
+    </record>
+
+    <menuitem
+        id="menu_odoo_ai_knowledge_source"
+        name="AI Knowledge"
+        parent="base.menu_administration"
+        action="action_odoo_ai_knowledge_source"
+        sequence="96"
+        groups="base.group_system"
+    />
+</odoo>
