@@ -1,8 +1,10 @@
 # Security
 
-This directory defines Assistant-owned Odoo access control and one residual compatibility authentication mechanism.
+This directory defines Assistant-owned Odoo access control for the supported embedded product.
 
-Security is broader than this folder: the core product boundary also depends on effective-user Odoo `Environment`, record rules/field access, capability availability, policy, approvals, write barriers and verification.
+Security is broader than this folder: the product boundary depends on the effective-user Odoo `Environment`, ACLs,
+record rules, field access, companies, capability availability, policy, approval when required, write barriers and
+verification.
 
 ## Current files
 
@@ -11,7 +13,6 @@ Security is broader than this folder: the core product boundary also depends on 
 | `ir.model.access.csv` | model-level access rights for Assistant technical/user models |
 | `chat_storage_security.xml` | conversation/message ownership rules |
 | `user_preferences_security.xml` | user preference access/ownership |
-| `machine_auth.py` | shared-secret validation retained for the bounded internal inventory callback |
 
 ## Normal product authority
 
@@ -20,38 +21,42 @@ flowchart LR
     U[Authenticated Odoo user] --> ENV[Effective Environment]
     ENV --> ACL[ACL + record rules + companies + field access]
     ACL --> CAT[Effective capabilities]
-    CAT --> POL[Policy / approval]
+    CAT --> POL[Policy / approval when required]
     POL --> OP[Business operation<br/>su=False]
 ```
 
-The model is not in this authority chain.
+The model is not in this authority chain. Full-control/autonomy may reduce redundant confirmation, but it never grants
+permissions the effective Odoo user does not already have.
 
 ## `sudo()` rule
 
-Normal model-visible business capabilities must use the effective user and `su=False`. `sudo()` should never be introduced as a convenience to make agent operations pass.
+Normal model-visible business capabilities must use the effective user and `su=False`. `sudo()` must not be introduced
+as a convenience to make agent operations pass.
 
-A future privileged Developer/Operator capability requires a separate explicit technical authority profile and audit/policy design.
+Future host-level operations belong behind the proposed Technical/host privilege broker in ADR-024. That broker is a
+technical execution boundary, not a third human product profile and not a replacement sidecar.
 
-## Residual machine authentication
+## Retired machine-auth callback
 
-`machine_auth.py` supports `controllers/internal_tools.py`, a bounded `auth="none"` instance-inventory callback retained from Source/scanner lineage.
+The old `controllers/internal_tools.py` `auth="none"` instance-inventory callback and its addon-local shared-secret
+primitive have been removed from the supported product. Installation inventory is now collected in-process through P8
+Evidence under the effective Odoo environment.
 
-Important:
+Historical `service/` or installer files may still mention the retired machine secret because those directories are kept
+as historical/regression evidence. They must not be treated as current product authority or copied back into the addon.
 
-- it is **not** required for normal browser -> Odoo -> embedded runtime turns;
-- it is not a template for new product endpoints;
-- the shared secret must not be stored in prompts/logs/database fields;
-- removing/replacing this residual path should be done with its remaining caller/compatibility need, not by weakening the boundary.
-
-## When adding a model or endpoint
+## When adding a model, endpoint or capability
 
 Check:
 
-1. who owns the record;
+1. who owns the record or resource;
 2. which groups can read/write/create/delete;
 3. company isolation;
 4. whether returned fields may contain secrets;
-5. whether a technical job later re-enters the effective user before business access;
-6. whether public events expose only sanitized data.
+5. whether a technical job re-enters the effective user before business access;
+6. whether public events expose only sanitized data;
+7. whether Evidence/source/log/document content remains untrusted data;
+8. whether a write needs preview, policy, approval and verification for its actual risk/autonomy profile.
 
-Prompt instructions are not security controls. Retrieved documents, source code, logs and user text are untrusted data and cannot grant capabilities or bypass these rules.
+Prompt instructions are not security controls. Retrieved documents, source code, logs, repository content and user text
+cannot grant capabilities, permissions or approval.
