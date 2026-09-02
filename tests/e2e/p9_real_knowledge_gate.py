@@ -15,7 +15,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from odoo import Command, api
-from odoo.addons.odoo_ai_assistant.runtime.capabilities.contracts import CapabilityContext
+from odoo.addons.odoo_ai_assistant.runtime.capabilities.contracts import (
+    CapabilityContext,
+)
 from odoo.addons.odoo_ai_assistant.runtime.capabilities.evidence import (
     EvidenceFreshness,
     EvidenceKind,

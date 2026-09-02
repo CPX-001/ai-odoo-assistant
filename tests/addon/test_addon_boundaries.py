@@ -136,17 +136,29 @@ def test_addon_server_paths_have_no_privilege_or_generic_execution_escape_hatche
     assert "execute_method" not in source
     assert "SELECT *" not in source
 
-    # Raw SQL is reserved for host-owned row locking. It is not a capability or
-    # provider escape hatch and must not spread into controllers/runtime code.
+    # Raw SQL is reserved for host-owned row locking and fixed parameterized FTS.
+    # It is not a capability/provider escape hatch and must not spread elsewhere.
     sql_sources = {
         path: text for path, text in python_sources.items() if ".cr.execute(" in text
     }
-    assert set(sql_sources) == {"models/turn_control.py", "models/turn_event.py"}
+    assert set(sql_sources) == {
+        "models/knowledge.py",
+        "models/knowledge_fts_index.py",
+        "models/turn_control.py",
+        "models/turn_event.py",
+    }
     joined_sql = "\n".join(sql_sources.values())
-    assert joined_sql.count(".cr.execute(") == 3
+    assert joined_sql.count(".cr.execute(") == 5
     assert joined_sql.count("FOR UPDATE") == 3
+    assert sql_sources["models/knowledge.py"].count(".cr.execute(") == 1
+    assert "SELECT c.id" in sql_sources["models/knowledge.py"]
+    assert "plainto_tsquery('simple', %s)" in sql_sources["models/knowledge.py"]
+    assert sql_sources["models/knowledge_fts_index.py"].count(".cr.execute(") == 1
+    assert "CREATE INDEX IF NOT EXISTS" in sql_sources["models/knowledge_fts_index.py"]
+    assert "USING GIN" in sql_sources["models/knowledge_fts_index.py"]
     assert not re.search(
-        r"['\"]\s*(?:INSERT|UPDATE|DELETE|ALTER|DROP)\b",
+        r"\.cr\.execute\(\s*(?:[rubf]{0,2})?(?:'''|\"\"\"|'|\")\s*"
+        r"(?:INSERT|UPDATE|DELETE|ALTER|DROP)\b",
         joined_sql,
         flags=re.IGNORECASE,
     )

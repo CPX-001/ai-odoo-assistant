@@ -13,9 +13,9 @@ patch(assistantPanelService, {
         const state = service.state;
         const baseSubmit = service.submit.bind(service);
 
-        service.submit = async (message) => {
+        service.submit = async (message, options = {}) => {
             const scope = activeScope(state);
-            const result = await baseSubmit(message);
+            const result = await baseSubmit(message, options);
             if (result && scope?.stopRequested) {
                 scope.stopRequested = false;
             }

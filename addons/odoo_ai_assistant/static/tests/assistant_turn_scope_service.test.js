@@ -5,9 +5,20 @@ import {
     conversationRuntimeState,
     conversationScopeKey,
     createConversationTurnScope,
+    normalizeSubmittedMessages,
     projectConversationTurnScope,
     refreshTurnScopeModelPreferences,
 } from "@odoo_ai_assistant/services/zzz_assistant_turn_scope_service";
+
+test("transport-only attachment markers never enter the optimistic user projection", () => {
+    const marker = "[[odoo_ai_attachment:0123456789abcdef0123456789abcdef]]";
+    expect(
+        normalizeSubmittedMessages(`Añade este archivo.\n${marker}`, "Añade este archivo.")
+    ).toEqual({
+        transport: `Añade este archivo.\n${marker}`,
+        visible: "Añade este archivo.",
+    });
+});
 
 function scopedState() {
     return {

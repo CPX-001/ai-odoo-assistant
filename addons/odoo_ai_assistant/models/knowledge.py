@@ -143,7 +143,7 @@ class AssistantKnowledgeSource(models.Model):
         string="Indexed chunks",
     )
 
-    _sql_constraints = [
+    _sql_constraints = [  # noqa: RUF012 - Odoo model metadata
         (
             "knowledge_source_uuid_unique",
             "unique(source_uuid)",
@@ -315,7 +315,7 @@ class AssistantKnowledgeSource(models.Model):
             system_source.write(
                 {"state": "error", "error_code": error.code[:128]}
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - cron boundary records a sanitized failure
             system_source.write(
                 {"state": "error", "error_code": "knowledge_processing_failed"}
             )
@@ -397,7 +397,7 @@ class AssistantKnowledgeChunk(models.Model):
     char_end = fields.Integer(required=True)
     content_fingerprint = fields.Char(required=True, index=True, size=64)
 
-    _sql_constraints = [
+    _sql_constraints = [  # noqa: RUF012 - Odoo model metadata
         (
             "knowledge_chunk_source_sequence_unique",
             "unique(source_id, source_version, sequence)",
@@ -456,7 +456,7 @@ class AssistantKnowledgeAttachment(models.Model):
     expires_at = fields.Datetime(required=True, readonly=True, index=True)
     consumed_at = fields.Datetime(readonly=True)
 
-    _sql_constraints = [
+    _sql_constraints = [  # noqa: RUF012 - Odoo model metadata
         (
             "knowledge_attachment_token_unique",
             "unique(token)",

@@ -414,12 +414,33 @@ async function bindPersistedTurn(state, scope, turnId, title) {
     projectIfActive(state, scope);
 }
 
-async function submitScopedTurn({ state, screenContext, scope, message, onConversationBound }) {
+export function normalizeSubmittedMessages(message, displayMessage = null) {
+    const transport = typeof message === "string" ? message.trim() : "";
+    const visible =
+        displayMessage === null
+            ? transport
+            : typeof displayMessage === "string"
+              ? displayMessage.trim()
+              : "";
+    if (!transport || transport.length > 4000 || !visible || visible.length > 4000) {
+        return null;
+    }
+    return { transport, visible };
+}
+
+async function submitScopedTurn({
+    state,
+    screenContext,
+    scope,
+    message,
+    displayMessage,
+    onConversationBound,
+}) {
     if (scope.loading || scope.decisionLoading || recoveryPending(scope)) {
         return false;
     }
-    const normalized = typeof message === "string" ? message.trim() : "";
-    if (!normalized || normalized.length > 4000) {
+    const submission = normalizeSubmittedMessages(message, displayMessage);
+    if (!submission) {
         scope.failure = null;
         scope.errorCode = "invalid_context";
         projectIfActive(state, scope);
@@ -435,13 +456,13 @@ async function submitScopedTurn({ state, screenContext, scope, message, onConver
     scope.errorCode = null;
     scope.failure = null;
     scope.actionReceipt = null;
-    scope.lastSubmittedMessage = normalized;
+    scope.lastSubmittedMessage = submission.transport;
     scope.messages = [
         ...scope.messages,
         {
             message_id: pendingMessageId(),
             role: "user",
-            content: normalized,
+            content: submission.visible,
             created_at: new Date().toISOString(),
         },
     ];
@@ -450,7 +471,7 @@ async function submitScopedTurn({ state, screenContext, scope, message, onConver
     try {
         const response = await streamAssistantChatLive({
             payload: {
-                message: normalized,
+                message: submission.transport,
                 screen: state.context,
                 conversation_id: scope.conversationId,
             },
@@ -466,7 +487,7 @@ async function submitScopedTurn({ state, screenContext, scope, message, onConver
                             state,
                             scope,
                             timing.turn_id,
-                            normalized.slice(0, 160)
+                            submission.visible.slice(0, 160)
                         );
                         onConversationBound?.(scope.conversationId);
                     } catch {
@@ -696,7 +717,7 @@ patch(assistantPanelService, {
             return loaded;
         };
 
-        service.submit = async (message) => {
+        service.submit = async (message, options = {}) => {
             if (state.runtimeState !== "authenticated") {
                 state.errorCode =
                     state.runtimeState === "codex_unavailable"
@@ -712,6 +733,7 @@ patch(assistantPanelService, {
                 screenContext: dependencies.odoo_ai_screen_context,
                 scope,
                 message,
+                displayMessage: options?.displayMessage ?? null,
                 onConversationBound: (conversationId) =>
                     saveRecentActiveChat(sessionStorage, conversationId),
             });

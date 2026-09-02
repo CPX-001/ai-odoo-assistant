@@ -4,7 +4,9 @@ import base64
 from datetime import UTC, datetime
 
 from odoo import Command
-from odoo.addons.odoo_ai_assistant.runtime.capabilities.contracts import CapabilityContext
+from odoo.addons.odoo_ai_assistant.runtime.capabilities.contracts import (
+    CapabilityContext,
+)
 from odoo.addons.odoo_ai_assistant.runtime.capabilities.providers.assistant_knowledge import (
     _preview,
     _verify,

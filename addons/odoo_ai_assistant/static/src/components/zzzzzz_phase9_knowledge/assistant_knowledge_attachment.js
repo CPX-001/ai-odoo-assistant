@@ -6,7 +6,6 @@ import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
 
 const MAX_PENDING_ATTACHMENTS = 8;
-const ATTACHMENT_MARKER_RE = /\n?\[\[odoo_ai_attachment:[0-9a-f]{32}\]\]/g;
 
 async function fileToBase64(file) {
     const buffer = await file.arrayBuffer();
@@ -21,16 +20,6 @@ async function fileToBase64(file) {
 
 function pendingUploads(state) {
     return Array.isArray(state.pendingKnowledgeUploads) ? state.pendingKnowledgeUploads : [];
-}
-
-function cleanLocalAttachmentMarkers(state) {
-    state.messages = state.messages.map((message) => {
-        if (message.role !== "user" || typeof message.content !== "string") {
-            return message;
-        }
-        const content = message.content.replace(ATTACHMENT_MARKER_RE, "").trim();
-        return content === message.content ? message : { ...message, content };
-    });
 }
 
 patch(AssistantPanel.prototype, {
@@ -119,19 +108,24 @@ patch(AssistantPanel.prototype, {
             return false;
         }
 
-        this.panel.setDraft(markedDraft);
-        const sent = await super.submit(...arguments);
+        this.panel.setDraft("");
+        let sent = false;
+        try {
+            sent = await this.panel.submit(markedDraft, { displayMessage: question });
+        } catch {
+            if (!this.state.errorCode) {
+                this.state.errorCode = "service_unavailable";
+            }
+        }
         if (!sent) {
-            // The turn-control layer may have restored the marked draft. Restore only when the
-            // user did not type a newer message while the request was in flight.
-            if (this.state.draft === markedDraft) {
+            // Restore only when the user did not type a newer message while the request ran.
+            if (!this.state.draft) {
                 this.panel.setDraft(draft);
             }
             return false;
         }
         this.state.pendingKnowledgeUploads = [];
         this.state.knowledgeUploadError = null;
-        cleanLocalAttachmentMarkers(this.state);
         return true;
     },
 });

@@ -308,7 +308,7 @@ patch(assistantPanelService, {
         state.reversionConfirmationOpen = false;
         state.turnControlNotice = "";
 
-        service.submit = async (message) => {
+        service.submit = async (message, options = {}) => {
             const scope = activeScope(state);
             const normalized = typeof message === "string" ? message.trim() : "";
             const awaitingApproval = scope?.result?.plan?.state === "awaiting_confirmation";
@@ -359,7 +359,7 @@ patch(assistantPanelService, {
             }
 
             const submittedScope = scope;
-            const sent = await baseSubmit(message);
+            const sent = await baseSubmit(message, options);
             if (!sent && submittedScope?.stopRequested) {
                 submittedScope.stopRequested = false;
                 submittedScope.loading = false;

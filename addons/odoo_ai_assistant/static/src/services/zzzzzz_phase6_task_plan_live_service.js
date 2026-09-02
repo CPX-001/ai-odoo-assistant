@@ -174,9 +174,9 @@ patch(assistantPanelService, {
             }
         };
 
-        panel.submit = async (message) => {
+        panel.submit = async (message, options = {}) => {
             state.liveTaskPlan = null;
-            const pending = baseSubmit(message);
+            const pending = baseSubmit(message, options);
             void Promise.resolve().then(() => pollWhileActive());
             const submitted = await pending;
             // Close the completion race with one final authoritative status read. A TaskPlan revision

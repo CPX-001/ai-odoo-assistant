@@ -27,7 +27,7 @@ _MAX_EXCERPT = 8 * 1024
 def _guard(context: CapabilityContext) -> bool:
     try:
         return bool(context.env.user._is_internal())
-    except Exception:
+    except Exception:  # noqa: BLE001 - Evidence availability fails closed
         return False
 
 

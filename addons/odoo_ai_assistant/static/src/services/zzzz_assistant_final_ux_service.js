@@ -51,8 +51,8 @@ patch(assistantPanelService, {
         const baseSubmit = service.submit.bind(service);
         const baseDecide = service.decide.bind(service);
 
-        service.submit = async (message) => {
-            const submitted = await baseSubmit(message);
+        service.submit = async (message, options = {}) => {
+            const submitted = await baseSubmit(message, options);
             reconcileFinalUxState(state);
             return submitted;
         };
