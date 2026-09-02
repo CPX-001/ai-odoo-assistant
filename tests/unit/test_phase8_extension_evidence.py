@@ -1,26 +1,44 @@
 from __future__ import annotations
 
+import importlib
+import sys
+import types
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from odoo_ai_assistant.runtime.capabilities.context import (
-    ContextProvider,
-    ContextProviderCatalog,
+ADDON_ROOT = Path(__file__).resolve().parents[2] / "addons/odoo_ai_assistant"
+for package_name, package_path in (
+    ("addons.odoo_ai_assistant", ADDON_ROOT),
+    ("addons.odoo_ai_assistant.runtime", ADDON_ROOT / "runtime"),
+    (
+        "addons.odoo_ai_assistant.runtime.capabilities",
+        ADDON_ROOT / "runtime/capabilities",
+    ),
+):
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(package_path)]
+    sys.modules.setdefault(package_name, package)
+
+context_module = importlib.import_module(
+    "addons.odoo_ai_assistant.runtime.capabilities.context"
 )
-from odoo_ai_assistant.runtime.capabilities.evidence import (
-    EvidenceItem,
-    EvidenceKind,
-    EvidenceProvider,
-    EvidenceProviderCatalog,
+evidence = importlib.import_module("addons.odoo_ai_assistant.runtime.capabilities.evidence")
+extensions = importlib.import_module(
+    "addons.odoo_ai_assistant.runtime.capabilities.extensions"
 )
-from odoo_ai_assistant.runtime.capabilities.extensions import (
-    AssistantExtensionCatalog,
-)
-from odoo_ai_assistant.runtime.capabilities.skills import (
-    SkillCatalog,
-    SkillDefinition,
-)
+skills = importlib.import_module("addons.odoo_ai_assistant.runtime.capabilities.skills")
+
+ContextProvider = context_module.ContextProvider
+ContextProviderCatalog = context_module.ContextProviderCatalog
+EvidenceItem = evidence.EvidenceItem
+EvidenceKind = evidence.EvidenceKind
+EvidenceProvider = evidence.EvidenceProvider
+EvidenceProviderCatalog = evidence.EvidenceProviderCatalog
+AssistantExtensionCatalog = extensions.AssistantExtensionCatalog
+SkillCatalog = skills.SkillCatalog
+SkillDefinition = skills.SkillDefinition
 
 
 def _context():

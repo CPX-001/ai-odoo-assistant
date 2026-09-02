@@ -85,6 +85,7 @@ from .features import (
     ProviderFeatureSupport,
     ProviderProfile,
 )
+from .log_evidence import build_odoo_log_evidence_provider
 from .manifest import (
     EffectiveAssistantManifest,
     TechnicalAccessProfile,
@@ -113,13 +114,15 @@ from .registry import (
     discover_capabilities_for_env,
 )
 from .skills import SkillCatalog, SkillDefinition, selector_matches
+from .source_evidence import build_installed_source_evidence_provider
 
 __all__ = [
+    "CAPABILITY_PROVIDER_API_VERSION",
+    "RESERVED_PROVIDER_NAMESPACES",
     "ActiveAssistantExtensions",
     "AssistantEvidenceDecisionEngine",
     "AssistantExtensionCatalog",
     "AssistantExtensionStatus",
-    "CAPABILITY_PROVIDER_API_VERSION",
     "CapabilityActivityProjector",
     "CapabilityActivitySpec",
     "CapabilityApproval",
@@ -178,12 +181,13 @@ __all__ = [
     "ProviderFeatureState",
     "ProviderFeatureSupport",
     "ProviderProfile",
-    "RESERVED_PROVIDER_NAMESPACES",
     "SkillCatalog",
     "SkillDefinition",
     "TechnicalAccessProfile",
     "build_disclosure_snapshot",
     "build_effective_assistant_manifest",
+    "build_installed_source_evidence_provider",
+    "build_odoo_log_evidence_provider",
     "canonical_fingerprint",
     "canonical_json_bytes",
     "clear_discovery_cache",

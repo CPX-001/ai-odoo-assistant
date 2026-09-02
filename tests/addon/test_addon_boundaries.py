@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -73,7 +74,10 @@ def test_history_ui_never_replaces_the_account_gate_before_authentication() -> N
     auth_service = (
         ADDON_ROOT / "static/src/services/zz_assistant_auth_service.js"
     ).read_text(encoding="utf-8")
-    assert "state.historyView = false;" in auth_service
+    assert "const lockChat = () => {" in auth_service
+    assert "state.chatBootstrapped = false;" in auth_service
+    assert "state.conversations = [];" in auth_service
+    assert 'state.runtimeState !== "authenticated"' in auth_service
 
 
 def test_account_ui_polls_and_settings_target_exists_in_odoo_18() -> None:
@@ -121,13 +125,28 @@ def test_internal_endpoint_and_secret_are_not_duplicated_in_views() -> None:
 
 
 def test_addon_server_paths_have_no_privilege_or_generic_execution_escape_hatches() -> None:
-    source = "\n".join(
-        path.read_text(encoding="utf-8")
+    python_sources = {
+        path.relative_to(ADDON_ROOT).as_posix(): path.read_text(encoding="utf-8")
         for root_name in ("controllers", "models", "services", "runtime")
         for path in (ADDON_ROOT / root_name).rglob("*.py")
-    )
+    }
+    source = "\n".join(python_sources.values())
     assert ".sudo(" not in source
     assert "execute_kw" not in source
     assert "execute_method" not in source
-    assert "env.cr.execute(" not in source
     assert "SELECT *" not in source
+
+    # Raw SQL is reserved for host-owned row locking. It is not a capability or
+    # provider escape hatch and must not spread into controllers/runtime code.
+    sql_sources = {
+        path: text for path, text in python_sources.items() if ".cr.execute(" in text
+    }
+    assert set(sql_sources) == {"models/turn_control.py", "models/turn_event.py"}
+    joined_sql = "\n".join(sql_sources.values())
+    assert joined_sql.count(".cr.execute(") == 3
+    assert joined_sql.count("FOR UPDATE") == 3
+    assert not re.search(
+        r"['\"]\s*(?:INSERT|UPDATE|DELETE|ALTER|DROP)\b",
+        joined_sql,
+        flags=re.IGNORECASE,
+    )

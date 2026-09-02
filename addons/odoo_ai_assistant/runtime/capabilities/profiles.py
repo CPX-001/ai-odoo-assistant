@@ -42,8 +42,8 @@ def product_profile_for_env(env) -> ProductUserProfile:
     try:
         if user is not None and user.has_group("base.group_system"):
             return ProductUserProfile.TECHNICAL
-    except Exception:
-        pass
+    except Exception:  # noqa: BLE001 - profile detection fails closed
+        return ProductUserProfile.USER
     return ProductUserProfile.USER
 
 

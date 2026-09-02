@@ -44,7 +44,7 @@ def _is_technical(context: CapabilityContext) -> bool:
     user = getattr(getattr(context, "env", None), "user", None)
     try:
         return bool(user and user.has_group("base.group_system"))
-    except Exception:
+    except Exception:  # noqa: BLE001 - profile detection fails closed
         return False
 
 
@@ -65,7 +65,7 @@ def _release_payload() -> dict[str, JsonValue]:
             "series": str(getattr(release, "series", "")),
             "edition": "community",
         }
-    except Exception:
+    except Exception:  # noqa: BLE001 - runtime projection is best effort
         return {
             "version": "unknown",
             "version_info": [],
@@ -97,7 +97,7 @@ def _module_payload(env, *, technical: bool) -> tuple[list[dict[str, JsonValue]]
     for name in names[:MAX_MODULES]:
         try:
             manifest = module_model.get_module_info(name) or {}
-        except Exception:
+        except Exception:  # noqa: BLE001 - malformed optional manifest is isolated
             manifest = {}
         if not isinstance(manifest, dict):
             manifest = {}

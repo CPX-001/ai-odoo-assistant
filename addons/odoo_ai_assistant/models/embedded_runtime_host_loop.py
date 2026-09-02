@@ -158,21 +158,20 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             except RuntimeError as error:
                 raise EmbeddedRuntimeError(str(error)) from error
 
-        decision_engine = PlanningDecisionEngine(
-            _with_assistant_extensions(
-                self.env,
-                FailureNormalizingDecisionEngine(
-                    InteractiveCodexDecisionEngine(
-                        settings,
-                        cancellation_requested=cancellation_requested,
-                    ),
-                    component="codex",
-                    effect_state="none",
+        extension_engine = _with_assistant_extensions(
+            self.env,
+            FailureNormalizingDecisionEngine(
+                InteractiveCodexDecisionEngine(
+                    settings,
+                    cancellation_requested=cancellation_requested,
                 ),
-                registry=registry,
-                config=resolver,
-            )
+                component="codex",
+                effect_state="none",
+            ),
+            registry=registry,
+            config=resolver,
         )
+        decision_engine = PlanningDecisionEngine(extension_engine)
         reasoning_activity_id = None
 
         def on_work_started():
@@ -224,7 +223,9 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 {"confidence": result.confidence, "activity_id": reasoning_activity_id},
             )
         if not result.plan:
-            return self._read_only_response(turn, result, policy_snapshot)
+            response = self._read_only_response(turn, result, policy_snapshot)
+            response["citations"] = extension_engine.browser_citations()
+            return response
 
         prepared = asyncio.run(plans.prepare(result.plan))
         _ensure_turn_control_current(turn)

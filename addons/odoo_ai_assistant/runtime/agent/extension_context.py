@@ -28,6 +28,7 @@ from ..capabilities.evidence import (
     EvidenceLedger,
     EvidenceRoutingPolicy,
     EvidenceSearchRequest,
+    thaw_json,
 )
 from ..capabilities.evidence_runtime import AssistantEvidenceDecisionEngine
 from .contracts import NextDecision
@@ -76,6 +77,21 @@ class AssistantExtensionDecisionEngine:
             routing_policy=self._evidence_routing,
         )
         self._evidence_ledger = EvidenceLedger()
+
+    def browser_citations(self) -> list[dict[str, object]]:
+        """Return bounded public provenance metadata without retrieved content."""
+
+        return [
+            {
+                "evidence_id": ref.evidence_id,
+                "kind": ref.kind.value,
+                "title": ref.title,
+                "provenance": ref.provenance,
+                "freshness": ref.freshness.value,
+                "citation": thaw_json(ref.citation),
+            }
+            for ref in self._evidence_ledger.snapshot().refs[-24:]
+        ]
 
     async def next_decision(self, **kwargs) -> NextDecision:
         context = kwargs.get("context")

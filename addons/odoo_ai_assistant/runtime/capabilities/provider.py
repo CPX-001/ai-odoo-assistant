@@ -138,7 +138,7 @@ class CapabilityProvider:
         context_providers: Iterable[ContextProvider] = (),
         evidence_providers: Iterable[EvidenceProvider] = (),
         api_version: str = CAPABILITY_PROVIDER_API_VERSION,
-    ) -> "CapabilityProvider":
+    ) -> CapabilityProvider:
         """Build a static provider from handlers decorated with ``@tool``."""
 
         from .decorators import definition_from_object

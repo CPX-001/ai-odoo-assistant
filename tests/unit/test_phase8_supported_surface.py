@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ADDON_ROOT = REPO_ROOT / "addons" / "odoo_ai_assistant"
 AUTH_NONE_RE = re.compile(r"\bauth\s*=\s*['\"]none['\"]")

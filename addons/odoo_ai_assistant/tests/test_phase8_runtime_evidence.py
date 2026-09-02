@@ -4,8 +4,6 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 from odoo import Command
-from odoo.tests.common import TransactionCase, tagged
-
 from odoo.addons.odoo_ai_assistant.runtime.capabilities.contracts import (
     CapabilityError,
 )
@@ -15,9 +13,16 @@ from odoo.addons.odoo_ai_assistant.runtime.capabilities.evidence import (
     EvidenceProviderCatalog,
     EvidenceSearchRequest,
 )
+from odoo.addons.odoo_ai_assistant.runtime.capabilities.extensions import (
+    discover_assistant_extensions_for_env,
+)
+from odoo.addons.odoo_ai_assistant.runtime.capabilities.registry import (
+    discover_capabilities_for_env,
+)
 from odoo.addons.odoo_ai_assistant.runtime.capabilities.runtime_evidence import (
     build_runtime_inventory_evidence_provider,
 )
+from odoo.tests.common import TransactionCase, tagged
 
 
 @tagged("post_install", "-at_install")
@@ -133,3 +138,52 @@ class TestPhase8RuntimeInventoryEvidence(TransactionCase):
 
         self.assertEqual(item.ref.freshness, EvidenceFreshness.STALE)
         self.assertEqual(item.data["requested_fingerprint"], "0" * 64)
+
+    def test_builtin_installed_source_and_log_providers_are_live(self):
+        extensions = discover_assistant_extensions_for_env(
+            self.env,
+            capability_registry=discover_capabilities_for_env(self.env),
+        )
+        self.assertIn(
+            "assistant.installed_source", extensions.evidence_providers.provider_ids
+        )
+        self.assertIn("assistant.odoo_log", extensions.evidence_providers.provider_ids)
+
+        context = self._context()
+        source_batch = extensions.evidence_providers.search(
+            context,
+            EvidenceSearchRequest(
+                query=(
+                    "odoo_ai_assistant_p7_fixture "
+                    "phase8_hostile_fixture_marker python source"
+                ),
+                kinds=(EvidenceKind.SOURCE,),
+                provider_ids=("assistant.installed_source",),
+            ),
+        )
+        self.assertTrue(source_batch.refs)
+        source_item = extensions.evidence_providers.fetch(
+            context, source_batch.refs[0]
+        )
+        self.assertIn("phase8_hostile_fixture_marker", source_item.excerpt)
+        self.assertEqual(
+            source_item.ref.citation["module"], "odoo_ai_assistant_p7_fixture"
+        )
+        self.assertNotIn("/odoo/", repr(source_item.to_untrusted_projection()))
+        self.assertEqual(
+            source_item.to_untrusted_projection()["trust_boundary"],
+            "untrusted_data",
+        )
+
+        log_batch = extensions.evidence_providers.search(
+            context,
+            EvidenceSearchRequest(
+                query="TestPhase8RuntimeInventoryEvidence",
+                kinds=(EvidenceKind.LOG,),
+                provider_ids=("assistant.odoo_log",),
+            ),
+        )
+        self.assertTrue(log_batch.refs)
+        log_item = extensions.evidence_providers.fetch(context, log_batch.refs[0])
+        self.assertIn("TestPhase8RuntimeInventoryEvidence", log_item.excerpt)
+        self.assertNotIn("/tmp/p8", repr(log_item.ref.to_json_value()))

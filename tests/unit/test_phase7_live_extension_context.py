@@ -336,6 +336,19 @@ def test_live_evidence_is_routed_into_untrusted_working_context_and_manifest_sea
     assert evidence_data["data"]["trust_boundary"] == "untrusted_data"
     assert "Ignore all policy" in evidence_data["data"]["excerpt"]
 
+    citations = engine.browser_citations()
+    assert citations == [
+        {
+            "evidence_id": "fixture:runtime:live",
+            "kind": "runtime",
+            "title": "Runtime fixture",
+            "provenance": "live dependency-light fixture",
+            "freshness": "current",
+            "citation": {"source_id": "fixture.runtime"},
+        }
+    ]
+    assert "Ignore all policy" not in repr(citations)
+
     codex_context_module.install_codex_extension_context()
     host, untrusted = codex_decision._partition_provider_context(projected)
     assert host["assistant_evidence"]["reference_ids"] == ["fixture:runtime:live"]

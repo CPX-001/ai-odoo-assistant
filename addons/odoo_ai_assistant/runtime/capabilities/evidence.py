@@ -262,7 +262,7 @@ class EvidenceAccessScope:
         *,
         group_xmlids: Iterable[str] = (),
         source_acl: Iterable[str] = (),
-    ) -> "EvidenceAccessScope":
+    ) -> EvidenceAccessScope:
         return cls(
             user_id=_context_user_id(context),
             company_ids=_context_company_ids(context),
@@ -271,7 +271,7 @@ class EvidenceAccessScope:
         )
 
     @classmethod
-    def from_json_value(cls, value: Mapping[str, Any]) -> "EvidenceAccessScope":
+    def from_json_value(cls, value: Mapping[str, Any]) -> EvidenceAccessScope:
         return cls(
             user_id=value.get("user_id"),
             company_ids=tuple(value.get("company_ids") or ()),
@@ -299,7 +299,7 @@ class EvidenceAccessScope:
                 try:
                     if user is None or not all(user.has_group(item) for item in self.group_xmlids):
                         return False
-                except Exception:
+                except Exception:  # noqa: BLE001 - access adapters fail closed
                     return False
         return not self.source_acl or set(self.source_acl).issubset(set(source_acl))
 
@@ -336,7 +336,7 @@ class EvidenceLocator:
         )
 
     @classmethod
-    def from_json_value(cls, value: Mapping[str, Any]) -> "EvidenceLocator":
+    def from_json_value(cls, value: Mapping[str, Any]) -> EvidenceLocator:
         return cls(
             provider_id=str(value["provider_id"]),
             source_id=str(value["source_id"]),
@@ -408,7 +408,7 @@ class EvidenceRef:
         object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata, max_bytes=16 * 1024))
 
     @classmethod
-    def from_json_value(cls, value: Mapping[str, Any]) -> "EvidenceRef":
+    def from_json_value(cls, value: Mapping[str, Any]) -> EvidenceRef:
         return cls(
             evidence_id=str(value["evidence_id"]),
             kind=EvidenceKind(value["kind"]),
@@ -429,7 +429,7 @@ class EvidenceRef:
             metadata=value.get("metadata") or {},
         )
 
-    def with_freshness(self, freshness: EvidenceFreshness) -> "EvidenceRef":
+    def with_freshness(self, freshness: EvidenceFreshness) -> EvidenceRef:
         return replace(self, freshness=freshness)
 
     def to_json_value(self, *, include_scope: bool = True) -> dict[str, JsonValue]:
@@ -484,7 +484,7 @@ class EvidenceItem:
         value: Mapping[str, Any],
         *,
         refs_by_id: Mapping[str, EvidenceRef],
-    ) -> "EvidenceItem":
+    ) -> EvidenceItem:
         evidence_id = str((value.get("reference") or {}).get("evidence_id") or "")
         ref = refs_by_id.get(evidence_id)
         if ref is None:
@@ -669,6 +669,26 @@ class EvidenceRoutingPolicy:
                 EvidenceKind.RUNTIME,
                 EvidenceKind.SOURCE,
                 EvidenceKind.XML,
+            )
+        if any(
+            token in query
+            for token in (
+                "código",
+                "codigo",
+                "field",
+                "modelo",
+                "python",
+                "source",
+                "vista",
+                "view",
+                "xml",
+            )
+        ):
+            return (
+                EvidenceKind.SOURCE,
+                EvidenceKind.XML,
+                EvidenceKind.RUNTIME,
+                EvidenceKind.DOCUMENT,
             )
         if any(token in query for token in ("módulo", "modulo", "module", "repo", "instal", "version")):
             return (
@@ -949,7 +969,7 @@ class EvidenceLedgerSnapshot:
             raise CapabilityError("evidence_ledger_size_exceeded")
 
     @classmethod
-    def from_json_value(cls, value: Mapping[str, Any]) -> "EvidenceLedgerSnapshot":
+    def from_json_value(cls, value: Mapping[str, Any]) -> EvidenceLedgerSnapshot:
         refs = tuple(EvidenceRef.from_json_value(item) for item in value.get("refs") or ())
         refs_by_id = {item.evidence_id: item for item in refs}
         items = tuple(

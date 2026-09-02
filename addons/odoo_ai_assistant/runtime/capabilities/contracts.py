@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-
 type JsonValue = (
     None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 )
@@ -439,13 +438,13 @@ class CapabilityDefinition:
             try:
                 if any(not user.has_group(group) for group in self.required_groups):
                     return False
-            except Exception:
+            except Exception:  # noqa: BLE001 - group adapters fail closed
                 return False
         if self.guard is None:
             return True
         try:
             return bool(self.guard(context))
-        except Exception:
+        except Exception:  # noqa: BLE001 - extension guards fail closed
             return False
 
     def wire_descriptor(self) -> dict[str, JsonValue]:

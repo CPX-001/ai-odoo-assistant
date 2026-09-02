@@ -1,23 +1,41 @@
 from __future__ import annotations
 
+import importlib
+import sys
+import types
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
-from odoo_ai_assistant.runtime.capabilities.evidence import (
-    EvidenceAccessScope,
-    EvidenceFreshness,
-    EvidenceItem,
-    EvidenceKind,
-    EvidenceLocator,
-    EvidenceProvider,
-    EvidenceProviderCatalog,
-    EvidenceRef,
-    EvidenceSearchRequest,
-    EvidenceTrust,
+ADDON_ROOT = Path(__file__).resolve().parents[2] / "addons/odoo_ai_assistant"
+for package_name, package_path in (
+    ("addons.odoo_ai_assistant", ADDON_ROOT),
+    ("addons.odoo_ai_assistant.runtime", ADDON_ROOT / "runtime"),
+    (
+        "addons.odoo_ai_assistant.runtime.capabilities",
+        ADDON_ROOT / "runtime/capabilities",
+    ),
+):
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(package_path)]
+    sys.modules.setdefault(package_name, package)
+
+evidence = importlib.import_module("addons.odoo_ai_assistant.runtime.capabilities.evidence")
+evidence_runtime = importlib.import_module(
+    "addons.odoo_ai_assistant.runtime.capabilities.evidence_runtime"
 )
-from odoo_ai_assistant.runtime.capabilities.evidence_runtime import (
-    AssistantEvidenceDecisionEngine,
-)
+
+EvidenceAccessScope = evidence.EvidenceAccessScope
+EvidenceFreshness = evidence.EvidenceFreshness
+EvidenceItem = evidence.EvidenceItem
+EvidenceKind = evidence.EvidenceKind
+EvidenceLocator = evidence.EvidenceLocator
+EvidenceProvider = evidence.EvidenceProvider
+EvidenceProviderCatalog = evidence.EvidenceProviderCatalog
+EvidenceRef = evidence.EvidenceRef
+EvidenceSearchRequest = evidence.EvidenceSearchRequest
+EvidenceTrust = evidence.EvidenceTrust
+AssistantEvidenceDecisionEngine = evidence_runtime.AssistantEvidenceDecisionEngine
 
 
 def _context():

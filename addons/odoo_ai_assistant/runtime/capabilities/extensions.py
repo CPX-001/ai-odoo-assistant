@@ -21,10 +21,12 @@ from .evidence import (
     EvidenceSearchBatch,
     EvidenceSearchRequest,
 )
+from .log_evidence import build_odoo_log_evidence_provider
 from .provider import CapabilityProvider, discover_odoo_capability_providers
 from .registry import CapabilityRegistry, discover_capabilities_for_env
 from .runtime_evidence import build_runtime_inventory_evidence_provider
 from .skills import SkillCatalog, SkillDefinition, selector_matches
+from .source_evidence import build_installed_source_evidence_provider
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,7 +264,11 @@ def discover_assistant_extensions_for_env(
 ) -> AssistantExtensionCatalog:
     registry = capability_registry or discover_capabilities_for_env(env)
     providers = discover_odoo_capability_providers(env)
-    builtin_evidence = (build_runtime_inventory_evidence_provider(),)
+    builtin_evidence = (
+        build_runtime_inventory_evidence_provider(),
+        build_installed_source_evidence_provider(),
+        build_odoo_log_evidence_provider(),
+    )
     if not providers:
         return AssistantExtensionCatalog(
             skills=SkillCatalog(),

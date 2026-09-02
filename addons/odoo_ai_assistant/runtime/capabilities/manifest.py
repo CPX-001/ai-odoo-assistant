@@ -64,7 +64,7 @@ def technical_access_profile_for_env(env) -> TechnicalAccessProfile:
     try:
         if user is not None and user.has_group("base.group_system"):
             return TechnicalAccessProfile.DEVELOPER
-    except Exception:
+    except Exception:  # noqa: BLE001 - profile detection fails closed
         return TechnicalAccessProfile.BUSINESS
     return TechnicalAccessProfile.BUSINESS
 

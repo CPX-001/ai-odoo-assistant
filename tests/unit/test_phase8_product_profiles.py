@@ -1,16 +1,32 @@
 from __future__ import annotations
 
+import importlib
+import sys
+import types
 from dataclasses import fields
+from pathlib import Path
 from types import SimpleNamespace
 
-from odoo_ai_assistant.runtime.capabilities.manifest import (
-    EffectiveAssistantManifest,
-)
-from odoo_ai_assistant.runtime.capabilities.profiles import (
-    ProductUserProfile,
-    product_profile_for_env,
-    product_profile_from_technical,
-)
+ADDON_ROOT = Path(__file__).resolve().parents[2] / "addons/odoo_ai_assistant"
+for package_name, package_path in (
+    ("addons.odoo_ai_assistant", ADDON_ROOT),
+    ("addons.odoo_ai_assistant.runtime", ADDON_ROOT / "runtime"),
+    (
+        "addons.odoo_ai_assistant.runtime.capabilities",
+        ADDON_ROOT / "runtime/capabilities",
+    ),
+):
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(package_path)]
+    sys.modules.setdefault(package_name, package)
+
+manifest = importlib.import_module("addons.odoo_ai_assistant.runtime.capabilities.manifest")
+profiles = importlib.import_module("addons.odoo_ai_assistant.runtime.capabilities.profiles")
+
+EffectiveAssistantManifest = manifest.EffectiveAssistantManifest
+ProductUserProfile = profiles.ProductUserProfile
+product_profile_for_env = profiles.product_profile_for_env
+product_profile_from_technical = profiles.product_profile_from_technical
 
 
 def test_internal_profiles_map_to_exactly_user_or_technical():

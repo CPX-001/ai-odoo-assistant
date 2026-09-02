@@ -1,43 +1,57 @@
 from __future__ import annotations
 
+import importlib
+import sys
+import types
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from odoo_ai_assistant.runtime.capabilities.contracts import (
-    CapabilityDefinition,
-    CapabilityEffect,
-    CapabilityError,
-    CapabilityRisk,
-)
-from odoo_ai_assistant.runtime.capabilities.evidence import (
-    LEDGER_MAX_REFS,
-    REDACTED_SECRET,
-    EvidenceAccessScope,
-    EvidenceFreshness,
-    EvidenceItem,
-    EvidenceKind,
-    EvidenceLedger,
-    EvidenceLedgerSnapshot,
-    EvidenceLocator,
-    EvidenceProvider,
-    EvidenceProviderCatalog,
-    EvidenceRef,
-    EvidenceRoutingPolicy,
-    EvidenceSearchRequest,
-    EvidenceTrust,
-    freeze_json_mapping,
-)
-from odoo_ai_assistant.runtime.capabilities.provider import (
-    CAPABILITY_PROVIDER_API_VERSION,
-    CapabilityProvider,
-)
-from odoo_ai_assistant.runtime.capabilities.registry import (
-    CapabilityRegistry,
-    compose_capability_registry,
-)
+ADDON_ROOT = Path(__file__).resolve().parents[2] / "addons/odoo_ai_assistant"
+for package_name, package_path in (
+    ("addons.odoo_ai_assistant", ADDON_ROOT),
+    ("addons.odoo_ai_assistant.runtime", ADDON_ROOT / "runtime"),
+    (
+        "addons.odoo_ai_assistant.runtime.capabilities",
+        ADDON_ROOT / "runtime/capabilities",
+    ),
+):
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(package_path)]
+    sys.modules.setdefault(package_name, package)
+
+contracts = importlib.import_module("addons.odoo_ai_assistant.runtime.capabilities.contracts")
+evidence = importlib.import_module("addons.odoo_ai_assistant.runtime.capabilities.evidence")
+provider = importlib.import_module("addons.odoo_ai_assistant.runtime.capabilities.provider")
+registry = importlib.import_module("addons.odoo_ai_assistant.runtime.capabilities.registry")
+
+CapabilityDefinition = contracts.CapabilityDefinition
+CapabilityEffect = contracts.CapabilityEffect
+CapabilityError = contracts.CapabilityError
+CapabilityRisk = contracts.CapabilityRisk
+LEDGER_MAX_REFS = evidence.LEDGER_MAX_REFS
+REDACTED_SECRET = evidence.REDACTED_SECRET
+EvidenceAccessScope = evidence.EvidenceAccessScope
+EvidenceFreshness = evidence.EvidenceFreshness
+EvidenceItem = evidence.EvidenceItem
+EvidenceKind = evidence.EvidenceKind
+EvidenceLedger = evidence.EvidenceLedger
+EvidenceLedgerSnapshot = evidence.EvidenceLedgerSnapshot
+EvidenceLocator = evidence.EvidenceLocator
+EvidenceProvider = evidence.EvidenceProvider
+EvidenceProviderCatalog = evidence.EvidenceProviderCatalog
+EvidenceRef = evidence.EvidenceRef
+EvidenceRoutingPolicy = evidence.EvidenceRoutingPolicy
+EvidenceSearchRequest = evidence.EvidenceSearchRequest
+EvidenceTrust = evidence.EvidenceTrust
+freeze_json_mapping = evidence.freeze_json_mapping
+CAPABILITY_PROVIDER_API_VERSION = provider.CAPABILITY_PROVIDER_API_VERSION
+CapabilityProvider = provider.CapabilityProvider
+CapabilityRegistry = registry.CapabilityRegistry
+compose_capability_registry = registry.compose_capability_registry
 
 _EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
 
