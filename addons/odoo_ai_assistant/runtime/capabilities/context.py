@@ -7,7 +7,13 @@ import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 
-from .contracts import CapabilityContext, CapabilityError, JsonValue
+from .contracts import (
+    CapabilityContext,
+    CapabilityError,
+    JsonValue,
+    freeze_contract_mapping,
+    thaw_contract_json,
+)
 
 _PROVIDER_ID_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _VERSION_RE = re.compile(r"^[1-9][0-9]*$")
@@ -46,12 +52,18 @@ class ContextProvider:
             raise CapabilityError("context_provider_output_limit_invalid")
         if not callable(self.collect):
             raise CapabilityError("context_provider_collector_invalid")
+        object.__setattr__(self, "metadata", freeze_contract_mapping(self.metadata))
 
 
 @dataclass(frozen=True, slots=True)
 class ContextContribution:
     provider_id: str
     data: Mapping[str, JsonValue]
+
+    def __post_init__(self) -> None:
+        if not _PROVIDER_ID_RE.fullmatch(self.provider_id):
+            raise CapabilityError("context_provider_id_invalid")
+        object.__setattr__(self, "data", freeze_contract_mapping(self.data))
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,11 +160,12 @@ def _validated_payload(
 ) -> Mapping[str, JsonValue]:
     if not isinstance(value, Mapping):
         raise CapabilityError("context_provider_payload_invalid")
-    data = dict(value)
+    data = freeze_contract_mapping(value)
     try:
         encoded = json.dumps(
-            data,
+            thaw_contract_json(data),
             ensure_ascii=False,
+            allow_nan=False,
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
