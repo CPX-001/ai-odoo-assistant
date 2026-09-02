@@ -1,18 +1,17 @@
 # P9 focused validation runbook
 
-State: `FOCUSED PASS / REAL VALIDATION BLOCKED ON PRIMARY CODEX AUTH`
+State: `FOCUSED PASS / REAL PASS / P9 ACCEPTED`
 Scope: first P9 company Knowledge lifecycle, FTS Evidence and chat ingestion slice
 
-Execution record: `evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md`.
-The focused static, dependency-light, Odoo, HOOT and browser gates passed. The real
-runner proved `P9-REAL-UPLOAD-INGEST`, then failed closed on its first provider-backed
-turn because the primary host session returned `authentication / unauthorized`.
-P9 remains unaccepted and P10 remains ineligible until the primary session is
-reauthenticated and all seven real gates pass in one authoritative rerun.
+Acceptance record: `evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`.
+The focused static, dependency-light, Odoo, HOOT and browser gates passed. After
+primary-session reauthentication and a bounded natural-FTS repair, the authoritative
+real rerun passed all seven P9 gates with effective-user `su=False`. The earlier
+blocked record remains historical evidence only.
 
-This is the blocking validation for the implementation recorded in
-`P9_KNOWLEDGE_FIRST_SLICE.md`. It does not authorize P10 and no result in this file is
-PASS until the command is actually executed and recorded as evidence.
+This runbook and its acceptance record validate the implementation recorded in
+`P9_KNOWLEDGE_FIRST_SLICE.md`. P10 is eligible, subject to its mandatory
+privilege-boundary ADR.
 
 ## 1. Static/dependency-light scope
 
@@ -136,5 +135,6 @@ When all blocking focused and real gates pass, create an immutable evidence file
 - explicitly unexecuted broad regressions;
 - final P9 acceptance decision.
 
-Until that record exists, `EXECUTION_STATE.md` must remain
-`IMPLEMENTED_AWAITING_FOCUSED_VALIDATION` or a more specific failing state.
+That record now exists at
+`evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`; `EXECUTION_STATE.md` advances
+to the P10 privilege-boundary design prerequisite.

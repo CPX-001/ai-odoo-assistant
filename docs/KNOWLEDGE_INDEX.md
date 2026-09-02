@@ -23,7 +23,8 @@ assistant.installed_source
 assistant.odoo_log
 ```
 
-P9's first coherent slice is now implemented on main, awaiting focused validation:
+P9's first coherent slice is accepted on main at
+`77d470febf67ddee46562907718dc47e975922bb`:
 
 ```text
 odoo.ai.knowledge.source
@@ -356,7 +357,7 @@ safe final citation metadata
 source-scope/access/freshness policy
 ```
 
-Implemented in P9 first slice, validation still blocking:
+Implemented and accepted in P9 first slice:
 
 ```text
 company Knowledge source/chunk lifecycle
@@ -368,13 +369,12 @@ ACL/freshness/citation behavior
 temporary chat upload + durable turn binding
 chat-driven Knowledge ingestion capability
 Assistant attachment UI
-focused tests and real-gate runner
+focused and seven real gates PASS
 ```
 
 Still pending beyond this slice:
 
 ```text
-focused/real P9 execution evidence
 PDF/OCR and richer file parsing
 semantic/vector retrieval if justified by evals
 rich Knowledge citation navigation
@@ -382,4 +382,6 @@ web/repository Evidence
 ```
 
 See `EVIDENCE_ARCHITECTURE.md`, `research/P9_KNOWLEDGE_FIRST_SLICE.md`,
-`research/P9_FOCUSED_VALIDATION_RUNBOOK.md` and `research/EXECUTION_STATE.md`.
+`research/P9_FOCUSED_VALIDATION_RUNBOOK.md`,
+`research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md` and
+`research/EXECUTION_STATE.md`.

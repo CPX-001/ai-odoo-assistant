@@ -12,7 +12,7 @@ P5.1-P5.8 accepted
 P6 COMPLETE / ACCEPTED
 P7 COMPLETE / ACCEPTED at 092ac57fe58a3a36765b115e78b2eca687f5dbbc
 P8 COMPLETE / ACCEPTED at e370af8acb7df175c0a90c8e17520c8576b4c6ce
-P9 first coherent slice FOCUSED PASS / REAL VALIDATION BLOCKED / NOT YET ACCEPTED
+P9 COMPLETE / ACCEPTED at 77d470febf67ddee46562907718dc47e975922bb
 ```
 
 P7 acceptance is recorded in
@@ -23,11 +23,10 @@ accepted regression in
 P8 acceptance evidence is recorded in
 `research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md`.
 
-P9 implementation and its blocking validation runbook are recorded in
+P9 implementation and validation runbook are recorded in
 `research/P9_KNOWLEDGE_FIRST_SLICE.md` and
-`research/P9_FOCUSED_VALIDATION_RUNBOOK.md`. The focused checkpoint is
-`research/evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md`; no P9
-acceptance PASS is claimed yet.
+`research/P9_FOCUSED_VALIDATION_RUNBOOK.md`. Acceptance evidence is
+`research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`.
 
 ## 1. Product/deployment baseline
 
@@ -234,7 +233,7 @@ diagnosis questions can retrieve Evidence. Codex only adapts the existing trust
 partition; it does not gain an Evidence-specific authority path. Retrieved text,
 including prompt-injection text, remains untrusted data.
 
-## 8. P9 company Knowledge first slice — implemented, awaiting validation
+## 8. P9 company Knowledge first slice — accepted
 
 P9 now adds Odoo-native company Knowledge on top of that accepted Evidence path:
 
@@ -276,14 +275,14 @@ durable turn, and `assistant.knowledge.ingest_attachment` may create the persist
 source through the same plan/capability runtime. Raw base64 never enters the model
 prompt.
 
-This implementation is **not accepted yet**. Its focused tests and real gate runner
-are prepared but unexecuted.
+This implementation is accepted at `77d470febf67ddee46562907718dc47e975922bb`.
+Focused validation and all seven real Odoo/Codex gates passed with effective-user
+`su=False`.
 
 ## 9. Explicit follow-up scope after this P9 slice
 
 Still pending are:
 
-- execute/repair/record P9 focused and seven real acceptance gates;
 - durable reconnect restoration of the Evidence ledger through the existing Odoo working transcript;
 - richer citation navigation beyond persisted final-result metadata;
 - runtime/schema/configuration/security/navigation providers beyond inventory;
@@ -294,8 +293,7 @@ Still pending are:
 - repository/module acquisition and the Technical host privilege broker;
 - domain-addon split and its clean install/update/uninstall proof.
 
-These are later P9/P10 follow-ups and must not be inferred from P8 acceptance or the
-unvalidated P9 implementation.
+These are later P10+ follow-ups and must not be inferred from P9 acceptance.
 
 ## 10. Evidence/source scope
 
@@ -346,13 +344,11 @@ P8 passed `61` focused dependency-light tests, `20` focused Odoo tests and all s
 real Odoo/Codex Evidence gates with effective-user `su=False`.
 
 P9 focused validation passed: 49 dependency-light tests, 25 focused Odoo tests,
-focused HOOT and the required composer browser smoke. The smoke found and verified a
-repair that keeps attachment markers transport-only across every service wrapper.
-The real runner then passed deterministic upload ingestion and failed closed on its
-first provider-backed turn because the primary Codex session requires
-reauthentication. The blocking next action is to reauthenticate that normal host
-session and rerun all seven P9 real Knowledge gates. Until all seven pass, P10 is not
-eligible.
+focused HOOT and the required composer browser smoke. The acceptance resume added a
+bounded natural-query FTS repair, then passed its 10 dependency-light boundary/routing
+tests, 4 focused Odoo test methods and all seven real Odoo/Codex Knowledge gates with
+effective-user `su=False`. P9 is accepted and P10 is eligible. P10 must begin with the
+mandatory privilege-boundary ADR before implementing host-operation capabilities.
 
 The broad repository/addon/HOOT/Product Behavior FULL regressions remain periodic debt
-unless focused P9 failures require widening the validation scope.
+unless a concrete later failure requires widening the validation scope.

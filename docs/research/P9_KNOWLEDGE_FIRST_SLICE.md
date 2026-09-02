@@ -155,7 +155,7 @@ activate/disable actions.
 The Assistant composer receives the bounded attachment control. This is a single
 transport into the existing turn/capability runtime rather than a second chat flow.
 
-## Focused validation prepared
+## Focused validation
 
 Added deterministic coverage for:
 
@@ -170,11 +170,8 @@ request-id retry safety and capability discovery.
 
 ## Validation status
 
-No test or real-environment gate has been executed as part of the GitHub-connector
-implementation session that produced this record. Therefore none is claimed PASS.
-
-The next blocking step is focused validation and repair. After that, the P9 real
-acceptance gates remain:
+P9 is accepted at `77d470febf67ddee46562907718dc47e975922bb`. Focused validation,
+the incremental natural-FTS repair gates and all seven real gates passed:
 
 ```text
 P9-REAL-UPLOAD-INGEST
@@ -186,8 +183,8 @@ P9-REAL-REINDEX
 P9-REAL-LARGE-DOCUMENT
 ```
 
-`P9-REAL-SEMANTIC-GAIN` remains conditional and should only exist if an embeddings
-backend is introduced because eval evidence demonstrates a material gain.
+`P9-REAL-SEMANTIC-GAIN` remains not applicable because no embeddings backend was
+introduced. See `evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`.
 
 ## Deferred intentionally
 

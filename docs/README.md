@@ -6,16 +6,15 @@ direction and validation evidence.
 ## Current formal state
 
 ```text
-P0-P8 COMPLETE / ACCEPTED
-P8 focused dependency-light + Odoo validation PASS
-P8 real Evidence gates PASS (6/6)
-P9 focused validation PASS; real validation BLOCKED on primary Codex reauthentication
-P10 NOT YET ELIGIBLE
+P0-P9 COMPLETE / ACCEPTED
+P9 focused validation PASS
+P9 real Knowledge gates PASS (7/7)
+P10 ELIGIBLE — privilege-boundary ADR is the first HARD prerequisite
 ```
 
-P8 is accepted through `e370af8acb7df175c0a90c8e17520c8576b4c6ce`.
-The current P9 validation checkpoint is
-[`research/evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md`](research/evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md).
+P9 is accepted through `77d470febf67ddee46562907718dc47e975922bb`.
+The current P9 acceptance record is
+[`research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`](research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md).
 No new PASS evidence is inferred without executed evidence.
 
 ## Primary reading path

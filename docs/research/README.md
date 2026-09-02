@@ -19,18 +19,14 @@ Unexecuted validation is never PASS.
 ## Current cursor
 
 ```text
-P0-P8 COMPLETE / ACCEPTED
-P8 FOCUSED VALIDATION PASS
-P8 REAL EVIDENCE GATES PASS (6/6)
+P0-P9 COMPLETE / ACCEPTED
 P9 FOCUSED VALIDATION PASS
-P9 REAL VALIDATION BLOCKED ON PRIMARY CODEX REAUTHENTICATION
-P10 NOT YET ELIGIBLE
+P9 REAL KNOWLEDGE GATES PASS (7/7)
+P10 ELIGIBLE — PRIVILEGE-BOUNDARY ADR REQUIRED FIRST
 ```
 
-P8 acceptance is anchored at `e370af8acb7df175c0a90c8e17520c8576b4c6ce` and
-documented in `evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md`.
-The current P9 checkpoint is
-`evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md`.
+P9 acceptance is anchored at `77d470febf67ddee46562907718dc47e975922bb` and
+documented in `evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`.
 
 Use `EXECUTION_STATE.md` for the exact current SHA/cursor and validation debt.
 

@@ -8,11 +8,10 @@ intent chatbot.
 ## Current state
 
 ```text
-P0-P8 COMPLETE / ACCEPTED
-P8 focused dependency-light + Odoo validation PASS
-P8 real Evidence gates PASS (6/6)
-P9 focused validation PASS; real validation BLOCKED on primary Codex reauthentication
-P10 NOT YET ELIGIBLE
+P0-P9 COMPLETE / ACCEPTED
+P9 focused validation PASS
+P9 real Knowledge gates PASS (7/7)
+P10 ELIGIBLE — privilege-boundary ADR is the first HARD prerequisite
 ```
 
 The exact cursor is

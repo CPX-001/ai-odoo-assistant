@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 63
+State format: 64
 Updated: 2026-09-03
 
 ## Accepted lineage
@@ -18,28 +18,29 @@ P5.8 through 688f569d441a40a4637ad6a23f111e584e18c955
 P6 final acceptance through 0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0
 P7 final acceptance through 092ac57fe58a3a36765b115e78b2eca687f5dbbc
 P8 final acceptance through e370af8acb7df175c0a90c8e17520c8576b4c6ce
+P9 final acceptance through 77d470febf67ddee46562907718dc47e975922bb
 ```
 
 ## Current cursor
 
 ```text
-phase: 9
-phase_name: company Knowledge/RAG and source lifecycle
-active_slice: P9-FIRST-COHERENT-SLICE
-slice_state: FOCUSED_PASS_REAL_VALIDATION_BLOCKED
-current_gate_type: P9_REAL_VALIDATION
-blocking_implementation: none known after focused validation and browser repair
-blocking_validation: primary host CODEX_HOME requires reauthentication; the first provider-backed gate failed closed with codex_turn_failed / authentication / unauthorized
-latest_accepted_evidence: docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
-latest_phase_acceptance: docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
+phase: 10
+phase_name: developer/operator host operations
+active_slice: P10-PRIVILEGE-BOUNDARY-ADR
+slice_state: READY
+current_gate_type: HARD_DESIGN_PREREQUISITE
+blocking_implementation: privilege-boundary ADR must be accepted before host-operation capabilities
+blocking_validation: none for P9; all seven P9 real gates passed
+latest_accepted_evidence: docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
+latest_phase_acceptance: docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
 latest_implementation_record: docs/research/P9_KNOWLEDGE_FIRST_SLICE.md
-latest_validation_record: docs/research/evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md
-next_action: reauthenticate the normal primary host Codex session in /home/cpx/.codex, then rerun tests/e2e/p9_real_knowledge_gate.py against e227da1; accept P9 and move the cursor to P10 only if all seven real gates pass
+latest_validation_record: docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
+next_action: inspect ADR-024 and the current host/capability boundary, then complete the mandatory P10 privilege-boundary ADR before implementing any host-operation capability
 ```
 
 ## P9 first-slice implementation state
 
-Implemented on main but not yet validated in an execution environment:
+Implemented and accepted on main:
 
 ```text
 Odoo-native Knowledge source/chunk/temporary-attachment models
@@ -72,18 +73,19 @@ focused Odoo                                  PASS — 25 tests, 0 failures/erro
 focused HOOT                                  PASS — 1 test / 1 assertion
 focused browser/asset smoke                    PASS after attachment-marker repair
 P9-REAL-UPLOAD-INGEST                         PASS
-P9-REAL-CHAT-INGEST                           BLOCKED / NOT EXECUTED
-P9-REAL-FTS                                   BLOCKED / NOT EXECUTED
-P9-REAL-CITATIONS                             BLOCKED / NOT EXECUTED
-P9-REAL-ACL                                   BLOCKED / NOT EXECUTED
-P9-REAL-REINDEX                               BLOCKED / NOT EXECUTED
-P9-REAL-LARGE-DOCUMENT                        BLOCKED / NOT EXECUTED
+P9-REAL-CHAT-INGEST                           PASS
+P9-REAL-FTS                                   PASS
+P9-REAL-CITATIONS                             PASS
+P9-REAL-ACL                                   PASS
+P9-REAL-REINDEX                               PASS
+P9-REAL-LARGE-DOCUMENT                        PASS
 P9-REAL-SEMANTIC-GAIN                         NOT APPLICABLE unless vector backend is introduced
-P9 acceptance                                 NOT CLAIMED — P10 NOT YET ELIGIBLE
+P9 acceptance                                 COMPLETE / ACCEPTED — P10 ELIGIBLE
 ```
 
-The exact commands, focused repair and provider-authentication failure are recorded in
-`docs/research/evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md`.
+The exact commands, natural-FTS repair and seven-gate result are recorded in
+`docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`. The earlier
+authentication-blocked checkpoint remains historical evidence.
 
 ## P8 acceptance result
 
