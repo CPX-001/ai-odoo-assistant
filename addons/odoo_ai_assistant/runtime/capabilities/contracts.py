@@ -33,6 +33,13 @@ class FrozenDict(dict):
     def _immutable(*_args, **_kwargs):
         raise TypeError("frozen dict is immutable")
 
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        memo[id(self)] = self
+        return self
+
     __setitem__ = _immutable
     __delitem__ = _immutable
     clear = _immutable
@@ -49,6 +56,13 @@ class FrozenList(list):
     @staticmethod
     def _immutable(*_args, **_kwargs):
         raise TypeError("frozen list is immutable")
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        memo[id(self)] = self
+        return self
 
     __setitem__ = _immutable
     __delitem__ = _immutable
