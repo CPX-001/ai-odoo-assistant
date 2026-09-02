@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import math
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
+
 
 type JsonValue = (
     None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
@@ -21,6 +23,45 @@ type CapabilityActivityProjector = Callable[
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _VERSION_RE = re.compile(r"^[1-9][0-9]*$")
 _SETTING_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_MAX_CONTRACT_JSON_DEPTH = 32
+
+
+class FrozenDict(dict):
+    """A deeply immutable ``dict`` that preserves ``isinstance(value, dict)``."""
+
+    @staticmethod
+    def _immutable(*_args, **_kwargs):
+        raise TypeError("frozen dict is immutable")
+
+    __setitem__ = _immutable
+    __delitem__ = _immutable
+    clear = _immutable
+    pop = _immutable
+    popitem = _immutable
+    setdefault = _immutable
+    update = _immutable
+    __ior__ = _immutable
+
+
+class FrozenList(list):
+    """A deeply immutable ``list`` that preserves ``isinstance(value, list)``."""
+
+    @staticmethod
+    def _immutable(*_args, **_kwargs):
+        raise TypeError("frozen list is immutable")
+
+    __setitem__ = _immutable
+    __delitem__ = _immutable
+    append = _immutable
+    clear = _immutable
+    extend = _immutable
+    insert = _immutable
+    pop = _immutable
+    remove = _immutable
+    reverse = _immutable
+    sort = _immutable
+    __iadd__ = _immutable
+    __imul__ = _immutable
 
 
 class CapabilityError(RuntimeError):
@@ -29,7 +70,59 @@ class CapabilityError(RuntimeError):
     def __init__(self, code: str, *, details: Mapping[str, JsonValue] | None = None) -> None:
         super().__init__(code)
         self.code = code
-        self.details = dict(details or {})
+        self.details = freeze_contract_mapping(details or {})
+
+
+def freeze_contract_json(value: Any, *, _depth: int = 0) -> JsonValue:
+    """Deep-freeze JSON contracts while retaining normal ``dict``/``list`` identity.
+
+    The helper is deliberately generic and secret-agnostic. Evidence adds its own
+    redaction and byte/count limits on top of this representation.
+    """
+
+    if _depth > _MAX_CONTRACT_JSON_DEPTH:
+        raise CapabilityError("capability_contract_depth_exceeded")
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise CapabilityError("capability_contract_non_finite")
+        return value
+    if isinstance(value, str):
+        return value
+    if isinstance(value, Mapping):
+        frozen: dict[str, JsonValue] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise CapabilityError("capability_contract_key_invalid")
+            frozen[key] = freeze_contract_json(item, _depth=_depth + 1)
+        return FrozenDict(frozen)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return FrozenList(
+            freeze_contract_json(item, _depth=_depth + 1) for item in value
+        )
+    raise CapabilityError("capability_contract_type_invalid")
+
+
+def freeze_contract_mapping(
+    value: Mapping[str, JsonValue] | None,
+) -> Mapping[str, JsonValue]:
+    frozen = freeze_contract_json(dict(value or {}))
+    if not isinstance(frozen, dict):
+        raise CapabilityError("capability_contract_mapping_invalid")
+    return frozen
+
+
+def thaw_contract_json(value: Any) -> JsonValue:
+    """Return a mutable JSON copy for serialization/adapters that require one."""
+
+    if isinstance(value, Mapping):
+        return {str(key): thaw_contract_json(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [thaw_contract_json(item) for item in value]
+    return value
 
 
 class CapabilityRisk(StrEnum):
@@ -115,6 +208,8 @@ class CapabilitySetting:
             raise CapabilityError("capability_setting_choices_invalid")
         if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
             raise CapabilityError("capability_setting_range_invalid")
+        object.__setattr__(self, "default", freeze_contract_json(self.default))
+        object.__setattr__(self, "choices", tuple(self.choices))
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +219,10 @@ class CapabilityResult:
     data: Mapping[str, JsonValue]
     evidence: tuple[object, ...] = ()
     changes_preconditions: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "data", freeze_contract_mapping(self.data))
+        object.__setattr__(self, "evidence", tuple(self.evidence))
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +238,7 @@ class CapabilityPreview:
             or re.fullmatch(r"sha256:[0-9a-f]{64}", self.precondition_fingerprint) is None
         ):
             raise CapabilityError("capability_preview_fingerprint_invalid")
+        object.__setattr__(self, "summary", freeze_contract_mapping(self.summary))
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +247,9 @@ class CapabilityVerification:
 
     verified: bool
     summary: Mapping[str, JsonValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "summary", freeze_contract_mapping(self.summary))
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +268,11 @@ class CapabilityContext:
     settings: Mapping[str, JsonValue] = field(default_factory=dict)
     event_sink: CapabilityEventSink | None = None
     metadata: Mapping[str, JsonValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "screen", freeze_contract_mapping(self.screen))
+        object.__setattr__(self, "settings", freeze_contract_mapping(self.settings))
+        object.__setattr__(self, "metadata", freeze_contract_mapping(self.metadata))
 
     def emit(
         self,
@@ -242,9 +350,11 @@ class CapabilityDefinition:
             raise CapabilityError("capability_description_invalid")
         if self.title and len(self.title) > 160:
             raise CapabilityError("capability_title_invalid")
-        if self.input_schema.get("type") != "object":
+        input_schema = freeze_contract_mapping(self.input_schema)
+        output_schema = freeze_contract_mapping(self.output_schema)
+        if input_schema.get("type") != "object":
             raise CapabilityError("capability_input_schema_invalid")
-        if self.output_schema.get("type") != "object":
+        if output_schema.get("type") != "object":
             raise CapabilityError("capability_output_schema_invalid")
         if self.activity is not None and not isinstance(self.activity, CapabilityActivitySpec):
             raise CapabilityError("capability_activity_invalid")
@@ -290,6 +400,14 @@ class CapabilityDefinition:
             raise CapabilityError("capability_setting_duplicate")
         if len(set(self.required_groups)) != len(self.required_groups):
             raise CapabilityError("capability_group_duplicate")
+        object.__setattr__(self, "input_schema", input_schema)
+        object.__setattr__(self, "output_schema", output_schema)
+        object.__setattr__(self, "tags", tuple(self.tags))
+        object.__setattr__(self, "dependencies", tuple(self.dependencies))
+        object.__setattr__(self, "settings", tuple(self.settings))
+        object.__setattr__(self, "required_groups", tuple(self.required_groups))
+        object.__setattr__(self, "audit_metadata", freeze_contract_mapping(self.audit_metadata))
+        object.__setattr__(self, "developer_metadata", freeze_contract_mapping(self.developer_metadata))
 
     @property
     def namespace(self) -> str:
@@ -301,11 +419,20 @@ class CapabilityDefinition:
 
     def available_for(self, context: CapabilityContext) -> bool:
         user = getattr(context.env, "user", None)
-        if self.required_groups and (
-            user is None or any(not user.has_group(group) for group in self.required_groups)
-        ):
+        if self.required_groups:
+            if user is None:
+                return False
+            try:
+                if any(not user.has_group(group) for group in self.required_groups):
+                    return False
+            except Exception:
+                return False
+        if self.guard is None:
+            return True
+        try:
+            return bool(self.guard(context))
+        except Exception:
             return False
-        return self.guard(context) if self.guard is not None else True
 
     def wire_descriptor(self) -> dict[str, JsonValue]:
         """Transport-neutral, MCP-shaped descriptor; adapters may further translate it."""
@@ -315,8 +442,8 @@ class CapabilityDefinition:
             "name": self.name,
             "title": self.title or self.name,
             "description": self.description,
-            "inputSchema": dict(self.input_schema),
-            "outputSchema": dict(self.output_schema),
+            "inputSchema": thaw_contract_json(self.input_schema),
+            "outputSchema": thaw_contract_json(self.output_schema),
             "meta": {
                 "namespace": self.namespace,
                 "version": self.version,
