@@ -1,7 +1,8 @@
 # Research and execution guidance
 
-This directory contains living implementation playbooks, validation runbooks, product-eval specifications and named
-evidence. Research documents do not override current code/accepted ADRs.
+This directory contains implementation records, validation runbooks, product-eval
+specifications and named evidence. Research history does not override current code or
+accepted ADRs.
 
 ## Authority
 
@@ -10,7 +11,7 @@ When sources disagree, normally prefer:
 1. current code on `main` plus accepted ADRs;
 2. current architecture/subsystem docs;
 3. current tests and accepted real evidence;
-4. `EXECUTION_STATE.md` and active phase records;
+4. `EXECUTION_STATE.md` and the active phase record;
 5. older reports/external references.
 
 Unexecuted validation is never PASS.
@@ -19,47 +20,59 @@ Unexecuted validation is never PASS.
 
 ```text
 P0-P7 COMPLETE / ACCEPTED
-P8 ELIGIBLE / READY TO START
+P8.0 + P8.1/P8.2 FOUNDATION IMPLEMENTED
+P8 FOCUSED VALIDATION / REAL GATES PENDING
 P9+ NOT ELIGIBLE
 ```
 
-Phase 7 passed its consolidated Product Behavior, six real gates and final periodic regression at `092ac57`. The next
-work is the prepared P8 evidence-core slice; no P8 implementation is claimed yet.
+P7 acceptance is anchored at `092ac57fe58a3a36765b115e78b2eca687f5dbbc`.
+The current P8 Evidence foundation is implemented on `main` but is not accepted until
+its focused and real gates execute successfully.
 
-Use `EXECUTION_STATE.md` for the exact current SHA/cursor semantics.
+Use `EXECUTION_STATE.md` for the exact current SHA/cursor and validation debt.
 
-## Primary execution documents
+## Primary current documents
 
 | Document | Purpose |
 | --- | --- |
-| `EXECUTION_STATE.md` | Current cursor, acceptance debt and exact next action. |
+| `EXECUTION_STATE.md` | Compact current cursor, blockers, accepted evidence and exact next action. |
+| `P8_EVIDENCE_CORE_IMPLEMENTATION.md` | Implemented P8.0/P8.1/P8.2 foundation and explicit deferrals. |
+| `P8_FOCUSED_VALIDATION_RUNBOOK.md` | Focused dependency-light/Odoo validation required before live Evidence expansion. |
 | `CONTINUOUS_EXECUTION_PROTOCOL.md` | Restartable execution/validation rules. |
 | `REAL_ENV_VALIDATION_PROTOCOL.md` | Named gates requiring real Odoo/provider/browser paths. |
-| `PERIODIC_FULL_REGRESSION_RUNBOOK.md` | Canonical expensive final regression. |
-| `PRODUCT_BEHAVIOR_EVALS_V1.md` | Permanent user-visible product behavior baseline and 54-scenario catalog. |
-| `PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md` | Product Behavior implementation/real-gate handoff. |
-| `P7_MINI_FRAMEWORK_IMPLEMENTATION.md` | Current complete Phase-7 implementation record. |
-| `P7_CONSOLIDATED_VALIDATION_RUNBOOK.md` | Required next pass: P7 tests + Product Behavior + six P7 real gates + corrections. |
-| `P8_EVIDENCE_CORE_PREPARATION.md` | Prepared Phase-8 start, invariants, first coherent slice and HARD gates. |
-| `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` | P5+ product roadmap and phase requirements. |
-| `FOUNDATION_STABILIZATION_PLAYBOOK.md` | P0-P4 historical stabilization path. |
+| `PERIODIC_FULL_REGRESSION_RUNBOOK.md` | Canonical expensive broad regression when required. |
+| `PRODUCT_BEHAVIOR_EVALS_V1.md` | Permanent user-visible product behavior baseline. |
+| `P7_MINI_FRAMEWORK_IMPLEMENTATION.md` | Accepted Phase-7 extension-framework record. |
 
-Accepted P5/P6 records and historical evidence remain in this directory and `evidence/`.
+`P8_EVIDENCE_CORE_PREPARATION.md` is a completed historical preparation record and
+must not be read as the current cursor.
 
-## Phase-7 implementation boundary
+## Current P7/P8 boundary
 
-Current Phase-7 code includes:
+Accepted P7 provides:
 
 ```text
 CapabilityProvider installed-addon discovery/composition
 SkillDefinition / SkillCatalog
 ContextProvider / ContextProviderCatalog
-AssistantExtensionCatalog + live activation
-ProviderProfile + current Codex binding
-EffectiveAssistantManifest + admin diagnostics
-Business/Developer technical profile skeleton
-progressive-disclosure state contract with eager default
-trusted P7 fixture addon + prepared tests
+AssistantExtensionCatalog
+ProviderProfile
+EffectiveAssistantManifest
+progressive-disclosure state model
+```
+
+P8 extends that same seam with:
+
+```text
+CAPABILITY_PROVIDER_API_VERSION = "1"
+reserved core namespaces
+provider/guard failure isolation
+EvidenceProvider
+EvidenceProviderCatalog
+EvidenceRoutingPolicy
+EvidenceLedger
+assistant.runtime_inventory
+public User/Technical profile mapping
 ```
 
 Trust/authority remains:
@@ -67,86 +80,68 @@ Trust/authority remains:
 ```text
 Skill instructions       trusted behavior guidance, not authority
 ContextProvider output   untrusted contextual data
+Evidence content         untrusted data, never authority
 manifest/provider data   derived host metadata, not authority
 CapabilityDefinition     atomic executable unit
-host registry/executor   final validation/permission/policy authority
+host registry/executor   final permission/policy/execution authority
 ```
 
-The product stays eager for capability schemas until the disclosure gate shows that a lazy strategy improves cost
-without harming task/tool-selection quality.
+## P8 validation next
 
-## Consolidated validation next
-
-`P7_CONSOLIDATED_VALIDATION_RUNBOOK.md` defines the required order:
+Run the focused P8 gate before expanding live Evidence orchestration:
 
 ```text
-P7 dependency-light/static
-Product Behavior focused
-installed fixture Odoo tests
-Product Behavior SMOKE
-six P7 real gates
-Product Behavior FULL
-final affected/full regression
+focused dependency-light P8 tests
++ directly affected P7 extension/boundary tests
++ focused Odoo runtime-inventory Evidence test
++ static supported-surface cleanup checks
 ```
 
-Every HARD failure is repaired and rerun before Phase-7 acceptance.
+Repair failures at their owning layer and record exact execution evidence. Do not mark
+P8 PASS from committed test files alone. The full regression is not implied unless the
+active runbook/cursor or user requires it.
 
-## Accepted evidence through Phase 6
+## Accepted evidence
+
+P5/P6/P7 accepted evidence remains immutable historical proof. Important anchors:
 
 ```text
-P5.1 evidence/phase5/2026-08-28/P5.1-REAL-ACCEPTANCE-f7f924c.md
-P5.2 evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md
-P5.3 evidence/phase5/2026-08-29/P5.3-REAL-ACCEPTANCE-32e836e.md
-P5.4 evidence/phase5/2026-08-29/P5.4-REAL-ACCEPTANCE-3e2b38d.md
-P5.5 evidence/phase5/2026-08-29/P5.5-REAL-ACCEPTANCE-8427c88.md
-P5.6 evidence/phase5/2026-08-29/P5.6-REAL-ACCEPTANCE-720102f.md
-P5.7 evidence/phase5/2026-08-29/P5.7-REAL-ACCEPTANCE-074a71c.md
 P5.8 evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
 P6 final evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
+P7 acceptance evidence/phase7/2026-09-02/P7-ACCEPTANCE-092ac57.md
+P7 final regression evidence/regression/2026-09-02/FULL-REGRESSION-092ac57.md
 ```
 
-The earlier P7.1 foundation evidence remains historical focused evidence only; it does not validate the later complete
-Phase-7 integration.
-
-## Product Behavior gate
-
-Product Behavior v1 remains mandatory despite the user-directed sequencing change. It covers technical tests,
-product-contract E2E and agentic behavior with:
-
-- SMOKE and FULL suites;
-- HARD authority/safety/user-contract graders;
-- semantic quality scoring;
-- normal/limited/admin personas;
-- Spanish/Catalan/English cases;
-- provider/tool timing;
-- real answer streaming;
-- Direct vs one-shot Plan;
-- grounding/navigation/approval/batch/Stop/correction/multichat behavior.
-
-Historical Phase-4 answer-streaming evidence cannot substitute for the new current-lineage real first-delta check.
+Older preparation/blocker records remain historical and must not be rewritten to
+pretend they were already PASS at the time.
 
 ## External implementation references
 
-External Odoo/agent projects remain design references, not requirements. Useful concrete patterns include:
+External projects are design references, not requirements. Current useful patterns
+include:
 
-- OpenAI Agents namespaces/tool search for deferred large tool surfaces;
-- Apexive `odoo-llm` reuse of one tool framework from chat and MCP;
-- OCA `ai_tool` direction toward reusable tool definitions;
-- Pydantic-style bundle separation above atomic tools.
+- Odoo Agents/Skills/Sources and Odoo-native link/`auto_install` modules;
+- Pydantic AI capability composition/progressive disclosure;
+- FastMCP provider composition;
+- Apexive/OCA reusable tool/provider patterns;
+- ERPipe typed safe-write/diagnostic workflows;
+- OpenTelemetry GenAI naming/sensitive-content discipline.
 
-The project keeps its stronger Odoo/host authority boundary and does not add those frameworks merely for resemblance.
+The project keeps its stronger Odoo/host authority boundary and does not introduce a
+framework merely to resemble a reference.
 
 ## Execution rule
 
-Each future run reconstructs from Git:
+Every future run reconstructs from Git:
 
 ```text
 inspect current main
- -> read EXECUTION_STATE
+ -> read EXECUTION_STATE + current implementation record
  -> process new validation evidence first
  -> repair failed HARD gate if present
  -> otherwise follow exact current next action
  -> update code/tests/docs/evidence coherently
 ```
 
-No GitHub Actions are assumed while repository policy says usable runners are unavailable.
+No GitHub Actions are used for this roadmap while repository policy says runners are
+not the supported validation path.
