@@ -1,111 +1,76 @@
 # Architecture
 
-Current product architecture for `ai-odoo-assistant`. For the implementation snapshot see `CURRENT_STATE.md`; for target product behavior see `PRODUCT_VISION.md`; accepted ADRs remain decision authority.
+Current architecture for `CPX-001/ai-odoo-assistant`. Code plus accepted ADRs are
+authoritative. `CURRENT_STATE.md` summarizes the implementation and
+`research/EXECUTION_STATE.md` owns the roadmap cursor/validation debt.
 
 ## 1. Deployment unit
 
-The managed application is the Odoo 18 Community addon `odoo_ai_assistant`.
+The supported product is an Odoo 18 Community addon with an embedded agent runtime.
 
 ```text
 Browser / OWL
     |
-    | authenticated Odoo JSON/RPC
+    | authenticated Odoo RPC
     v
 Odoo 18 + odoo_ai_assistant
     |
     +-- Odoo PostgreSQL
     +-- native ir.cron turn workers
-    +-- <data_dir>/odoo_ai_assistant/*
-    +-- Codex App Server subprocess per provider decision/turn path
+    +-- provider-owned CODEX_HOME
+    +-- Codex App Server subprocess
 ```
 
-The supported runtime does not require the retired FastAPI/Uvicorn sidecar, second Assistant database, internal sidecar HTTP port or shared machine secret.
+The supported product requires no FastAPI/Uvicorn Assistant sidecar, second Assistant
+database, internal sidecar HTTP port or shared machine secret. The obsolete
+`auth="none"` inventory callback and its addon-local machine-auth primitive are
+removed.
 
-Future privileged host operations may require a narrow local privilege broker/helper. That is not the retired Assistant sidecar and cannot be introduced without a dedicated ADR defining its authority and installation boundary.
+Future host-level privilege may require a narrow local broker. ADR-024 is proposed
+only; that broker must not become a general sidecar or passwordless-root Odoo process.
 
 ## 2. Authority boundary
 
-Odoo/host code is authoritative for:
-
-- authenticated user and allowed companies;
-- ACLs, record rules and field access;
-- model/schema visibility;
-- conversation/turn state;
-- capability/provider discovery and configuration;
-- planning strategy and immutable turn settings;
-- autonomy/policy/technical access profile;
-- agent budget ceilings;
-- approval state;
-- TaskPlan transition rules;
-- EffectPlan preparation/execution/verification/recovery;
-- recovery-unit classification and EffectJournal state;
-- public activity/failure/progress projection;
-- future Evidence/Knowledge access policy;
-- scheduler capacity/backpressure.
-
-The reasoning provider is not authority. It may reason broadly and request supported operations, but each operation is resolved against current host state.
-
-Business capabilities execute under the effective user and must not gain `su=True` as a shortcut. Host-internal infrastructure may use privileged mechanics only for narrowly defined internal coordination/operations.
-
-## 3. Durable turn model
-
-A browser submit persists the user message and `odoo.ai.turn` before long reasoning begins.
-
-Current turn processing uses:
-
-- queued/running/approval/terminal states;
-- lease token and expiry;
-- bounded attempts;
-- cancellation;
-- stale-turn recovery;
-- two native cron runner slots;
-- an administrator-configurable logical execution ceiling currently bounded to those two physical slots;
-- a short host-internal PostgreSQL advisory lock for race-safe admission/claim;
-- one active causal turn per conversation;
-- cross-user anti-starvation ordering;
-- post-release scheduler wake-up;
-- bounded aggregate scheduler diagnostics.
-
-The scheduler claim transaction uses `READ COMMITTED` locally before acquiring the advisory lock so a worker that waited for another claim observes the previous committed claim. Provider/business execution never holds the scheduler coordination lock.
-
-Excess work remains durable `queued`; scheduler saturation is not treated as a turn failure. `running` and `cancel_requested` consume execution capacity. `awaiting_confirmation` releases worker capacity while continuing to block later turns in the same conversation. `recovery_required` remains non-replayable but is terminal for scheduler eligibility.
-
-The current physical pool still has two cron slots. P5.2 makes capacity/backpressure explicit for that pool; future measurement/provider support may justify a larger runner pool without changing turn authority or recovery semantics.
-
-P5.2 is implemented and accepted through its batched deterministic/Odoo/regression/real gates. See
-`research/P5.2_SCHEDULER_IMPLEMENTATION.md` and
-`research/evidence/phase5/2026-08-29/P5.2-REAL-ACCEPTANCE-b4fbb03.md`.
-
-## 4. Concurrency boundary
-
-A running turn is background server work, not a browser lock.
-
-P5.1 established per-conversation frontend execution scopes. Chat A may continue in the background while the user opens or submits Chat B; late A activity/stream/failure updates remain owned by A, and model/autonomy/planning selectors affect future turns rather than mutating A's captured snapshot.
-
-P5.2 extends the same product rule into backend scheduling:
+Odoo/host code owns:
 
 ```text
-Chat A turn running
-   |
-   +-- user may switch to Chat B
-   +-- Odoo remains usable
-   +-- selectors/settings remain usable
-   +-- Chat B may submit/run when capacity exists
-   +-- later Chat A turn waits for A's unresolved predecessor
-   +-- excess global work remains queued under backpressure
+identity + companies
+ACL / record rules / field access
+schema/capability visibility
+conversation/turn durability
+CapabilityProvider composition
+Skills / Context / Evidence availability
+budgets
+policy/autonomy/approval
+EffectPlan + write barrier
+execution + verification + recovery
+audit/public progress projections
+scheduler/backpressure
 ```
 
-The ordering rule is one active causal turn per conversation, multiple conversations in parallel up to effective capacity. This prevents racing two messages against the same unresolved conversation context while still allowing real multitasking.
+The model proposes. It cannot grant permissions, approve itself, reveal hidden tools
+or turn Evidence into authority.
 
-Scheduler fairness prefers users consuming fewer active slots, then the least recently served waiting user, then FIFO within that service order. One user may still use spare capacity when nobody else is waiting.
+Normal business operations use the effective Odoo `Environment` with `su=False`.
 
-A turn captures the execution settings/policy/model/profile/planning strategy it requires. UI changes made while it runs affect future turns rather than changing the running turn retroactively.
+## 3. Durable turn runtime
 
-## 5. Agent runtime
+A submitted message is persisted before long-running provider work. The current
+accepted P5/P6 path provides:
 
-`AgentTurnService` is the current host loop. A provider-neutral reasoning seam returns one validated `NextDecision` at a time.
+- queued/running/approval/terminal states;
+- lease/attempt/cancellation/stale recovery;
+- native cron claim workers and bounded concurrency;
+- one active causal turn per conversation;
+- cross-conversation parallelism/fairness;
+- immutable per-turn model/reasoning/autonomy/planning settings;
+- persisted public/live events and reconnectable status.
 
-Conceptually:
+A browser connection does not own the server turn.
+
+## 4. Provider-neutral agent loop
+
+`AgentTurnService` and the provider-neutral decision layer operate conceptually as:
 
 ```text
 provider decision
@@ -115,213 +80,247 @@ provider decision
   OR plan_step_proposal
 ```
 
-`PlanningDecisionEngine` sits above provider adapters. `adaptive`, `deliberate` and `auto` are orchestration modes captured per turn; they never grant capability or write authority. Deliberate mode requires an initial public TaskPlan before capability/effect requests, while structural replans require new host-observed evidence.
+Provider output is validated input. The host resolves effective capability identity,
+schema, budgets, policy and effect state.
 
-The host validates capability identity, schema, effective availability and budget families. READ results/errors become bounded private working items and may drive another provider decision.
+`TaskPlan` is public orchestration/progress. `EffectPlan` is a separate typed
+host-authorized effect proposal. Neither is private chain-of-thought.
 
-The action path accumulates a bounded typed EffectPlan of up to five steps. Every step remains one `CapabilityDefinition`; there is no generic provider-authored program, arbitrary ORM method, SQL or shell execution surface.
+Codex-specific code stays below this boundary and owns App Server transport,
+Structured Outputs translation, provider events/errors, streaming deltas and
+steer/interrupt mechanics.
 
-After verified effects, PLAN authority is removed. A verified receipt may return to read-only reasoning so the provider can synthesize the natural final answer without replaying the effect.
+## 5. Capability architecture
 
-## 6. Capability framework
-
-`CapabilityDefinition` is the atomic executable contract. `CapabilityRegistry` creates effective views and `CapabilityExecutor` executes resolved definitions.
-
-Current core providers include:
-
-```text
-runtime/capabilities/providers/
-  odoo_query.py
-  odoo_actions.py
-  odoo_batch.py
-  odoo_runtime.py
-  odoo_navigation.py
-  odoo_compensations.py
-  odoo_unarchive.py
-```
-
-Future composition is additive:
+`CapabilityDefinition` is the atomic executable contract.
 
 ```text
 CapabilityProvider
   -> Skill / Bundle
-  -> CapabilityDefinition
-  -> optional ContextProvider / EvidenceProvider
+      -> CapabilityDefinition selectors
+      -> ContextProvider selectors
+      -> EvidenceProvider selectors
 ```
 
-No parallel chat/MCP/automation registry is introduced.
+The current provider API is versioned (`CAPABILITY_PROVIDER_API_VERSION = "1"`).
+Core namespaces are reserved. Optional provider/guard/Evidence failures are isolated;
+required authority can fail closed.
 
-The framework is not permanently restricted to CRUD. Explicit future capabilities may wrap source reads, logs, Odoo module/config operations, web evidence or approved host operations when their schemas, profiles, policy, privilege boundary and verification are defined.
+The same registry/executor is the intended authority source for future chat,
+automation, AI-field and MCP projections. No parallel tool registry is introduced.
 
-See `CAPABILITY_FRAMEWORK.md`.
+There is no arbitrary SQL, Python, shell, sudo or unrestricted ORM-method surface.
 
-## 7. Context architecture
+## 6. Context architecture
 
-Current turn input includes bounded user/screen/conversation/capability context plus immutable per-turn model, reasoning, policy and planning settings. Screen context is an untrusted navigation hint; user/company/permissions are reconstructed server-side.
-
-The target Context Orchestrator keeps a small reliable base and resolves additional context just in time:
+Turns start with a small bounded base derived from host state:
 
 ```text
-BaseContext
-  user/company/lang/tz
-  Odoo/database/version
-  current screen/record hints
-  conversation state
-  Assistant manifest summary
-
-+ ContextProviders
-  module/schema/view/action
-  domain-specific context
-  source/log/runtime context
+user/company/lang/tz
+screen/record/view hints
+conversation state
+effective Assistant manifest
+immutable turn settings
 ```
 
-Global potential knowledge is not dumped into every prompt.
+`ContextProvider`s add just-in-time contextual data selected by active Skills. Their
+content is untrusted data and cannot change permissions/policy/tool authority.
 
-## 8. Evidence/retrieval architecture
+Global installation knowledge is not dumped into every prompt.
 
-There is currently no general embedded RAG provider.
+## 7. Evidence architecture
 
-Target:
+P8 introduces a shared non-executable Evidence layer:
 
 ```text
 EvidenceProvider
-  -> normalized Evidence
-      provenance / locator / fingerprint / freshness
-      bounded data/excerpt / access scope / citation
+  -> EvidenceRef
+      locator + provenance + access scope
+      fingerprint/freshness + trust
+  -> EvidenceItem
+      bounded excerpt/data
+  -> EvidenceLedger
+      bounded selected refs/items for continuation/citations
 ```
 
-Evidence sources include live Odoo/runtime facts, source/XML, logs, company Knowledge, lexical/semantic indexes and future web/connectors.
+`EvidenceProviderCatalog` handles availability/search/fetch isolation and
+`EvidenceRoutingPolicy` prioritizes source classes according to the question without
+becoming a rigid intent router.
 
-Live business records remain live Odoo authority. Retrieved content is never policy.
+Evidence is always data. Search/fetch access is checked against the current context;
+fetch revalidates access and freshness.
 
-See `KNOWLEDGE_INDEX.md`.
+The first real provider, `assistant.runtime_inventory`, exposes bounded current
+installation facts (release, sanitized DB identity, installed modules, registry
+fingerprint). Mutable business truth remains live ORM authority.
 
-## 9. Provider boundary
+See `EVIDENCE_ARCHITECTURE.md`.
 
-Codex App Server is the primary current provider and is owned as a local subprocess by the Odoo runtime identity. Credentials remain provider-owned in one host-configured primary `CODEX_HOME` consumed by the installation. Odoo users share that provider identity and quota, never Odoo business authority or conversation data.
+## 8. Source scope
 
-The product contract is provider-neutral. TaskPlan, EffectPlan, budgets, recovery units, EffectJournal, ACL/policy/approval and execution remain above the provider adapter. Codex-specific code owns App Server transport, Structured Outputs translation, provider events/errors and steer/interrupt behavior.
+P8 source intelligence must prefer the current installation and avoid accidental
+contamination from retired implementation lineages.
 
-Future `ProviderProfile` feature negotiation may record capabilities such as structured output, tool calls, answer streaming, vision/file input, web and context support as `native`, `emulated` or `unavailable`.
+Default current sources include the active addon, installed/trusted addons, Odoo 18
+core/addons and current tests when behavior evidence is requested. Historical
+`service/`, `installer/`, root migrations, old task packets and evidence archives are
+excluded from normal current context by policy, not deleted.
 
-Do not reduce every provider to a lowest common denominator. The Assistant manifest/UI should accurately expose effective features.
+See `CONTEXT_SOURCE_POLICY.md` and
+`addons/odoo_ai_assistant/runtime/context_source_policy.json`.
 
-## 10. Live public activity, TaskPlan and answer projection
+## 9. Effective Assistant manifest
 
-Current `main` includes accepted P3/P4 production implementation for public activity and answer streaming plus the Phase-6 candidate TaskPlan projection.
-
-### Public activity
-
-Runtime lifecycle is projected into closed bounded `PublicTurnEvent` data and persisted in an independent `odoo.ai.turn.live.event` transaction. This allows a second browser request to observe progress without committing the worker business transaction.
-
-### TaskPlan
-
-The latest validated TaskPlan is public progress data, not private reasoning. Running status exposes a bounded TaskPlan without capability arguments. The frontend keeps the highest host-validated revision and prefers the authoritative final response on equal revisions, preventing a stale live poll from hiding the terminal plan.
-
-### Answer
-
-Codex `item/agentMessage/delta` events are parsed only for the structured user-facing answer field. Provisional answer deltas are non-authoritative and share the independent live stream store. Final validated `NextDecision` remains authoritative.
-
-### Browser
-
-The current browser consumes `/odoo_ai/v1/turn/live` and `/turn/status` through Odoo-authenticated polling. Activity, TaskPlan, readable reasoning summary and answer are separate UI/data surfaces.
-
-Polling vs SSE/bus is an optimization decision; persisted turn/live state is the authority.
-
-## 11. Effect lifecycle and recovery units
-
-Current bounded effect path:
+`EffectiveAssistantManifest` is a host-derived self-description, not an authority
+registry. It projects sanitized effective state such as:
 
 ```text
-one or more typed proposals (max 5)
- -> host accumulate + dependency ordering
- -> prepare/preview + preconditions for every step
- -> policy/approval
- -> revalidate version/binding/preconditions
+provider profile/features
+public product profile
+active Skills
+model-visible capabilities
+ContextProvider IDs
+EvidenceProvider IDs
+configuration/availability summaries
+```
+
+Retrieved Evidence content, secrets and host-only details do not belong in the
+manifest.
+
+## 10. Product profiles and autonomy
+
+Product-facing profiles are exactly:
+
+```text
+User / non-technical
+Technical
+```
+
+Internal historical names may map to these two values for compatibility. The future
+Technical/host broker is an execution boundary, not another human profile.
+
+Autonomy is independent of technical reach. Full-control can suppress redundant
+confirmation only when trusted policy allows an effect the effective user is already
+permitted to perform. It cannot expand Odoo authority.
+
+## 11. Effect lifecycle and recovery
+
+Current bounded effects use:
+
+```text
+typed proposals
+ -> prepare/preview + preconditions
+ -> policy / approval when required
+ -> revalidate binding/preconditions
  -> recovery-unit checkpoint / write barrier
  -> execute as effective user
- -> verify each step
- -> verified receipt + EffectJournal / recovery state
- -> post-effect read/final synthesis with PLAN disabled
+ -> verify
+ -> receipt / EffectJournal / recovery state
 ```
 
-Prepared plans use current format-v3 recovery metadata while preserving format-v1/v2 execution compatibility.
+Recovery semantics distinguish Odoo-atomic, segmented and external/uncertain units.
+Persisted in-flight effects are never blindly replayed and ambiguous writes are not
+auto-retried.
 
-Recovery units are host-derived from trusted capability metadata:
+## 12. Public activity and streaming
+
+Public progress is a sanitized projection of host-observed work, not model private
+reasoning. Persisted activity, TaskPlan/reasoning summary and answer streaming are
+separate data surfaces.
+
+The browser currently consumes authenticated Odoo polling/live cursors. Polling vs
+bus/SSE remains an optimization; durable Odoo state is authoritative.
+
+Raw prompts, private reasoning, sensitive tool arguments/results and credentials must
+not be emitted as public progress.
+
+## 13. Observability
+
+ADR-023 defines host-owned observability around:
 
 ```text
-odoo_atomic  consecutive Odoo-local steps intentionally sharing one transaction/recovery unit
-segmented    explicit durable internal unit boundary
-external     external/non-transactional unit whose in-flight interruption may remain uncertain
+turn
+provider decision/generation
+capability call
+Evidence search/fetch
+effect preview / approval wait / execute / verify
+public-delivery checkpoint
 ```
 
-Before crossing each new durable unit the host preflights the unit, reacquires the effect lock and rechecks Stop/redirect. Completed non-final segmented units can be durably distinguished from later units. A persisted in-flight unit is never blindly replayed.
+Default telemetry is metadata/timing/outcome/counts/bytes, not full sensitive
+content. Detailed diagnostic content requires explicit authorization, redaction,
+bounds and retention policy.
 
-If an Odoo-local transaction is lost, the host may classify the unit as rolled back when that is actually knowable. External/non-transactional ambiguity remains `uncertain` until a dedicated recovery procedure resolves it.
+No second tracing database or mandatory sidecar is introduced.
 
-## 12. Persistence
+## 14. Secret handling
 
-Operational state is Odoo-native:
+Secret-looking values in Evidence/metadata are redacted by bounded normalization.
+A secret pasted by the user is data, not authority, and should not automatically
+block otherwise safe work. Derived traces/Evidence/progress should avoid reproducing
+it and the user should be warned without unnecessary re-emission.
+
+Assistant-presented secrets require a dedicated masked/copy/reveal UI before that
+behavior can be claimed complete.
+
+## 15. Module/domain architecture
+
+The current core manifest still depends on `sale` and `account`. P7 makes future
+Odoo-native domain/link addons possible:
+
+```text
+odoo_ai_assistant
+odoo_ai_assistant_sale
+odoo_ai_assistant_account
+...
+```
+
+This split is not performed merely for aesthetics. It must preserve one customer
+product/install experience and be proven with clean install/update/uninstall tests.
+Odoo's `auto_install` link-module pattern is the preferred reference where correct.
+
+## 16. Future repository/host operations
+
+The direction is **discovery + bounded Evidence + typed promotion**, not shell or ORM
+escape hatches.
+
+A future `ModuleAcquisitionSession` can resolve arbitrary candidate repositories,
+perform bounded web/repo/manifest/license/dependency/static preflight, assess
+compatibility/risk, then select a policy-driven direct or staged path. Allowlists may
+be trust signals/customer policy but are not universal product requirements.
+
+Operations that truly cross the OS/service/filesystem privilege boundary belong
+behind the minimal ADR-024 broker with fixed schemas, managed roots/targets,
+request binding, time/output bounds, receipts and recovery.
+
+## 17. Persistence
+
+Operational state stays Odoo-native:
 
 - conversations/messages/turns;
-- queue/lease/recovery state;
-- scheduler service watermark (`scheduler_claimed_at`);
-- failure payloads;
-- TaskPlan working state;
-- effect plans/receipts and recovery units;
-- short-lived `odoo.ai.effect.journal` records;
-- public/live event state;
-- current settings/configuration.
+- queue/lease/recovery;
+- working items and public events;
+- effect plans/receipts/EffectJournal;
+- configuration;
+- bounded Evidence ledger/state when continuation requires durability.
 
-The EffectJournal stores bounded recent before/after/receipt evidence and classification for recovery/inspection. It is not a backup, unlimited audit warehouse or chain-of-thought store; current retention is intentionally short and scheduled for cleanup.
+No P8 design restores the retired Assistant SQLAlchemy database.
 
-Future ConversationContext/EvidenceLedger/KnowledgeSource subsystems should also remain Odoo-owned unless a specific ADR/evaluation demonstrates a strong reason otherwise.
+## 18. Validation architecture
 
-Historical root migrations/Assistant SQLAlchemy DB are retired lineage.
-
-## 13. Filesystem
-
-`RuntimePaths.from_odoo()` derives runtime/cache/source paths below Odoo `data_dir`. The persistent provider home comes from the absolute host `CODEX_HOME`; when absent, the managed `<data_dir>/odoo_ai_assistant/codex` path remains a compatible fallback. Current code validates external homes and rejects unsafe managed paths/symlinks.
-
-Future source/host capabilities must use explicit approved roots/locators; a reasoning provider does not gain arbitrary filesystem authority merely because Odoo can read files.
-
-## 14. Technical access
-
-Autonomy and technical reach are different axes.
-
-Target technical profiles:
-
-```text
-Business/User
-Developer/Operator
-```
-
-Developer operations such as module update, Odoo config patch, service restart or PostgreSQL diagnostics require specialized capabilities. Privileged OS operations require a new ADR/privilege boundary; `Full access` autonomy alone cannot grant them.
-
-## 15. Evolution rule
-
-Before adding a subsystem:
-
-1. reuse current durable turn/capability/policy/recovery infrastructure;
-2. keep model-facing description separate from host authority;
-3. define deterministic + agentic + real blocking gates;
-4. use an ADR for changes to deployment/privilege/persistence/effect invariants;
-5. borrow tested Odoo patterns where useful without adding dependencies by reflex.
-
-Useful references include OCA `queue_job` for bounded background concurrency, OCA `ai_tool` for reusable UI/tool declaration, and Apexive for provider/Knowledge/domain-tool breadth. They are implementation references, not authority replacements.
-
-## 16. Validation architecture
-
-The repository uses risk-based incremental validation during implementation and batches expensive broad/real checks into explicitly named periodic checkpoints.
+Validation is incremental and evidence-based:
 
 ```text
 changed contract
- -> focused unit/contract tests when practical
- -> directly affected Odoo or browser boundary
- -> accumulate broad/real validation debt
- -> periodic full regression on one exact candidate SHA
+ -> focused unit/contract tests
+ -> directly affected Odoo/browser boundary
+ -> named real gates when required
+ -> periodic full regression only when the runbook/user requires it
 ```
 
-The current Phase-6 candidate is implementation-complete but not accepted. The canonical periodic runbook is `research/PERIODIC_FULL_REGRESSION_RUNBOOK.md`; it combines deterministic current contracts, complete addon tests, complete HOOT and all accumulated named real-product gates.
+P7 is accepted. P8.0 + P8.1/P8.2 foundation is implemented but focused
+P8 dependency-light/Odoo tests and P8 real gates remain pending. Do not treat a
+committed test or implementation as PASS.
 
-A passing historical phase or committed test file is not evidence that the current candidate passed. Required but unexecuted gates remain explicit validation debt.
+See `research/P8_FOCUSED_VALIDATION_RUNBOOK.md` and
+`research/EXECUTION_STATE.md`.
