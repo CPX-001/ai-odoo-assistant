@@ -10,11 +10,14 @@ from .context import ContextProviderCatalog
 from .contracts import CapabilityContext, CapabilityError, JsonValue
 from .disclosure import CapabilityDisclosureSnapshot, build_disclosure_snapshot
 from .features import ProviderProfile
+from .profiles import product_profile_from_technical
 from .registry import CapabilityRegistry
 from .skills import SkillCatalog
 
 
 class TechnicalAccessProfile(StrEnum):
+    """Internal compatibility seam; public projections use User/Technical only."""
+
     BUSINESS = "business"
     DEVELOPER = "developer"
 
@@ -36,7 +39,10 @@ class EffectiveAssistantManifest:
     def browser_payload(self) -> dict[str, JsonValue]:
         return {
             "provider": dict(self.provider),
-            "technical_profile": self.technical_profile.value,
+            # BUSINESS/DEVELOPER remain internal compatibility names only.
+            "technical_profile": product_profile_from_technical(
+                self.technical_profile
+            ).value,
             "skills": [dict(item) for item in self.skills],
             "capabilities": [dict(item) for item in self.capabilities],
             "context_providers": [dict(item) for item in self.context_providers],
@@ -55,8 +61,11 @@ def technical_access_profile_for_env(env) -> TechnicalAccessProfile:
     """Describe technical reach without granting any new execution authority."""
 
     user = getattr(env, "user", None)
-    if user is not None and user.has_group("base.group_system"):
-        return TechnicalAccessProfile.DEVELOPER
+    try:
+        if user is not None and user.has_group("base.group_system"):
+            return TechnicalAccessProfile.DEVELOPER
+    except Exception:
+        return TechnicalAccessProfile.BUSINESS
     return TechnicalAccessProfile.BUSINESS
 
 
@@ -128,7 +137,14 @@ def build_effective_assistant_manifest(
     provider_health = tuple(
         {
             "provider_id": item.provider_id,
+            "version": item.version,
+            "api_version": item.api_version,
             "state": item.state,
+            "optional": item.optional,
+            "capability_count": item.capability_count,
+            "skill_count": item.skill_count,
+            "context_provider_count": item.context_provider_count,
+            "evidence_provider_count": item.evidence_provider_count,
             "error_code": item.error_code or None,
         }
         for item in registry.provider_statuses
