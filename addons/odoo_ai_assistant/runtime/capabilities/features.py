@@ -58,7 +58,10 @@ class ProviderProfile:
             raise CapabilityError("provider_profile_id_invalid")
         if not _VERSION_RE.fullmatch(self.version):
             raise CapabilityError("provider_profile_version_invalid")
-        feature_names = [item.feature for item in self.features]
+        features = tuple(self.features)
+        if any(not isinstance(item, ProviderFeatureSupport) for item in features):
+            raise CapabilityError("provider_feature_invalid")
+        feature_names = [item.feature for item in features]
         if len(set(feature_names)) != len(feature_names):
             raise CapabilityError("provider_feature_duplicate")
         if set(feature_names) != set(ProviderFeature):
@@ -70,6 +73,7 @@ class ProviderProfile:
         ):
             if value is not None and (type(value) is not int or value <= 0):
                 raise CapabilityError("provider_capacity_invalid")
+        object.__setattr__(self, "features", features)
 
     def support(self, feature: ProviderFeature) -> ProviderFeatureSupport:
         return next(item for item in self.features if item.feature is feature)
