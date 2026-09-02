@@ -11,7 +11,12 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
-from .contracts import CapabilityContext, CapabilityError, JsonValue
+from .contracts import (
+    CapabilityContext,
+    CapabilityError,
+    JsonValue,
+    freeze_contract_mapping,
+)
 
 _ID_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _NAMESPACE_SELECTOR_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\.\*$")
@@ -47,15 +52,19 @@ class SkillDefinition:
             raise CapabilityError("skill_title_invalid")
         if len(self.instructions) > 12_000:
             raise CapabilityError("skill_instructions_invalid")
-        if len(self.examples) > 16 or any(
+        examples = tuple(self.examples)
+        capability_selectors = tuple(self.capability_selectors)
+        context_provider_selectors = tuple(self.context_provider_selectors)
+        evidence_provider_selectors = tuple(self.evidence_provider_selectors)
+        if len(examples) > 16 or any(
             not isinstance(item, str) or not item.strip() or len(item) > 2_000
-            for item in self.examples
+            for item in examples
         ):
             raise CapabilityError("skill_examples_invalid")
         for selectors in (
-            self.capability_selectors,
-            self.context_provider_selectors,
-            self.evidence_provider_selectors,
+            capability_selectors,
+            context_provider_selectors,
+            evidence_provider_selectors,
         ):
             if len(set(selectors)) != len(selectors):
                 raise CapabilityError("skill_selector_duplicate")
@@ -63,6 +72,20 @@ class SkillDefinition:
                 raise CapabilityError("skill_selector_invalid")
         if self.eval_owner and len(self.eval_owner) > 160:
             raise CapabilityError("skill_eval_owner_invalid")
+        object.__setattr__(self, "examples", examples)
+        object.__setattr__(self, "capability_selectors", capability_selectors)
+        object.__setattr__(self, "context_provider_selectors", context_provider_selectors)
+        object.__setattr__(self, "evidence_provider_selectors", evidence_provider_selectors)
+        object.__setattr__(
+            self,
+            "activation_metadata",
+            freeze_contract_mapping(self.activation_metadata),
+        )
+        object.__setattr__(
+            self,
+            "configuration_metadata",
+            freeze_contract_mapping(self.configuration_metadata),
+        )
 
 
 class SkillCatalog:
