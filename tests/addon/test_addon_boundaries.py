@@ -25,22 +25,25 @@ def test_browser_assets_use_only_authenticated_odoo_routes() -> None:
     assert "t-raw" not in source
 
 
-def test_retired_internal_callback_and_machine_auth_are_absent() -> None:
+def test_retired_internal_callback_machine_auth_and_inventory_service_are_absent() -> None:
     controllers = ADDON_ROOT / "controllers"
     security = ADDON_ROOT / "security"
+    services = ADDON_ROOT / "services"
 
     assert not (controllers / "internal_tools.py").exists()
     assert not (security / "machine_auth.py").exists()
+    assert not (services / "instance_inventory.py").exists()
 
     supported_python = "\n".join(
         path.read_text(encoding="utf-8")
-        for root in (controllers, security)
+        for root in (controllers, security, services)
         for path in root.rglob("*.py")
     )
     assert 'auth="none"' not in supported_python
     assert "auth='none'" not in supported_python
     assert "require_machine_secret(" not in supported_python
     assert "/odoo_ai/internal/v1/instance-inventory" not in supported_python
+    assert "collect_instance_inventory" not in supported_python
 
 
 def test_turn_controller_is_the_authenticated_browser_ingress() -> None:
