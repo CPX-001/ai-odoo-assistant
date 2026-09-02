@@ -32,28 +32,28 @@ class AssistantTurnKnowledgeAttachments(models.Model):
         screen,
         conversation_uuid=None,
         client_request_id=None,
+        planning_mode="adaptive",
     ):
         clean_message, tokens = _parse_attachment_markers(message)
-        if not tokens:
-            return super().enqueue_for_current_user(
-                message=message,
-                screen=screen,
-                conversation_uuid=conversation_uuid,
-                client_request_id=client_request_id,
-            )
-
-        attachments = self.env["odoo.ai.knowledge.attachment"].owned_by_tokens(tokens)
-        if any(item.turn_id for item in attachments):
-            bound_turns = {item.turn_id.turn_uuid for item in attachments if item.turn_id}
-            if len(bound_turns) != 1:
-                raise AccessError("Assistant attachment already bound")
+        effective_message = clean_message if tokens else message
+        attachments = self.env["odoo.ai.knowledge.attachment"].browse()
+        if tokens:
+            attachments = self.env["odoo.ai.knowledge.attachment"].owned_by_tokens(tokens)
+            if any(item.turn_id for item in attachments):
+                bound_turns = {item.turn_id.turn_uuid for item in attachments if item.turn_id}
+                if len(bound_turns) != 1:
+                    raise AccessError("Assistant attachment already bound")
 
         result = super().enqueue_for_current_user(
-            message=clean_message,
+            message=effective_message,
             screen=screen,
             conversation_uuid=conversation_uuid,
             client_request_id=client_request_id,
+            planning_mode=planning_mode,
         )
+        if not tokens:
+            return result
+
         turn_uuid = result.get("turn_id") if isinstance(result, dict) else None
         if not isinstance(turn_uuid, str) or not turn_uuid:
             raise ValidationError("Assistant turn was not persisted")
@@ -79,8 +79,9 @@ class AssistantTurnKnowledgeAttachments(models.Model):
                 "conversation_id": conversation.id if conversation else False,
             }
         )
-        augmented = _augment_message(clean_message, descriptors)
-        turn.with_user(SUPERUSER_ID).write({"input_message": augmented})
+        turn.with_user(SUPERUSER_ID).write(
+            {"input_message": _augment_message(clean_message, descriptors)}
+        )
         return result
 
 
