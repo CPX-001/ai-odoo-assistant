@@ -17,6 +17,17 @@ for package_name, package_path in (
     package.__path__ = [str(package_path)]
     sys.modules.setdefault(package_name, package)
 
+# Other dependency-light tests may leave a namespace-only capabilities package in
+# sys.modules during consolidated collection. Ensure the runtime adapter sees the
+# real package exports rather than an import-order-dependent placeholder.
+capability_package = "addons.odoo_ai_assistant.runtime.capabilities"
+existing_capabilities = sys.modules.get(capability_package)
+if existing_capabilities is not None and not hasattr(
+    existing_capabilities, "CapabilityContext"
+):
+    del sys.modules[capability_package]
+importlib.import_module(capability_package)
+
 codex_module = importlib.import_module("addons.odoo_ai_assistant.runtime.agent.codex")
 control_module = importlib.import_module(
     "addons.odoo_ai_assistant.runtime.agent.interactive_codex"
