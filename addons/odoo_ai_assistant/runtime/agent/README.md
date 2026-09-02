@@ -1,8 +1,10 @@
 # Agent runtime
 
-This directory implements the **host-owned provider-neutral agent loop**. A capable model chooses the next useful operation while Odoo owns sequencing, capability resolution, budgets, effects, approval, verification and recovery semantics.
+This directory implements the **host-owned provider-neutral agent loop**. The model
+chooses a proposed next step; Odoo owns sequencing, effective capabilities, budgets,
+Evidence/context projection, effects, policy/approval, verification and recovery.
 
-The key idea from ADR-019 remains: **one untrusted decision at a time**.
+The ADR-019 principle remains: **one untrusted decision at a time**.
 
 ## Mental model
 
@@ -16,11 +18,11 @@ stateDiagram-v2
     ValidateDecision --> EffectStep: plan_step_proposal
     ValidateDecision --> Final: final_answer
     TaskPlan --> PersistProgress
-    PersistProgress --> AskProvider
+    PersistProgress --> BuildContext
     Call --> RecordResult
-    RecordResult --> AskProvider
+    RecordResult --> BuildContext
     EffectStep --> AccumulateEffectPlan
-    AccumulateEffectPlan --> AskProvider
+    AccumulateEffectPlan --> BuildContext
     Final --> PrepareOrFinish
     PrepareOrFinish --> [*]
 ```
@@ -32,15 +34,40 @@ Current provider-neutral `NextDecision` shapes are:
 - `reasoning_capability_call`
 - `plan_step_proposal`
 
-The provider never returns an arbitrary program and never directly commits business effects.
+The provider never returns an arbitrary executable program and never directly commits
+business effects.
+
+## Context, Skills and Evidence
+
+Before a provider decision the host builds a bounded projection from:
+
+```text
+conversation + screen hints
+immutable turn settings
+ProviderProfile / EffectiveAssistantManifest
+active Skill instructions
+selected ContextProvider data
+working transcript
+selected Evidence refs/items
+remaining budgets
+```
+
+Skill instructions are trusted installed-code behavior guidance, not authority.
+ContextProvider and Evidence content are untrusted data. They cannot create/reveal
+hidden capabilities, grant permissions, approve an effect or redefine host policy.
+
+P8 introduces `EvidenceProviderCatalog`, `EvidenceRoutingPolicy` and bounded
+`EvidenceLedger` as provider-neutral seams. The foundation exists, but ordinary
+model-driven turns do not yet constitute a complete end-to-end Evidence/citation
+product merely because the contracts are present.
 
 ## TaskPlan vs EffectPlan
 
-They are intentionally different contracts.
+They are separate contracts.
 
 ### TaskPlan
 
-`TaskPlan` is bounded user-visible progress structure:
+`TaskPlan` is bounded user-visible orchestration/progress:
 
 ```text
 goal
@@ -48,101 +75,103 @@ revision
 steps: step_id / title / state / depends_on
 ```
 
-It has **no capability, arguments, approval or execution authority**. Revisions are host-validated and durable in the private working transcript. It is not chain-of-thought.
+It has no capability arguments, approval or execution authority and is not
+chain-of-thought.
 
-Visible planning is now an explicit product choice:
-
-```text
-Directo (adaptive)  default; no TaskPlan is available for a new turn
-Plan (deliberate)   user opt-in; requires an initial TaskPlan before capability/effect work
-```
-
-Direct mode may still answer, inspect schema, perform several bounded reads, reason over their results and stage a short EffectPlan. The number of provider/tool calls does not promote a Direct turn into visible planning. In particular, a bounded chain such as “find the Demo contact; create it if absent; create a test quotation” remains planless unless the user selected Plan.
-
-The former `auto` preference is legacy-read compatibility only. Existing stored values normalize to Direct for new turns, and historical snapshots remain parseable. Structural complexity can still be retained as diagnostic/eval evidence, but it does not activate TaskPlan.
+Current product behavior keeps Direct as the normal strategy and supports explicit
+one-turn deliberate/Plan behavior according to the accepted P7 product contract.
+The host decides whether TaskPlan is available in the provider schema; it is not a
+prompt-only convention.
 
 ### EffectPlan
 
-Effect steps remain typed `CapabilityDefinition` proposals. The product host currently permits up to **5** ordered steps; callers without the Phase-6 policy opt-in remain single-step for compatibility.
+Effect steps are typed `CapabilityDefinition` proposals. The host supports bounded
+multi-step plans and explicit recovery-unit semantics.
 
-Every step keeps capability/version/validated arguments, preview, preconditions, risk/effect, approval requirement, verification and result. No generic script body replaces typed capabilities.
-
-For the currently supported Odoo-local effects, execution is one Odoo business transaction after one durable write barrier. Future external/non-transactional segmentation belongs to P6.4 and must not be described as atomic before that work exists.
-
-## Important files
-
-| File | Role |
-|---|---|
-| `service.py` | provider-neutral host loop, TaskPlan/EffectPlan accumulation and budgets |
-| `contracts.py` | typed `NextDecision` contract |
-| `task_plan.py` | closed non-authoritative TaskPlan contract |
-| `planning.py` | Direct/Plan strategy and host-owned TaskPlan availability/revision rules |
-| `decision_validation.py` | host validation of provider decisions |
-| `working_transcript.py` | bounded private continuation state |
-| `budgets.py` | Safety / Exploration / Cost / Latency / Response ceilings |
-| `plan.py` | typed EffectPlan prepare/execute/verify integration |
-| `post_effect.py` | verified-receipt continuation with PLAN authority removed |
-| `compensation.py` | explicit HOST-only reverse-order compensators for eligible completed effects |
-| `codex_decision.py` | Codex App Server adapter for the neutral decision contract |
-| `interactive_codex.py` | Codex-specific steer/interrupt responsiveness |
-| `codex_streaming.py` | Codex answer/reasoning streaming integration |
-| `public_activity.py` | browser-safe host activity contract |
-
-Exact ownership can evolve; current code is the final reference.
-
-## Working transcript vs conversation history
-
-They solve different problems:
-
-- **Conversation history** is user-facing chat memory.
-- **Working transcript** is private typed state required to continue one active host loop: TaskPlan revisions, decisions, capability calls/results, staged effect proposals, prepared plans and verified receipts.
-
-The transcript is not a chain-of-thought store and must not be exposed wholesale as public progress.
+Every step retains capability/version/validated args, preview, preconditions,
+risk/effect classification, policy/approval requirement, execution result and
+verification. No generic script body replaces typed capabilities.
 
 ## Provider boundary
 
-A provider receives bounded context, effective reasoning/planning capability descriptors, working items and remaining budgets, then returns one neutral `NextDecision`.
+A provider receives only bounded effective state and returns a neutral
+`NextDecision`. Another provider can replace Codex by implementing the same reasoning
+seam without duplicating Odoo policy/capabilities/turn persistence.
 
-Another provider can replace Codex by implementing the same `NextDecisionEngine`; it does not need a duplicated Odoo agent runtime.
+Provider-specific code may own:
 
-Provider-specific code may own transport features such as Structured Outputs translation, model options, streaming, provider errors and steering. It must not own business authorization.
+- App Server transport/protocol;
+- Structured Outputs translation;
+- model/reasoning settings;
+- answer/reasoning presentation events;
+- provider errors/rate limits;
+- steer/interrupt mechanics.
 
-`PlanningDecisionEngine` projects `task_plan_available` as host-owned contract data. In Direct mode the TaskPlan branch is removed from the provider wire schema for a new turn, so planning behavior is not merely a prompt convention.
+It must not own Odoo business authorization or tool-policy truth.
 
 ## Capability calls
 
-For a reasoning call the host:
+For a reasoning capability call the host:
 
-1. resolves the named definition from the **effective** catalog;
-2. validates its input schema and call/budget constraints;
-3. executes through `CapabilityExecutor` with `ExecutionAuthority.REASONING`;
-4. records a typed result or safe error;
-5. asks the provider what to do next.
+1. resolves the named definition from the **effective** registry;
+2. validates input schema/configuration/guard/dependencies;
+3. checks call/resource budgets;
+4. executes through `CapabilityExecutor` with reasoning authority;
+5. validates/bounds the result or safe error;
+6. records typed continuation state;
+7. asks the provider for the next decision.
 
-A hidden/disabled capability cannot be invoked merely because the model guessed its name.
+A disabled/hidden/unauthorized operation cannot be invoked merely because the model
+or retrieved Evidence names it.
 
 ## Effect lifecycle
 
-A `plan_step_proposal` is stage-only. Distinct proposals may accumulate into the bounded EffectPlan, but nothing executes until the host completes the normal lifecycle:
+A `plan_step_proposal` is stage-only. The normal effect path is:
 
 ```text
 propose typed steps
  -> prepare / preview / bind preconditions
- -> policy / approval
- -> revalidate each step
- -> one durable write barrier for current Odoo-local unit
+ -> policy
+ -> approval when policy requires it
+ -> revalidate
+ -> durable write barrier / recovery unit
  -> execute under effective user
- -> verify every step
- -> verified-effect receipt
+ -> verify
+ -> verified receipt / EffectJournal / recovery state
  -> REASONING-only continuation
  -> natural final answer
 ```
 
-A TaskPlan update cannot grant authority or clear safety failures.
+Approval is policy/autonomy-driven. Full-control may remove redundant confirmation
+for a permitted auto-executable operation; it does not bypass ACLs/record rules,
+companies, field access or hard safety conditions.
+
+Persisted ambiguous effects are never blindly retried.
+
+## Recovery units
+
+The accepted runtime distinguishes host-declared recovery semantics such as:
+
+```text
+odoo_atomic
+segmented
+external / uncertain
+```
+
+The host knows when rollback/no-surviving-effect is provable. Provider failure alone
+is not evidence that an effect did not occur.
+
+## Working transcript vs conversation history
+
+- **Conversation history** is user-facing chat continuity.
+- **Working transcript** is bounded private typed state needed to continue/recover one active host loop.
+- **EvidenceLedger** is bounded provenance/freshness/citation state for selected Evidence.
+
+None is a private chain-of-thought archive.
 
 ## Budget families
 
-`budgets.py` separates:
+The host separates:
 
 ```text
 SafetyBudget
@@ -152,51 +181,79 @@ LatencyBudget
 ResponseBudget
 ```
 
-The current Cost/Latency families initially bound provider decisions; they are explicit seams for later provider telemetry rather than hidden magic numbers. Remaining counters are advisory provider context; the host owns enforcement.
+Provider-visible remaining values are context only. Enforcement remains host-side.
 
 ## Streaming and public activity
 
-Two projections remain separate:
+Keep distinct:
 
-- **activity** — sanitized host-known work classes;
-- **answer deltas** — provisional user-visible text.
+- **public activity** — sanitized host-observed work classes;
+- **TaskPlan** — optional high-level orchestration;
+- **readable reasoning summary** — bounded provider-presented text when enabled;
+- **answer delta** — provisional user-visible response text;
+- **final answer** — authoritative validated terminal response.
 
-TaskPlan is a separate product-plan artifact. Phase 6 does not turn private reasoning into activity.
+Public activity may say analyzing, retrieving, consulting Odoo, preparing, awaiting
+approval, executing or verifying. It must not expose private chain-of-thought, raw
+prompts, credentials or sensitive tool/Evidence payloads.
 
-The first provider decision is also the semantic route: it may answer directly, request the minimum authoritative Odoo reads, or begin bounded effect work. Direct model answers publish no generic "Thought" activity. Short Odoo lookups and short action chains may use several tightly scoped capabilities without creating a TaskPlan; public work starts only after the host accepts a non-final decision.
+## Stop and same-turn correction
 
-Exact social messages such as a greeting, thanks, or farewell use a bounded provider-free fast path
-before capability discovery and activity setup. The constraint stays deliberately narrow: a
-greeting combined with a business request still enters the normal semantic route.
+Durable user control is Odoo-owned. A same-turn correction is persisted before
+provider steering/restart is attempted. Approval-pending corrections supersede the
+old prepared plan, and the latest accepted intervention state is checked before an
+effect barrier.
 
-## Latency note
+Provider steer/interrupt improves responsiveness but is not the source of truth.
 
-Exact social messages do not incur provider startup. For all other requests, removing artificial
-TaskPlans avoids extra orchestration but does not make provider generation instantaneous. The
-current one-`NextDecision` host loop may still require several provider round-trips for
-schema/read/effect chains. Optimize that boundary from measured timings and evals rather than
-reintroducing a rigid intent router or making TaskPlan automatic again.
+## Product profiles
 
-## Failure semantics
+The provider-facing/public profile projection has exactly:
 
-Provider failures are normalized into bounded product state. Preserve useful category/status/retryability facts, but never make raw provider output the public failure contract.
+```text
+User / non-technical
+Technical
+```
 
-The queue retries a structured provider failure only when the carried envelope explicitly marks it
-`safe`, no effect has started and the requested user action is `retry`. Account usage limits and
-other `after_change` failures terminate the current attempt without an automatic replay.
+Historical internal compatibility profile values may map to those two. A future host
+privilege broker is an execution boundary, not a third user persona.
 
-After an effect becomes ambiguous, do not convert a provider/runtime error into “safe to retry.” Effect certainty is owned by Odoo.
+## Important files
 
-## Extending/replacing the agent layer
+| File | Role |
+|---|---|
+| `service.py` | provider-neutral host loop and decision/effect coordination |
+| `contracts.py` | typed `NextDecision` contract |
+| `task_plan.py` | closed non-authoritative TaskPlan |
+| `planning.py` | host-owned planning strategy/availability rules |
+| `decision_validation.py` | provider-decision validation |
+| `working_transcript.py` | bounded private continuation state |
+| `budgets.py` | budget families/ceilings |
+| `plan.py` | typed EffectPlan prepare/execute/verify integration |
+| `post_effect.py` | verified-receipt continuation with effect proposal authority removed |
+| `compensation.py` | explicit HOST-only safe compensators |
+| `codex_decision.py` | Codex adapter to the neutral decision contract |
+| `interactive_codex.py` | Codex steer/interrupt integration |
+| `codex_streaming.py` | Codex answer/reasoning streaming integration |
+| `public_activity.py` | browser-safe activity projection |
 
-Good changes preserve:
+Exact ownership in code is authoritative.
 
-- the provider-neutral `NextDecisionEngine` port;
-- one host-validated decision at a time;
-- `CapabilityRegistry`/`CapabilityExecutor` as the execution path;
-- TaskPlan as explicit non-authoritative progress only;
-- bounded typed EffectPlan steps;
-- host-owned budget/policy/approval/recovery semantics;
-- separate private state and public projections.
+## Extending the loop
 
-Avoid reintroducing rigid `GENERAL / QUERY / HOW_TO / ACTION` routing or provider-specific copies of the core agent loop.
+Do not add a rigid GENERAL/QUERY/HOW_TO/ACTION router. Add behavior through the
+existing provider-neutral loop, capability/Skill/Context/Evidence framework and host
+policy.
+
+For new Evidence-aware behavior, keep routing source classes separate from intent
+classification: `EvidenceRoutingPolicy` may prioritize runtime/source/docs/logs/web,
+but the model can continue investigating and the host can require local proof when
+needed.
+
+## Validation
+
+P7 agent/product behavior is accepted. The P8 Evidence foundation is implemented but
+its focused tests and P8 real gates remain pending. No code path or committed test
+file is itself execution evidence.
+
+See `../../../../docs/research/EXECUTION_STATE.md` for the exact next gate.
