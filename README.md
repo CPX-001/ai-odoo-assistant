@@ -8,11 +8,10 @@ intent chatbot.
 ## Current state
 
 ```text
-P0-P7 COMPLETE / ACCEPTED
-P8.0 architecture hardening IMPLEMENTED
-P8.1/P8.2 Evidence foundation + first live projection IMPLEMENTED
-focused P8 validation PENDING
-P8 real gates NOT EXECUTED / NOT ACCEPTED
+P0-P8 COMPLETE / ACCEPTED
+P8 focused dependency-light + Odoo validation PASS
+P8 real Evidence gates PASS (6/6)
+P9 ELIGIBLE / READY TO START
 ```
 
 The exact cursor is
@@ -95,15 +94,15 @@ isolation, question-sensitive routing, secret-safe projections and a bounded tur
 ledger. Capability/context/Skill/provider JSON contracts are deeply immutable through
 `FrozenDict`/`FrozenList` while preserving normal `dict`/`list` compatibility.
 
-The first provider exposes sanitized installation/module/registry facts from Odoo.
-Relevant model decisions can now search/fetch that Evidence through the existing
-provider-neutral extension wrapper. Host structural Evidence metadata is kept
-separate from retrieved untrusted content; generic/social turns do not receive a
-mandatory retrieval dump.
+The live providers expose sanitized installation/module/registry facts, bounded
+installed-addon source/XML and correlated configured-log Evidence. Relevant model
+decisions search/fetch through the existing provider-neutral extension wrapper.
+Host structural metadata and final citations stay separate from retrieved untrusted
+content; generic/social turns do not receive a mandatory retrieval dump.
 
 Evidence is data. It cannot enable tools, waive approval, change profile or grant
 permissions. Mutable business facts continue to use live ORM. The current ledger is
-turn-scoped; durable reconnect restoration and richer citation UI remain later work.
+turn-scoped; raw excerpt replay and richer citation navigation remain later work.
 See [`docs/EVIDENCE_ARCHITECTURE.md`](docs/EVIDENCE_ARCHITECTURE.md).
 
 ## Writes and autonomy
@@ -173,17 +172,16 @@ tests/unit/test_phase8_product_profiles.py
 tests/unit/test_capability_provider_extensions.py
 tests/unit/test_phase7_feature_negotiation.py
 tests/unit/test_phase7_live_extension_context.py
-tests/addon/test_phase8_runtime_evidence.py
+addons/odoo_ai_assistant/tests/test_phase8_runtime_evidence.py
 tests/addon/test_addon_boundaries.py
 addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py
 ```
 
-They cover bounded contracts, deep immutability, secret redaction, fine-grained
-provider failure isolation, access recheck, ledger restore/overflow, routing, Skill
-Evidence selectors, live host/untrusted Evidence projection, public `user`/`technical`
-profile mapping, supported HTTP/security surface and Odoo inventory/freshness. They
-must be executed in the appropriate local/Codex Odoo environment before P8
-acceptance; GitHub repository writes do not execute them.
+They cover bounded contracts, deep immutability, secret redaction, provider failure
+isolation, access/freshness, routing, source/log diagnosis, Skill selectors, trust
+partition, public profiles and supported security surfaces. The focused result is
+`61` dependency-light tests, `20` Odoo tests and all six real gates passing; see
+[`P8 acceptance evidence`](docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md).
 
 ## Development rules
 

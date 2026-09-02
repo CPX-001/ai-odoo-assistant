@@ -80,8 +80,9 @@ Installation inventory is in process and owned directly by
 inventory service have been removed from the supported tree.
 
 Evidence never grants a capability or approval. Live mutable business facts remain
-ORM queries; source/XML/log/docs/web providers are later P8/P9 slices. Durable ledger
-restoration after reconnect and richer citation UI are also not claimed yet.
+ORM queries. Bounded installed-addon source/XML and correlated configured-log
+providers are live; company Knowledge/docs/web remain later slices. Raw ledger
+restoration after reconnect and richer citation navigation are not claimed yet.
 
 ## Autonomy and writes
 
@@ -113,22 +114,24 @@ Controllers are transport adapters; they do not own policy or provider credentia
 
 ## Validation state
 
-P0-P7 are accepted. P8.0 plus the P8.1/P8.2 checkpoint is implemented with focused
-tests prepared/updated, but those tests and P8 real gates remain pending. See:
+P0-P8 are accepted. P8 passed 61 focused dependency-light tests, 20 focused Odoo
+tests and all six real Evidence gates. P9 is eligible. See:
 
 ```text
 docs/research/EXECUTION_STATE.md
 docs/research/P8_EVIDENCE_CORE_IMPLEMENTATION.md
 docs/research/P8_FOCUSED_VALIDATION_RUNBOOK.md
+docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
 tests/unit/test_phase8_evidence_contracts.py
 tests/unit/test_phase8_evidence_runtime.py
 tests/unit/test_phase8_extension_evidence.py
 tests/unit/test_phase8_supported_surface.py
 tests/unit/test_phase8_product_profiles.py
+tests/unit/test_phase8_source_log_evidence.py
 tests/unit/test_capability_provider_extensions.py
 tests/unit/test_phase7_feature_negotiation.py
 tests/unit/test_phase7_live_extension_context.py
-tests/addon/test_phase8_runtime_evidence.py
+addons/odoo_ai_assistant/tests/test_phase8_runtime_evidence.py
 tests/addon/test_addon_boundaries.py
 addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py
 ```

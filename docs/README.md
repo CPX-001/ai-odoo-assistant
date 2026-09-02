@@ -6,17 +6,16 @@ direction and validation evidence.
 ## Current formal state
 
 ```text
-P0-P7 COMPLETE / ACCEPTED
-P8.0 hardening + P8.1/P8.2 Evidence foundation/live projection IMPLEMENTED
-P8 focused validation PENDING
-P8 real gates NOT EXECUTED / NOT ACCEPTED
-P9+ NOT ELIGIBLE
+P0-P8 COMPLETE / ACCEPTED
+P8 focused dependency-light + Odoo validation PASS
+P8 real Evidence gates PASS (6/6)
+P9 ELIGIBLE / READY TO START
 ```
 
-P7 remains accepted through `092ac57fe58a3a36765b115e78b2eca687f5dbbc`.
-The P8 implementation record is
+P8 is accepted through `e370af8acb7df175c0a90c8e17520c8576b4c6ce`.
+The implementation and validation records are
 [`research/P8_EVIDENCE_CORE_IMPLEMENTATION.md`](research/P8_EVIDENCE_CORE_IMPLEMENTATION.md).
-No new PASS evidence is inferred from code or prepared tests.
+No new PASS evidence is inferred without executed evidence.
 
 ## Primary reading path
 

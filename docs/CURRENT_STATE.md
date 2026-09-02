@@ -11,7 +11,7 @@ P0-P4 accepted
 P5.1-P5.8 accepted
 P6 COMPLETE / ACCEPTED
 P7 COMPLETE / ACCEPTED at 092ac57fe58a3a36765b115e78b2eca687f5dbbc
-P8.0 + P8.1/P8.2 checkpoint implemented; focused validation and P8 real gates pending
+P8 COMPLETE / ACCEPTED at e370af8acb7df175c0a90c8e17520c8576b4c6ce
 ```
 
 P7 acceptance is recorded in
@@ -19,7 +19,8 @@ P7 acceptance is recorded in
 accepted regression in
 `research/evidence/regression/2026-09-02/FULL-REGRESSION-092ac57.md`.
 
-No unexecuted P8 test or gate is a PASS.
+P8 acceptance evidence is recorded in
+`research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md`.
 
 ## 1. Product/deployment baseline
 
@@ -141,7 +142,7 @@ is an execution boundary, not a third human product profile.
 
 Profile mapping does not grant permission. Odoo ACLs/policy remain authoritative.
 
-## 6. P8.0 + P8.1/P8.2 Evidence foundation — implemented, not accepted
+## 6. P8 Evidence foundation and diagnosis — accepted
 
 The current tree implements:
 
@@ -177,9 +178,9 @@ turn-scoped; durable reconnect restoration is not claimed yet.
 `EffectiveAssistantManifest.evidence_provider_ids` is reused as the manifest seam;
 there is no second Evidence manifest/registry.
 
-## 7. Runtime/installation Evidence and live projection
+## 7. Runtime/source/log Evidence and live projection
 
-`assistant.runtime_inventory` is the first real EvidenceProvider. It derives a
+`assistant.runtime_inventory` derives a
 bounded projection from the effective Odoo Environment containing:
 
 ```text
@@ -194,6 +195,12 @@ It intentionally excludes absolute addon roots, raw database names, credentials,
 host commands and mutable business snapshots. Mutable business facts continue to
 come from live ORM. A fingerprint change is surfaced as stale Evidence rather than
 silently treating an old reference as current.
+
+`assistant.source_evidence` performs bounded source/XML search only inside resolved
+installed-addon roots, using logical locators, line citations and fingerprints.
+`assistant.log_evidence` performs bounded correlated scans of the configured Odoo
+logfile with secret redaction and opaque byte locators. Both are Technical resources
+and neither creates execution authority.
 
 The first live provider-neutral retrieval path is also implemented:
 
@@ -213,22 +220,20 @@ diagnosis questions can retrieve Evidence. Codex only adapts the existing trust
 partition; it does not gain an Evidence-specific authority path. Retrieved text,
 including prompt-injection text, remains untrusted data.
 
-## 8. What P8 does not implement yet
+## 8. Explicit follow-up scope after P8
 
 The current checkpoint is not the complete Evidence product. Still pending are:
 
 - durable reconnect restoration of the Evidence ledger through the existing Odoo working transcript;
-- richer final-answer citation/navigation UX;
+- richer citation navigation beyond persisted final-result metadata;
 - runtime/schema/configuration/security/navigation providers beyond inventory;
-- source/XML/module-document semantic indexing and validators;
-- correlated log/traceback Evidence and automatic diagnosis;
 - full host-owned observability spans/self-inspection capabilities;
 - secret-value masked/copy/reveal UI;
 - company Knowledge/RAG and uploaded Sources;
 - repository/module acquisition and the Technical host privilege broker;
 - domain-addon split and its clean install/update/uninstall proof.
 
-These are later P8/P9/P10 work and must not be inferred from the foundation contracts.
+These are P9/P10 follow-ups and must not be inferred from P8 acceptance.
 
 ## 9. Evidence/source scope
 
@@ -271,13 +276,9 @@ package installation or service operation is implemented by this P8 foundation.
 
 ## 12. Validation truth and next action
 
-Current P8 validation debt is authoritative in `research/EXECUTION_STATE.md`.
-The focused dependency-light tests, focused Odoo runtime-inventory test, immutable
-context/planning regression and directly affected P7 extension/addon boundaries must
-be executed in an Odoo/Codex-capable checkout and failures repaired before any P8
-gate is claimed.
+P8 passed `61` focused dependency-light tests, `20` focused Odoo tests and all six
+real Odoo/Codex Evidence gates with effective-user `su=False`. The broad repository,
+addon, HOOT/browser and Product Behavior FULL suites remain unexecuted periodic debt.
 
-The GitHub connector can publish source changes but cannot substitute for those real
-execution gates. P8 acceptance is not claimed. After focused validation, the next
-integration work is durable ledger reconnect/citation UX and the source/XML/log real
-gates rather than reimplementing the Evidence foundation again.
+P9 is eligible. The next action is the largest coherent company Knowledge/RAG and
+source-lifecycle slice described by `research/EXECUTION_STATE.md`.

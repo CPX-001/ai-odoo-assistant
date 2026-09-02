@@ -1,6 +1,6 @@
 # Evidence architecture
 
-Status: P8 foundation and first live provider-neutral projection implemented; focused and real validation pending.
+Status: P8 complete/accepted; focused tests and all six real Evidence gates passed.
 
 ## Purpose
 
@@ -125,8 +125,8 @@ threshold: a generic turn can legitimately select no Evidence provider.
 | Repository/module preflight | web metadata, manifest/docs, bounded source scan |
 | Current external fact | web when deployment policy permits |
 
-Only the runtime/installation provider exists in this checkpoint; the table describes
-routing direction for later providers, not capabilities falsely claimed as present.
+Runtime/installation, installed-addon source/XML and configured-log providers exist.
+The remaining rows describe routing direction for later providers.
 
 ## First provider: installation inventory
 
@@ -160,15 +160,15 @@ The host search request is bounded and the decision engine limits fetches per mo
 decision. Evidence prompt injection stays in the untrusted partition and cannot
 change the effective capability catalog.
 
-## Planned providers
+## Current and planned providers
 
-Later P8/P9 slices may add:
+P8 provides runtime inventory, bounded installed-addon source/XML and correlated
+configured-log Evidence. P9/P10 may add:
 
-1. runtime/schema/config/security/navigation evidence;
-2. bounded source/XML/module documentation and deterministic validators;
-3. correlated logs/tracebacks;
-4. host-owned observability/self-inspection;
-5. company Knowledge and uploaded sources.
+1. richer runtime/schema/config/security/navigation evidence;
+2. semantic module documentation and deterministic validators;
+3. host-owned observability/self-inspection;
+4. company Knowledge and uploaded sources.
 
 FTS/lexical search should precede vector search when exact identifiers and Odoo
 structure are more reliable. Embeddings are an additional provider strategy, not
@@ -176,8 +176,8 @@ the definition of Evidence.
 
 ## Validation
 
-Prepared deterministic/Odoo tests cover shape, dict/list-compatible deep
+Executed deterministic/Odoo tests cover shape, dict/list-compatible deep
 immutability, secret redaction, access recheck, fine-grained optional-provider
 isolation, routing, Skill selectors, live host/untrusted projection, ledger
-restore/overflow and runtime inventory freshness. The focused tests and six P8 real
-gates remain NOT EXECUTED until run in the prescribed environment.
+restore/overflow, source/log diagnosis and freshness. The focused gates passed 61
+dependency-light and 20 Odoo tests; all six real P8 Evidence gates passed.

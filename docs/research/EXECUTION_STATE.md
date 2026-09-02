@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 60  
+State format: 61
 Updated: 2026-09-02
 
 ## Accepted lineage
@@ -17,99 +17,61 @@ P5.7 through 074a71c29a6a6109ae7412e7b1f9850c4449e379
 P5.8 through 688f569d441a40a4637ad6a23f111e584e18c955
 P6 final acceptance through 0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0
 P7 final acceptance through 092ac57fe58a3a36765b115e78b2eca687f5dbbc
+P8 final acceptance through e370af8acb7df175c0a90c8e17520c8576b4c6ce
 ```
-
-P0-P7 remain accepted. No P8 validation result changes that lineage yet.
 
 ## Current cursor
 
 ```text
-phase: 8
-phase_name: evidence core and installation intelligence
-active_slice: P8.0-HARDENING + P8.1/P8.2-FOUNDATION-RECONCILED
-slice_state: IMPLEMENTED_FOCUSED_VALIDATION_PENDING
-implementation_record: docs/research/P8_EVIDENCE_CORE_IMPLEMENTATION.md
-focused_validation_runbook: docs/research/P8_FOCUSED_VALIDATION_RUNBOOK.md
-active_real_validation_runbook: docs/research/REAL_ENV_VALIDATION_PROTOCOL.md
-current_gate_type: P8_FOCUSED_DEPENDENCY_LIGHT_AND_ODOO
-blocking_implementation: none for the P8.0 + P8.1/P8.2 checkpoint described by the current specification
-blocking_validation: focused P8 tests and directly affected P7/addon/fixture boundaries have not been executed in an Odoo/Codex-capable environment
-latest_accepted_evidence: docs/research/evidence/regression/2026-09-02/FULL-REGRESSION-092ac57.md
-latest_phase_acceptance: docs/research/evidence/phase7/2026-09-02/P7-ACCEPTANCE-092ac57.md
-next_action: execute focused P8 dependency-light tests plus runtime-inventory, installed-addon Evidence fixture, addon boundary and canonical-plan Odoo tests; repair failures before claiming any P8 gate
+phase: 9
+phase_name: company Knowledge/RAG and source lifecycle
+active_slice: P9-FIRST-COHERENT-SLICE
+slice_state: READY_TO_START
+current_gate_type: P9_DESIGN_AND_FOCUSED_IMPLEMENTATION
+blocking_implementation: none
+blocking_validation: none from P8
+latest_accepted_evidence: docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
+latest_phase_acceptance: docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
+next_action: reconstruct P9 from the active playbook and implement the largest coherent source-lifecycle, bounded-ingestion, lexical/FTS retrieval and chat-ingestion slice that can be validated together
 ```
 
-## Implemented checkpoint
+## P8 acceptance result
 
 ```text
-obsolete sidecar-testing GitHub workflow removed
-unauthenticated sidecar inventory callback removed
-addon-local residual machine-auth primitive/exports removed
-residual addon instance-inventory service removed from the supported path
-runtime installation inventory owned directly by assistant.runtime_inventory EvidenceProvider
-versioned CapabilityProvider API + reserved provider/resource namespaces
-API mismatch/loader/collision/dependency/cycle failures isolated to attributable optional providers
-guards fail closed on exceptions
-deep immutable JSON contracts preserving isinstance(dict/list) compatibility
-Evidence contracts, logical locators and access/freshness checks
-EvidenceProviderCatalog + question-sensitive routing
-bounded EvidenceLedger
-Skills activated from effective Evidence provider IDs
-live provider-neutral bounded Evidence search/fetch on relevant model decisions
-Codex adapter keeps Evidence structural metadata host-owned and retrieved content untrusted
-runtime/installation inventory EvidenceProvider
-installed-addon fixture EvidenceProvider through real Odoo registry composition
-public manifest projection normalized to exactly user/technical
-source-scope descriptor and current architecture/ADRs
-focused dependency-light and Odoo tests prepared/extended
+focused dependency-light                         PASS — 61 tests
+focused Odoo + installed-addon fixture           PASS — 20 tests, 0 failures/errors
+P8-REAL-SOURCE-DIAGNOSIS                         PASS
+P8-REAL-LOG-DIAGNOSIS                            PASS
+P8-REAL-PROVENANCE                               PASS
+P8-REAL-FRESHNESS                                PASS
+P8-REAL-EVIDENCE-POLICY                          PASS
+P8-REAL-INJECTION-BOUNDARY                       PASS
+effective Odoo user Environment                  PASS — su=False
+P8 acceptance                                    COMPLETE / ACCEPTED
 ```
 
-This means code exists. It does not mean the focused tests or P8 real gates passed.
-The current live integration retrieves bounded Evidence only for relevant turns and
-projects it as untrusted working context. The ledger is currently turn-scoped in the
-live wrapper; durable reconnect restoration and richer end-user citation rendering
-remain later integration work rather than prerequisites for this foundation checkpoint.
+The authoritative command, environment, repair and rerun record is
+`docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md`.
 
-## Immediate focused validation
+P8 added bounded installed-addon source/XML Evidence, correlated configured-log
+Evidence, question-sensitive routing, logical locators, access/freshness checks,
+secret redaction and browser-safe citation metadata on top of the provider-neutral
+Evidence foundation. Retrieved text remains untrusted and cannot create execution
+authority.
 
-Run at minimum:
+## Periodic validation debt and explicit limits
 
 ```text
-tests/unit/test_phase8_evidence_contracts.py
-tests/unit/test_phase8_evidence_runtime.py
-tests/unit/test_phase8_extension_evidence.py
-tests/unit/test_phase8_supported_surface.py
-tests/unit/test_phase8_product_profiles.py
-tests/unit/test_capability_provider_extensions.py
-tests/unit/test_phase7_feature_negotiation.py
-tests/unit/test_phase7_live_extension_context.py
-tests/addon/test_phase8_runtime_evidence.py
-tests/addon/test_addon_boundaries.py
-addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py
-tests/fixtures/odoo_addons/odoo_ai_assistant_p7_fixture/tests/test_phase7_fixture.py
+full repository regression             NOT EXECUTED (periodic debt)
+full addon regression                   NOT EXECUTED (periodic debt)
+HOOT/browser regression                 NOT EXECUTED (periodic debt)
+Product Behavior FULL                   NOT EXECUTED (periodic debt)
+raw EvidenceLedger reconnect replay     NOT IMPLEMENTED / NOT A P8 ACCEPTANCE CLAIM
 ```
 
-The exact commands and environment are in
-`docs/research/P8_FOCUSED_VALIDATION_RUNBOOK.md`. A full regression is not implied
-merely because this checkpoint is on `main`; expand only for a concrete failure or an
-explicit runbook requirement.
-
-## Validation debt
-
-```text
-P8 focused dependency-light                         NOT EXECUTED
-P8 focused Odoo + installed-addon fixture           NOT EXECUTED
-P8 live Evidence search/fetch/trust projection      IMPLEMENTED / NOT EXECUTED
-P8 durable reconnect ledger restoration             NOT IMPLEMENTED / NOT EXECUTED
-P8 end-user citation rendering                      NOT IMPLEMENTED / NOT EXECUTED
-P8-REAL-SOURCE-DIAGNOSIS                            NOT EXECUTED
-P8-REAL-LOG-DIAGNOSIS                               NOT EXECUTED
-P8-REAL-PROVENANCE                                  NOT EXECUTED
-P8-REAL-FRESHNESS                                   NOT EXECUTED
-P8-REAL-EVIDENCE-POLICY                             NOT EXECUTED
-P8-REAL-INJECTION-BOUNDARY                          NOT EXECUTED
-P8 acceptance                                       NOT CLAIMED
-```
+These broad suites were not required by the focused P8 runbook, and no focused
+failure justified expanding the scope. Final citation metadata persists through the
+normal result payload; richer raw-excerpt replay/navigation remains future work.
 
 ## Permanent invariants
 
@@ -122,37 +84,28 @@ P8 acceptance                                       NOT CLAIMED
 - A future host broker is an execution boundary, not a third human profile.
 - Hidden, disabled or unauthorized capabilities remain non-executable.
 - Approval is policy/autonomy-driven but never expands the user's Odoo authority.
-- Full-control may reduce redundant approval only when trusted policy allows it.
 - Effects remain preview/policy/approval-when-required/execute/verify operations.
 - Ambiguous writes are not retried automatically.
-- Arbitrary repositories may be candidates after bounded preflight; allowlist is optional policy/trust input.
 - No arbitrary SQL, Python, shell, sudo or unrestricted ORM method is exposed.
 - Raw/private provider reasoning, credentials and unsanitized payloads are not persisted or shown as public progress.
-- User-pasted secrets do not automatically grant authority or require turn blocking; derived public projections must redact where possible.
+- User-pasted secrets do not automatically grant authority; derived public projections redact where possible.
 - Optional extension failures are isolated; required providers fail closed.
 - No unexecuted test or gate may be represented as PASS.
 
 ## Historical navigation
 
-Current implementation/architecture:
+Current architecture and implementation records:
 
 ```text
 docs/CURRENT_STATE.md
 docs/ARCHITECTURE.md
 docs/CAPABILITY_FRAMEWORK.md
-docs/PRODUCT_VISION.md
-docs/research/P8_EVIDENCE_CORE_IMPLEMENTATION.md
 docs/EVIDENCE_ARCHITECTURE.md
 docs/OBSERVABILITY_ARCHITECTURE.md
 docs/CONTEXT_SOURCE_POLICY.md
+docs/research/P8_EVIDENCE_CORE_IMPLEMENTATION.md
+docs/research/P8_FOCUSED_VALIDATION_RUNBOOK.md
 ```
 
-Completed preparation contract:
-
-```text
-docs/research/P8_EVIDENCE_CORE_PREPARATION.md
-```
-
-Older phase narratives and immutable proof remain in dated records under
-`docs/research/evidence/`; they are not duplicated in this cursor and are excluded
-from normal current-answer context by policy.
+Older phase narratives and immutable proof remain under `docs/research/evidence/`;
+they are historical evidence rather than the current execution cursor.

@@ -1,6 +1,6 @@
 # ADR-022 — Provider-neutral Evidence core and bounded ledger
 
-Status: Accepted; P8 foundation implementation focused validation pending  
+Status: Accepted; P8 implementation and validation complete
 Date: 2026-09-02
 
 ## Context

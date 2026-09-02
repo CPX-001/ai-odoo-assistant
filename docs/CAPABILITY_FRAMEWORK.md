@@ -346,10 +346,10 @@ Every new executable capability must answer:
 
 P7 is **COMPLETE / ACCEPTED** at `092ac57`.
 
-The reconciled P8.0 + P8.1/P8.2 checkpoint, including the first live
-provider-neutral Evidence search/fetch/trust projection, is implemented on `main`.
-Its focused dependency-light/Odoo checks and P8 real gates remain unexecuted.
-Implementation presence is not P8 acceptance.
+P8 is **COMPLETE / ACCEPTED** at `e370af8`. Its provider-neutral Evidence
+search/fetch/trust path, runtime inventory, installed-addon source/XML provider,
+configured-log provider and browser-safe citations passed 61 focused
+dependency-light tests, 20 focused Odoo tests and all six real gates.
 
 See:
 

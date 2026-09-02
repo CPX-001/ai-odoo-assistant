@@ -344,10 +344,10 @@ changed contract
  -> periodic full regression only when the runbook/user requires it
 ```
 
-P7 is accepted. The reconciled P8.0 + P8.1/P8.2 checkpoint, including the first live
-provider-neutral Evidence projection, is implemented but focused P8 dependency-light/
-Odoo tests and P8 real gates remain pending. Do not treat a committed test or
-implementation as PASS.
+P7 and P8 are accepted. P8's provider-neutral Evidence projection, runtime inventory,
+installed-addon source/XML provider, configured-log provider and browser-safe
+citations passed 61 focused dependency-light tests, 20 focused Odoo tests and all six
+real Evidence gates. Broad regression suites remain explicit periodic debt.
 
 See `research/P8_FOCUSED_VALIDATION_RUNBOOK.md` and
 `research/EXECUTION_STATE.md`.
