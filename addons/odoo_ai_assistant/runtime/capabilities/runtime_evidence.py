@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-import importlib
-from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any
 
 from .contracts import CapabilityContext, CapabilityError, JsonValue
 from .evidence import (
@@ -77,35 +74,9 @@ def _release_payload() -> dict[str, JsonValue]:
         }
 
 
-def _service_inventory(env) -> Mapping[str, Any] | None:
-    """Reuse a compatible internal inventory builder, never its raw payload."""
-
-    try:
-        module = importlib.import_module(
-            "odoo.addons.odoo_ai_assistant.services.instance_inventory"
-        )
-    except Exception:
-        return None
-    for name in (
-        "build_instance_inventory",
-        "collect_instance_inventory",
-        "get_instance_inventory",
-    ):
-        builder = getattr(module, name, None)
-        if not callable(builder):
-            continue
-        try:
-            value = builder(env)
-        except (TypeError, AttributeError, CapabilityError):
-            continue
-        except Exception:
-            return None
-        if isinstance(value, Mapping):
-            return value
-    return None
-
-
 def _module_payload(env, *, technical: bool) -> tuple[list[dict[str, JsonValue]], bool]:
+    """Read only installed-module metadata through the effective user Environment."""
+
     module_model = env["ir.module.module"]
     available_fields = set(getattr(module_model, "_fields", {}))
     field_names = ["name", "state"]
@@ -160,16 +131,6 @@ def collect_runtime_inventory(
     env = _env(context)
     technical = _is_technical(context)
     modules, truncated = _module_payload(env, technical=technical)
-    service_payload = _service_inventory(env)
-    service_version = ""
-    if service_payload:
-        # Legacy variants can contain roots/operational details. Only a safe format
-        # marker is reused, never the whole payload.
-        service_version = str(
-            service_payload.get("format_version")
-            or service_payload.get("version")
-            or ""
-        )[:80]
     payload: dict[str, JsonValue] = {
         "odoo": _release_payload(),
         "database_identity": _database_identity(env),
@@ -178,10 +139,10 @@ def collect_runtime_inventory(
         "installed_modules": modules,
         "registry_fingerprint": _registry_fingerprint(env),
         "visibility": "technical" if technical else "user",
-        "internal_inventory_service_version": service_version,
     }
     # Absolute roots, credentials, host commands/processes and mutable business
-    # snapshots are intentionally absent.
+    # snapshots are intentionally absent. No retired HTTP/machine-auth inventory
+    # service is consulted by this provider.
     return payload, canonical_fingerprint(payload)
 
 
