@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 
 from odoo import Command
 from odoo.tests.common import TransactionCase
@@ -92,16 +93,37 @@ class TestCanonicalPlanHostLoop(TransactionCase):
             },
         )
         registry = discover_capabilities()
-        executor = CapabilityExecutor(
+        executor = self._executor(registry, context)
+        return context, registry, executor, CapabilityPlanService(
+            registry=registry,
+            executor=executor,
+        )
+
+    def _executor(self, registry, context):
+        return CapabilityExecutor(
             registry,
             context,
             policy=CapabilityPolicy(),
             config=CapabilityConfigResolver(),
         )
-        return context, registry, executor, CapabilityPlanService(
-            registry=registry,
-            executor=executor,
-        )
+
+    def _context_with_metadata(
+        self,
+        context,
+        registry,
+        *,
+        policy_updates=None,
+        planning_strategy=None,
+    ):
+        metadata = {key: value for key, value in context.metadata.items()}
+        if policy_updates:
+            policy = dict(metadata.get("capability_policy") or {})
+            policy.update(policy_updates)
+            metadata["capability_policy"] = policy
+        if planning_strategy is not None:
+            metadata["planning_strategy"] = planning_strategy
+        updated = replace(context, metadata=metadata)
+        return updated, self._executor(registry, updated)
 
     def _service(self, registry, context, executor, *decisions):
         engine = _PlanDecisionEngine(*decisions)
@@ -490,11 +512,16 @@ class TestCanonicalPlanHostLoop(TransactionCase):
 
     def test_noop_task_plan_progress_is_correctable_and_not_published(self):
         context, registry, executor, _plans = self._runtime()
-        context.metadata["planning_strategy"] = resolve_planning_strategy(
+        strategy = resolve_planning_strategy(
             "deliberate",
             message="Resuelve",
             screen=context.screen,
         ).payload()
+        context, executor = self._context_with_metadata(
+            context,
+            registry,
+            planning_strategy=strategy,
+        )
         initial = TaskPlan(
             goal="Resolver",
             revision=1,
@@ -539,12 +566,17 @@ class TestCanonicalPlanHostLoop(TransactionCase):
 
     def test_task_plan_updates_do_not_reset_provider_decision_budget(self):
         context, registry, executor, _plans = self._runtime()
-        context.metadata["capability_policy"]["max_provider_decisions"] = 2
-        context.metadata["planning_strategy"] = resolve_planning_strategy(
+        strategy = resolve_planning_strategy(
             "deliberate",
             message="Resuelve",
             screen=context.screen,
         ).payload()
+        context, executor = self._context_with_metadata(
+            context,
+            registry,
+            policy_updates={"max_provider_decisions": 2},
+            planning_strategy=strategy,
+        )
         initial = TaskPlan(
             goal="Resolver",
             revision=1,
@@ -582,13 +614,20 @@ class TestCanonicalPlanHostLoop(TransactionCase):
 
     def test_task_plan_retry_cannot_evade_consecutive_failure_budget(self):
         context, registry, executor, _plans = self._runtime()
-        context.metadata["capability_policy"]["max_consecutive_failures"] = 1
-        context.metadata["capability_policy"]["max_consecutive_correctable_failures"] = 1
-        context.metadata["planning_strategy"] = resolve_planning_strategy(
+        strategy = resolve_planning_strategy(
             "deliberate",
             message="Resuelve",
             screen=context.screen,
         ).payload()
+        context, executor = self._context_with_metadata(
+            context,
+            registry,
+            policy_updates={
+                "max_consecutive_failures": 1,
+                "max_consecutive_correctable_failures": 1,
+            },
+            planning_strategy=strategy,
+        )
         initial = TaskPlan(
             goal="Resolver",
             revision=1,
