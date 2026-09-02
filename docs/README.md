@@ -22,9 +22,9 @@ No new PASS evidence is inferred from code or prepared tests.
 
 1. [`CURRENT_STATE.md`](CURRENT_STATE.md) — implementation snapshot in human terms.
 2. [`ARCHITECTURE.md`](ARCHITECTURE.md) — runtime and authority boundaries.
-3. [`PRODUCT_VISION.md`](PRODUCT_VISION.md) — product direction.
-4. [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) — executable extension contract.
-5. [`EVIDENCE_ARCHITECTURE.md`](EVIDENCE_ARCHITECTURE.md) — P8 retrieval/evidence contract.
+3. [`PRODUCT_VISION.md`](PRODUCT_VISION.md) — product direction and confirmed product decisions.
+4. [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) — executable/provider/Skill/Context/Evidence extension contract.
+5. [`EVIDENCE_ARCHITECTURE.md`](EVIDENCE_ARCHITECTURE.md) — P8 retrieval/Evidence contract.
 6. [`OBSERVABILITY_ARCHITECTURE.md`](OBSERVABILITY_ARCHITECTURE.md) — trace/privacy contract.
 7. [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) — exact roadmap cursor.
 
@@ -40,7 +40,7 @@ flowchart TB
     EVC --> LEDGER[Bounded EvidenceLedger]
     HOST --> CAT[Effective CapabilityRegistry]
     CAT --> EXEC[CapabilityExecutor + policy]
-    EXEC --> ORM[Odoo ORM / bounded host operation]
+    EXEC --> ORM[Effective-user Odoo ORM]
     HOST --> EFFECT[EffectPlan -> preview -> policy/approval -> execute -> verify]
     EFFECT --> ORM
     HOST --> LIVE[TaskPlan/activity/answer/final projection]
@@ -48,8 +48,8 @@ flowchart TB
 ```
 
 `CapabilityDefinition` remains executable authority. `CapabilityProvider`, Skills,
-ContextProviders, EvidenceProviders, manifests and ledgers enrich discovery and
-reasoning but cannot bypass registry/executor/policy.
+ContextProviders, EvidenceProviders, manifests and ledgers enrich discovery/reasoning
+but cannot bypass registry/executor/policy.
 
 ## Current subsystem documents
 
@@ -62,10 +62,11 @@ reasoning but cannot bypass registry/executor/policy.
 - [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md)
 - [`TURN_LIFECYCLE_COMPOSITION.md`](TURN_LIFECYCLE_COMPOSITION.md)
 
-### Capabilities, context and Evidence
+### Capabilities, Context and Evidence
 
 - [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md)
 - [`EVIDENCE_ARCHITECTURE.md`](EVIDENCE_ARCHITECTURE.md)
+- [`KNOWLEDGE_INDEX.md`](KNOWLEDGE_INDEX.md)
 - [`CONTEXT_SOURCE_POLICY.md`](CONTEXT_SOURCE_POLICY.md)
 - [`QUERY_CONTRACT.md`](QUERY_CONTRACT.md)
 - [`adr/ADR-022-evidence-core-and-ledger.md`](adr/ADR-022-evidence-core-and-ledger.md)
@@ -90,9 +91,12 @@ reasoning but cannot bypass registry/executor/policy.
 
 ## Supported-path cleanup
 
-The embedded Odoo addon is the product runtime. The obsolete GitHub Actions workflow
-that tested `service/`/`installer/` and the unauthenticated sidecar inventory
-callback were removed in P8. Historical directories and evidence may remain for
+The embedded Odoo addon is the product runtime. The obsolete GitHub Actions workflow,
+the unauthenticated sidecar inventory callback and its now-unused addon-local
+machine-auth primitive are removed from the supported tree. Installation inventory is
+consumed in process through Evidence.
+
+Historical `service/`, `installer/`, migration/task/evidence records may remain for
 lineage, but are excluded from current source context by
 [`CONTEXT_SOURCE_POLICY.md`](CONTEXT_SOURCE_POLICY.md).
 
@@ -100,7 +104,7 @@ lineage, but are excluded from current source context by
 
 - **Implemented:** code exists on the supported path.
 - **Implemented / validation pending:** code exists but its required gate is open.
-- **Accepted:** the required validation/evidence is green for that lineage.
+- **Accepted:** required validation/evidence is green for that lineage.
 - **Target/proposed:** product direction or ADR not yet implemented.
 - **Historical:** retained only for lineage/evidence.
 
@@ -118,6 +122,6 @@ External projects and Project PDFs provide patterns, not execution authority.
 
 ## Documentation maintenance
 
-When a subsystem changes, update the nearest current contract and the execution
-cursor in the same checkpoint. Do not rewrite historical evidence to look current
-and never label an unexecuted gate PASS.
+When a subsystem changes, update the nearest current contract and execution cursor in
+the same checkpoint. Do not rewrite historical evidence to look current and never
+label an unexecuted gate PASS.
