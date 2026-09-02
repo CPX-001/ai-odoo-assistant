@@ -2,6 +2,8 @@ from odoo import Command
 from odoo.addons.odoo_ai_assistant.runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
+    CapabilityError,
+    EvidenceSearchRequest,
     clear_discovery_cache,
     discover_assistant_extensions_for_env,
     discover_capabilities_for_env,
@@ -44,7 +46,7 @@ class TestPhase7Fixture(TransactionCase):
             },
         )
 
-    def test_installed_provider_skill_and_context_are_discovered(self):
+    def test_installed_provider_skill_context_and_evidence_are_discovered(self):
         registry, context = self._context(self.env)
         self.assertEqual(
             registry.provider_for("fixture.phase7_read_identity"),
@@ -61,6 +63,14 @@ class TestPhase7Fixture(TransactionCase):
         self.assertEqual(
             [item.provider_id for item in extensions.context_providers.providers],
             ["fixture.current_screen"],
+        )
+        self.assertIn(
+            "fixture.phase7_evidence",
+            extensions.evidence_providers.provider_ids,
+        )
+        self.assertIn(
+            "assistant.runtime_inventory",
+            extensions.evidence_providers.provider_ids,
         )
         self.assertFalse(
             any(
@@ -108,7 +118,7 @@ class TestPhase7Fixture(TransactionCase):
             {item.name for item in registry.for_reasoning(context)},
         )
 
-    def test_active_skill_collects_bounded_jit_context(self):
+    def test_active_skill_collects_bounded_jit_context_and_selects_evidence(self):
         self.env["ir.config_parameter"].set_param(
             "odoo_ai_assistant.capability.fixture.phase7_read_identity.fixture_label",
             "configured",
@@ -129,8 +139,35 @@ class TestPhase7Fixture(TransactionCase):
         self.assertEqual(len(active.context), 1)
         self.assertEqual(active.context[0].provider_id, "fixture.current_screen")
         self.assertEqual(active.context[0].data["model"], "res.partner")
+        self.assertIn("fixture.phase7_evidence", active.evidence_provider_ids)
 
-    def test_admin_manifest_reflects_fixture_and_provider_profile(self):
+    def test_installed_fixture_evidence_search_fetch_and_access_scope(self):
+        registry, context = self._context(self.env)
+        extensions = discover_assistant_extensions_for_env(
+            self.env,
+            capability_registry=registry,
+        )
+        batch = extensions.search_evidence(
+            context,
+            EvidenceSearchRequest(
+                query="phase7 fixture evidence",
+                provider_ids=("fixture.phase7_evidence",),
+            ),
+        )
+        self.assertEqual(len(batch.refs), 1)
+        ref = batch.refs[0]
+        self.assertEqual(ref.provider_id, "fixture.phase7_evidence")
+        item = extensions.evidence_providers.fetch(context, ref)
+        self.assertEqual(item.data["fixture"], "phase7")
+        self.assertEqual(item.data["user_id"], self.env.uid)
+
+        limited_env = self.env(user=self.limited_user, su=False)
+        _limited_registry, limited_context = self._context(limited_env)
+        with self.assertRaises(CapabilityError) as captured:
+            extensions.evidence_providers.fetch(limited_context, ref)
+        self.assertEqual(captured.exception.code, "evidence_access_denied")
+
+    def test_admin_manifest_reflects_fixture_provider_evidence_and_public_profile(self):
         self.env["ir.config_parameter"].set_param(
             "odoo_ai_assistant.capability.fixture.phase7_read_identity.fixture_label",
             "configured",
@@ -142,5 +179,7 @@ class TestPhase7Fixture(TransactionCase):
         self.assertIn("fixture.phase7_read_identity", names)
         self.assertIn("fixture.phase7_plan_probe", names)
         self.assertIn("fixture.phase7_skill", skills)
+        self.assertIn("fixture.phase7_evidence", payload["evidence_provider_ids"])
+        self.assertIn("assistant.runtime_inventory", payload["evidence_provider_ids"])
         self.assertEqual(payload["provider"]["provider_id"], "openai.codex_app_server")
-        self.assertEqual(payload["technical_profile"], "developer")
+        self.assertEqual(payload["technical_profile"], "technical")
