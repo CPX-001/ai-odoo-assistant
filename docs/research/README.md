@@ -22,11 +22,15 @@ Unexecuted validation is never PASS.
 P0-P8 COMPLETE / ACCEPTED
 P8 FOCUSED VALIDATION PASS
 P8 REAL EVIDENCE GATES PASS (6/6)
-P9 ELIGIBLE / READY TO START
+P9 FOCUSED VALIDATION PASS
+P9 REAL VALIDATION BLOCKED ON PRIMARY CODEX REAUTHENTICATION
+P10 NOT YET ELIGIBLE
 ```
 
 P8 acceptance is anchored at `e370af8acb7df175c0a90c8e17520c8576b4c6ce` and
 documented in `evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md`.
+The current P9 checkpoint is
+`evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md`.
 
 Use `EXECUTION_STATE.md` for the exact current SHA/cursor and validation debt.
 

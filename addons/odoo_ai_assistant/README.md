@@ -114,14 +114,18 @@ Controllers are transport adapters; they do not own policy or provider credentia
 
 ## Validation state
 
-P0-P8 are accepted. P8 passed 61 focused dependency-light tests, 20 focused Odoo
-tests and all six real Evidence gates. P9 is eligible. See:
+P0-P8 are accepted. P9 focused validation passed (49 dependency-light and 25 Odoo
+tests plus focused HOOT/browser smoke), but the real runner is blocked by required
+primary Codex reauthentication. P9 is not accepted and P10 is not yet eligible. See:
 
 ```text
 docs/research/EXECUTION_STATE.md
 docs/research/P8_EVIDENCE_CORE_IMPLEMENTATION.md
 docs/research/P8_FOCUSED_VALIDATION_RUNBOOK.md
 docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
+docs/research/P9_KNOWLEDGE_FIRST_SLICE.md
+docs/research/P9_FOCUSED_VALIDATION_RUNBOOK.md
+docs/research/evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md
 tests/unit/test_phase8_evidence_contracts.py
 tests/unit/test_phase8_evidence_runtime.py
 tests/unit/test_phase8_extension_evidence.py

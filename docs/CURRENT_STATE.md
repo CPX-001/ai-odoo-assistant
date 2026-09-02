@@ -12,7 +12,7 @@ P5.1-P5.8 accepted
 P6 COMPLETE / ACCEPTED
 P7 COMPLETE / ACCEPTED at 092ac57fe58a3a36765b115e78b2eca687f5dbbc
 P8 COMPLETE / ACCEPTED at e370af8acb7df175c0a90c8e17520c8576b4c6ce
-P9 first coherent slice IMPLEMENTED / NOT YET ACCEPTED
+P9 first coherent slice FOCUSED PASS / REAL VALIDATION BLOCKED / NOT YET ACCEPTED
 ```
 
 P7 acceptance is recorded in
@@ -25,7 +25,9 @@ P8 acceptance evidence is recorded in
 
 P9 implementation and its blocking validation runbook are recorded in
 `research/P9_KNOWLEDGE_FIRST_SLICE.md` and
-`research/P9_FOCUSED_VALIDATION_RUNBOOK.md`. No P9 PASS is claimed yet.
+`research/P9_FOCUSED_VALIDATION_RUNBOOK.md`. The focused checkpoint is
+`research/evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md`; no P9
+acceptance PASS is claimed yet.
 
 ## 1. Product/deployment baseline
 
@@ -343,12 +345,14 @@ package installation or service operation is implemented by P8/P9.
 P8 passed `61` focused dependency-light tests, `20` focused Odoo tests and all six
 real Odoo/Codex Evidence gates with effective-user `su=False`.
 
-P9 code/tests/runbook are implemented on main, but no P9 test or real gate has been
-executed in this connector session. The blocking next action is exactly
-`research/P9_FOCUSED_VALIDATION_RUNBOOK.md`: run focused static/dependency-light,
-focused Odoo, focused browser smoke and the seven P9 real Knowledge gates; repair any
-failures; then record immutable P9 acceptance evidence. Until that happens, P10 is
-not eligible.
+P9 focused validation passed: 49 dependency-light tests, 25 focused Odoo tests,
+focused HOOT and the required composer browser smoke. The smoke found and verified a
+repair that keeps attachment markers transport-only across every service wrapper.
+The real runner then passed deterministic upload ingestion and failed closed on its
+first provider-backed turn because the primary Codex session requires
+reauthentication. The blocking next action is to reauthenticate that normal host
+session and rerun all seven P9 real Knowledge gates. Until all seven pass, P10 is not
+eligible.
 
 The broad repository/addon/HOOT/Product Behavior FULL regressions remain periodic debt
 unless focused P9 failures require widening the validation scope.

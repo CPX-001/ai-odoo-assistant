@@ -11,7 +11,8 @@ intent chatbot.
 P0-P8 COMPLETE / ACCEPTED
 P8 focused dependency-light + Odoo validation PASS
 P8 real Evidence gates PASS (6/6)
-P9 ELIGIBLE / READY TO START
+P9 focused validation PASS; real validation BLOCKED on primary Codex reauthentication
+P10 NOT YET ELIGIBLE
 ```
 
 The exact cursor is

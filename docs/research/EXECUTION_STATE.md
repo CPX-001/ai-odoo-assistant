@@ -1,7 +1,7 @@
 # Stabilization execution state
 
-State format: 62
-Updated: 2026-09-02
+State format: 63
+Updated: 2026-09-03
 
 ## Accepted lineage
 
@@ -26,14 +26,15 @@ P8 final acceptance through e370af8acb7df175c0a90c8e17520c8576b4c6ce
 phase: 9
 phase_name: company Knowledge/RAG and source lifecycle
 active_slice: P9-FIRST-COHERENT-SLICE
-slice_state: IMPLEMENTED_AWAITING_FOCUSED_VALIDATION
-current_gate_type: P9_FOCUSED_VALIDATION
-blocking_implementation: none known after implementation review
-blocking_validation: P9 focused static/dependency-light + Odoo + browser smoke + seven real Knowledge gates are NOT EXECUTED
+slice_state: FOCUSED_PASS_REAL_VALIDATION_BLOCKED
+current_gate_type: P9_REAL_VALIDATION
+blocking_implementation: none known after focused validation and browser repair
+blocking_validation: primary host CODEX_HOME requires reauthentication; the first provider-backed gate failed closed with codex_turn_failed / authentication / unauthorized
 latest_accepted_evidence: docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
 latest_phase_acceptance: docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
 latest_implementation_record: docs/research/P9_KNOWLEDGE_FIRST_SLICE.md
-next_action: execute docs/research/P9_FOCUSED_VALIDATION_RUNBOOK.md against current main, repair any failures, rerun affected gates, then record immutable P9 acceptance evidence only if every blocking gate passes
+latest_validation_record: docs/research/evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md
+next_action: reauthenticate the normal primary host Codex session in /home/cpx/.codex, then rerun tests/e2e/p9_real_knowledge_gate.py against e227da1; accept P9 and move the cursor to P10 only if all seven real gates pass
 ```
 
 ## P9 first-slice implementation state
@@ -65,23 +66,24 @@ requirements for this first lexical slice.
 ## P9 validation status
 
 ```text
-static/compile/lint                            NOT EXECUTED
-focused dependency-light                      NOT EXECUTED
-focused Odoo                                  NOT EXECUTED
-focused browser/asset smoke                    NOT EXECUTED
-P9-REAL-UPLOAD-INGEST                         NOT EXECUTED
-P9-REAL-CHAT-INGEST                           NOT EXECUTED
-P9-REAL-FTS                                   NOT EXECUTED
-P9-REAL-CITATIONS                             NOT EXECUTED
-P9-REAL-ACL                                   NOT EXECUTED
-P9-REAL-REINDEX                               NOT EXECUTED
-P9-REAL-LARGE-DOCUMENT                        NOT EXECUTED
+static/compile/lint                            PASS
+focused dependency-light                      PASS — 49 tests
+focused Odoo                                  PASS — 25 tests, 0 failures/errors
+focused HOOT                                  PASS — 1 test / 1 assertion
+focused browser/asset smoke                    PASS after attachment-marker repair
+P9-REAL-UPLOAD-INGEST                         PASS
+P9-REAL-CHAT-INGEST                           BLOCKED / NOT EXECUTED
+P9-REAL-FTS                                   BLOCKED / NOT EXECUTED
+P9-REAL-CITATIONS                             BLOCKED / NOT EXECUTED
+P9-REAL-ACL                                   BLOCKED / NOT EXECUTED
+P9-REAL-REINDEX                               BLOCKED / NOT EXECUTED
+P9-REAL-LARGE-DOCUMENT                        BLOCKED / NOT EXECUTED
 P9-REAL-SEMANTIC-GAIN                         NOT APPLICABLE unless vector backend is introduced
-P9 acceptance                                 NOT CLAIMED
+P9 acceptance                                 NOT CLAIMED — P10 NOT YET ELIGIBLE
 ```
 
-No connector-side code inspection or commit creation is represented as test evidence.
-The blocking runbook is `docs/research/P9_FOCUSED_VALIDATION_RUNBOOK.md`.
+The exact commands, focused repair and provider-authentication failure are recorded in
+`docs/research/evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md`.
 
 ## P8 acceptance result
 

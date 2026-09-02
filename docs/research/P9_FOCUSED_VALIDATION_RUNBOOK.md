@@ -1,7 +1,14 @@
 # P9 focused validation runbook
 
-State: `PREPARED / NOT EXECUTED`
+State: `FOCUSED PASS / REAL VALIDATION BLOCKED ON PRIMARY CODEX AUTH`
 Scope: first P9 company Knowledge lifecycle, FTS Evidence and chat ingestion slice
+
+Execution record: `evidence/phase9/2026-09-03/P9-VALIDATION-BLOCKED-e227da1.md`.
+The focused static, dependency-light, Odoo, HOOT and browser gates passed. The real
+runner proved `P9-REAL-UPLOAD-INGEST`, then failed closed on its first provider-backed
+turn because the primary host session returned `authentication / unauthorized`.
+P9 remains unaccepted and P10 remains ineligible until the primary session is
+reauthenticated and all seven real gates pass in one authoritative rerun.
 
 This is the blocking validation for the implementation recorded in
 `P9_KNOWLEDGE_FIRST_SLICE.md`. It does not authorize P10 and no result in this file is
