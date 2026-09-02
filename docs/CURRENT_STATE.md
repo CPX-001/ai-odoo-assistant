@@ -11,7 +11,7 @@ P0-P4 accepted
 P5.1-P5.8 accepted
 P6 COMPLETE / ACCEPTED
 P7 COMPLETE / ACCEPTED at 092ac57fe58a3a36765b115e78b2eca687f5dbbc
-P8 foundation implemented; focused validation and P8 real gates pending
+P8.0 + P8.1/P8.2 checkpoint implemented; focused validation and P8 real gates pending
 ```
 
 P7 acceptance is recorded in
@@ -35,9 +35,10 @@ No unexecuted P8 test or gate is a PASS.
 - The retired FastAPI/Uvicorn Assistant sidecar is not part of the supported product.
 
 The obsolete sidecar-testing GitHub Actions workflow, the `auth="none"` inventory
-controller and its addon-local machine-authentication primitive are removed from
-the supported tree. Historical `service/` and `installer/` references remain only
-as historical/regression evidence.
+controller, its addon-local machine-authentication primitive and the residual
+`services/instance_inventory.py` compatibility layer are removed from the supported
+tree. Historical `service/` and `installer/` references remain only as
+historical/regression evidence.
 
 A future split into internal domain/link addons is allowed only if the customer still
 experiences one installable Odoo AI Assistant product. Odoo's `auto_install` link-module
@@ -98,7 +99,7 @@ The accepted P5/P6 runtime remains current:
 
 P8 does not replace this runtime or add another scheduler/database/agent loop.
 
-## 4. P7 extension framework — accepted
+## 4. P7 extension framework — accepted and P8-hardened
 
 P7 is accepted and live. The framework includes:
 
@@ -114,31 +115,35 @@ optional-provider failure isolation
 progressive-disclosure state model
 ```
 
-The provider API is now explicitly versioned by
-`CAPABILITY_PROVIDER_API_VERSION = "1"`, reserves core namespaces and isolates
-optional-provider/guard failures. Trusted installed extensions may contribute
-capabilities, Skills, ContextProviders and P8 EvidenceProviders without creating a
-parallel registry.
+P8 hardens this same framework rather than creating another tool/plugin system:
+
+- `CAPABILITY_PROVIDER_API_VERSION = "1"` is explicit;
+- core provider/resource namespaces are reserved;
+- API mismatch, loader, collision, dependency/version and cycle failures are isolated to attributable optional providers;
+- required providers fail closed;
+- capability/group guards fail closed on exceptions;
+- capability/context/Skill/provider JSON contracts are deeply immutable while preserving normal `dict`/`list` type checks;
+- trusted installed extensions may contribute capabilities, Skills, ContextProviders and EvidenceProviders through the same accepted provider boundary.
 
 ## 5. Public product profiles
 
-Product-facing behavior exposes exactly two profiles for now:
+Product-facing behavior exposes exactly two values:
 
 ```text
-User / non-technical
-Technical
+user
+technical
 ```
 
-Historical/internal compatibility values such as `business` or `developer` may still
-exist inside older contracts, but they map to those two product profiles. The
-Technical/host privilege boundary proposed for P10 is an execution boundary, not a
-third human product profile.
+Historical/internal compatibility values such as `business` or `developer` still
+exist in the internal access-profile seam, but public manifest projection normalizes
+them to `user` / `technical`. The Technical/host privilege boundary proposed for P10
+is an execution boundary, not a third human product profile.
 
 Profile mapping does not grant permission. Odoo ACLs/policy remain authoritative.
 
 ## 6. P8.0 + P8.1/P8.2 Evidence foundation — implemented, not accepted
 
-The current tree implements the first P8 foundation:
+The current tree implements:
 
 ```text
 EvidenceKind / EvidenceTrust / EvidenceFreshness
@@ -149,27 +154,30 @@ EvidenceProvider / EvidenceProviderStatus
 EvidenceProviderCatalog
 EvidenceRoutingPolicy
 EvidenceLedger / EvidenceLedgerSnapshot
+AssistantEvidenceDecisionEngine / EvidenceWorkingContext
 ```
 
 Key properties:
 
 - finite/canonical JSON and deep immutable metadata;
+- `FrozenDict`/`FrozenList` compatibility for callers using `isinstance(dict/list)`;
 - bounded refs/excerpts/bytes;
 - logical locators instead of model-authored arbitrary paths;
 - provenance, fingerprint/freshness and access binding;
 - secret redaction in Evidence structures;
-- optional provider failure isolation;
+- fine-grained optional provider failure isolation;
 - fetch-time access recheck;
 - explicit conflict groups;
 - Evidence is untrusted data and cannot grant capabilities, policy or approval.
 
-The bounded ledger currently retains at most 64 refs, 16 excerpts, 8 KiB per excerpt
-and 64 KiB total.
+The bounded ledger retains at most 64 refs, 16 excerpts, 8 KiB per excerpt and 64 KiB
+total. Its snapshot is serializable/versioned. The current live wrapper keeps it
+turn-scoped; durable reconnect restoration is not claimed yet.
 
 `EffectiveAssistantManifest.evidence_provider_ids` is reused as the manifest seam;
 there is no second Evidence manifest/registry.
 
-## 7. Runtime/installation Evidence
+## 7. Runtime/installation Evidence and live projection
 
 `assistant.runtime_inventory` is the first real EvidenceProvider. It derives a
 bounded projection from the effective Odoo Environment containing:
@@ -182,17 +190,35 @@ registry fingerprint
 user-vs-technical visibility
 ```
 
-It intentionally excludes absolute addon roots, credentials, host commands and
-mutable business snapshots. Mutable business facts continue to come from live ORM.
-A fingerprint change is surfaced as stale Evidence rather than silently treating an
-old reference as current.
+It intentionally excludes absolute addon roots, raw database names, credentials,
+host commands and mutable business snapshots. Mutable business facts continue to
+come from live ORM. A fingerprint change is surfaced as stale Evidence rather than
+silently treating an old reference as current.
+
+The first live provider-neutral retrieval path is also implemented:
+
+```text
+AssistantExtensionDecisionEngine
+ -> effective Evidence provider IDs
+ -> question-sensitive EvidenceRoutingPolicy
+ -> bounded search/fetch through AssistantEvidenceDecisionEngine
+ -> bounded turn EvidenceLedger
+ -> host_assistant_evidence structural metadata
+ -> assistant_evidence untrusted working data
+ -> current reasoning provider
+```
+
+Generic/social turns can select no Evidence provider. Relevant installation/how-to/
+diagnosis questions can retrieve Evidence. Codex only adapts the existing trust
+partition; it does not gain an Evidence-specific authority path. Retrieved text,
+including prompt-injection text, remains untrusted data.
 
 ## 8. What P8 does not implement yet
 
-The foundation is not the complete Evidence product. Still pending are:
+The current checkpoint is not the complete Evidence product. Still pending are:
 
-- live model-driven Evidence search/fetch integrated end to end in ordinary turns;
-- final-answer citation UX;
+- durable reconnect restoration of the Evidence ledger through the existing Odoo working transcript;
+- richer final-answer citation/navigation UX;
 - runtime/schema/configuration/security/navigation providers beyond inventory;
 - source/XML/module-document semantic indexing and validators;
 - correlated log/traceback Evidence and automatic diagnosis;
@@ -246,10 +272,12 @@ package installation or service operation is implemented by this P8 foundation.
 ## 12. Validation truth and next action
 
 Current P8 validation debt is authoritative in `research/EXECUTION_STATE.md`.
-At minimum the focused dependency-light tests, focused Odoo runtime-inventory test
-and directly affected P7 extension/addon boundaries must be executed in an
-Odoo/Codex-capable checkout and failures repaired before progressing to live
-Evidence orchestration.
+The focused dependency-light tests, focused Odoo runtime-inventory test, immutable
+context/planning regression and directly affected P7 extension/addon boundaries must
+be executed in an Odoo/Codex-capable checkout and failures repaired before any P8
+gate is claimed.
 
 The GitHub connector can publish source changes but cannot substitute for those real
-execution gates. P8 acceptance is not claimed.
+execution gates. P8 acceptance is not claimed. After focused validation, the next
+integration work is durable ledger reconnect/citation UX and the source/XML/log real
+gates rather than reimplementing the Evidence foundation again.
