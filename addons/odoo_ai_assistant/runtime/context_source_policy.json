@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "policy_id": "assistant.context_sources.default",
+  "include_current": [
+    "addons/odoo_ai_assistant/**",
+    "installed_trusted_addons/**",
+    "odoo18_effective_addons/**",
+    "tests/current/**",
+    "docs/current/**",
+    "docs/adr/accepted/**"
+  ],
+  "include_on_request": [
+    "candidate_repository/**",
+    "web/**",
+    "authorized_correlated_logs/**",
+    "historical_lineage/**"
+  ],
+  "exclude_default": [
+    "service/**",
+    "installer/**",
+    "migrations/**",
+    "alembic.ini",
+    "docs/codex/tasks/**",
+    "docs/research/evidence/**",
+    "docs/source-of-truth/**",
+    "**/generated/**",
+    "**/cache/**",
+    "**/node_modules/**",
+    "**/filestore/**",
+    "**/secrets/**",
+    "**/CODEX_HOME/**"
+  ],
+  "rules": {
+    "content_trust": "untrusted_data",
+    "logical_locators_only": true,
+    "access_recheck_on_fetch": true,
+    "fingerprint_required": true,
+    "secret_projection": "redact_or_omit",
+    "historical_requires_explicit_request": true
+  }
+}
