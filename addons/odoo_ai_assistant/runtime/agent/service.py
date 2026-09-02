@@ -778,7 +778,9 @@ def _latest_task_plan(items: tuple[WorkingItem, ...]) -> TaskPlan | None:
 
 
 def _proposed_plan(items: tuple[WorkingItem, ...]) -> tuple[PlannedCapability, ...]:
-    proposed = [item for item in items if item.kind == "plan_step_proposed"]
+    proposed = [
+        item for item in _active_plan_epoch(items) if item.kind == "plan_step_proposed"
+    ]
     result: list[PlannedCapability] = []
     previous_step_id: str | None = None
     for item in proposed:
@@ -809,7 +811,7 @@ def _proposed_plan(items: tuple[WorkingItem, ...]) -> tuple[PlannedCapability, .
 def _provider_decisions_used(items: tuple[WorkingItem, ...]) -> int:
     return sum(
         item.kind in {"assistant_decision", "task_plan", "task_plan_error", "final_answer"}
-        for item in items
+        for item in _active_plan_epoch(items)
     )
 
 
@@ -817,13 +819,13 @@ def _capability_calls_used(items: tuple[WorkingItem, ...]) -> int:
     return sum(
         item.kind == "assistant_decision"
         and item.data.get("decision_kind") == "reasoning_capability_call"
-        for item in items
+        for item in _active_plan_epoch(items)
     )
 
 
 def _trailing_failure_count(items: tuple[WorkingItem, ...]) -> int:
     count = 0
-    for item in reversed(items):
+    for item in reversed(_active_plan_epoch(items)):
         if item.kind in {"capability_error", "task_plan_error"}:
             count += 1
             continue
@@ -841,7 +843,7 @@ def _trailing_failure_count(items: tuple[WorkingItem, ...]) -> int:
 
 
 def _terminal_error_pending(items: tuple[WorkingItem, ...]) -> bool:
-    for item in reversed(items):
+    for item in reversed(_active_plan_epoch(items)):
         if item.kind == "capability_result":
             return False
         if item.kind == "capability_error":
@@ -854,8 +856,17 @@ def _definition_call_count(items: tuple[WorkingItem, ...], capability: str) -> i
         item.kind == "assistant_decision"
         and item.data.get("decision_kind") == "reasoning_capability_call"
         and item.data.get("capability") == capability
-        for item in items
+        for item in _active_plan_epoch(items)
     )
+
+
+def _active_plan_epoch(items: tuple[WorkingItem, ...]) -> tuple[WorkingItem, ...]:
+    """Return work after the latest fully rolled-back effect-plan attempt."""
+
+    for index in range(len(items) - 1, -1, -1):
+        if items[index].kind == "plan_execution_error":
+            return items[index + 1 :]
+    return items
 
 
 def _definition_max_calls(

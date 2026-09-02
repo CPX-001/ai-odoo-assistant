@@ -17,7 +17,12 @@ from .task_plan import TaskPlan, TaskPlanError, parse_task_plan
 _PLANNING_MODES = frozenset({"adaptive", "deliberate", "auto"})
 _EFFECTIVE_MODES = frozenset({"adaptive", "deliberate"})
 _REPLAN_EVIDENCE_KINDS = frozenset(
-    {"capability_result", "capability_error", "verified_effect_receipt"}
+    {
+        "capability_result",
+        "capability_error",
+        "plan_execution_error",
+        "verified_effect_receipt",
+    }
 )
 _TASK_PLAN_RETRY_BLOCKING_CODES = frozenset({"agent_task_plan_progress_required"})
 _LIST_ITEM_RE = re.compile(r"(?m)^\s*(?:[-*]|\d+[.)])\s+")

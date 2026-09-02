@@ -122,6 +122,7 @@ class AssistantEffectJournal(models.Model):
         existing = {
             row.step_id: row
             for row in self.with_user(SUPERUSER_ID).search([("turn_id", "=", turn.id)])
+            if row.state not in {"rolled_back", "reverted"}
         }
         expires_at = fields.Datetime.now() + timedelta(days=_RETENTION_DAYS)
         seen = set()

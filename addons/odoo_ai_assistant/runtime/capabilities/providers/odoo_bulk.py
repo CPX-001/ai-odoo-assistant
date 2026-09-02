@@ -7,7 +7,13 @@ verification remain host-owned.
 
 from __future__ import annotations
 
-from odoo.exceptions import AccessError, MissingError, UserError, ValidationError
+from odoo.exceptions import (
+    AccessError,
+    MissingError,
+    RedirectWarning,
+    UserError,
+    ValidationError,
+)
 
 from ..contracts import (
     CapabilityActivitySpec,
@@ -111,10 +117,19 @@ _BULK_DELETE_OUTPUT = {
     "properties": {
         "operation": {"type": "string", "enum": ["delete"]},
         "model": {"type": "string"},
-        "count": {"type": "integer", "minimum": 1, "maximum": _MAX_BULK_RECORDS},
+        "count": {"type": "integer", "minimum": 0, "maximum": _MAX_BULK_RECORDS},
+        "requested_count": {"type": "integer", "minimum": 1, "maximum": _MAX_BULK_RECORDS},
+        "excluded_count": {"type": "integer", "minimum": 0, "maximum": _MAX_BULK_RECORDS},
         "selection_fingerprint": {"type": "string", "minLength": 71, "maxLength": 71},
     },
-    "required": ["operation", "model", "count", "selection_fingerprint"],
+    "required": [
+        "operation",
+        "model",
+        "count",
+        "requested_count",
+        "excluded_count",
+        "selection_fingerprint",
+    ],
     "additionalProperties": False,
 }
 
@@ -179,19 +194,26 @@ def query_record_ids(context: CapabilityContext, arguments):
 
 
 def _bulk_delete_preview(context: CapabilityContext, arguments):
-    model, record_ids, records = _bulk_delete_targets(context, arguments)
+    model, record_ids, records, protected = _bulk_delete_targets(context, arguments)
     sample = [
         {"record_id": record.id, "display_name": _safe_name(record)}
         for record in records[:_MAX_PREVIEW_RECORDS]
     ]
-    fingerprint = _selection_fingerprint(model, record_ids)
+    protected_sample = [
+        {"record_id": item["record"].id, "display_name": _safe_name(item["record"]), "reason": item["reason"]}
+        for item in protected[:_MAX_PREVIEW_RECORDS]
+    ]
+    fingerprint = _selection_fingerprint(model, record_ids, records.ids)
     return CapabilityPreview(
         summary={
             "operation": "delete",
             "model": model,
-            "count": len(record_ids),
+            "count": len(records),
+            "requested_count": len(record_ids),
+            "excluded_count": len(protected),
             "records": sample,
-            "omitted_count": max(0, len(record_ids) - len(sample)),
+            "protected_records": protected_sample,
+            "omitted_count": max(0, len(records) - len(sample)),
         },
         precondition_fingerprint=fingerprint,
     )
@@ -201,20 +223,31 @@ def _bulk_delete_verify(context: CapabilityContext, arguments):
     result = context.metadata.get("capability_result")
     model = _model_name(arguments.get("model"))
     record_ids = _record_ids(arguments.get("record_ids"))
-    expected_fingerprint = _selection_fingerprint(model, record_ids)
+    model_set = _action_model_set(context, model)
+    remaining = model_set.browse(list(record_ids)).exists()
+    protected = _protected_delete_records(context, model, remaining)
+    protected_ids = {item["record"].id for item in protected}
+    eligible_ids = [record_id for record_id in record_ids if record_id not in protected_ids]
+    expected_fingerprint = _selection_fingerprint(model, record_ids, eligible_ids)
     if (
         not isinstance(result, dict)
         or result.get("operation") != "delete"
         or result.get("model") != model
-        or result.get("count") != len(record_ids)
+        or result.get("count") != len(eligible_ids)
+        or result.get("requested_count") != len(record_ids)
+        or result.get("excluded_count") != len(protected)
         or result.get("selection_fingerprint") != expected_fingerprint
     ):
         raise CapabilityError("capability_verification_invalid")
-    model_set = _action_model_set(context, model)
-    remaining = model_set.browse(list(record_ids)).exists()
     return CapabilityVerification(
-        verified=not bool(remaining),
-        summary={"operation": "delete", "model": model, "count": len(record_ids)},
+        verified=set(remaining.ids) == protected_ids,
+        summary={
+            "operation": "delete",
+            "model": model,
+            "count": len(eligible_ids),
+            "requested_count": len(record_ids),
+            "excluded_count": len(protected),
+        },
     )
 
 
@@ -222,10 +255,11 @@ def _bulk_delete_verify(context: CapabilityContext, arguments):
     name="odoo.records.bulk_delete",
     title="Delete many Odoo records",
     description=(
-        "Permanently delete 1 to 500 explicit eligible Odoo records in one bounded recordset "
-        "operation. The host validates every target, previews a bounded sample, always requires "
-        "human approval and verifies that all selected records are absent afterwards."
+        "Permanently delete the eligible subset of 1 to 500 explicit Odoo records in one bounded "
+        "recordset operation. The host excludes protected host records, previews both the effective "
+        "scope and exclusions, and verifies the effective deletion afterwards."
     ),
+    version="2",
     input_schema=_BULK_DELETE_INPUT,
     output_schema=_BULK_DELETE_OUTPUT,
     risk=CapabilityRisk.ACTION,
@@ -238,18 +272,25 @@ def _bulk_delete_verify(context: CapabilityContext, arguments):
     max_calls=5,
     max_input_bytes=64 * 1024,
     max_output_bytes=16 * 1024,
+    developer_metadata={"approval_refinement": "record_id_subset"},
 )
 def bulk_delete(context: CapabilityContext, arguments):
-    model, record_ids, records = _bulk_delete_targets(context, arguments)
-    fingerprint = _selection_fingerprint(model, record_ids)
+    model, record_ids, records, protected = _bulk_delete_targets(context, arguments)
+    fingerprint = _selection_fingerprint(model, record_ids, records.ids)
     try:
-        records.unlink()
-    except (AccessError, MissingError, ValidationError, UserError):
-        raise CapabilityError("action_rejected") from None
+        if records:
+            records.unlink()
+    except (AccessError, MissingError, RedirectWarning, ValidationError, UserError) as error:
+        raise CapabilityError(
+            "action_rejected",
+            details={"model": model, "operation": "delete"},
+        ) from error
     return {
         "operation": "delete",
         "model": model,
-        "count": len(record_ids),
+        "count": len(records),
+        "requested_count": len(record_ids),
+        "excluded_count": len(protected),
         "selection_fingerprint": fingerprint,
     }
 
@@ -264,12 +305,42 @@ def _bulk_delete_targets(context, arguments):
         records = model_set.browse(list(record_ids)).exists()
         if len(records) != len(record_ids) or set(records.ids) != set(record_ids):
             raise CapabilityError("record_not_found")
-        records.check_access("unlink")
+        records.check_access("read")
     except CapabilityError:
         raise
     except (AccessError, MissingError, ValidationError):
         raise CapabilityError("access_denied") from None
-    return model, record_ids, records
+    protected = _protected_delete_records(context, model, records)
+    protected_ids = {item["record"].id for item in protected}
+    eligible = records.filtered(lambda record: record.id not in protected_ids)
+    if eligible:
+        try:
+            eligible.check_access("unlink")
+        except (AccessError, MissingError, ValidationError):
+            raise CapabilityError("access_denied") from None
+    return model, record_ids, eligible, protected
+
+
+def _protected_delete_records(context, model, records):
+    if model != "res.partner" or not records:
+        return []
+    record_ids = records.ids
+    active_users = context.env["res.users"].search(
+        [("active", "=", True), ("partner_id", "in", record_ids)]
+    )
+    user_partner_ids = set(active_users.mapped("partner_id").ids)
+    companies = context.env["res.company"].search([("partner_id", "in", record_ids)])
+    company_partner_ids = set(companies.mapped("partner_id").ids)
+    protected = []
+    for record in records:
+        reasons = []
+        if record.id in user_partner_ids:
+            reasons.append("linked_active_user")
+        if record.id in company_partner_ids:
+            reasons.append("company_partner")
+        if reasons:
+            protected.append({"record": record, "reason": "+".join(reasons)})
+    return protected
 
 
 def _record_ids(value):
@@ -282,5 +353,12 @@ def _record_ids(value):
     return tuple(value)
 
 
-def _selection_fingerprint(model, record_ids):
-    return _fingerprint({"model": model, "record_ids": list(record_ids), "operation": "delete"})
+def _selection_fingerprint(model, record_ids, eligible_ids):
+    return _fingerprint(
+        {
+            "model": model,
+            "record_ids": list(record_ids),
+            "eligible_ids": list(eligible_ids),
+            "operation": "delete",
+        }
+    )

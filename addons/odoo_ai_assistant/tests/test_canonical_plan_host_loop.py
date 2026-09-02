@@ -12,6 +12,7 @@ from ..runtime.agent.plan import CapabilityPlanService
 from ..runtime.agent.planning import PlanningDecisionEngine, resolve_planning_strategy
 from ..runtime.agent.service import AgentTurnError, AgentTurnService
 from ..runtime.agent.task_plan import TaskPlan, TaskPlanStep
+from ..runtime.agent.working_transcript import append_working_item
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -137,6 +138,83 @@ class TestCanonicalPlanHostLoop(TransactionCase):
                 "rejected_revision": 2,
             },
         )
+
+    def test_rolled_back_plan_starts_a_fresh_bounded_plan_epoch(self):
+        context, registry, executor, _plans = self._runtime()
+        old_arguments = {
+            "model": "res.partner",
+            "record_id": self.target.id,
+            "values": {"name": "STALE PLAN"},
+        }
+        items = append_working_item((), "user_input", {"message": "Actualiza"})
+        items = append_working_item(
+            items,
+            "assistant_decision",
+            {
+                "call_id": "old-step",
+                "decision_kind": "plan_step_proposal",
+                "capability": "odoo.record.patch",
+                "arguments": old_arguments,
+                "summary": "Plan anterior",
+            },
+        )
+        items = append_working_item(
+            items,
+            "plan_step_proposed",
+            {
+                "call_id": "old-step",
+                "capability": "odoo.record.patch",
+                "arguments": old_arguments,
+                "summary": "Plan anterior",
+            },
+        )
+        items = append_working_item(
+            items,
+            "final_answer",
+            {"answer": "Plan anterior", "confidence": "high"},
+        )
+        items = append_working_item(
+            items,
+            "plan_execution_error",
+            {
+                "code": "action_rejected",
+                "step_id": "old-step",
+                "capability": "odoo.record.patch",
+                "details": {"model": "res.partner"},
+                "effect_state": "none",
+                "rolled_back": True,
+                "replan": 1,
+            },
+        )
+        new_arguments = {
+            "model": "res.partner",
+            "record_id": self.target.id,
+            "values": {"name": "REPAIRED PLAN"},
+        }
+        engine = _PlanDecisionEngine(
+            PlanStepProposal(
+                "plan_step_proposal",
+                "new-step",
+                "odoo.record.patch",
+                new_arguments,
+                "Plan corregido",
+            ),
+            FinalAnswer("final_answer", "Plan corregido", "high"),
+        )
+        service = AgentTurnService(
+            registry=registry,
+            context=context,
+            executor=executor,
+            decision_engine=engine,
+            working_items=items,
+            allow_plan_proposals=True,
+        )
+
+        result = asyncio.run(service.run(message="Actualiza"))
+
+        self.assertEqual(engine.calls, 2)
+        self.assertEqual([step.step_id for step in result.plan], ["new-step"])
+        self.assertEqual(result.plan[0].arguments, new_arguments)
 
     def test_patch_proposal_is_stage_only_until_approved_then_executes_once_and_verifies(self):
         context, registry, executor, plans = self._runtime()

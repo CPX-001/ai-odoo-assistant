@@ -204,6 +204,14 @@ external     non-transactional/external unit whose interrupted outcome may be un
 
 A persisted in-flight unit is never blindly replayed.
 
+For one Odoo-local atomic unit, a capability rejection after the write barrier is recoverable only when the host rolls
+back the transaction and every durable journal row proves `rolled_back`. The host then appends a sanitized
+`plan_execution_error` and lets the model narrow or correct the complete plan within the original intent. That repair
+does not create new approval authority: the original approval is reused only for the same operation over a strict or
+equal subset of its approved record identities. Expanding the scope, changing capability/model/operation, an
+unproven rollback, or an external/uncertain effect stops automatic repair and follows the normal approval/recovery
+path.
+
 ## 9. Safe compensation and recent effect journal
 
 P5.8 adds explicit host-side compensation for selected verified reversible operations. It is not a PostgreSQL transaction rollback.

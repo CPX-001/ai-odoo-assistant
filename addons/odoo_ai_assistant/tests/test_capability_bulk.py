@@ -125,3 +125,66 @@ class TestBulkSelectionAndDeletion(TransactionCase):
         self.assertEqual(executed.results[0].data["count"], 113)
         self.assertNotIn("record_ids", executed.results[0].data)
         self.assertEqual(executed.payload["steps"][0]["verification"]["count"], 113)
+
+    def test_protected_company_and_active_user_contacts_are_excluded_host_side(self):
+        context, _registry, _executor, plans = self._runtime()
+        protected_ids = [context.env.company.partner_id.id, self.bulk_user.partner_id.id]
+        requested_ids = [*self.targets.ids, *protected_ids]
+        requested = (
+            PlannedCapability(
+                capability="odoo.records.bulk_delete",
+                arguments={
+                    "operation": "delete",
+                    "model": "res.partner",
+                    "record_ids": requested_ids,
+                },
+                summary="Eliminar contactos eliminables",
+            ),
+        )
+
+        prepared = asyncio.run(plans.prepare(requested))
+        preview = prepared["steps"][0]["preview"]
+        self.assertEqual(preview["requested_count"], 115)
+        self.assertEqual(preview["count"], 113)
+        self.assertEqual(preview["excluded_count"], 2)
+        self.assertEqual(
+            {item["record_id"] for item in preview["protected_records"]},
+            set(protected_ids),
+        )
+
+        authorized = dict(prepared)
+        authorized["state"] = "authorized"
+        executed = asyncio.run(plans.execute(authorized, human_approved=True))
+        self.assertFalse(context.env["res.partner"].browse(self.targets.ids).exists())
+        remaining_protected = context.env["res.partner"].browse(protected_ids).exists()
+        self.assertEqual(set(remaining_protected.ids), set(protected_ids))
+        self.assertEqual(executed.results[0].data["requested_count"], 115)
+        self.assertEqual(executed.results[0].data["count"], 113)
+        self.assertEqual(executed.results[0].data["excluded_count"], 2)
+
+    def test_approval_is_reused_only_for_same_operation_record_subset(self):
+        _context, _registry, _executor, plans = self._runtime()
+
+        def prepared(record_ids):
+            return asyncio.run(
+                plans.prepare(
+                    (
+                        PlannedCapability(
+                            capability="odoo.records.bulk_delete",
+                            arguments={
+                                "operation": "delete",
+                                "model": "res.partner",
+                                "record_ids": record_ids,
+                            },
+                            summary="Eliminar contactos eliminables",
+                        ),
+                    )
+                )
+            )
+
+        approved = prepared(self.targets.ids[:3])
+        narrowed = prepared(self.targets.ids[:2])
+        expanded = prepared([*self.targets.ids[:3], self.env.company.partner_id.id])
+
+        self.assertTrue(plans.approval_refines(approved, narrowed))
+        self.assertFalse(plans.approval_refines(approved, expanded))

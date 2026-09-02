@@ -26,9 +26,10 @@ _SETTING_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 class CapabilityError(RuntimeError):
     """Sanitized capability framework failure."""
 
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, *, details: Mapping[str, JsonValue] | None = None) -> None:
         super().__init__(code)
         self.code = code
+        self.details = dict(details or {})
 
 
 class CapabilityRisk(StrEnum):

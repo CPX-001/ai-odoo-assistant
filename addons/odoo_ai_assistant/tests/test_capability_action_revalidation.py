@@ -3,7 +3,12 @@ import asyncio
 from odoo import Command
 from odoo.tests.common import TransactionCase
 
-from ..runtime.agent import CapabilityPlanError, CapabilityPlanService, PlannedCapability
+from ..runtime.agent import (
+    CapabilityPlanError,
+    CapabilityPlanService,
+    CapabilityPlanStepError,
+    PlannedCapability,
+)
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -12,6 +17,7 @@ from ..runtime.capabilities import (
     clear_discovery_cache,
     discover_capabilities,
 )
+from ..runtime.capabilities.contracts import CapabilityError
 
 
 def _policy(mode, risk):
@@ -124,3 +130,43 @@ class TestCapabilityActionPolicyRevalidation(TransactionCase):
         self.assertEqual(executed.payload["state"], "completed")
         self.target.invalidate_recordset(["name"])
         self.assertEqual(self.target.name, "AI POLICY UPDATED")
+
+    def test_execution_failure_is_bound_to_the_failed_step_for_agent_repair(self):
+        plans = self._plan_service(_policy("always_confirm", "low"))
+        prepared = asyncio.run(plans.prepare(self._patch()))
+        authorized = dict(prepared)
+        authorized["state"] = "authorized"
+
+        async def reject_execution(*_args, **_kwargs):
+            raise CapabilityError(
+                "action_rejected",
+                details={"model": "res.partner", "operation": "patch"},
+            )
+
+        plans._executor.execute = reject_execution
+
+        with self.assertRaises(CapabilityPlanStepError) as captured:
+            asyncio.run(plans.execute(authorized, human_approved=True))
+
+        self.assertEqual(captured.exception.code, "action_rejected")
+        self.assertEqual(captured.exception.step_id, prepared["steps"][0]["step_id"])
+        self.assertEqual(captured.exception.capability, "odoo.record.patch")
+        self.assertEqual(captured.exception.phase, "execution")
+        self.assertEqual(
+            captured.exception.details,
+            {"model": "res.partner", "operation": "patch"},
+        )
+
+    def test_preflight_failure_is_bound_without_claiming_a_rollback(self):
+        plans = self._plan_service(_policy("always_confirm", "low"))
+        prepared = asyncio.run(plans.prepare(self._patch()))
+        authorized = dict(prepared)
+        authorized["state"] = "authorized"
+        self.target.unlink()
+
+        with self.assertRaises(CapabilityPlanStepError) as captured:
+            asyncio.run(plans.execute(authorized, human_approved=True))
+
+        self.assertEqual(captured.exception.code, "record_not_found")
+        self.assertEqual(captured.exception.phase, "preflight")
+        self.assertEqual(captured.exception.details, {})

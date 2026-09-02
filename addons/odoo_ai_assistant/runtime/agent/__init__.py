@@ -10,7 +10,12 @@ from .budgets import (
     resolve_agent_budgets,
 )
 from .extension_context import AssistantExtensionDecisionEngine
-from .plan import CapabilityPlanError, CapabilityPlanExecution, CapabilityPlanService
+from .plan import (
+    CapabilityPlanError,
+    CapabilityPlanExecution,
+    CapabilityPlanService,
+    CapabilityPlanStepError,
+)
 from .planning import (
     PlanningDecisionEngine,
     PlanningStrategy,
@@ -52,6 +57,7 @@ __all__ = [
     "CapabilityPlanError",
     "CapabilityPlanExecution",
     "CapabilityPlanService",
+    "CapabilityPlanStepError",
     "CostBudget",
     "ExplorationBudget",
     "LatencyBudget",

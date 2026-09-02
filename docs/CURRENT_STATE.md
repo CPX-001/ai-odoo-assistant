@@ -63,12 +63,17 @@ future file-import subsystem.
 
 Fallback batch plans may execute up to five bounded pages of the same mutation capability. The host validates the
 complete per-capability call budget before crossing the write barrier, and an Odoo-atomic failure is automatically
-settled as having no surviving effect only when every durable EffectJournal row proves rollback. Live reasoning detail
+settled as having no surviving effect only when every durable EffectJournal row proves rollback. Once that proof
+exists, a sanitized step-bound failure is returned to the same agent loop as corrective evidence. The provider gets a
+fresh bounded planning epoch and may prepare a repaired plan. An existing approval is reused only when the repaired
+plan keeps the same capability/model/operation and narrows the approved record set; broader or different effects
+require approval again. Known protected contacts (active-user and company partners) are excluded host-side from bulk
+deletion before execution and are shown as exclusions in the preview/receipt. Live reasoning detail
 follows newly appended summaries while the user remains at the bottom; manual upward scrolling suspends following
 until the user returns to the end.
 
-The `18.0.13.18.0` upgrade normalizes legacy nullable conversation-autonomy overrides to their declared false
-default before Odoo enforces the required Boolean column contract.
+The `18.0.13.19.0` upgrade adds this rollback/replan contract and protected bulk-delete classification. The preceding
+`18.0.13.18.0` upgrade normalized legacy nullable conversation-autonomy overrides to their declared false default.
 
 ### Current latency optimization checkpoint
 

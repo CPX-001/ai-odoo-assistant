@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from ..capabilities import (
     CapabilityEffect,
+    CapabilityError,
     CapabilityExecutor,
     CapabilityExposure,
     CapabilityRegistry,
@@ -27,6 +28,17 @@ class CapabilityPlanError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+class CapabilityPlanStepError(CapabilityPlanError):
+    """Sanitized failure bound to the plan step that the host was executing."""
+
+    def __init__(self, code, *, step_id, capability, phase, details=None):
+        super().__init__(code)
+        self.step_id = step_id
+        self.capability = capability
+        self.phase = phase
+        self.details = dict(details or {})
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,21 +225,35 @@ class CapabilityPlanService:
                 definition = definitions[step_id]
                 step["state"] = "executing"
                 steps[index] = step
-                result = await self._executor.execute(
-                    definition.name,
-                    step["arguments"],
-                    authority=ExecutionAuthority.PLAN,
-                    approved=human_approved,
-                    semantic_group_key=step["semantic_groups"]["execute"],
-                )
-                verification = await self._executor.verify(
-                    definition.name,
-                    step["arguments"],
-                    result,
-                    semantic_group_key=step["semantic_groups"]["verify"],
-                )
+                try:
+                    result = await self._executor.execute(
+                        definition.name,
+                        step["arguments"],
+                        authority=ExecutionAuthority.PLAN,
+                        approved=human_approved,
+                        semantic_group_key=step["semantic_groups"]["execute"],
+                    )
+                    verification = await self._executor.verify(
+                        definition.name,
+                        step["arguments"],
+                        result,
+                        semantic_group_key=step["semantic_groups"]["verify"],
+                    )
+                except CapabilityError as error:
+                    raise CapabilityPlanStepError(
+                        error.code,
+                        step_id=step_id,
+                        capability=definition.name,
+                        phase="execution",
+                        details=error.details,
+                    ) from error
                 if verification.verified is not True:
-                    raise CapabilityPlanError("capability_plan_verification_failed")
+                    raise CapabilityPlanStepError(
+                        "capability_plan_verification_failed",
+                        step_id=step_id,
+                        capability=definition.name,
+                        phase="execution",
+                    )
                 step["state"] = "completed"
                 step["result"] = dict(result.data)
                 step["verification"] = dict(verification.summary)
@@ -260,6 +286,18 @@ class CapabilityPlanService:
             state="completed",
         )
         return CapabilityPlanExecution(payload=completed, results=tuple(results))
+
+    def approval_refines(self, approved, candidate):
+        """Return true when a repaired plan cannot exceed the user's approved effect scope."""
+
+        original = _validated_plan(approved)
+        repaired = _validated_plan(candidate)
+        original_scopes = _approval_scopes(self._registry, original["steps"])
+        repaired_scopes = _approval_scopes(self._registry, repaired["steps"])
+        return all(
+            key in original_scopes and values <= original_scopes[key]
+            for key, values in repaired_scopes.items()
+        ) and bool(repaired_scopes)
 
     async def _preflight_unit(
         self,
@@ -298,13 +336,27 @@ class CapabilityPlanService:
             )
             if expected_binding != step["binding_fingerprint"]:
                 raise CapabilityPlanError("capability_plan_binding_mismatch")
-            current_preview = await self._executor.preview(
-                definition.name,
-                step["arguments"],
-                semantic_group_key=step["semantic_groups"]["prepare"],
-            )
+            try:
+                current_preview = await self._executor.preview(
+                    definition.name,
+                    step["arguments"],
+                    semantic_group_key=step["semantic_groups"]["prepare"],
+                )
+            except CapabilityError as error:
+                raise CapabilityPlanStepError(
+                    error.code,
+                    step_id=step_id,
+                    capability=definition.name,
+                    phase="preflight",
+                    details=error.details,
+                ) from error
             if current_preview.precondition_fingerprint != step["precondition_fingerprint"]:
-                raise CapabilityPlanError("capability_plan_precondition_changed")
+                raise CapabilityPlanStepError(
+                    "capability_plan_precondition_changed",
+                    step_id=step_id,
+                    capability=definition.name,
+                    phase="preflight",
+                )
             if (
                 _journal_classification(
                     self._registry,
@@ -334,6 +386,46 @@ def _validate_execution_call_budget(registry, steps):
         definition = registry.resolve(capability)
         if count > definition.max_calls:
             raise CapabilityPlanError("capability_call_limit_exceeded")
+
+
+def _approval_scopes(registry, steps):
+    scopes = {}
+    exact = Counter()
+    for step in steps:
+        definition = registry.resolve(step["capability"])
+        arguments = step["arguments"]
+        mode = definition.developer_metadata.get("approval_refinement")
+        if mode == "record_id_subset":
+            model = arguments.get("model")
+            operation = arguments.get("operation")
+            record_ids = arguments.get("record_ids")
+            if (
+                not isinstance(model, str)
+                or not isinstance(operation, str)
+                or not isinstance(record_ids, list)
+                or any(type(record_id) is not int for record_id in record_ids)
+            ):
+                raise CapabilityPlanError("capability_plan_invalid")
+            key = (definition.name, model, operation)
+            scopes.setdefault(key, set()).update(record_ids)
+            continue
+        exact[(definition.name, _canonical_arguments(arguments))] += 1
+    for key, count in exact.items():
+        scopes[("exact", *key)] = set(range(count))
+    return scopes
+
+
+def _canonical_arguments(arguments):
+    try:
+        return json.dumps(
+            arguments,
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    except (TypeError, ValueError):
+        raise CapabilityPlanError("capability_plan_invalid") from None
 
 
 def _validated_plan(payload):

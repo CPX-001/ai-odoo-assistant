@@ -19,6 +19,7 @@ _ALLOWED_KINDS = frozenset(
         "capability_error",
         "plan_step_proposed",
         "plan_prepared",
+        "plan_execution_error",
         "verified_effect_receipt",
         "final_answer",
     }
@@ -129,7 +130,13 @@ def _validate_item(item: WorkingItem) -> None:
         raise WorkingTranscriptError("agent_working_item_kind_invalid")
     maximum = (
         MAX_RESULT_BYTES
-        if item.kind in {"capability_result", "capability_error", "verified_effect_receipt"}
+        if item.kind
+        in {
+            "capability_result",
+            "capability_error",
+            "plan_execution_error",
+            "verified_effect_receipt",
+        }
         else 16 * 1024
     )
     _bounded(item.data, maximum, "agent_working_item_too_large")

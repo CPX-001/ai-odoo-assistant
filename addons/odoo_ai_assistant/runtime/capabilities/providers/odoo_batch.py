@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from odoo.exceptions import AccessError, MissingError, UserError, ValidationError
+from odoo.exceptions import (
+    AccessError,
+    MissingError,
+    RedirectWarning,
+    UserError,
+    ValidationError,
+)
 
 from ..contracts import (
     CapabilityApproval,
@@ -272,6 +278,7 @@ def batch_patch(context: CapabilityContext, arguments):
     max_calls=_MAX_BATCH_CALLS_PER_PLAN,
     max_input_bytes=_MAX_BATCH_INPUT_BYTES,
     max_output_bytes=_MAX_BATCH_OUTPUT_BYTES,
+    developer_metadata={"approval_refinement": "record_id_subset"},
 )
 def batch_mutate(context: CapabilityContext, arguments):
     return _execute_batch(context, arguments, expected_operation="delete")
@@ -287,8 +294,11 @@ def _execute_batch(context: CapabilityContext, arguments, *, expected_operation)
         model_set = _model_set(context, model)
         try:
             records = model_set.create(rows)
-        except (AccessError, MissingError, ValidationError, UserError):
-            raise CapabilityError("action_rejected") from None
+        except (AccessError, MissingError, RedirectWarning, ValidationError, UserError):
+            details = {"model": model, "operation": "delete"}
+            if model == "res.partner":
+                details["exclusion_hint"] = "active_user_and_company_partners"
+            raise CapabilityError("action_rejected", details=details) from None
         record_ids = records.ids
     elif operation == "patch":
         record_ids, checked = _patch_input(context, model, arguments)
