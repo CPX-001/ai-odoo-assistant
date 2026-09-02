@@ -5,6 +5,7 @@ from . import chat_preferences as chat_preferences
 from . import chat_storage as chat_storage
 from . import knowledge as knowledge
 from . import knowledge_attachment_link as knowledge_attachment_link
+from . import knowledge_fts_index as knowledge_fts_index
 from . import embedded_runtime as embedded_runtime
 from . import res_config_settings as res_config_settings
 from . import runtime_diagnostics as runtime_diagnostics
