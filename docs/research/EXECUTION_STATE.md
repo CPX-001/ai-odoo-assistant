@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 59  
+State format: 60  
 Updated: 2026-09-02
 
 ## Accepted lineage
@@ -33,10 +33,10 @@ focused_validation_runbook: docs/research/P8_FOCUSED_VALIDATION_RUNBOOK.md
 active_real_validation_runbook: docs/research/REAL_ENV_VALIDATION_PROTOCOL.md
 current_gate_type: P8_FOCUSED_DEPENDENCY_LIGHT_AND_ODOO
 blocking_implementation: none for the P8.0 + P8.1/P8.2 checkpoint described by the current specification
-blocking_validation: focused P8 tests and directly affected P7/addon boundaries have not been executed in an Odoo/Codex-capable environment
+blocking_validation: focused P8 tests and directly affected P7/addon/fixture boundaries have not been executed in an Odoo/Codex-capable environment
 latest_accepted_evidence: docs/research/evidence/regression/2026-09-02/FULL-REGRESSION-092ac57.md
 latest_phase_acceptance: docs/research/evidence/phase7/2026-09-02/P7-ACCEPTANCE-092ac57.md
-next_action: execute the focused P8 dependency-light tests, directly affected P7 extension tests and focused Odoo runtime-inventory/boundary tests; repair failures before claiming any P8 gate
+next_action: execute focused P8 dependency-light tests plus runtime-inventory, installed-addon Evidence fixture, addon boundary and canonical-plan Odoo tests; repair failures before claiming any P8 gate
 ```
 
 ## Implemented checkpoint
@@ -58,6 +58,7 @@ Skills activated from effective Evidence provider IDs
 live provider-neutral bounded Evidence search/fetch on relevant model decisions
 Codex adapter keeps Evidence structural metadata host-owned and retrieved content untrusted
 runtime/installation inventory EvidenceProvider
+installed-addon fixture EvidenceProvider through real Odoo registry composition
 public manifest projection normalized to exactly user/technical
 source-scope descriptor and current architecture/ADRs
 focused dependency-light and Odoo tests prepared/extended
@@ -85,6 +86,7 @@ tests/unit/test_phase7_live_extension_context.py
 tests/addon/test_phase8_runtime_evidence.py
 tests/addon/test_addon_boundaries.py
 addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py
+tests/fixtures/odoo_addons/odoo_ai_assistant_p7_fixture/tests/test_phase7_fixture.py
 ```
 
 The exact commands and environment are in
@@ -96,7 +98,7 @@ explicit runbook requirement.
 
 ```text
 P8 focused dependency-light                         NOT EXECUTED
-P8 focused Odoo                                     NOT EXECUTED
+P8 focused Odoo + installed-addon fixture           NOT EXECUTED
 P8 live Evidence search/fetch/trust projection      IMPLEMENTED / NOT EXECUTED
 P8 durable reconnect ledger restoration             NOT IMPLEMENTED / NOT EXECUTED
 P8 end-user citation rendering                      NOT IMPLEMENTED / NOT EXECUTED
