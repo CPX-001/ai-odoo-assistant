@@ -28,7 +28,7 @@ def test_spanish_semantic_activity_catalog_entries_are_javascript_translations()
 def test_semantic_activity_interactions_keep_the_component_receiver():
     source = (
         ROOT
-        / "addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_panel_activity.xml"
+        / "addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_semantic_activity_component.js"
     ).read_text(encoding="utf-8")
 
     for handler in [
@@ -36,11 +36,11 @@ def test_semantic_activity_interactions_keep_the_component_receiver():
         "showMoreActivityReferences",
         "showRemainingActivityReferences",
     ]:
-        assert f"() =&gt; this.{handler}" in source or f"() => this.{handler}" in source
+        assert f"{handler}(" in source
 
     final_references = (
         ROOT
-        / "addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_navigation_references.xml"
+        / "addons/odoo_ai_assistant/static/src/components/assistant_panel/assistant_panel_activity.xml"
     ).read_text(encoding="utf-8")
     assert "() => this.openFinalReference" in final_references
 

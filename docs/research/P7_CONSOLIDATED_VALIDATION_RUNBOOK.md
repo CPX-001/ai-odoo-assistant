@@ -20,6 +20,25 @@ Before testing:
 Record every repair commit. After a repair, rerun the smallest owning failed gate immediately, then rerun downstream
 checks whose assumptions it changed.
 
+### Disposable-environment preflight
+
+The Product Behavior catalog expects `contacts`, `sale_management` and `account` to be installed, in addition to
+`odoo_ai_assistant` and the Phase-7 fixture. In particular, a database without `contacts` can correctly return no
+Contacts navigation reference and still fail the catalog's navigation expectation. Check module installation before
+spending provider quota; do not weaken the navigation assertion to accommodate an incomplete fixture.
+
+The dependency-light interpreter needs `lxml` for the real screen-context service. Keep its services package isolated
+from the Odoo-only package initializer in the standalone extension tests.
+
+For a standalone local Odoo server, put the Odoo virtualenv's `bin` directory first in `PATH`, including for automatic
+server reloads. Set suitable test-server time limits (the 2026-09-02 run uses `--limit-time-real=1200
+--limit-time-cpu=1200`) so an idle browser request does not kill the disposable worker mid-eval. These are local
+validation settings, not changes to production limits or the host's bounded turn budgets.
+
+`test_latency_routing.py` contains plain `unittest.TestCase` classes, which Odoo's addon tag runner does not select.
+Execute its six tests explicitly with `unittest` in the Odoo interpreter when validating the session/Auto checkpoint;
+do not count an unmatched Odoo class selector as a passing test.
+
 ## 2. Dependency-light/static Phase-7 gate
 
 Run the Phase-7 tests together so framework interactions are checked on one lineage:
