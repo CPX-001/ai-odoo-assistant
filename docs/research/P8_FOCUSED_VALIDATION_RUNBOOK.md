@@ -48,6 +48,7 @@ addons/odoo_ai_assistant/runtime/capabilities/manifest.py
 addons/odoo_ai_assistant/runtime/agent/extension_context.py
 addons/odoo_ai_assistant/runtime/agent/codex_extension_context.py
 addons/odoo_ai_assistant/controllers/__init__.py
+tests/fixtures/odoo_addons/odoo_ai_assistant_p7_fixture/models/provider.py
 ```
 
 Fail on syntax errors, import cycles, unsupported Python syntax for the repository's
@@ -91,13 +92,21 @@ public manifest values are user/technical, not business/developer
 ## 4. Focused Odoo gate
 
 Use the existing disposable Odoo 18 Community test environment and repository addon
-path. Install/update `odoo_ai_assistant`, then run at least:
+path. Install/update `odoo_ai_assistant` and the existing P7 fixture addon, then run at
+least:
 
 ```text
 TestPhase8RuntimeInventoryEvidence
+TestPhase7Fixture
 addon boundary tests for retired inventory/machine-auth surfaces
 TestCanonicalPlanHostLoop
 ```
+
+The fixture test at
+`tests/fixtures/odoo_addons/odoo_ai_assistant_p7_fixture/tests/test_phase7_fixture.py`
+is the installed-addon Evidence gate: it proves real Odoo-registry discovery,
+CapabilityProvider composition, Skill selector activation, Evidence search/fetch,
+fetch-time user scope rejection and manifest projection without editing core.
 
 Required assertions:
 
@@ -106,12 +115,13 @@ Required assertions:
 - no supported addon machine-auth or inventory-service compatibility path remains;
 - runtime inventory is collected in-process as `assistant.runtime_inventory` Evidence;
 - the Assistant addon appears in the current installed-module projection;
+- installed trusted addons can contribute an EvidenceProvider through the existing CapabilityProvider boundary;
 - user/company/group access binding is rechecked on fetch;
 - a mismatched fingerprint becomes explicit `stale`;
 - no absolute path, raw database name, credential or host command appears in model-visible inventory output;
 - P7 extension composition still works with an Evidence catalog present;
 - immutable `CapabilityContext` metadata does not regress planning/effect behavior;
-- User and Technical profiles remain descriptive only and do not alter Odoo authority.
+- public profile values are `user`/`technical` and remain descriptive only.
 
 An access failure for an ordinary User profile is not silently repaired by adding a
 generic `sudo()` path. If installation metadata needs a host-owned technical read,
