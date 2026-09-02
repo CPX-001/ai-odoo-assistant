@@ -1,8 +1,9 @@
-"""Provider-neutral projection of active Skills and JIT context into one model decision.
+"""Provider-neutral projection of active Skills, JIT context and Evidence into one model decision.
 
 This wrapper is deliberately non-authoritative. Skills are trusted behavior guidance from
-installed code, JIT context and current-screen semantics are data, and the EffectiveAssistantManifest
-is a derived host projection. Executable authority remains the CapabilityRegistry/Executor/Policy path.
+installed code, JIT context/current-screen semantics and retrieved Evidence are data, and the
+EffectiveAssistantManifest is a derived host projection. Executable authority remains the
+CapabilityRegistry/Executor/Policy path.
 """
 
 from __future__ import annotations
@@ -23,6 +24,12 @@ from ..capabilities import (
     TechnicalAccessProfile,
     build_effective_assistant_manifest,
 )
+from ..capabilities.evidence import (
+    EvidenceLedger,
+    EvidenceRoutingPolicy,
+    EvidenceSearchRequest,
+)
+from ..capabilities.evidence_runtime import AssistantEvidenceDecisionEngine
 from .contracts import NextDecision
 
 _CACHE_METADATA_KEYS = (
@@ -33,12 +40,13 @@ _CACHE_METADATA_KEYS = (
 
 
 class AssistantExtensionDecisionEngine:
-    """Inject active extension guidance/context without persisting it as transcript state.
+    """Inject active extension guidance/context without granting execution authority.
 
     The wrapper is created for one host decision loop. Expensive host projections that are stable
     for that turn (resolved screen semantics, configuration health and the manifest projection) are
-    memoized locally. JIT ContextProvider contributions are deliberately collected on every model
-    decision so time-sensitive/provider-specific context never becomes accidentally stale.
+    memoized locally. JIT ContextProvider contributions remain fresh on every model decision.
+    Evidence retrieval is question-sensitive, bounded and provider-neutral; generic turns do not
+    pre-retrieve it, and retrieved content is always projected through the untrusted-data partition.
     """
 
     def __init__(
@@ -62,12 +70,19 @@ class AssistantExtensionDecisionEngine:
         self._manifest_cache_key = None
         self._manifest_cache_value = None
         self._configuration_health_cache = None
+        self._evidence_routing = EvidenceRoutingPolicy()
+        self._evidence_engine = AssistantEvidenceDecisionEngine(
+            extensions.evidence_providers,
+            routing_policy=self._evidence_routing,
+        )
+        self._evidence_ledger = EvidenceLedger()
 
     async def next_decision(self, **kwargs) -> NextDecision:
         context = kwargs.get("context")
         working_items = kwargs.get("working_items", ())
         reasoning = kwargs.get("reasoning_capabilities", ())
         planning = kwargs.get("planning_capabilities", ())
+        message = kwargs.get("message")
         if not isinstance(context, CapabilityContext):
             raise CapabilityError("assistant_extension_context_invalid")
         if not isinstance(working_items, tuple):
@@ -85,7 +100,7 @@ class AssistantExtensionDecisionEngine:
         )
 
         # Context providers are intentionally JIT. Even though Skills/availability are usually
-        # stable for the turn, collection may expose changing installation/runtime evidence.
+        # stable for the turn, collection may expose changing installation/runtime context.
         active = self._extensions.activate(
             context,
             capability_names=model_visible_names,
@@ -94,6 +109,7 @@ class AssistantExtensionDecisionEngine:
             context,
             screen_key=screen_key,
             model_visible_names=model_visible_names,
+            evidence_provider_ids=active.evidence_provider_ids,
         )
 
         extension_contract = {
@@ -107,6 +123,42 @@ class AssistantExtensionDecisionEngine:
                 for item in active.context_statuses
             ],
         }
+
+        evidence_host_item = None
+        evidence_working_items: tuple[dict[str, object], ...] = ()
+        if (
+            isinstance(message, str)
+            and message.strip()
+            and active.evidence_provider_ids
+        ):
+            probe = EvidenceSearchRequest(query=message)
+            if self._evidence_routing.should_retrieve(probe):
+                request = EvidenceSearchRequest(
+                    query=message,
+                    provider_ids=active.evidence_provider_ids,
+                    max_results=16,
+                    max_excerpt_bytes=8 * 1024,
+                    max_total_bytes=64 * 1024,
+                )
+                evidence = self._evidence_engine.collect(
+                    context,
+                    request,
+                    ledger=self._evidence_ledger,
+                )
+                evidence_host_item = {
+                    "kind": "host_assistant_evidence",
+                    "source": "host",
+                    "data": evidence.host_contract(),
+                }
+                evidence_working_items = tuple(
+                    {
+                        "kind": "assistant_evidence",
+                        "source": "evidence",
+                        "data": item,
+                    }
+                    for item in evidence.untrusted_data()
+                )
+
         provider_kwargs = dict(kwargs)
         provider_kwargs["context"] = context
         provider_kwargs["working_items"] = (
@@ -121,6 +173,7 @@ class AssistantExtensionDecisionEngine:
                 "source": "host",
                 "data": manifest_payload,
             },
+            *((evidence_host_item,) if evidence_host_item is not None else ()),
             *(
                 {
                     "kind": "assistant_context",
@@ -130,6 +183,7 @@ class AssistantExtensionDecisionEngine:
                 }
                 for item in active.untrusted_context_data()
             ),
+            *evidence_working_items,
         )
         return await self._provider.next_decision(**provider_kwargs)
 
@@ -165,11 +219,13 @@ class AssistantExtensionDecisionEngine:
         *,
         screen_key,
         model_visible_names: tuple[str, ...],
+        evidence_provider_ids: tuple[str, ...],
     ) -> dict[str, object]:
         key = _manifest_projection_key(
             context,
             screen_key=screen_key,
             model_visible_names=model_visible_names,
+            evidence_provider_ids=evidence_provider_ids,
         )
         if key is not None and key == self._manifest_cache_key and self._manifest_cache_value is not None:
             return deepcopy(self._manifest_cache_value)
@@ -180,6 +236,7 @@ class AssistantExtensionDecisionEngine:
             provider_profile=self._provider_profile,
             skills=self._extensions.skills,
             context_providers=self._extensions.context_providers,
+            evidence_provider_ids=evidence_provider_ids,
             technical_profile=self._technical_profile,
             configuration_health=self._configuration_health(),
         )
@@ -202,6 +259,7 @@ def _manifest_projection_key(
     *,
     screen_key,
     model_visible_names: tuple[str, ...],
+    evidence_provider_ids: tuple[str, ...],
 ):
     if screen_key is None:
         return None
@@ -213,7 +271,12 @@ def _manifest_projection_key(
     encoded_metadata = _canonical_json(metadata)
     if encoded_metadata is None:
         return None
-    return (screen_key, model_visible_names, encoded_metadata)
+    return (
+        screen_key,
+        model_visible_names,
+        tuple(evidence_provider_ids),
+        encoded_metadata,
+    )
 
 
 def _canonical_json(value: object) -> str | None:
@@ -260,12 +323,18 @@ def _provider_manifest(payload: Mapping[str, object]) -> dict[str, object]:
 
     skills = payload.get("skills")
     contexts = payload.get("context_providers")
+    evidence_provider_ids = payload.get("evidence_provider_ids")
     health = payload.get("configuration_health")
     return {
         "provider": payload.get("provider"),
         "technical_profile": payload.get("technical_profile"),
         "skills": list(skills) if isinstance(skills, list) else [],
         "context_providers": list(contexts) if isinstance(contexts, list) else [],
+        "evidence_provider_ids": (
+            list(evidence_provider_ids)
+            if isinstance(evidence_provider_ids, list)
+            else []
+        ),
         "configuration_health": [
             item
             for item in (health if isinstance(health, list) else [])
