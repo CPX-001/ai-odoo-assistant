@@ -6,7 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from odoo_ai_assistant.runtime.capabilities.contracts import CapabilityError
+from odoo_ai_assistant.runtime.capabilities.contracts import (
+    CapabilityDefinition,
+    CapabilityEffect,
+    CapabilityError,
+    CapabilityRisk,
+)
 from odoo_ai_assistant.runtime.capabilities.evidence import (
     LEDGER_MAX_REFS,
     REDACTED_SECRET,
@@ -29,6 +34,12 @@ from odoo_ai_assistant.runtime.capabilities.provider import (
     CAPABILITY_PROVIDER_API_VERSION,
     CapabilityProvider,
 )
+from odoo_ai_assistant.runtime.capabilities.registry import (
+    CapabilityRegistry,
+    compose_capability_registry,
+)
+
+_EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
 
 
 def _context(user_id: int = 7):
@@ -37,6 +48,18 @@ def _context(user_id: int = 7):
         company_ids=(1,),
         group_xmlids=("base.group_user",),
         env=None,
+    )
+
+
+def _definition(name: str) -> CapabilityDefinition:
+    return CapabilityDefinition(
+        name=name,
+        description=f"Fixture capability {name}.",
+        input_schema=_EMPTY_SCHEMA,
+        output_schema={"type": "object"},
+        risk=CapabilityRisk.READ,
+        effect=CapabilityEffect.READ_ONLY,
+        handler=lambda _context, _arguments: {"ok": True},
     )
 
 
@@ -101,7 +124,7 @@ def _provider(
     )
 
 
-def test_json_and_provider_metadata_are_deeply_immutable_and_secret_safe():
+def test_json_and_provider_metadata_are_deeply_immutable_secret_safe_and_container_compatible():
     original = {
         "nested": {"values": [1, 2]},
         "api_key": "sk-abcdefghijklmnopqrstuvwxyz123456",
@@ -109,41 +132,79 @@ def test_json_and_provider_metadata_are_deeply_immutable_and_secret_safe():
     frozen = freeze_json_mapping(original)
     original["nested"]["values"].append(3)
 
-    assert tuple(frozen["nested"]["values"]) == (1, 2)
+    assert isinstance(frozen, dict)
+    assert isinstance(frozen["nested"], dict)
+    assert isinstance(frozen["nested"]["values"], list)
+    assert frozen["nested"]["values"] == [1, 2]
     assert frozen["api_key"] == REDACTED_SECRET
     with pytest.raises(TypeError):
         frozen["new"] = True
+    with pytest.raises(TypeError):
+        frozen["nested"]["values"].append(3)
 
     provider = CapabilityProvider(
         provider_id="vendor.fixture",
         metadata={"nested": {"enabled": True}},
     )
+    assert isinstance(provider.metadata, dict)
     with pytest.raises(TypeError):
         provider.metadata["nested"]["enabled"] = False
 
 
-def test_capability_provider_api_version_and_reserved_namespaces_fail_closed():
-    with pytest.raises(
-        CapabilityError,
-        match="capability_provider_api_version_incompatible",
-    ):
-        CapabilityProvider(provider_id="vendor.fixture", api_version="999")
+def test_capability_provider_api_mismatch_is_isolated_instead_of_breaking_healthy_sibling():
+    incompatible = CapabilityProvider(
+        provider_id="vendor.incompatible",
+        api_version="999",
+    )
+    healthy = CapabilityProvider(provider_id="vendor.healthy")
 
-    with pytest.raises(
-        CapabilityError,
-        match="capability_provider_namespace_reserved",
-    ):
-        CapabilityProvider(provider_id="assistant.fixture")
+    registry = compose_capability_registry(
+        CapabilityRegistry(),
+        (incompatible, healthy),
+    )
+    status = {item.provider_id: item for item in registry.provider_statuses}
+
+    assert status["vendor.incompatible"].state == "failed"
+    assert status["vendor.incompatible"].api_version == "999"
+    assert (
+        status["vendor.incompatible"].error_code
+        == "capability_provider_api_version_incompatible"
+    )
+    assert status["vendor.healthy"].state == "loaded"
+    assert status["vendor.healthy"].api_version == CAPABILITY_PROVIDER_API_VERSION
+
+
+def test_reserved_provider_and_resource_namespaces_are_isolated_for_third_parties():
+    reserved_provider = CapabilityProvider(provider_id="assistant.fixture")
+    reserved_resource = CapabilityProvider(
+        provider_id="vendor.fixture",
+        definitions=(_definition("assistant.hidden_probe"),),
+    )
+    healthy = CapabilityProvider(provider_id="vendor.healthy")
+
+    registry = compose_capability_registry(
+        CapabilityRegistry(),
+        (reserved_provider, reserved_resource, healthy),
+    )
+    status = {item.provider_id: item for item in registry.provider_statuses}
+
+    assert status["assistant.fixture"].error_code == "capability_provider_namespace_reserved"
+    assert (
+        status["vendor.fixture"].error_code
+        == "capability_provider_resource_namespace_reserved"
+    )
+    assert status["vendor.healthy"].state == "loaded"
 
     core = CapabilityProvider(
         provider_id="assistant.fixture",
-        api_version=CAPABILITY_PROVIDER_API_VERSION,
         metadata={"namespace_owner": "core"},
+        api_version=CAPABILITY_PROVIDER_API_VERSION,
     )
-    assert core.provider_id == "assistant.fixture"
+    core_registry = compose_capability_registry(CapabilityRegistry(), (core,))
+    assert core_registry.provider_statuses[0].state == "loaded"
 
 
-def test_guard_exception_isolated_and_healthy_provider_survives():
+def test_guard_exception_isolated_and_healthy_evidence_provider_survives():
     def exploding_guard(_context):
         raise RuntimeError("guard failure")
 
@@ -258,7 +319,7 @@ def test_ledger_rejects_identity_conflicts_and_overflow_transactionally():
     assert full.snapshot().to_json_value() == before
 
 
-def test_routing_prioritizes_runtime_for_installation_questions():
+def test_routing_prioritizes_installation_evidence_and_skips_generic_turns():
     runtime = _provider("fixture.runtime")
     document = EvidenceProvider(
         provider_id="fixture.documents",
@@ -267,9 +328,11 @@ def test_routing_prioritizes_runtime_for_installation_questions():
         search=lambda _context, _request: (),
         fetch=lambda _context, ref: EvidenceItem(ref=ref),
     )
-    selected = EvidenceRoutingPolicy().select(
+    policy = EvidenceRoutingPolicy()
+    selected = policy.select(
         EvidenceSearchRequest(query="qué módulos hay instalados"),
         (document, runtime),
     )
 
     assert selected[0].provider_id == "fixture.runtime"
+    assert policy.select(EvidenceSearchRequest(query="hola, gracias"), (document, runtime)) == ()
