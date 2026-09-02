@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="rule_odoo_ai_knowledge_source_read" model="ir.rule">
+        <field name="name">AI Knowledge sources visible to owner/company</field>
+        <field name="model_id" ref="model_odoo_ai_knowledge_source"/>
+        <field name="domain_force">['|', ('owner_user_id', '=', user.id), '&amp;', ('access_mode', '=', 'company'), ('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="rule_odoo_ai_knowledge_source_owner_mutation" model="ir.rule">
+        <field name="name">AI Knowledge sources mutable by owner</field>
+        <field name="model_id" ref="model_odoo_ai_knowledge_source"/>
+        <field name="domain_force">[('owner_user_id', '=', user.id), ('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="False"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+    <record id="rule_odoo_ai_knowledge_source_admin" model="ir.rule">
+        <field name="name">AI Knowledge sources administrators</field>
+        <field name="model_id" ref="model_odoo_ai_knowledge_source"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('base.group_system'))]"/>
+    </record>
+
+    <record id="rule_odoo_ai_knowledge_chunk_read" model="ir.rule">
+        <field name="name">AI Knowledge chunks follow source visibility</field>
+        <field name="model_id" ref="model_odoo_ai_knowledge_chunk"/>
+        <field name="domain_force">['|', ('source_id.owner_user_id', '=', user.id), '&amp;', ('source_id.access_mode', '=', 'company'), ('source_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="rule_odoo_ai_knowledge_chunk_owner_mutation" model="ir.rule">
+        <field name="name">AI Knowledge chunks mutable by source owner</field>
+        <field name="model_id" ref="model_odoo_ai_knowledge_chunk"/>
+        <field name="domain_force">[('source_id.owner_user_id', '=', user.id), ('source_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="False"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+    <record id="rule_odoo_ai_knowledge_chunk_admin" model="ir.rule">
+        <field name="name">AI Knowledge chunks administrators</field>
+        <field name="model_id" ref="model_odoo_ai_knowledge_chunk"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('base.group_system'))]"/>
+    </record>
+
+    <record id="rule_odoo_ai_knowledge_attachment_owner" model="ir.rule">
+        <field name="name">AI pending Knowledge attachments are private</field>
+        <field name="model_id" ref="model_odoo_ai_knowledge_attachment"/>
+        <field name="domain_force">[('user_id', '=', user.id), ('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <record id="rule_odoo_ai_knowledge_attachment_admin" model="ir.rule">
+        <field name="name">AI pending Knowledge attachments administrators</field>
+        <field name="model_id" ref="model_odoo_ai_knowledge_attachment"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('base.group_system'))]"/>
+    </record>
+</odoo>
