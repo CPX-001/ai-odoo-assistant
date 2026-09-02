@@ -25,29 +25,23 @@ def test_browser_assets_use_only_authenticated_odoo_routes() -> None:
     assert "t-raw" not in source
 
 
-def test_internal_tools_expose_only_residual_inventory_callback() -> None:
-    controller = (ADDON_ROOT / "controllers/internal_tools.py").read_text(encoding="utf-8")
-    assert "/odoo_ai/internal/v1/instance-inventory" in controller
-    assert 'auth="none"' in controller
-    assert "require_machine_secret(" in controller
-    for retired in (
-        "/odoo_ai/internal/v1/model-metadata",
-        "/odoo_ai/internal/v1/read-records",
-        "/odoo_ai/internal/v1/navigation",
-        "/odoo_ai/internal/v1/query-schema",
-        "/odoo_ai/internal/v1/query-records",
-        "/odoo_ai/internal/v1/aggregate-records",
-        "/odoo_ai/internal/v1/action-write-schema",
-        "/odoo_ai/internal/v1/action-preview",
-        "/odoo_ai/internal/v1/action-commit",
-        "/odoo_ai/internal/v1/action-verify",
-        "DELEGATION_HEADER",
-        "DelegatedOrmToolExecutor",
-        "ApprovedActionToolExecutor",
-    ):
-        assert retired not in controller
-    assert "execute_kw" not in controller
-    assert "execute_method" not in controller
+def test_retired_internal_callback_and_machine_auth_are_absent() -> None:
+    controllers = ADDON_ROOT / "controllers"
+    security = ADDON_ROOT / "security"
+
+    assert not (controllers / "internal_tools.py").exists()
+    assert not (security / "machine_auth.py").exists()
+
+    supported_source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for root in (controllers, security)
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix in {".py", ".md", ".xml", ".csv"}
+    )
+    assert 'auth="none"' not in supported_source
+    assert "auth='none'" not in supported_source
+    assert "require_machine_secret(" not in supported_source
+    assert "/odoo_ai/internal/v1/instance-inventory" not in supported_source
 
 
 def test_turn_controller_is_the_authenticated_browser_ingress() -> None:
