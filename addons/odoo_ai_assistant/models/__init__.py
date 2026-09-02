@@ -3,6 +3,8 @@ from . import assistant_diagnostics as assistant_diagnostics
 from . import chat_policy as chat_policy
 from . import chat_preferences as chat_preferences
 from . import chat_storage as chat_storage
+from . import knowledge as knowledge
+from . import knowledge_attachment_link as knowledge_attachment_link
 from . import embedded_runtime as embedded_runtime
 from . import res_config_settings as res_config_settings
 from . import runtime_diagnostics as runtime_diagnostics
@@ -11,6 +13,7 @@ from . import turn_event as turn_event
 from . import turn_queue as turn_queue
 from . import turn_settings_snapshot as turn_settings_snapshot
 from . import turn_planning_one_shot as turn_planning_one_shot
+from . import turn_knowledge_attachments as turn_knowledge_attachments
 from . import turn_failure as turn_failure
 from . import effect_journal as effect_journal
 from . import turn_scheduler as turn_scheduler
