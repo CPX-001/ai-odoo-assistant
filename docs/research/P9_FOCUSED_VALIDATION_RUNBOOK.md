@@ -33,6 +33,7 @@ run:
 
 ```text
 addons/odoo_ai_assistant/tests/test_phase9_knowledge.py
+addons/odoo_ai_assistant/tests/test_phase9_knowledge_capability.py
 addons/odoo_ai_assistant/tests/test_phase8_runtime_evidence.py
 addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py
 ```
@@ -51,6 +52,9 @@ Required focused properties:
 - attachment binding is owner-only and `client_request_id` retry-safe;
 - `assistant.knowledge.ingest_attachment` is discovered through the existing
   capability framework;
+- its preview binds the current attachment fingerprint, its handler is idempotent and
+  its verification resolves the created source;
+- the ingestion call budget matches the eight-attachment turn bound;
 - effective Odoo business/runtime context remains `su=False`.
 
 ## 3. Browser/asset smoke
