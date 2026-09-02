@@ -75,44 +75,48 @@ def _release_payload() -> dict[str, JsonValue]:
 
 
 def _module_payload(env, *, technical: bool) -> tuple[list[dict[str, JsonValue]], bool]:
-    """Read only installed-module metadata through the effective user Environment."""
+    """Return installed-module host facts without granting business-data authority.
+
+    Ordinary Odoo users do not consistently have read ACL on ``ir.module.module``.
+    Odoo 18 already provides the cached host helper ``ir.module.module._installed()``,
+    which internally obtains the installed module set under Odoo's own authority.
+    We reuse that narrow Odoo-owned primitive and derive descriptive metadata from
+    each addon manifest instead of adding a generic sudo/business-record read path.
+    """
 
     module_model = env["ir.module.module"]
-    available_fields = set(getattr(module_model, "_fields", {}))
-    field_names = ["name", "state"]
-    for field_name in (
-        "shortdesc",
-        "installed_version",
-        "latest_version",
-        "author",
-        "license",
-    ):
-        if field_name in available_fields:
-            field_names.append(field_name)
-    records = module_model.search_read(
-        [("state", "=", "installed")],
-        fields=field_names,
-        order="name asc",
-        limit=MAX_MODULES + 1,
-    )
+    try:
+        installed = module_model._installed()
+    except Exception as exc:
+        raise CapabilityError("runtime_inventory_modules_unavailable") from exc
+    if not isinstance(installed, dict):
+        raise CapabilityError("runtime_inventory_modules_invalid")
+
+    names = sorted(str(name) for name in installed if name)
     result: list[dict[str, JsonValue]] = []
-    for record in records[:MAX_MODULES]:
+    for name in names[:MAX_MODULES]:
+        try:
+            manifest = module_model.get_module_info(name) or {}
+        except Exception:
+            manifest = {}
+        if not isinstance(manifest, dict):
+            manifest = {}
         item: dict[str, JsonValue] = {
-            "name": str(record.get("name") or ""),
-            "state": str(record.get("state") or ""),
-            "title": str(record.get("shortdesc") or ""),
-            "installed_version": str(record.get("installed_version") or ""),
+            "name": name,
+            "state": "installed",
+            "title": str(manifest.get("name") or name),
+            "installed_version": str(manifest.get("version") or ""),
         }
         if technical:
             item.update(
                 {
-                    "latest_version": str(record.get("latest_version") or ""),
-                    "author": str(record.get("author") or ""),
-                    "license": str(record.get("license") or ""),
+                    "author": str(manifest.get("author") or ""),
+                    "license": str(manifest.get("license") or ""),
+                    "application": bool(manifest.get("application", False)),
                 }
             )
         result.append(item)
-    return result, len(records) > MAX_MODULES
+    return result, len(names) > MAX_MODULES
 
 
 def _registry_fingerprint(env) -> str:
@@ -126,7 +130,7 @@ def _registry_fingerprint(env) -> str:
 def collect_runtime_inventory(
     context: CapabilityContext,
 ) -> tuple[dict[str, JsonValue], str]:
-    """Collect a sanitized installation snapshot under the effective user."""
+    """Collect a sanitized installation snapshot bound to the effective user scope."""
 
     env = _env(context)
     technical = _is_technical(context)
@@ -163,7 +167,7 @@ def _build_ref(
             key="current_inventory",
         ),
         title="Current Odoo installation inventory",
-        provenance="Effective Odoo registry and installed module records",
+        provenance="Odoo registry plus Odoo-owned installed-module host metadata",
         fingerprint=fingerprint,
         captured_at=datetime.now(UTC),
         freshness=freshness,
@@ -177,6 +181,7 @@ def _build_ref(
             "mutable_business_data": False,
             "logical_locator_only": True,
             "visibility": "technical" if technical else "user",
+            "host_metadata_read": True,
         },
     )
 
@@ -260,8 +265,9 @@ def build_runtime_inventory_evidence_provider() -> EvidenceProvider:
         metadata={
             "namespace_owner": "core",
             "source": SOURCE_ID,
-            "effective_user_env": True,
-            "su": False,
+            "effective_user_scope": True,
+            "host_metadata_read": True,
+            "business_data_sudo": False,
         },
     )
 
