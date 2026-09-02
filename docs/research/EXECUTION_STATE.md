@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 61
+State format: 62
 Updated: 2026-09-02
 
 ## Accepted lineage
@@ -26,14 +26,62 @@ P8 final acceptance through e370af8acb7df175c0a90c8e17520c8576b4c6ce
 phase: 9
 phase_name: company Knowledge/RAG and source lifecycle
 active_slice: P9-FIRST-COHERENT-SLICE
-slice_state: READY_TO_START
-current_gate_type: P9_DESIGN_AND_FOCUSED_IMPLEMENTATION
-blocking_implementation: none
-blocking_validation: none from P8
+slice_state: IMPLEMENTED_AWAITING_FOCUSED_VALIDATION
+current_gate_type: P9_FOCUSED_VALIDATION
+blocking_implementation: none known after implementation review
+blocking_validation: P9 focused static/dependency-light + Odoo + browser smoke + seven real Knowledge gates are NOT EXECUTED
 latest_accepted_evidence: docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
 latest_phase_acceptance: docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
-next_action: reconstruct P9 from the active playbook and implement the largest coherent source-lifecycle, bounded-ingestion, lexical/FTS retrieval and chat-ingestion slice that can be validated together
+latest_implementation_record: docs/research/P9_KNOWLEDGE_FIRST_SLICE.md
+next_action: execute docs/research/P9_FOCUSED_VALIDATION_RUNBOOK.md against current main, repair any failures, rerun affected gates, then record immutable P9 acceptance evidence only if every blocking gate passes
 ```
+
+## P9 first-slice implementation state
+
+Implemented on main but not yet validated in an execution environment:
+
+```text
+Odoo-native Knowledge source/chunk/temporary-attachment models
+uploaded -> processing -> indexed/active | error lifecycle
+bounded deterministic TXT/Markdown/RST/CSV/JSON/XML ingestion
+PostgreSQL lexical/FTS search with GIN expression index
+assistant.company_knowledge EvidenceProvider
+Knowledge-aware question-sensitive Evidence routing
+version/fingerprint freshness revalidation and browser-safe citation metadata
+company/private Odoo record-rule boundaries
+host-owned derived chunk mutation
+bounded temporary Assistant attachment transport
+retry-safe attachment -> durable turn binding
+assistant.knowledge.ingest_attachment capability with preview + verification
+Assistant composer attachment chip/control
+focused Odoo/unit coverage prepared
+real Odoo/Codex P9 gate runner prepared
+```
+
+The implementation deliberately does not add PDF/OCR parsing, embeddings/vector
+storage or a second RAG runtime. Those remain conditional future P9 work, not missing
+requirements for this first lexical slice.
+
+## P9 validation status
+
+```text
+static/compile/lint                            NOT EXECUTED
+focused dependency-light                      NOT EXECUTED
+focused Odoo                                  NOT EXECUTED
+focused browser/asset smoke                    NOT EXECUTED
+P9-REAL-UPLOAD-INGEST                         NOT EXECUTED
+P9-REAL-CHAT-INGEST                           NOT EXECUTED
+P9-REAL-FTS                                   NOT EXECUTED
+P9-REAL-CITATIONS                             NOT EXECUTED
+P9-REAL-ACL                                   NOT EXECUTED
+P9-REAL-REINDEX                               NOT EXECUTED
+P9-REAL-LARGE-DOCUMENT                        NOT EXECUTED
+P9-REAL-SEMANTIC-GAIN                         NOT APPLICABLE unless vector backend is introduced
+P9 acceptance                                 NOT CLAIMED
+```
+
+No connector-side code inspection or commit creation is represented as test evidence.
+The blocking runbook is `docs/research/P9_FOCUSED_VALIDATION_RUNBOOK.md`.
 
 ## P8 acceptance result
 
@@ -50,28 +98,22 @@ effective Odoo user Environment                  PASS — su=False
 P8 acceptance                                    COMPLETE / ACCEPTED
 ```
 
-The authoritative command, environment, repair and rerun record is
+The authoritative P8 command, environment, repair and rerun record is
 `docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md`.
-
-P8 added bounded installed-addon source/XML Evidence, correlated configured-log
-Evidence, question-sensitive routing, logical locators, access/freshness checks,
-secret redaction and browser-safe citation metadata on top of the provider-neutral
-Evidence foundation. Retrieved text remains untrusted and cannot create execution
-authority.
 
 ## Periodic validation debt and explicit limits
 
 ```text
 full repository regression             NOT EXECUTED (periodic debt)
 full addon regression                   NOT EXECUTED (periodic debt)
-HOOT/browser regression                 NOT EXECUTED (periodic debt)
+full HOOT/browser regression            NOT EXECUTED (periodic debt)
 Product Behavior FULL                   NOT EXECUTED (periodic debt)
-raw EvidenceLedger reconnect replay     NOT IMPLEMENTED / NOT A P8 ACCEPTANCE CLAIM
+raw EvidenceLedger reconnect replay     NOT IMPLEMENTED / NOT A P9 CLAIM
 ```
 
-These broad suites were not required by the focused P8 runbook, and no focused
-failure justified expanding the scope. Final citation metadata persists through the
-normal result payload; richer raw-excerpt replay/navigation remains future work.
+The focused P9 browser smoke is blocking because this slice changes the composer;
+the full browser regression remains periodic unless focused failures widen the blast
+radius.
 
 ## Permanent invariants
 
@@ -101,10 +143,13 @@ docs/CURRENT_STATE.md
 docs/ARCHITECTURE.md
 docs/CAPABILITY_FRAMEWORK.md
 docs/EVIDENCE_ARCHITECTURE.md
+docs/KNOWLEDGE_INDEX.md
 docs/OBSERVABILITY_ARCHITECTURE.md
 docs/CONTEXT_SOURCE_POLICY.md
 docs/research/P8_EVIDENCE_CORE_IMPLEMENTATION.md
 docs/research/P8_FOCUSED_VALIDATION_RUNBOOK.md
+docs/research/P9_KNOWLEDGE_FIRST_SLICE.md
+docs/research/P9_FOCUSED_VALIDATION_RUNBOOK.md
 ```
 
 Older phase narratives and immutable proof remain under `docs/research/evidence/`;
