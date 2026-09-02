@@ -274,9 +274,9 @@ def compose_capability_registry(
 ) -> CapabilityRegistry:
     """Compose trusted extension providers over one already-valid base catalog.
 
-    Provider identity conflicts fail closed. Optional provider loader/definition/conflict
-    failures are isolated and retained as sanitized status instead of removing core tools.
-    Required providers fail the composition.
+    Every provider is validated and attributed independently. API/namespace, loader,
+    collision, dependency and cycle failures from an optional provider are isolated
+    without discarding unrelated healthy providers. Required providers fail closed.
     """
 
     ordered = tuple(sorted(providers, key=lambda item: item.provider_id))
@@ -292,21 +292,21 @@ def compose_capability_registry(
     provider_by_id = {item.provider_id: item for item in ordered}
 
     for provider in ordered:
+        contract_error = provider.contract_error_code()
+        if contract_error:
+            _handle_provider_failure(provider, contract_error, statuses)
+            continue
         try:
             definitions = provider.load_definitions()
             _validate_provider_local_definitions(definitions)
         except Exception as error:  # trusted extension boundary; never expose raw provider errors
             if not provider.optional:
                 raise CapabilityError("capability_provider_load_failed") from error
-            statuses.append(
-                CapabilityProviderStatus(
-                    provider_id=provider.provider_id,
-                    version=provider.version,
-                    state="failed",
-                    optional=True,
-                    error_code="capability_provider_load_failed",
-                )
-            )
+            statuses.append(_failed_provider_status(provider, "capability_provider_load_failed"))
+            continue
+        contract_error = provider.contract_error_code(definitions)
+        if contract_error:
+            _handle_provider_failure(provider, contract_error, statuses)
             continue
         loaded[provider.provider_id] = definitions
 
@@ -316,15 +316,21 @@ def compose_capability_registry(
         if not provider.optional:
             raise CapabilityError(error_code)
         loaded.pop(provider_id, None)
-        statuses.append(
-            CapabilityProviderStatus(
-                provider_id=provider.provider_id,
-                version=provider.version,
-                state="failed",
-                optional=True,
-                error_code=error_code,
-            )
-        )
+        statuses.append(_failed_provider_status(provider, error_code))
+
+    # Dependency failures can cascade (A depends on B, B is broken), so isolate the
+    # directly attributable subset, remove it, then recompute until the graph is valid.
+    while loaded:
+        failures = _provider_dependency_failures(base_registry.definitions, loaded)
+        if not failures:
+            break
+        for provider_id, error_code in sorted(failures.items()):
+            provider = provider_by_id[provider_id]
+            if not provider.optional:
+                raise CapabilityError(error_code)
+        for provider_id, error_code in sorted(failures.items()):
+            loaded.pop(provider_id, None)
+            statuses.append(_failed_provider_status(provider_by_id[provider_id], error_code))
 
     definitions = list(base_registry.definitions)
     capability_providers = {
@@ -344,49 +350,45 @@ def compose_capability_registry(
             CapabilityProviderStatus(
                 provider_id=provider.provider_id,
                 version=provider.version,
+                api_version=provider.api_version,
                 state="loaded",
                 optional=provider.optional,
                 capability_count=len(provider_definitions),
+                skill_count=len(provider.skills),
+                context_provider_count=len(provider.context_providers),
+                evidence_provider_count=len(provider.evidence_providers),
             )
         )
 
-    try:
-        return CapabilityRegistry(
-            definitions,
-            provider_statuses=tuple(statuses),
-            capability_providers=capability_providers,
-        )
-    except CapabilityError as error:
-        # Dependency/cycle failures are provider contract failures too. If every
-        # extension is optional, preserve the valid core catalog rather than let one
-        # third-party declaration take the Assistant down. Detailed attribution is a
-        # later diagnostics concern; the current status remains safely sanitized.
-        if loaded and all(provider_by_id[item].optional for item in loaded):
-            failed_statuses = [
-                item
-                for item in statuses
-                if item.provider_id not in loaded
-            ]
-            failed_statuses.extend(
-                CapabilityProviderStatus(
-                    provider_id=provider_id,
-                    version=provider_by_id[provider_id].version,
-                    state="failed",
-                    optional=True,
-                    error_code=error.code,
-                )
-                for provider_id in sorted(loaded)
-            )
-            return CapabilityRegistry(
-                base_registry.definitions,
-                provider_statuses=tuple(failed_statuses),
-                capability_providers={
-                    item.name: base_registry.provider_for(item.name)
-                    for item in base_registry.definitions
-                    if base_registry.provider_for(item.name) is not None
-                },
-            )
-        raise
+    return CapabilityRegistry(
+        definitions,
+        provider_statuses=tuple(statuses),
+        capability_providers=capability_providers,
+    )
+
+
+def _handle_provider_failure(
+    provider: CapabilityProvider,
+    error_code: str,
+    statuses: list[CapabilityProviderStatus],
+) -> None:
+    if not provider.optional:
+        raise CapabilityError(error_code)
+    statuses.append(_failed_provider_status(provider, error_code))
+
+
+def _failed_provider_status(
+    provider: CapabilityProvider,
+    error_code: str,
+) -> CapabilityProviderStatus:
+    return CapabilityProviderStatus(
+        provider_id=provider.provider_id,
+        version=provider.version,
+        api_version=provider.api_version,
+        state="failed",
+        optional=provider.optional,
+        error_code=error_code,
+    )
 
 
 def discover_capabilities_for_env(
@@ -443,6 +445,63 @@ def _provider_conflicts(
         for provider_id in owners - {"__core__"}:
             conflicts.setdefault(provider_id, "capability_executor_duplicate")
     return conflicts
+
+
+def _provider_dependency_failures(
+    base_definitions: tuple[CapabilityDefinition, ...],
+    loaded: Mapping[str, tuple[CapabilityDefinition, ...]],
+) -> dict[str, str]:
+    """Attribute dependency/version/cycle failures to only the owning extensions."""
+
+    by_name = {item.name: item for item in base_definitions}
+    owner_by_name = {item.name: "__core__" for item in base_definitions}
+    for provider_id, definitions in loaded.items():
+        for definition in definitions:
+            by_name[definition.name] = definition
+            owner_by_name[definition.name] = provider_id
+
+    failures: dict[str, str] = {}
+    for provider_id, definitions in loaded.items():
+        for definition in definitions:
+            for dependency in definition.dependencies:
+                target = by_name.get(dependency.name)
+                if target is None:
+                    failures.setdefault(provider_id, "capability_dependency_missing")
+                elif int(target.version) < int(dependency.minimum_version):
+                    failures.setdefault(
+                        provider_id,
+                        "capability_dependency_version_mismatch",
+                    )
+
+    # Cycles are isolated to providers owning nodes in the actual cycle. Healthy
+    # siblings outside the strongly implicated stack remain loaded.
+    visiting: list[str] = []
+    visiting_set: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(name: str) -> None:
+        if name in visited:
+            return
+        if name in visiting_set:
+            start = visiting.index(name)
+            for cycle_name in visiting[start:]:
+                owner = owner_by_name.get(cycle_name)
+                if owner and owner != "__core__":
+                    failures.setdefault(owner, "capability_dependency_cycle")
+            return
+        visiting.append(name)
+        visiting_set.add(name)
+        definition = by_name[name]
+        for dependency in definition.dependencies:
+            if dependency.name in by_name:
+                visit(dependency.name)
+        visiting.pop()
+        visiting_set.remove(name)
+        visited.add(name)
+
+    for name in tuple(by_name):
+        visit(name)
+    return failures
 
 
 def clear_discovery_cache() -> None:
