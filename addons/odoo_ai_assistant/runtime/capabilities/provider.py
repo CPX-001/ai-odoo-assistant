@@ -1,8 +1,8 @@
 """Trusted addon extension contract for capability providers.
 
-Phase 7 keeps :class:`CapabilityDefinition` as the atomic executable authority while
-allowing installed Odoo addons to contribute definitions and higher-level declarative
-resources without editing the core ``runtime.capabilities.providers`` package.
+``CapabilityDefinition`` remains the atomic executable authority. Installed Odoo
+addons may contribute definitions and declarative resources, but API versioning,
+identity and immutable metadata are validated before composition.
 """
 
 from __future__ import annotations
@@ -13,7 +13,11 @@ from dataclasses import dataclass, field
 
 from .context import ContextProvider
 from .contracts import CapabilityDefinition, CapabilityError, JsonValue
+from .evidence import EvidenceProvider, freeze_json_mapping
 from .skills import SkillDefinition
+
+CAPABILITY_PROVIDER_API_VERSION = "1"
+RESERVED_PROVIDER_NAMESPACES = ("odoo.", "assistant.", "host.")
 
 _PROVIDER_ID_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 _PROVIDER_VERSION_RE = re.compile(r"^[1-9][0-9]*$")
@@ -22,14 +26,18 @@ _PROVIDER_MARKER_ATTR = "_odoo_ai_capability_provider"
 type CapabilityProviderLoader = Callable[[], Iterable[CapabilityDefinition]]
 
 
+def _uses_reserved_namespace(provider_id: str) -> bool:
+    return provider_id.startswith(RESERVED_PROVIDER_NAMESPACES)
+
+
 @dataclass(frozen=True, slots=True)
 class CapabilityProvider:
     """One trusted installed-code source of Assistant extension resources.
 
-    ``definitions`` is the simple/static executable path. ``loader`` exists for providers
-    that need deferred capability construction and is also the failure-isolation boundary.
-    A provider may use one or the other, never both. Skills and ContextProviders remain
-    declarative/non-authoritative resources layered around those atomic definitions.
+    Existing positional field order is preserved. New P8 fields are appended so
+    P7 providers remain source-compatible. Reserved ``odoo.*``, ``assistant.*``
+    and ``host.*`` identities require ``metadata={"namespace_owner": "core"}``.
+    Third-party addons should use a reverse-domain or addon-owned namespace.
     """
 
     provider_id: str
@@ -41,26 +49,49 @@ class CapabilityProvider:
     title: str = ""
     optional: bool = True
     metadata: Mapping[str, JsonValue] = field(default_factory=dict)
+    evidence_providers: tuple[EvidenceProvider, ...] = ()
+    api_version: str = CAPABILITY_PROVIDER_API_VERSION
 
     def __post_init__(self) -> None:
         if not _PROVIDER_ID_RE.fullmatch(self.provider_id):
             raise CapabilityError("capability_provider_id_invalid")
         if not _PROVIDER_VERSION_RE.fullmatch(self.version):
             raise CapabilityError("capability_provider_version_invalid")
-        if self.title and len(self.title) > 160:
+        if self.api_version != CAPABILITY_PROVIDER_API_VERSION:
+            raise CapabilityError("capability_provider_api_version_incompatible")
+        if self.title and len(self.title.encode("utf-8")) > 320:
             raise CapabilityError("capability_provider_title_invalid")
         if self.definitions and self.loader is not None:
             raise CapabilityError("capability_provider_source_ambiguous")
-        if any(not isinstance(item, CapabilityDefinition) for item in self.definitions):
+
+        definitions = tuple(self.definitions)
+        skills = tuple(self.skills)
+        context_providers = tuple(self.context_providers)
+        evidence_providers = tuple(self.evidence_providers)
+        metadata = freeze_json_mapping(self.metadata, max_bytes=16 * 1024)
+
+        if _uses_reserved_namespace(self.provider_id) and metadata.get("namespace_owner") != "core":
+            raise CapabilityError("capability_provider_namespace_reserved")
+        if any(not isinstance(item, CapabilityDefinition) for item in definitions):
             raise CapabilityError("capability_provider_definition_invalid")
-        if any(not isinstance(item, SkillDefinition) for item in self.skills):
+        if any(not isinstance(item, SkillDefinition) for item in skills):
             raise CapabilityError("capability_provider_skill_invalid")
-        if any(not isinstance(item, ContextProvider) for item in self.context_providers):
+        if any(not isinstance(item, ContextProvider) for item in context_providers):
             raise CapabilityError("capability_provider_context_invalid")
-        if len({item.skill_id for item in self.skills}) != len(self.skills):
+        if any(not isinstance(item, EvidenceProvider) for item in evidence_providers):
+            raise CapabilityError("capability_provider_evidence_invalid")
+        if len({item.skill_id for item in skills}) != len(skills):
             raise CapabilityError("skill_id_duplicate")
-        if len({item.provider_id for item in self.context_providers}) != len(self.context_providers):
+        if len({item.provider_id for item in context_providers}) != len(context_providers):
             raise CapabilityError("context_provider_id_duplicate")
+        if len({item.provider_id for item in evidence_providers}) != len(evidence_providers):
+            raise CapabilityError("evidence_provider_id_duplicate")
+
+        object.__setattr__(self, "definitions", definitions)
+        object.__setattr__(self, "skills", skills)
+        object.__setattr__(self, "context_providers", context_providers)
+        object.__setattr__(self, "evidence_providers", evidence_providers)
+        object.__setattr__(self, "metadata", metadata)
 
     @classmethod
     def from_objects(
@@ -74,12 +105,10 @@ class CapabilityProvider:
         metadata: Mapping[str, JsonValue] | None = None,
         skills: Iterable[SkillDefinition] = (),
         context_providers: Iterable[ContextProvider] = (),
-    ) -> CapabilityProvider:
-        """Build a static provider from handlers decorated with ``@tool``.
-
-        This is intentionally explicit: installed addon code chooses which objects it
-        contributes, while the host still owns identity/conflict validation.
-        """
+        evidence_providers: Iterable[EvidenceProvider] = (),
+        api_version: str = CAPABILITY_PROVIDER_API_VERSION,
+    ) -> "CapabilityProvider":
+        """Build a static provider from handlers decorated with ``@tool``."""
 
         from .decorators import definition_from_object
 
@@ -98,10 +127,17 @@ class CapabilityProvider:
             title=title,
             optional=optional,
             metadata=dict(metadata or {}),
+            evidence_providers=tuple(evidence_providers),
+            api_version=api_version,
         )
 
     def load_definitions(self) -> tuple[CapabilityDefinition, ...]:
-        values = self.definitions if self.loader is None else tuple(self.loader())
+        try:
+            values = self.definitions if self.loader is None else tuple(self.loader())
+        except Exception as exc:
+            if isinstance(exc, CapabilityError) and exc.args:
+                raise CapabilityError(str(exc.args[0])[:160]) from exc
+            raise CapabilityError("capability_provider_load_failed") from exc
         if any(not isinstance(item, CapabilityDefinition) for item in values):
             raise CapabilityError("capability_provider_definition_invalid")
         return tuple(values)
@@ -109,7 +145,7 @@ class CapabilityProvider:
 
 @dataclass(frozen=True, slots=True)
 class CapabilityProviderStatus:
-    """Sanitized provider state retained for diagnostics/future manifest projection."""
+    """Sanitized provider state retained for diagnostics/manifest projection."""
 
     provider_id: str
     version: str
@@ -117,6 +153,9 @@ class CapabilityProviderStatus:
     optional: bool
     capability_count: int = 0
     error_code: str = ""
+    skill_count: int = 0
+    context_provider_count: int = 0
+    evidence_provider_count: int = 0
 
     def __post_init__(self) -> None:
         if not _PROVIDER_ID_RE.fullmatch(self.provider_id):
@@ -125,7 +164,13 @@ class CapabilityProviderStatus:
             raise CapabilityError("capability_provider_version_invalid")
         if self.state not in {"loaded", "failed"}:
             raise CapabilityError("capability_provider_state_invalid")
-        if self.capability_count < 0:
+        counts = (
+            self.capability_count,
+            self.skill_count,
+            self.context_provider_count,
+            self.evidence_provider_count,
+        )
+        if any(item < 0 for item in counts):
             raise CapabilityError("capability_provider_count_invalid")
         if self.state == "loaded" and self.error_code:
             raise CapabilityError("capability_provider_state_invalid")
@@ -136,10 +181,8 @@ class CapabilityProviderStatus:
 def discover_odoo_capability_providers(env) -> tuple[CapabilityProvider, ...]:
     """Discover provider markers from the effective Odoo registry.
 
-    Odoo only materializes models from installed addons in the active registry, so this
-    gives third-party addons an Odoo-native extension point without scanning arbitrary
-    filesystem/Python packages. Provider markers are trusted code declarations, not DB
-    records or model-generated instructions.
+    Odoo materializes models only from installed addons in the active registry.
+    This is an Odoo-native extension point, not an arbitrary package scan.
     """
 
     registry = getattr(env, "registry", None)
@@ -151,10 +194,8 @@ def discover_odoo_capability_providers(env) -> tuple[CapabilityProvider, ...]:
     marker_classes: set[type] = set()
     for model_name in sorted(models):
         model_class = models[model_name]
-        # Odoo's registry class is synthesized and does not retain custom class
-        # attributes in its own namespace.  `_model_classes__` is the ordered set of
-        # installed source classes used to construct it; inspect each namespace
-        # directly so ordinary Python inheritance still cannot duplicate a marker.
+        # Odoo registry classes are synthesized. `_model_classes__` contains the
+        # installed source classes used to construct each effective model.
         source_classes = getattr(model_class, "_model_classes__", (model_class,))
         for source_class in source_classes:
             namespace = vars(source_class)
@@ -171,6 +212,8 @@ def discover_odoo_capability_providers(env) -> tuple[CapabilityProvider, ...]:
 
 
 __all__ = [
+    "CAPABILITY_PROVIDER_API_VERSION",
+    "RESERVED_PROVIDER_NAMESPACES",
     "CapabilityProvider",
     "CapabilityProviderLoader",
     "CapabilityProviderStatus",
