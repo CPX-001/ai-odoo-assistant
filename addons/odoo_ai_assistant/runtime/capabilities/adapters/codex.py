@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..contracts import CapabilityContext, JsonValue
+from ..contracts import CapabilityContext, JsonValue, thaw_contract_json
 from ..registry import CapabilityRegistry
 
 
@@ -16,7 +16,7 @@ def codex_reasoning_tools(
         {
             "name": definition.name,
             "description": definition.description,
-            "input_schema": dict(definition.input_schema),
+            "input_schema": thaw_contract_json(definition.input_schema),
         }
         for definition in registry.for_reasoning(context)
     )
