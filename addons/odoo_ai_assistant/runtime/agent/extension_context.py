@@ -26,7 +26,6 @@ from ..capabilities import (
 )
 from ..capabilities.evidence import (
     EvidenceLedger,
-    EvidenceRoutingPolicy,
     EvidenceSearchRequest,
     thaw_json,
 )
