@@ -1,8 +1,8 @@
-"""Odoo-side services used by the embedded runtime."""
+"""Odoo-side helpers used by the embedded runtime.
 
-from .instance_inventory import InstanceInventoryError, collect_instance_inventory
+Runtime installation inventory is owned by the P8 Evidence provider rather than a
+service/HTTP compatibility layer. Individual dependency-light helpers are imported
+from their concrete modules where needed.
+"""
 
-__all__ = [
-    "InstanceInventoryError",
-    "collect_instance_inventory",
-]
+__all__ = []
