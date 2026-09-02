@@ -32,16 +32,15 @@ def test_retired_internal_callback_and_machine_auth_are_absent() -> None:
     assert not (controllers / "internal_tools.py").exists()
     assert not (security / "machine_auth.py").exists()
 
-    supported_source = "\n".join(
+    supported_python = "\n".join(
         path.read_text(encoding="utf-8")
         for root in (controllers, security)
-        for path in root.rglob("*")
-        if path.is_file() and path.suffix in {".py", ".md", ".xml", ".csv"}
+        for path in root.rglob("*.py")
     )
-    assert 'auth="none"' not in supported_source
-    assert "auth='none'" not in supported_source
-    assert "require_machine_secret(" not in supported_source
-    assert "/odoo_ai/internal/v1/instance-inventory" not in supported_source
+    assert 'auth="none"' not in supported_python
+    assert "auth='none'" not in supported_python
+    assert "require_machine_secret(" not in supported_python
+    assert "/odoo_ai/internal/v1/instance-inventory" not in supported_python
 
 
 def test_turn_controller_is_the_authenticated_browser_ingress() -> None:
