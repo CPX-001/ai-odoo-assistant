@@ -10,15 +10,15 @@ The customer installs one Odoo AI Assistant product. Internal link/domain addons
 be introduced later to reduce domain coupling, but normal customers should not need
 to understand or assemble that internal split.
 
-There are exactly two product-facing profiles for now:
+There are exactly two public profile values for now:
 
 ```text
-User / non-technical
-Technical
+user
+technical
 ```
 
 Historical/internal `business`/`developer`-style values may remain for compatibility,
-but they map to those two public profiles. A future Technical/host broker is an
+but they normalize to those two public profiles. A future Technical/host broker is an
 execution boundary, not a third human role.
 
 ## Runtime flow
@@ -28,7 +28,8 @@ OWL chat/context surface
  -> authenticated Odoo conversation + durable turn
  -> cron worker claims turn under effective user
  -> provider-neutral host decision loop
- -> effective Capabilities + Skills + JIT Context + Evidence metadata
+ -> effective Capabilities + Skills + JIT Context + Evidence providers
+ -> relevant turns: bounded Evidence search/fetch -> untrusted working data
  -> Codex App Server adapter
  -> host validates calls/policy/effects
  -> execute with effective Environment and su=False
@@ -47,33 +48,40 @@ execution and verification. The model proposes; it never grants itself authority
 - `SkillDefinition` — trusted procedural guidance and selectors;
 - `ContextProvider` — bounded just-in-time untrusted context;
 - `EvidenceProvider` — bounded search/fetch with provenance/access/freshness;
-- `EvidenceLedger` — turn-scoped refs and selected excerpts only.
+- `EvidenceLedger` — bounded turn-scoped refs and selected excerpts.
+
+Provider API mismatch, loader/collision/dependency/cycle failures and guard failures
+are isolated/fail-closed at the host boundary according to provider optionality.
+Deep JSON contracts use immutable `dict`/`list`-compatible wrappers.
 
 The framework does not expose arbitrary SQL, Python, shell, sudo or unrestricted Odoo
 method invocation.
 
-## P8 Evidence foundation
+## P8 Evidence checkpoint
 
-The current checkpoint adds:
+The current checkpoint includes:
 
 ```text
 EvidenceKind / Trust / Freshness
 logical locators and stable refs
 access check on collect and fetch
 fingerprint/stale semantics
-per-provider failure isolation
+fine-grained per-provider failure isolation
 question-sensitive source routing
-bounded durable ledger
+bounded turn ledger
 runtime/installation inventory provider
-secret-safe untrusted projections
+live provider-neutral search/fetch projection
+secret-safe untrusted Evidence data
 ```
 
-Installation inventory is in-process. The obsolete GitHub Actions workflow, retired
-`auth="none"` sidecar callback and the addon-local machine-auth primitive used only by
-that callback have been removed from the supported tree.
+Installation inventory is in process and owned directly by
+`assistant.runtime_inventory`. The obsolete GitHub Actions workflow, retired
+`auth="none"` sidecar callback, addon-local machine-auth primitive and residual addon
+inventory service have been removed from the supported tree.
 
 Evidence never grants a capability or approval. Live mutable business facts remain
-ORM queries; source/XML/log/docs/web providers are later P8/P9 slices.
+ORM queries; source/XML/log/docs/web providers are later P8/P9 slices. Durable ledger
+restoration after reconnect and richer citation UI are also not claimed yet.
 
 ## Autonomy and writes
 
@@ -105,8 +113,8 @@ Controllers are transport adapters; they do not own policy or provider credentia
 
 ## Validation state
 
-P0-P7 are accepted. P8.0 plus the P8.1/P8.2 foundation is implemented with focused
-tests prepared, but those tests and P8 real gates remain pending. See:
+P0-P7 are accepted. P8.0 plus the P8.1/P8.2 checkpoint is implemented with focused
+tests prepared/updated, but those tests and P8 real gates remain pending. See:
 
 ```text
 docs/research/EXECUTION_STATE.md
@@ -117,8 +125,12 @@ tests/unit/test_phase8_evidence_runtime.py
 tests/unit/test_phase8_extension_evidence.py
 tests/unit/test_phase8_supported_surface.py
 tests/unit/test_phase8_product_profiles.py
+tests/unit/test_capability_provider_extensions.py
+tests/unit/test_phase7_feature_negotiation.py
+tests/unit/test_phase7_live_extension_context.py
 tests/addon/test_phase8_runtime_evidence.py
 tests/addon/test_addon_boundaries.py
+addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py
 ```
 
 Do not interpret code or committed tests as PASS evidence.
