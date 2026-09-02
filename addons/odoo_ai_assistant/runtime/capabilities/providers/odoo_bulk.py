@@ -27,15 +27,18 @@ from ..contracts import (
     CapabilityVerification,
 )
 from ..decorators import tool
-from .odoo_actions import _fingerprint, _model_name, _model_set as _action_model_set, _safe_name
+from .odoo_actions import _fingerprint, _model_name, _safe_name
+from .odoo_actions import _model_set as _action_model_set
 from .odoo_query import (
     _FILTER_SCHEMA,
     _bounded_int,
     _domain,
     _effective_schema,
-    _model_set as _query_model_set,
     _order,
     _require_schema_id,
+)
+from .odoo_query import (
+    _model_set as _query_model_set,
 )
 
 _MAX_BULK_RECORDS = 500

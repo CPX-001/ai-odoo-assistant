@@ -10,6 +10,9 @@ ADDON_ROOT = Path(__file__).resolve().parents[2] / "addons/odoo_ai_assistant"
 for package_name, package_path in (
     ("addons.odoo_ai_assistant", ADDON_ROOT),
     ("addons.odoo_ai_assistant.runtime", ADDON_ROOT / "runtime"),
+    # Import the real dependency-light screen service without executing the
+    # services initializer, which also loads Odoo-only inventory services.
+    ("addons.odoo_ai_assistant.services", ADDON_ROOT / "services"),
     (
         "addons.odoo_ai_assistant.runtime.agent",
         ADDON_ROOT / "runtime/agent",
