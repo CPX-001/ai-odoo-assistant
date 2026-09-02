@@ -13,25 +13,25 @@ The exact roadmap/acceptance cursor is always [`research/EXECUTION_STATE.md`](re
 ## Current formal state
 
 ```text
-P0-P6 COMPLETE / ACCEPTED
-P7 IMPLEMENTATION COMPLETE / ACCEPTANCE PENDING
+P0-P7 COMPLETE / ACCEPTED
   CapabilityProvider live installed-addon composition implemented
   Skills/Bundles live guidance implemented
   ContextProvider JIT projection implemented
   ProviderProfile bound for current Codex seam
   EffectiveAssistantManifest live + diagnostics implemented
   Business/Developer technical profile skeleton implemented
-  progressive-disclosure framework implemented; eager default retained pending eval
-P8+ NOT ELIGIBLE until consolidated P7 validation is green
+  progressive-disclosure framework accepted; eager default retained from equal-quality evidence
+P8 ELIGIBLE / READY TO START (no P8 implementation claimed)
+P9+ NOT ELIGIBLE
 ```
 
-Phase-7 code exists on `main`, but the user explicitly deferred the accumulated tests/corrections until after finishing
-the implementation. No deferred gate is therefore represented as PASS.
+Phase 7 passed Product Behavior FULL x3, all six real gates and the final periodic regression at `092ac57`.
 
 Use:
 
 - [`research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md`](research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md) for what Phase 7 now implements;
-- [`research/P7_CONSOLIDATED_VALIDATION_RUNBOOK.md`](research/P7_CONSOLIDATED_VALIDATION_RUNBOOK.md) for the next validation/correction pass;
+- [`research/P7_CONSOLIDATED_VALIDATION_RUNBOOK.md`](research/P7_CONSOLIDATED_VALIDATION_RUNBOOK.md) for the completed acceptance contract;
+- [`research/P8_EVIDENCE_CORE_PREPARATION.md`](research/P8_EVIDENCE_CORE_PREPARATION.md) for the prepared Phase-8 start;
 - [`research/REAL_ENV_VALIDATION_PROTOCOL.md`](research/REAL_ENV_VALIDATION_PROTOCOL.md) for named real-product gates;
 - [`research/PRODUCT_BEHAVIOR_EVALS_V1.md`](research/PRODUCT_BEHAVIOR_EVALS_V1.md) for the permanent product-behavior baseline.
 
@@ -42,7 +42,7 @@ Use:
 | Know what works/what is accepted | [`CURRENT_STATE.md`](CURRENT_STATE.md) | [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) |
 | Understand runtime authority | [`ARCHITECTURE.md`](ARCHITECTURE.md) | [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md) |
 | Extend capabilities/Skills/context | [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) | [`research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md`](research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md) |
-| Validate Phase 7 | [`research/P7_CONSOLIDATED_VALIDATION_RUNBOOK.md`](research/P7_CONSOLIDATED_VALIDATION_RUNBOOK.md) | [`research/REAL_ENV_VALIDATION_PROTOCOL.md`](research/REAL_ENV_VALIDATION_PROTOCOL.md) |
+| Start Phase 8 | [`research/P8_EVIDENCE_CORE_PREPARATION.md`](research/P8_EVIDENCE_CORE_PREPARATION.md) | [`research/REAL_ENV_VALIDATION_PROTOCOL.md`](research/REAL_ENV_VALIDATION_PROTOCOL.md) |
 | Work on Product Behavior evals | [`research/PRODUCT_BEHAVIOR_EVALS_V1.md`](research/PRODUCT_BEHAVIOR_EVALS_V1.md) | [`research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md`](research/PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md) |
 | Add/change a capability | [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) | [`../addons/odoo_ai_assistant/runtime/capabilities/README.md`](../addons/odoo_ai_assistant/runtime/capabilities/README.md) |
 | Work on provider/agent loop | [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md) | [`adr/ADR-019-host-owned-iterative-decision-loop.md`](adr/ADR-019-host-owned-iterative-decision-loop.md) |

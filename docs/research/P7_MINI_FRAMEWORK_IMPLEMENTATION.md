@@ -2,15 +2,13 @@
 
 Date: 2026-08-31  
 Phase: 7 — mini-framework, feature negotiation and Assistant self-awareness  
-State: `IMPLEMENTATION_COMPLETE / ACCEPTANCE_VALIDATION_PENDING`
+State: `COMPLETE / ACCEPTED at 092ac57`
 
 ## Meaning of this state
 
-The implementation work planned for P7.1-P7.7 is now present on `main`. The user explicitly chose to defer the
-accumulated validation and corrections until the end of the phase, so **no unexecuted deterministic, Odoo, product or
-real gate is claimed PASS**. Phase 8 remains ineligible until the consolidated Phase-7 validation is green.
-
-Implementation complete is therefore not the same as accepted/validated complete.
+The implementation work planned for P7.1-P7.7 is present and its consolidated acceptance is green. Evidence:
+`evidence/phase7/2026-09-02/P7-ACCEPTANCE-092ac57.md`. Phase 8 is eligible and prepared in
+`P8_EVIDENCE_CORE_PREPARATION.md`.
 
 ## Current composition
 
@@ -253,11 +251,10 @@ Use `P7_CONSOLIDATED_VALIDATION_RUNBOOK.md` so failures can be repaired in one v
 
 ## Exit rule
 
-Phase 7 may be marked **ACCEPTED / COMPLETE** only after the consolidated validation has zero unresolved HARD
-failures and the resulting corrections have been revalidated. Until then the correct state is:
+The exit rule is satisfied: consolidated validation has zero unresolved HARD failures and the resulting corrections
+were revalidated. Current state:
 
 ```text
-P7 IMPLEMENTATION COMPLETE
-P7 ACCEPTANCE PENDING
-P8 NOT ELIGIBLE
+P7 COMPLETE / ACCEPTED
+P8 ELIGIBLE / READY TO START
 ```

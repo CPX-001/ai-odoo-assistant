@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 55
+State format: 56
 Updated: 2026-09-02
 
 ## Accepted lineage
@@ -16,10 +16,10 @@ P5.6 through 720102f2a13af5240c779b07cc71ee65994a87b1
 P5.7 through 074a71c29a6a6109ae7412e7b1f9850c4449e379
 P5.8 through 688f569d441a40a4637ad6a23f111e584e18c955
 P6 final acceptance through 0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0
+P7 final acceptance through 092ac57fe58a3a36765b115e78b2eca687f5dbbc
 ```
 
-P0-P6 remain accepted. Phase-7 code after the P6 checkpoint is **not accepted yet** unless the consolidated validation
-below is actually executed and recorded.
+P0-P7 are accepted. Phase 8 is prepared and eligible, but no Phase-8 implementation or gate is claimed yet.
 
 ## User-directed validation sequencing
 
@@ -38,18 +38,18 @@ P8 stays blocked until P7 acceptance
 ## Current cursor
 
 ```text
-phase: 7
-phase_name: mini-framework, feature negotiation and Assistant self-awareness
-phase_state: IMPLEMENTATION_COMPLETE_ACCEPTANCE_BLOCKED_PROVIDER_CAPACITY
-active_phase_record: docs/research/P7_MINI_FRAMEWORK_IMPLEMENTATION.md
-active_validation_runbook: docs/research/P7_CONSOLIDATED_VALIDATION_RUNBOOK.md
-current_gate_type: CONSOLIDATED_P7_AND_PRODUCT_VALIDATION
-blocking_work: no planned Phase-7 implementation slice remains before validation
-blocking_validation: Product Behavior FULL x3 stopped at 76/162 PASS by current provider usage limit; then final periodic regression
-latest_accepted_evidence: docs/research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
-latest_executed_p7_evidence: docs/research/evidence/phase7/2026-09-02/P7-ACCEPTANCE-3787cb6.md
-latest_executed_product_evidence: docs/research/evidence/product_behavior/2026-09-01/PRODUCT-BEHAVIOR-BASELINE-e100dba.md
-next_action: after current provider quota returns, rerun Product Behavior SMOKE from the beginning on the corrected disposable fixture, then all six P7 real gates and Product Behavior FULL x3; if green run the final periodic regression and publish P7 acceptance
+phase: 8
+phase_name: evidence core and installation intelligence
+phase_state: READY_TO_START
+active_phase_record: docs/research/P8_EVIDENCE_CORE_PREPARATION.md
+active_validation_runbook: docs/research/REAL_ENV_VALIDATION_PROTOCOL.md
+current_gate_type: P8_FIRST_COHERENT_SLICE
+blocking_work: none; P8.1 evidence contract/ledger plus the minimum P8.2 provider-routing seam is prepared
+blocking_validation: none before implementation; all six P8 real gates remain future HARD gates
+latest_accepted_evidence: docs/research/evidence/regression/2026-09-02/FULL-REGRESSION-092ac57.md
+latest_executed_p7_evidence: docs/research/evidence/phase7/2026-09-02/P7-ACCEPTANCE-092ac57.md
+latest_executed_product_evidence: docs/research/evidence/phase7/2026-09-02/P7-ACCEPTANCE-092ac57.md
+next_action: implement the P8.1 bounded Evidence contract/ledger and minimum P8.2 EvidenceProvider routing seam as one coherent provider-neutral slice
 ```
 
 ## Latency / Auto optimization checkpoint — 2026-09-02
@@ -154,16 +154,12 @@ P3 COMPLETE / ACCEPTED
 P4 COMPLETE / ACCEPTED
 P5 COMPLETE / ACCEPTED
 P6 COMPLETE / ACCEPTED
-P7 IMPLEMENTATION COMPLETE / ACCEPTANCE PENDING
-  PRE-P7 Product Behavior Evals v1   IMPLEMENTED / PARTIAL_VALIDATION_BLOCKED_PROVIDER_CAPACITY
-  P7.1 CapabilityProvider API        IMPLEMENTED_LIVE / VALIDATION_PENDING
-  P7.2 Skill/Bundle                  IMPLEMENTED_LIVE / VALIDATION_PENDING
-  P7.3 ContextProvider               IMPLEMENTED_LIVE / VALIDATION_PENDING
-  P7.4 ProviderProfile               IMPLEMENTED_BOUND / VALIDATION_PENDING
-  P7.5 EffectiveAssistantManifest    IMPLEMENTED_LIVE / VALIDATION_PENDING
-  P7.6 Technical profile skeleton    IMPLEMENTED / NO_PRIVILEGED_AUTHORITY
-  P7.7 Progressive disclosure        FRAMEWORK_IMPLEMENTED / EAGER_DEFAULT / PROMOTION_EVAL_GATED
-P8+ NOT_ELIGIBLE
+P7 COMPLETE / ACCEPTED
+  Product Behavior Evals v1          ACCEPTED (FULL 162/162 HARD PASS)
+  P7.1-P7.6                          ACCEPTED
+  P7.7 Progressive disclosure        ACCEPTED FRAMEWORK / EAGER DEFAULT RETAINED
+P8 ELIGIBLE / READY_TO_START
+P9+ NOT_ELIGIBLE
 ```
 
 ## Phase-7 implementation now present
@@ -298,17 +294,12 @@ Historical Phase-4 streaming PASS remains historical only; the current real firs
 
 ## Exit rule
 
-Phase 7 becomes accepted only after the consolidated pass has zero unresolved HARD failures and all repairs have been
-revalidated. Then update this cursor to:
+The Phase-7 exit rule has been satisfied: the consolidated pass has zero unresolved HARD failures and all repairs were
+revalidated. The current cursor is:
 
 ```text
 P7 COMPLETE / ACCEPTED
 P8 ELIGIBLE
 ```
 
-Until that evidence exists, the authoritative state is:
-
-```text
-P7 IMPLEMENTATION COMPLETE / ACCEPTANCE PENDING
-P8 NOT ELIGIBLE
-```
+Evidence: `docs/research/evidence/phase7/2026-09-02/P7-ACCEPTANCE-092ac57.md`.

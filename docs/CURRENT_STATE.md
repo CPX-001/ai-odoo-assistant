@@ -16,15 +16,16 @@ P5.6 through 720102f2a13af5240c779b07cc71ee65994a87b1
 P5.7 through 074a71c29a6a6109ae7412e7b1f9850c4449e379
 P5.8 through 688f569d441a40a4637ad6a23f111e584e18c955
 P6 final acceptance through 0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0
+P7 final acceptance through 092ac57fe58a3a36765b115e78b2eca687f5dbbc
 ```
 
 Phase 5 and Phase 6 are **COMPLETE**. The final Phase-6 regression evidence is
 `research/evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md`.
 
-Phase 7 is implemented but remains acceptance-blocked by the incomplete real-provider Product Behavior gate described
-in `research/EXECUTION_STATE.md`. Post-checkpoint latency/Auto optimizations on `main` are implementation claims only
-until their focused real-environment validation is executed. No blocked or unexecuted provider run is represented as
-PASS.
+Phase 7 is **COMPLETE / ACCEPTED**. Product Behavior FULL passed 162/162 HARD trials, all six P7
+real gates passed and the final regression is recorded in
+`research/evidence/regression/2026-09-02/FULL-REGRESSION-092ac57.md`. Phase 8 is prepared and eligible;
+no Phase-8 implementation or gate is claimed yet.
 
 ## 1. Product/deployment baseline
 
@@ -353,12 +354,12 @@ P3 COMPLETE
 P4 COMPLETE
 P5 COMPLETE
 P6 COMPLETE
-P7 IMPLEMENTATION COMPLETE / ACCEPTANCE PENDING
+P7 COMPLETE / ACCEPTED
   provider extensions + Skills + ContextProviders LIVE
-  Product Behavior focused and real SMOKE PASS
-  Product Behavior FULL x3 BLOCKED by provider capacity
-  post-checkpoint latency/Auto optimizations IMPLEMENTED / FOCUSED REAL VALIDATION PENDING
-P8 NOT ELIGIBLE
+  Product Behavior FULL x3 PASS (162/162 HARD)
+  six P7 real gates + periodic full regression PASS
+P8 ELIGIBLE / READY TO START
+P9+ NOT ELIGIBLE
 ```
 
 Use `research/EXECUTION_STATE.md` for the exact next action and stop rule.

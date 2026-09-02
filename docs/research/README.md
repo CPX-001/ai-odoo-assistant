@@ -18,14 +18,13 @@ Unexecuted validation is never PASS.
 ## Current cursor
 
 ```text
-P0-P6 COMPLETE / ACCEPTED
-P7 IMPLEMENTATION COMPLETE / ACCEPTANCE PENDING
-P8+ NOT ELIGIBLE
+P0-P7 COMPLETE / ACCEPTED
+P8 ELIGIBLE / READY TO START
+P9+ NOT ELIGIBLE
 ```
 
-The user requested that the remaining Phase-7 implementation be finished first and that accumulated tests plus
-corrections be executed afterward. That implementation is now present; the next work is the consolidated validation
-pass, not another P7 feature slice.
+Phase 7 passed its consolidated Product Behavior, six real gates and final periodic regression at `092ac57`. The next
+work is the prepared P8 evidence-core slice; no P8 implementation is claimed yet.
 
 Use `EXECUTION_STATE.md` for the exact current SHA/cursor semantics.
 
@@ -41,6 +40,7 @@ Use `EXECUTION_STATE.md` for the exact current SHA/cursor semantics.
 | `PRODUCT_BEHAVIOR_EVALS_CODEX_HANDOFF.md` | Product Behavior implementation/real-gate handoff. |
 | `P7_MINI_FRAMEWORK_IMPLEMENTATION.md` | Current complete Phase-7 implementation record. |
 | `P7_CONSOLIDATED_VALIDATION_RUNBOOK.md` | Required next pass: P7 tests + Product Behavior + six P7 real gates + corrections. |
+| `P8_EVIDENCE_CORE_PREPARATION.md` | Prepared Phase-8 start, invariants, first coherent slice and HARD gates. |
 | `AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md` | P5+ product roadmap and phase requirements. |
 | `FOUNDATION_STABILIZATION_PLAYBOOK.md` | P0-P4 historical stabilization path. |
 
