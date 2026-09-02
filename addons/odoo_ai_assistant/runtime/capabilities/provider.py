@@ -26,8 +26,8 @@ _PROVIDER_MARKER_ATTR = "_odoo_ai_capability_provider"
 type CapabilityProviderLoader = Callable[[], Iterable[CapabilityDefinition]]
 
 
-def _uses_reserved_namespace(provider_id: str) -> bool:
-    return provider_id.startswith(RESERVED_PROVIDER_NAMESPACES)
+def _uses_reserved_namespace(identifier: str) -> bool:
+    return identifier.startswith(RESERVED_PROVIDER_NAMESPACES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +38,11 @@ class CapabilityProvider:
     P7 providers remain source-compatible. Reserved ``odoo.*``, ``assistant.*``
     and ``host.*`` identities require ``metadata={"namespace_owner": "core"}``.
     Third-party addons should use a reverse-domain or addon-owned namespace.
+
+    Compatibility and reserved-namespace failures are intentionally *not* raised
+    while the marker object is constructed. They are provider-boundary failures and
+    are isolated by catalog composition so one incompatible optional addon cannot
+    prevent healthy providers or the core catalog from loading.
     """
 
     provider_id: str
@@ -57,8 +62,8 @@ class CapabilityProvider:
             raise CapabilityError("capability_provider_id_invalid")
         if not _PROVIDER_VERSION_RE.fullmatch(self.version):
             raise CapabilityError("capability_provider_version_invalid")
-        if self.api_version != CAPABILITY_PROVIDER_API_VERSION:
-            raise CapabilityError("capability_provider_api_version_incompatible")
+        if not isinstance(self.api_version, str) or not _PROVIDER_VERSION_RE.fullmatch(self.api_version):
+            raise CapabilityError("capability_provider_api_version_invalid")
         if self.title and len(self.title.encode("utf-8")) > 320:
             raise CapabilityError("capability_provider_title_invalid")
         if self.definitions and self.loader is not None:
@@ -70,8 +75,6 @@ class CapabilityProvider:
         evidence_providers = tuple(self.evidence_providers)
         metadata = freeze_json_mapping(self.metadata, max_bytes=16 * 1024)
 
-        if _uses_reserved_namespace(self.provider_id) and metadata.get("namespace_owner") != "core":
-            raise CapabilityError("capability_provider_namespace_reserved")
         if any(not isinstance(item, CapabilityDefinition) for item in definitions):
             raise CapabilityError("capability_provider_definition_invalid")
         if any(not isinstance(item, SkillDefinition) for item in skills):
@@ -92,6 +95,34 @@ class CapabilityProvider:
         object.__setattr__(self, "context_providers", context_providers)
         object.__setattr__(self, "evidence_providers", evidence_providers)
         object.__setattr__(self, "metadata", metadata)
+
+    @property
+    def owns_reserved_namespace(self) -> bool:
+        return self.metadata.get("namespace_owner") == "core"
+
+    def contract_error_code(
+        self,
+        definitions: Iterable[CapabilityDefinition] | None = None,
+    ) -> str:
+        """Return one sanitized host-owned compatibility error, if any."""
+
+        if self.api_version != CAPABILITY_PROVIDER_API_VERSION:
+            return "capability_provider_api_version_incompatible"
+        if _uses_reserved_namespace(self.provider_id) and not self.owns_reserved_namespace:
+            return "capability_provider_namespace_reserved"
+        if self.owns_reserved_namespace:
+            return ""
+
+        executable = tuple(self.definitions if definitions is None else definitions)
+        resource_ids = (
+            *(item.name for item in executable),
+            *(item.skill_id for item in self.skills),
+            *(item.provider_id for item in self.context_providers),
+            *(item.provider_id for item in self.evidence_providers),
+        )
+        if any(_uses_reserved_namespace(identifier) for identifier in resource_ids):
+            return "capability_provider_resource_namespace_reserved"
+        return ""
 
     @classmethod
     def from_objects(
@@ -156,12 +187,15 @@ class CapabilityProviderStatus:
     skill_count: int = 0
     context_provider_count: int = 0
     evidence_provider_count: int = 0
+    api_version: str = CAPABILITY_PROVIDER_API_VERSION
 
     def __post_init__(self) -> None:
         if not _PROVIDER_ID_RE.fullmatch(self.provider_id):
             raise CapabilityError("capability_provider_id_invalid")
         if not _PROVIDER_VERSION_RE.fullmatch(self.version):
             raise CapabilityError("capability_provider_version_invalid")
+        if not isinstance(self.api_version, str) or not _PROVIDER_VERSION_RE.fullmatch(self.api_version):
+            raise CapabilityError("capability_provider_api_version_invalid")
         if self.state not in {"loaded", "failed"}:
             raise CapabilityError("capability_provider_state_invalid")
         counts = (
