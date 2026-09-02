@@ -126,6 +126,13 @@ class TestPhase9Knowledge(TransactionCase):
             item.to_untrusted_projection()["trust_boundary"],
             "untrusted_data",
         )
+        natural_results = env["odoo.ai.knowledge.source"].lexical_search(
+            "According to the handbook, who should receive critical tickets? "
+            "Include the exact marker."
+        )
+        self.assertTrue(
+            any(chunk.source_id == source for chunk, _score in natural_results)
+        )
 
         source.write(
             {

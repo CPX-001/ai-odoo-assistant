@@ -172,8 +172,8 @@ def lexical_citation_gate() -> tuple[int, object]:
     source_id, _source_uuid = create_and_index_source(
         name=f"p9-policy-{uuid.uuid4().hex[:8]}",
         text=(
-            "P9_POLICY_MARKER_6402. Internal company policy: critical customer "
-            "incidents must be escalated to the duty manager."
+            "P9_POLICY_MARKER_6402. Política interna de la empresa: los incidentes "
+            "críticos de clientes deben escalarse al duty manager."
         ),
     )
     result = run_turn(

@@ -152,7 +152,8 @@ def test_addon_server_paths_have_no_privilege_or_generic_execution_escape_hatche
     assert joined_sql.count("FOR UPDATE") == 3
     assert sql_sources["models/knowledge.py"].count(".cr.execute(") == 1
     assert "SELECT c.id" in sql_sources["models/knowledge.py"]
-    assert "plainto_tsquery('simple', %s)" in sql_sources["models/knowledge.py"]
+    assert "to_tsquery('simple', %s)" in sql_sources["models/knowledge.py"]
+    assert "unnest(%s::text[])" in sql_sources["models/knowledge.py"]
     assert sql_sources["models/knowledge_fts_index.py"].count(".cr.execute(") == 1
     assert "CREATE INDEX IF NOT EXISTS" in sql_sources["models/knowledge_fts_index.py"]
     assert "USING GIN" in sql_sources["models/knowledge_fts_index.py"]

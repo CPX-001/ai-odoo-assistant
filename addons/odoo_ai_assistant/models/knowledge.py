@@ -19,6 +19,47 @@ _MAX_SEARCH_RESULTS = 20
 _MAX_FILENAME = 255
 _MAX_ATTACHMENT_COUNT_PER_TURN = 8
 _TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
+_SEARCH_TERM_RE = re.compile(r"[0-9A-Za-zÀ-ÖØ-öø-ÿ_]{2,}")
+_SEARCH_STOP_WORDS = frozenset(
+    {
+        "about",
+        "according",
+        "and",
+        "como",
+        "cómo",
+        "con",
+        "cual",
+        "cuál",
+        "de",
+        "del",
+        "el",
+        "en",
+        "es",
+        "for",
+        "from",
+        "how",
+        "la",
+        "las",
+        "los",
+        "not",
+        "para",
+        "por",
+        "que",
+        "qué",
+        "quien",
+        "quién",
+        "segun",
+        "según",
+        "the",
+        "this",
+        "una",
+        "uno",
+        "use",
+        "with",
+        "without",
+        "you",
+    }
+)
 _SUPPORTED_MIMETYPES = frozenset(
     {
         "application/json",
@@ -336,25 +377,55 @@ class AssistantKnowledgeSource(models.Model):
         if not source_ids:
             return []
         exact = f"%{query[:1_000]}%"
+        terms = tuple(
+            dict.fromkeys(
+                term
+                for term in _SEARCH_TERM_RE.findall(query.casefold())
+                if term not in _SEARCH_STOP_WORDS
+            )
+        )[:24]
+        if not terms:
+            return []
+        lexical_query = " | ".join(terms)
+        minimum_matches = (
+            1 if len(terms) == 1 else min(3, (len(terms) * 3 + 4) // 5)
+        )
         self.env.cr.execute(
             """
             SELECT c.id,
                    CASE WHEN c.content ILIKE %s THEN 1 ELSE 0 END AS exact_match,
                    ts_rank_cd(
                        to_tsvector('simple', COALESCE(c.content, '')),
-                       plainto_tsquery('simple', %s)
+                       to_tsquery('simple', %s)
                    ) AS rank
               FROM odoo_ai_knowledge_chunk AS c
              WHERE c.source_id = ANY(%s)
                AND (
                     c.content ILIKE %s
-                    OR to_tsvector('simple', COALESCE(c.content, ''))
-                       @@ plainto_tsquery('simple', %s)
+                    OR (
+                        to_tsvector('simple', COALESCE(c.content, ''))
+                            @@ to_tsquery('simple', %s)
+                        AND (
+                            SELECT COUNT(*)
+                              FROM unnest(%s::text[]) AS search_term
+                             WHERE to_tsvector('simple', COALESCE(c.content, ''))
+                                   @@ plainto_tsquery('simple', search_term)
+                        ) >= %s
+                    )
                )
              ORDER BY exact_match DESC, rank DESC, c.source_id, c.sequence
              LIMIT %s
             """,
-            (exact, query, source_ids, exact, query, int(limit)),
+            (
+                exact,
+                lexical_query,
+                source_ids,
+                exact,
+                lexical_query,
+                list(terms),
+                minimum_matches,
+                int(limit),
+            ),
         )
         ranked = self.env.cr.fetchall()
         if not ranked:
