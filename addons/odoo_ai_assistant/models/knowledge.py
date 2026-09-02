@@ -19,7 +19,6 @@ _MAX_SEARCH_RESULTS = 20
 _MAX_FILENAME = 255
 _MAX_ATTACHMENT_COUNT_PER_TURN = 8
 _TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
-_WORD_RE = re.compile(r"[^\W_]{2,}", re.UNICODE)
 _SUPPORTED_MIMETYPES = frozenset(
     {
         "application/json",
@@ -33,6 +32,36 @@ _SUPPORTED_MIMETYPES = frozenset(
 )
 _SUPPORTED_EXTENSIONS = frozenset(
     {".csv", ".json", ".md", ".markdown", ".rst", ".txt", ".xml"}
+)
+_SOURCE_INTERNAL_FIELDS = frozenset(
+    {
+        "source_uuid",
+        "owner_user_id",
+        "company_id",
+        "conversation_id",
+        "state",
+        "file_size",
+        "content_fingerprint",
+        "indexed_fingerprint",
+        "version",
+        "chunk_count",
+        "indexed_at",
+        "error_code",
+    }
+)
+_ATTACHMENT_INTERNAL_FIELDS = frozenset(
+    {
+        "token",
+        "user_id",
+        "company_id",
+        "turn_id",
+        "conversation_id",
+        "file_size",
+        "fingerprint",
+        "expires_at",
+        "consumed_at",
+        "knowledge_source_id",
+    }
 )
 
 
@@ -125,8 +154,25 @@ class AssistantKnowledgeSource(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         prepared = []
-        for values in vals_list:
-            values = dict(values)
+        for incoming in vals_list:
+            values = dict(incoming)
+            if not self.env.su:
+                for key in _SOURCE_INTERNAL_FIELDS:
+                    values.pop(key, None)
+                values["owner_user_id"] = self.env.uid
+                values["company_id"] = self.env.company.id
+                conversation_id = incoming.get("conversation_id")
+                if conversation_id:
+                    conversation = self.env["odoo.ai.conversation"].browse(
+                        int(conversation_id)
+                    ).exists()
+                    if (
+                        not conversation
+                        or conversation.user_id.id != self.env.uid
+                        or conversation.company_id.id != self.env.company.id
+                    ):
+                        raise AccessError("Knowledge conversation is not accessible")
+                    values["conversation_id"] = conversation.id
             filename = _filename(values.get("filename"))
             mimetype = _mimetype(values.get("mimetype"), filename)
             raw = _decode_binary(values.get("data"))
@@ -135,15 +181,23 @@ class AssistantKnowledgeSource(models.Model):
             values["mimetype"] = mimetype
             values["file_size"] = len(raw)
             values["content_fingerprint"] = hashlib.sha256(raw).hexdigest()
+            values.setdefault("state", "uploaded")
+            values.setdefault("version", 0)
+            values.setdefault("chunk_count", 0)
             if not values.get("name"):
                 values["name"] = filename[:160]
             prepared.append(values)
-        return super().create(prepared)
+        records = super().create(prepared)
+        records._trigger_processing_cron()
+        return records
 
     def write(self, vals):
-        content_change = any(key in vals for key in ("data", "filename", "mimetype"))
-        prepared = dict(vals)
-        if content_change and not self.env.context.get("odoo_ai_knowledge_internal_write"):
+        requested = dict(vals)
+        if not self.env.su and set(requested) & _SOURCE_INTERNAL_FIELDS:
+            raise AccessError("Knowledge lifecycle fields are host-owned")
+        content_change = any(key in requested for key in ("data", "filename", "mimetype"))
+        prepared = dict(requested)
+        if content_change:
             if len(self) != 1:
                 raise ValidationError("Update Knowledge source files one record at a time")
             filename = _filename(prepared.get("filename", self.filename))
@@ -161,14 +215,14 @@ class AssistantKnowledgeSource(models.Model):
                 }
             )
         result = super().write(prepared)
-        if content_change and not self.env.context.get("odoo_ai_knowledge_internal_write"):
+        if content_change:
             self._trigger_processing_cron()
         return result
 
     def action_queue_processing(self):
         self.check_access("write")
         for source in self:
-            source.with_context(odoo_ai_knowledge_internal_write=True).write(
+            source.with_user(SUPERUSER_ID).write(
                 {"state": "uploaded", "error_code": False}
             )
         self._trigger_processing_cron()
@@ -187,7 +241,7 @@ class AssistantKnowledgeSource(models.Model):
         self.check_access("write")
         for source in self:
             if source.indexed_fingerprint and source.chunk_count:
-                source.with_context(odoo_ai_knowledge_internal_write=True).write(
+                source.with_user(SUPERUSER_ID).write(
                     {"enabled": True, "state": "active", "error_code": False}
                 )
         return True
@@ -196,14 +250,14 @@ class AssistantKnowledgeSource(models.Model):
         self.check_access("write")
         for source in self:
             state = "indexed" if source.indexed_fingerprint else source.state
-            source.with_context(odoo_ai_knowledge_internal_write=True).write(
+            source.with_user(SUPERUSER_ID).write(
                 {"enabled": False, "state": state}
             )
         return True
 
     @api.model
     def _cron_process_pending(self):
-        sources = self.search(
+        sources = self.with_user(SUPERUSER_ID).search(
             [("state", "=", "uploaded")],
             order="id",
             limit=2,
@@ -215,9 +269,8 @@ class AssistantKnowledgeSource(models.Model):
     def _process_one(self):
         self.ensure_one()
         self.check_access("write")
-        self.with_context(odoo_ai_knowledge_internal_write=True).write(
-            {"state": "processing", "error_code": False}
-        )
+        system_source = self.with_user(SUPERUSER_ID)
+        system_source.write({"state": "processing", "error_code": False})
         try:
             raw = _decode_binary(self.data)
             _validate_supported_document(self.filename, self.mimetype)
@@ -227,7 +280,7 @@ class AssistantKnowledgeSource(models.Model):
             if not chunks:
                 raise KnowledgeProcessingError("knowledge_empty_document")
             version = self.version + 1
-            self.chunk_ids.unlink()
+            system_source.chunk_ids.unlink()
             rows = []
             for sequence, chunk in enumerate(chunks, start=1):
                 rows.append(
@@ -243,10 +296,10 @@ class AssistantKnowledgeSource(models.Model):
                         ).hexdigest(),
                     }
                 )
-            self.env["odoo.ai.knowledge.chunk"].create(rows)
+            self.env["odoo.ai.knowledge.chunk"].with_user(SUPERUSER_ID).create(rows)
             now = fields.Datetime.now()
             final_state = "active" if self.enabled else "indexed"
-            self.with_context(odoo_ai_knowledge_internal_write=True).write(
+            system_source.write(
                 {
                     "file_size": len(raw),
                     "content_fingerprint": fingerprint,
@@ -259,11 +312,11 @@ class AssistantKnowledgeSource(models.Model):
                 }
             )
         except KnowledgeProcessingError as error:
-            self.with_context(odoo_ai_knowledge_internal_write=True).write(
+            system_source.write(
                 {"state": "error", "error_code": error.code[:128]}
             )
         except Exception:
-            self.with_context(odoo_ai_knowledge_internal_write=True).write(
+            system_source.write(
                 {"state": "error", "error_code": "knowledge_processing_failed"}
             )
         return self.state
@@ -411,22 +464,42 @@ class AssistantKnowledgeAttachment(models.Model):
         ),
     ]
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        prepared = []
+        for incoming in vals_list:
+            values = dict(incoming)
+            if not self.env.su:
+                for key in _ATTACHMENT_INTERNAL_FIELDS:
+                    values.pop(key, None)
+                values["user_id"] = self.env.uid
+                values["company_id"] = self.env.company.id
+            filename = _filename(values.get("filename"))
+            mimetype = _mimetype(values.get("mimetype"), filename)
+            raw = _decode_binary(values.get("data"))
+            _validate_supported_document(filename, mimetype)
+            values["filename"] = filename
+            values["mimetype"] = mimetype
+            values["file_size"] = len(raw)
+            values["fingerprint"] = hashlib.sha256(raw).hexdigest()
+            values.setdefault("expires_at", fields.Datetime.now() + timedelta(hours=24))
+            prepared.append(values)
+        return super().create(prepared)
+
+    def write(self, vals):
+        if not self.env.su and vals:
+            raise AccessError("Pending Knowledge attachments are immutable")
+        return super().write(vals)
+
     @api.model
     def create_upload(self, *, filename, mimetype, data):
         if not self.env.user._is_internal():
             raise AccessError("Assistant attachments require an internal user")
-        filename = _filename(filename)
-        mimetype = _mimetype(mimetype, filename)
-        raw = _decode_binary(data)
-        _validate_supported_document(filename, mimetype)
         return self.create(
             {
                 "filename": filename,
                 "mimetype": mimetype,
                 "data": data,
-                "file_size": len(raw),
-                "fingerprint": hashlib.sha256(raw).hexdigest(),
-                "expires_at": fields.Datetime.now() + timedelta(hours=24),
             }
         )
 
