@@ -117,6 +117,17 @@ that provider-neutral structure:
 - provenance/freshness/trust/citation metadata may ground answers but does not become authority.
 
 `EffectiveAssistantManifest.evidence_provider_ids` remains the single manifest seam.
+The admin/settings manifest derives the same effective available Evidence-provider
+IDs rather than maintaining a separate list.
+
+### Installed-addon Evidence fixture
+
+The existing Odoo P7 fixture addon now contributes a real
+`fixture.phase7_evidence` provider through `CapabilityProvider.evidence_providers`.
+Its Skill selects that provider through `evidence_provider_selectors`. The fixture
+Odoo test covers registry discovery, catalog composition, search/fetch, fetch-time
+user-scope rejection and effective manifest projection without editing the core
+catalog. This is test coverage only until the focused Odoo gate is actually executed.
 
 ### Ledger durability decision for this checkpoint
 
@@ -160,6 +171,7 @@ tests/unit/test_phase7_live_extension_context.py
 tests/addon/test_phase8_runtime_evidence.py
 tests/addon/test_addon_boundaries.py
 addons/odoo_ai_assistant/tests/test_canonical_plan_host_loop.py
+tests/fixtures/odoo_addons/odoo_ai_assistant_p7_fixture/tests/test_phase7_fixture.py
 ```
 
 Coverage targets now include:
@@ -174,6 +186,7 @@ Coverage targets now include:
 - question-sensitive routing with no generic pre-retrieval;
 - public `user` / `technical` manifest projection;
 - live Evidence host/untrusted trust partition, including indirect prompt-injection text;
+- installed-addon Evidence discovery/search/fetch/scope through the Odoo registry fixture;
 - no supported `auth="none"` callback, addon machine-auth primitive or inventory service;
 - live Odoo inventory grounding and stale-fingerprint behavior;
 - existing plan tests adapted to immutable `CapabilityContext` metadata rather than mutating host contracts after capture.
@@ -212,9 +225,10 @@ foundation checkpoint.
 ## Next action
 
 Run the focused P8 dependency-light and Odoo tests in a checkout with Odoo 18,
-including the directly affected P7 extension and canonical-plan boundaries. Repair
-failures at their owning layer and record exact evidence. Only then continue toward
-durable ledger reconnect/citation UX and the six P8 real gates.
+including the directly affected P7 extension, installed-addon Evidence fixture and
+canonical-plan boundaries. Repair failures at their owning layer and record exact
+evidence. Only then continue toward durable ledger reconnect/citation UX and the six
+P8 real gates.
 
 A full regression is not implied unless the active runbook/cursor is updated to
 require it.
