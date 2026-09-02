@@ -34,6 +34,7 @@ from . import (
 )
 from . import test_phase4_live_projection as test_phase4_live_projection
 from . import test_phase8_runtime_evidence as test_phase8_runtime_evidence
+from . import test_phase9_knowledge as test_phase9_knowledge
 from . import test_planning_preferences as test_planning_preferences
 from . import test_post_effect_reasoning as test_post_effect_reasoning
 from . import test_public_references as test_public_references
