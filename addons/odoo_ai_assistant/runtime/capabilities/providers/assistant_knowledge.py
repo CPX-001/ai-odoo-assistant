@@ -135,7 +135,7 @@ def _verify(context, arguments):
     approval=CapabilityApproval.NONE,
     preview=_preview,
     verify=_verify,
-    max_calls=4,
+    max_calls=8,
     timeout_seconds=10,
     tags=("assistant", "knowledge", "attachment", "ingestion"),
 )
@@ -162,7 +162,6 @@ def ingest_attachment(context: CapabilityContext, arguments):
                 "consumed_at": fields.Datetime.now(),
             }
         )
-        source.action_queue_processing()
     except (AccessError, ValidationError):
         raise CapabilityError("knowledge_ingest_rejected") from None
     return _result(source)
