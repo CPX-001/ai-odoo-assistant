@@ -45,7 +45,7 @@
                         </group>
                         <group string="Access and lifecycle">
                             <field name="access_mode"/>
-                            <field name="enabled"/>
+                            <field name="enabled" readonly="1"/>
                             <field name="owner_user_id" readonly="1"/>
                             <field name="company_id" readonly="1" groups="base.group_multi_company"/>
                             <field name="conversation_id" readonly="1"/>
@@ -65,7 +65,6 @@
         <field name="name">AI Knowledge</field>
         <field name="res_model">odoo.ai.knowledge.source</field>
         <field name="view_mode">list,form</field>
-        <field name="search_view_id" eval="False"/>
     </record>
 
     <menuitem
