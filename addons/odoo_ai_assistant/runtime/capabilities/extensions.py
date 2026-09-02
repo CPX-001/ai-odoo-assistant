@@ -21,6 +21,7 @@ from .evidence import (
     EvidenceSearchBatch,
     EvidenceSearchRequest,
 )
+from .knowledge_evidence import build_company_knowledge_evidence_provider
 from .log_evidence import build_odoo_log_evidence_provider
 from .provider import CapabilityProvider, discover_odoo_capability_providers
 from .registry import CapabilityRegistry, discover_capabilities_for_env
@@ -268,6 +269,7 @@ def discover_assistant_extensions_for_env(
         build_runtime_inventory_evidence_provider(),
         build_installed_source_evidence_provider(),
         build_odoo_log_evidence_provider(),
+        build_company_knowledge_evidence_provider(),
     )
     if not providers:
         return AssistantExtensionCatalog(
