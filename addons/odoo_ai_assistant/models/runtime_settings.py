@@ -252,6 +252,12 @@ class ResConfigSettingsRuntime(models.TransientModel):
             self.env,
             capability_registry=registry,
         )
+        available_evidence, _evidence_statuses = extensions.evidence_providers.availability(
+            context
+        )
+        evidence_provider_ids = tuple(
+            item.provider_id for item in available_evidence
+        )
         configuration_health = _configuration_health(registry, resolver)
         configuration_health.extend(
             {
@@ -268,6 +274,7 @@ class ResConfigSettingsRuntime(models.TransientModel):
             provider_profile=current_codex_provider_profile(),
             skills=extensions.skills,
             context_providers=extensions.context_providers,
+            evidence_provider_ids=evidence_provider_ids,
             technical_profile=technical_access_profile_for_env(self.env),
             configuration_health=configuration_health,
         ).browser_payload()
