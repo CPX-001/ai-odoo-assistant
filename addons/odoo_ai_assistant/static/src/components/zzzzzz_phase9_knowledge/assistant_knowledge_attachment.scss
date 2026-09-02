@@ -1,0 +1,18 @@
+.o_ai_assistant_knowledge_attach_button {
+    flex: 0 0 auto;
+    min-width: 2.4rem;
+}
+
+.o_ai_assistant_knowledge_upload {
+    max-width: 100%;
+    font-weight: 400;
+
+    > span {
+        max-width: 14rem;
+    }
+
+    .btn {
+        line-height: 1;
+        text-decoration: none;
+    }
+}
