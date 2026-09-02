@@ -31,6 +31,7 @@ from ..capabilities.evidence import (
     thaw_json,
 )
 from ..capabilities.evidence_runtime import AssistantEvidenceDecisionEngine
+from ..capabilities.knowledge_routing import CompanyKnowledgeEvidenceRoutingPolicy
 from .contracts import NextDecision
 
 _CACHE_METADATA_KEYS = (
@@ -71,7 +72,7 @@ class AssistantExtensionDecisionEngine:
         self._manifest_cache_key = None
         self._manifest_cache_value = None
         self._configuration_health_cache = None
-        self._evidence_routing = EvidenceRoutingPolicy()
+        self._evidence_routing = CompanyKnowledgeEvidenceRoutingPolicy()
         self._evidence_engine = AssistantEvidenceDecisionEngine(
             extensions.evidence_providers,
             routing_policy=self._evidence_routing,
