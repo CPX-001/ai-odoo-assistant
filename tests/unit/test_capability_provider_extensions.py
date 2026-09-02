@@ -52,7 +52,7 @@ def _handler(context, arguments):
     return {"ok": True}
 
 
-def _definition(name: str, *, dependencies=()) -> CapabilityDefinition:
+def _definition(name: str, *, dependencies=(), guard=None) -> CapabilityDefinition:
     return CapabilityDefinition(
         name=name,
         description=f"Read-only test capability {name}.",
@@ -62,6 +62,7 @@ def _definition(name: str, *, dependencies=()) -> CapabilityDefinition:
         effect=CapabilityEffect.READ_ONLY,
         handler=_handler,
         dependencies=dependencies,
+        guard=guard,
     )
 
 
@@ -98,6 +99,7 @@ def test_static_provider_composes_without_editing_core_catalog() -> None:
     status = {item.provider_id: item for item in registry.provider_statuses}["example.sales"]
     assert status.state == "loaded"
     assert status.version == "2"
+    assert status.api_version == provider_module.CAPABILITY_PROVIDER_API_VERSION
     assert status.capability_count == 1
 
 
@@ -195,11 +197,12 @@ def test_optional_provider_capability_collision_is_rejected_not_shadowed() -> No
     assert status.error_code == "capability_name_duplicate"
 
 
-def test_optional_dependency_contract_failure_preserves_core_catalog() -> None:
+def test_optional_dependency_failure_preserves_healthy_sibling_provider() -> None:
     dependent = _definition(
         "example.needs_missing",
         dependencies=(CapabilityDependency("missing.capability"),),
     )
+    healthy = _definition("healthy.read")
     registry = compose_capability_registry(
         _base_registry(),
         (
@@ -207,15 +210,64 @@ def test_optional_dependency_contract_failure_preserves_core_catalog() -> None:
                 provider_id="example.bad_dependency",
                 definitions=(dependent,),
             ),
+            CapabilityProvider(
+                provider_id="healthy.provider",
+                definitions=(healthy,),
+            ),
         ),
     )
 
-    assert [item.name for item in registry.definitions] == ["core.identity"]
-    status = {item.provider_id: item for item in registry.provider_statuses}[
-        "example.bad_dependency"
+    assert [item.name for item in registry.definitions] == [
+        "core.identity",
+        "healthy.read",
     ]
-    assert status.state == "failed"
-    assert status.error_code == "capability_dependency_missing"
+    status = {item.provider_id: item for item in registry.provider_statuses}
+    assert status["example.bad_dependency"].state == "failed"
+    assert status["example.bad_dependency"].error_code == "capability_dependency_missing"
+    assert status["healthy.provider"].state == "loaded"
+
+
+def test_cycle_isolated_to_involved_optional_providers_only() -> None:
+    alpha = _definition(
+        "cycle.alpha",
+        dependencies=(CapabilityDependency("cycle.beta"),),
+    )
+    beta = _definition(
+        "cycle.beta",
+        dependencies=(CapabilityDependency("cycle.alpha"),),
+    )
+    healthy = _definition("healthy.read")
+
+    registry = compose_capability_registry(
+        _base_registry(),
+        (
+            CapabilityProvider(provider_id="cycle.provider_alpha", definitions=(alpha,)),
+            CapabilityProvider(provider_id="cycle.provider_beta", definitions=(beta,)),
+            CapabilityProvider(provider_id="healthy.provider", definitions=(healthy,)),
+        ),
+    )
+
+    assert [item.name for item in registry.definitions] == [
+        "core.identity",
+        "healthy.read",
+    ]
+    status = {item.provider_id: item for item in registry.provider_statuses}
+    assert status["cycle.provider_alpha"].error_code == "capability_dependency_cycle"
+    assert status["cycle.provider_beta"].error_code == "capability_dependency_cycle"
+    assert status["healthy.provider"].state == "loaded"
+
+
+def test_capability_guard_exception_fails_closed_without_escaping_details() -> None:
+    def exploding_guard(_context):
+        raise RuntimeError("private guard detail")
+
+    definition = _definition("example.guarded", guard=exploding_guard)
+    context = CapabilityContext(
+        env=types.SimpleNamespace(user=types.SimpleNamespace(has_group=lambda _group: True)),
+        turn_id="guard",
+    )
+
+    assert CapabilityRegistry((definition,)).available(context) == ()
 
 
 def test_odoo_registry_marker_discovery_is_deterministic_and_direct_only() -> None:
