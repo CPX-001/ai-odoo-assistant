@@ -1,11 +1,13 @@
 # Knowledge, Evidence and Retrieval
 
 This document supersedes the retired sidecar PostgreSQL FTS Knowledge Index design.
-Current code/ADRs plus `CURRENT_STATE.md` are authoritative.
+Current code/ADRs plus `CURRENT_STATE.md` and `research/EXECUTION_STATE.md` are
+authoritative.
 
 ## 1. Current state
 
-P8 now has a shared embedded Evidence foundation:
+P8 is accepted and provides the shared embedded Evidence foundation plus live
+installation/source/XML/log providers:
 
 ```text
 EvidenceKind / Trust / Freshness
@@ -17,14 +19,24 @@ EvidenceProviderCatalog
 EvidenceRoutingPolicy
 EvidenceLedger / EvidenceLedgerSnapshot
 assistant.runtime_inventory
+assistant.installed_source
+assistant.odoo_log
 ```
 
-The first live provider exposes bounded installation/runtime facts under the effective
-Odoo Environment. General company document RAG, source/XML semantic search, correlated
-logs and web Evidence are not implemented end to end yet.
+P9's first coherent slice is now implemented on main, awaiting focused validation:
+
+```text
+odoo.ai.knowledge.source
+odoo.ai.knowledge.chunk
+odoo.ai.knowledge.attachment
+assistant.company_knowledge
+assistant.knowledge.ingest_attachment
+PostgreSQL lexical/FTS company-document retrieval
+bounded temporary chat attachment transport
+```
 
 The retired Assistant Service SQLAlchemy/Alembic knowledge/source implementation is
-historical evidence only. Useful concepts may be reimplemented inside Odoo; its API,
+historical evidence only. Its concepts may be reimplemented inside Odoo; its API,
 database and machine-auth callback are not restored.
 
 ## 2. Product objective
@@ -57,24 +69,27 @@ answer.
 
 Do not run a generic vector search before every turn.
 
-Target pattern:
+Current/target pattern:
 
 ```text
 small reliable BaseContext
  -> reasoning provider
-     -> enough evidence? answer
-     -> otherwise search an effective EvidenceProvider
-     -> inspect bounded refs/items
+     -> question-sensitive Evidence routing
+     -> inspect bounded refs/items from effective providers
      -> fetch/search another source when useful
      -> synthesize with provenance
 ```
+
+P8 ordinary turns already use this Evidence path for supported technical questions.
+P9 extends the same routing seam to company-document language; it does not add a
+parallel RAG agent or intent router.
 
 The host may require installation-local evidence for claims that must be current,
 installation-specific or safety-critical.
 
 ## 4. Evidence contract
 
-Every retrieval mechanism normalizes to the P8 host-owned contracts rather than
+Every retrieval mechanism normalizes to the host-owned Evidence contracts rather than
 leaking storage-specific response shapes into the agent loop.
 
 Core Evidence carries:
@@ -105,7 +120,7 @@ profile, approval or execution authority.
 
 ## 5. EvidenceLedger
 
-The P8 ledger is implemented and bounded. Its initial limits are:
+The bounded ledger limits remain:
 
 ```text
 64 refs per turn
@@ -136,13 +151,13 @@ missing
 revoked
 ```
 
-Fingerprint mismatch should be surfaced as stale Evidence, not silently merged into
-an old conclusion.
+Fingerprint mismatch or source-version change is surfaced as stale Evidence, not
+silently merged into an old conclusion. P9 company Knowledge uses source version plus
+chunk fingerprint for this revalidation.
 
 ## 7. Routing policy
 
-`EvidenceRoutingPolicy` prioritizes evidence classes without introducing a rigid
-intent router.
+Evidence routing prioritizes source classes without introducing a rigid intent router.
 
 Direction:
 
@@ -151,11 +166,15 @@ business/current state      -> live ORM
 installation behavior       -> runtime/schema/source/XML/config
 standard HOW_TO              -> official/versioned docs + local verification
 error diagnosis              -> turn trace + logs + source/XML/runtime
-company policy               -> Knowledge/document sources
+company policy/manual        -> Knowledge/document sources
 module/repository HOW_TO     -> manifest/README/docs/source/scripts + install state
 current external fact        -> web when allowed
 repository preflight         -> web/repo metadata + bounded static inspection
 ```
+
+P9 adds company-document hints through a subclass of the shared routing policy. An
+explicit evidence kind still wins. Generic/social turns still select no Evidence when
+nothing relevant is requested.
 
 Conflicting evidence should be preserved/disclosed, not silently collapsed into a
 single unsupported truth.
@@ -172,9 +191,10 @@ the model.
 
 ## 9. Runtime/schema/configuration evidence
 
-P8.2 currently implements installation inventory. Later P8 providers should add:
+P8 currently provides bounded installation/runtime inventory plus source/XML and
+configured-log evidence. Runtime/schema/configuration expansion may still add richer:
 
-- effective models/fields and schema explanations;
+- effective model/field explanations;
 - menus/actions/views and configuration;
 - groups/ACL/record-rule/company explanations;
 - capability/provider/configuration health.
@@ -184,25 +204,10 @@ relevant.
 
 ## 10. Source/XML/module documentation
 
-P8.4 should build installation-local source intelligence before reaching for a heavy
-external graph stack by default.
+P8 built installation-local source intelligence before reaching for a heavy external
+graph stack.
 
-Required evidence classes include:
-
-```text
-manifest / README / docs
-model + field + method symbols
-Python inheritance/overrides
-XML IDs / views / inherit_id / xpath chains
-menus/actions/buttons/wizards
-requirements/dependencies
-commands / scripts / flags / parameters
-install/update/uninstall notes
-troubleshooting/security notes
-tests/examples where useful
-```
-
-Rules:
+Current design rules remain:
 
 - preserve module/path/symbol/source provenance;
 - use logical locators and approved current-source scopes;
@@ -211,34 +216,80 @@ Rules:
 - source/document text remains untrusted data;
 - distinguish normal-user operation from Odoo administration and host/technical operation.
 
-Source modification is a separate later patch/test/deploy workflow.
+Future semantic enrichment may add more explicit model/field/method/view inheritance
+relations and validators, but should preserve local installation evidence as the
+source of truth. Source modification is a separate later patch/test/deploy workflow.
 
 ## 11. Logs and diagnosis
 
-Logs are Evidence, not prompt dumps.
-
-A later provider should support bounded search by time/component/severity/terms plus
-small surrounding context and correlation with turn/action/record/source state.
+P8 configured-log Evidence supports bounded correlated diagnosis. Logs remain
+Evidence, not prompt dumps.
 
 For ambiguous effects, diagnosis must not imply a failed model response means no
 write occurred. Host verification/recovery state stays authoritative.
 
 ## 12. Company Knowledge / Sources
 
-P9 should make Knowledge Odoo-native and editable by administrators/users with a clear
-source lifecycle:
+P9 first-slice implementation uses Odoo-native records and the lifecycle:
 
 ```text
-uploaded/discovered -> processing -> indexed -> active
-                                  \-> error
+uploaded -> processing -> indexed -> active
+                      \-> error
 ```
 
-Support persistent sources and temporary conversation attachments. Keep the retrieval
-backend independent from the LLM provider.
+Persistent sources carry owner, company, access mode, fingerprints, version and index
+metadata. Temporary conversation uploads are separate expiring records and do not
+become Knowledge merely because a file was attached.
 
-Start with deterministic extraction/structure and PostgreSQL lexical/FTS where
-suitable. Add embeddings/vector/hybrid ranking when evals demonstrate a material
-recall/answer-quality gain.
+Initial deterministic ingestion supports:
+
+```text
+TXT / Markdown / RST / CSV / JSON / XML
+8 MiB max file/source
+6,000 characters per chunk
+2,048 chunks per source
+```
+
+Binary data stays in Odoo attachments. The runtime sees only a host-controlled
+attachment descriptor until bounded Evidence is fetched.
+
+Derived chunks are host-owned. Normal users cannot create/update/delete index chunks
+directly. Source reads/writes are constrained by effective Odoo owner/company record
+rules. `company` sources are visible in active allowed companies; `private` sources
+are owner-only.
+
+Lexical retrieval uses parameterized PostgreSQL FTS with a GIN expression index and
+an exact-substring fallback. `assistant.company_knowledge` normalizes results into
+`DOCUMENT` Evidence with `USER_CONTENT` trust and source/version/chunk citations.
+
+Fetch rechecks current ORM access, enabled/state/version and chunk fingerprint.
+Changed/reindexed references become stale; disabled sources are revoked.
+
+### Chat ingestion
+
+The Assistant composer can upload a bounded temporary source and show a pending file
+chip. The visible UX states that persistence requires an explicit user request.
+
+On the next new turn the browser sends only an opaque attachment token marker. The
+server validates ownership/expiry, strips the marker from the persisted visible user
+message and adds a bounded host descriptor to the durable runtime input.
+
+`assistant.knowledge.ingest_attachment` is a normal plan capability. It can act only
+on an attachment already bound to the current turn, creates the source under the
+effective user Environment, queues indexing and verifies the resulting source link.
+It does not grant any authority from file content.
+
+### Deferred intentionally
+
+```text
+PDF/OCR
+XLSX-specific parsing
+embeddings/vector store/semantic reranking
+bulk source import
+```
+
+Embeddings should be added only if evals demonstrate a material recall/answer-quality
+gain over the lexical baseline.
 
 ## 13. Web and repository Evidence
 
@@ -254,8 +305,10 @@ Retrieved web/repository content is untrusted and cannot grant authority.
 
 ## 14. Citations
 
-Final answers should be able to expose safe citations that resolve from Evidence
-metadata without exposing raw host paths or inaccessible records.
+P8 final-answer results already carry safe host-owned citation metadata. P9 company
+Knowledge contributes citations containing source UUID/name, source version, chunk
+sequence and character range without exposing raw attachment bytes or inaccessible
+records.
 
 Citation quality requires:
 
@@ -268,7 +321,8 @@ access-safe display metadata
 bounded excerpt where appropriate
 ```
 
-Citation UX is not yet complete merely because P8 contracts contain citation metadata.
+Rich browser navigation for company Knowledge citations is still future UX work; the
+metadata contract exists now.
 
 ## 15. Security rules
 
@@ -278,11 +332,16 @@ Citation UX is not yet complete merely because P8 contracts contain citation met
 - document/source/log/web text never becomes system/tool policy;
 - no arbitrary filesystem traversal or shell to compensate for incomplete indexing;
 - no raw unlimited payload persistence;
+- temporary upload tokens are user-bound, expiring and opaque;
+- visible user messages never persist the internal attachment marker;
+- source ownership/company/lifecycle metadata cannot be forged by normal RPC writes;
+- derived chunk mutation is host-owned;
+- the fixed FTS SQL is parameterized host code, not an exposed SQL capability;
 - technical host details are restricted by product profile and Odoo permissions.
 
 ## 16. Current implementation/validation boundary
 
-Implemented now:
+Implemented and P8-accepted:
 
 ```text
 Evidence contracts/catalog/routing/ledger
@@ -290,22 +349,37 @@ CapabilityProvider Evidence composition
 Skill Evidence selectors
 manifest evidence_provider_ids seam
 runtime/installation inventory EvidenceProvider
-source-scope policy
-focused tests prepared
+installed source/XML EvidenceProvider
+configured-log EvidenceProvider
+ordinary-turn Evidence orchestration
+safe final citation metadata
+source-scope/access/freshness policy
 ```
 
-Still pending:
+Implemented in P9 first slice, validation still blocking:
 
 ```text
-focused P8 test execution
-live Evidence orchestration in ordinary turns
-source/XML/module-doc providers
-logs/self-diagnosis
-company Knowledge/RAG
-citation UX
+company Knowledge source/chunk lifecycle
+bounded deterministic ingestion
+PostgreSQL lexical/FTS + GIN index
+company Knowledge EvidenceProvider
+company-document routing
+ACL/freshness/citation behavior
+temporary chat upload + durable turn binding
+chat-driven Knowledge ingestion capability
+Assistant attachment UI
+focused tests and real-gate runner
+```
+
+Still pending beyond this slice:
+
+```text
+focused/real P9 execution evidence
+PDF/OCR and richer file parsing
+semantic/vector retrieval if justified by evals
+rich Knowledge citation navigation
 web/repository Evidence
 ```
 
-See `EVIDENCE_ARCHITECTURE.md`,
-`research/P8_EVIDENCE_CORE_IMPLEMENTATION.md` and
-`research/EXECUTION_STATE.md`.
+See `EVIDENCE_ARCHITECTURE.md`, `research/P9_KNOWLEDGE_FIRST_SLICE.md`,
+`research/P9_FOCUSED_VALIDATION_RUNBOOK.md` and `research/EXECUTION_STATE.md`.
