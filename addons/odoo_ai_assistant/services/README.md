@@ -7,7 +7,7 @@ flowchart LR
     C[controllers/models] --> S[services]
     S --> O[effective Odoo environment/runtime facts]
     S --> R[runtime account/provider state]
-    E[P8 Evidence providers] --> S
+    E[P8 Evidence providers] --> O
 ```
 
 ## Current services
@@ -17,18 +17,17 @@ flowchart LR
 | `screen_context.py` | validates/builds bounded context from the current Odoo screen |
 | `turn_context.py` | assembles turn-level context used by the runtime |
 | `runtime_account.py` | Odoo-facing Codex account/login/status gate and sanitized payloads |
-| `instance_inventory.py` | bounded internal installation inventory reusable by P8 Evidence |
 
-## Instance inventory
+## Installation inventory
 
-`instance_inventory.py` is now an **in-process service**. The retired
-`controllers/internal_tools.py` `auth="none"` callback and its addon-local machine
-secret are not part of the supported product.
+Installation inventory no longer has a parallel addon service or HTTP compatibility
+surface. `assistant.runtime_inventory` owns the supported in-process projection and
+reads only bounded installation metadata through the effective Odoo Environment.
+It does not expose absolute addon roots, database names, credentials, commands or
+host-only payloads to the model.
 
-`assistant.runtime_inventory` may reuse safe inventory facts, but it projects only a
-bounded/sanitized subset under the effective user context. Legacy service payloads
-must not leak absolute roots, credentials, commands or host-only details into model
-Evidence.
+The retired `controllers/internal_tools.py`, addon-local machine-auth primitive and
+former `services/instance_inventory.py` are not part of the supported runtime.
 
 ## When code belongs here
 
