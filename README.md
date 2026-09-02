@@ -118,10 +118,10 @@ The supported application is `addons/odoo_ai_assistant` plus the embedded runtim
 Historical `service/`, `installer/`, root migration and old task/evidence material
 may remain for lineage but are not current runtime sources by default.
 
-The obsolete GitHub Actions workflow that validated retired sidecar components and
-the `auth="none"` machine-secret inventory callback have been removed. Supported
-Assistant controllers authenticate through Odoo. Installation inventory is consumed
-in process through Evidence.
+The obsolete GitHub Actions workflow, the `auth="none"` machine-secret inventory
+callback and the addon-local machine-auth primitive used only by that callback have
+been removed. Supported Assistant controllers authenticate through Odoo. Installation
+inventory is consumed in process through Evidence.
 
 Source relevance defaults are documented in
 [`docs/CONTEXT_SOURCE_POLICY.md`](docs/CONTEXT_SOURCE_POLICY.md).
@@ -159,14 +159,16 @@ tests/unit/test_phase8_evidence_contracts.py
 tests/unit/test_phase8_evidence_runtime.py
 tests/unit/test_phase8_extension_evidence.py
 tests/unit/test_phase8_supported_surface.py
+tests/unit/test_phase8_product_profiles.py
 tests/addon/test_phase8_runtime_evidence.py
+tests/addon/test_addon_boundaries.py
 ```
 
 They cover bounded contracts, deep immutability, secret redaction, provider failure
-isolation, access recheck, ledger restore/overflow, routing, supported HTTP surface
-and live Odoo inventory/freshness. They must be executed in the appropriate local/
-Codex Odoo environment before P8 acceptance; GitHub repository writes do not execute
-them.
+isolation, access recheck, ledger restore/overflow, routing, public User/Technical
+profile mapping, supported HTTP/security surface and live Odoo inventory/freshness.
+They must be executed in the appropriate local/Codex Odoo environment before P8
+acceptance; GitHub repository writes do not execute them.
 
 ## Development rules
 
