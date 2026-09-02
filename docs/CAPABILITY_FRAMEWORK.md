@@ -31,8 +31,14 @@ optional preview / verification
 safe public activity metadata
 ```
 
-Definitions are deeply normalized/copied when registered so nested mutable schema or
-metadata cannot change the accepted contract after registration.
+Definitions and the surrounding capability/context/Skill/provider JSON contracts are
+deeply normalized/copied so nested mutable schema or metadata cannot change an
+accepted contract after registration. P8 uses immutable `FrozenDict`/`FrozenList`
+wrappers that still satisfy normal `isinstance(value, dict/list)` checks and explicit
+thaw helpers for transport serialization.
+
+Group/guard exceptions fail closed: a failed availability check makes the capability
+unavailable and does not expose the underlying exception to the model.
 
 There is no generic arbitrary SQL, Python, shell, sudo or unrestricted ORM-method
 execution surface.
@@ -46,9 +52,9 @@ the active Odoo registry marker. The provider API is versioned:
 CAPABILITY_PROVIDER_API_VERSION = "1"
 ```
 
-A provider with an incompatible API version fails closed. Core namespaces such as
-`odoo.*`, `assistant.*` and `host.*` are reserved unless the provider is explicitly
-owned by core.
+Core namespaces such as `odoo.*`, `assistant.*` and `host.*` are reserved unless the
+provider is explicitly owned by core. The same namespace rule applies to contributed
+capabilities/Skills/ContextProviders/EvidenceProviders.
 
 Current provider composition can include:
 
@@ -61,10 +67,14 @@ CapabilityProvider
   +-- immutable provider metadata
 ```
 
-Provider identity/capability collisions fail closed. Optional-provider dependency,
-guard or Evidence failures are attributed and isolated so a broken optional extension
-does not remove healthy providers or the core catalog. Required providers may fail
-closed.
+API mismatch, loader failure, identity/capability collisions, dependency/version
+errors and dependency cycles are provider-boundary failures. Optional failures are
+attributed and isolated so a broken extension does not remove healthy sibling
+providers or the core catalog. Required providers fail closed.
+
+Sanitized provider introspection includes provider id, provider version, API version,
+optional/required state, capability/Skill/Context/Evidence counts and an `error_code`.
+It never exposes raw exceptions, stack traces, secrets or arbitrary host paths.
 
 ## 4. Effective registry and executor
 
@@ -148,7 +158,7 @@ The product exposes one global Assistant; Skills are not separate user-facing bo
 ## 7. ContextProvider
 
 A `ContextProvider` supplies bounded just-in-time contextual data. Its output is
-untrusted contextual data and cannot:
+deeply frozen untrusted contextual data and cannot:
 
 - register or reveal hidden capabilities;
 - change policy;
@@ -175,6 +185,7 @@ EvidenceProvider / EvidenceProviderStatus
 EvidenceProviderCatalog
 EvidenceRoutingPolicy
 EvidenceLedger / EvidenceLedgerSnapshot
+AssistantEvidenceDecisionEngine / EvidenceWorkingContext
 ```
 
 Search returns bounded refs. Fetch resolves a logical ref and rechecks provider
@@ -185,12 +196,15 @@ availability, product profile, policy or approval.
 
 The initial ledger is bounded to 64 refs, 16 selected excerpts, 8 KiB per excerpt and
 64 KiB total. It stores enough provenance/freshness for continuation and citations,
-not a second corpus or raw log/source dump.
+not a second corpus or raw log/source dump. The current live wrapper keeps a
+turn-scoped ledger; its snapshot is serializable/versioned but durable reconnect
+restoration is not claimed yet.
 
-## 9. Evidence routing
+## 9. Evidence routing and live projection
 
 `EvidenceRoutingPolicy` prioritizes evidence classes without recreating a rigid
-GENERAL/QUERY/HOW_TO/ACTION router.
+GENERAL/QUERY/HOW_TO/ACTION router. It may select no provider for a generic/social
+turn.
 
 Current direction:
 
@@ -205,24 +219,41 @@ current external fact        -> web when policy/context allows
 repository preflight         -> web/repo metadata + bounded static inspection
 ```
 
-The model may request another source; the host may require local evidence for
+The current live decision seam is:
+
+```text
+AssistantExtensionDecisionEngine
+ -> effective EvidenceProvider IDs
+ -> question-sensitive routing
+ -> bounded AssistantEvidenceDecisionEngine search/fetch
+ -> bounded turn EvidenceLedger
+ -> host_assistant_evidence   # sanitized structure/status only
+ -> assistant_evidence        # untrusted ref/excerpt/data
+ -> reasoning provider
+```
+
+The Codex adapter only maps that provider-neutral trust partition. Retrieved content,
+including prompt-injection text, never becomes host/Skill instructions or authority.
+The model may reason over it and the host may require local evidence for
 installation-specific or safety-critical claims.
 
 ## 10. Runtime inventory Evidence
 
 The first real provider is `assistant.runtime_inventory`. It derives bounded current
-installation Evidence from the effective Odoo Environment:
+installation Evidence directly from the effective Odoo Environment:
 
 ```text
 Odoo release/edition
-sanitized database identity
+hashed database identity
 installed modules + safe version metadata
 registry fingerprint
 visibility = user | technical
 ```
 
-It exposes no absolute source roots, credentials, commands or mutable business
-snapshots. A changed fingerprint is returned as stale Evidence.
+It exposes no absolute source roots, raw database name, credentials, commands or
+mutable business snapshots. A changed fingerprint is returned as stale Evidence.
+The retired HTTP callback, addon machine-auth primitive and residual addon inventory
+service are not used by this provider.
 
 ## 11. EffectiveAssistantManifest
 
@@ -231,19 +262,21 @@ authority registry. It includes effective provider/features, active Skills,
 model-visible capabilities, ContextProviders and the existing
 `evidence_provider_ids` seam plus sanitized health/availability metadata.
 
-Do not place retrieved Evidence content or host-only details in the manifest.
+The admin/settings projection also derives effective available Evidence-provider IDs
+from the same catalog. Do not place retrieved Evidence content or host-only details in
+the manifest.
 
 ## 12. Product profiles
 
-Product-facing profile semantics are exactly:
+Product-facing profile values are exactly:
 
 ```text
-User / non-technical
-Technical
+user
+technical
 ```
 
-Older internal `business`/`developer`-style values may remain as compatibility
-implementation detail but map unambiguously to those two public profiles.
+Older internal `business`/`developer`-style values remain only as compatibility
+implementation detail and normalize unambiguously before public projection.
 
 The future Technical/host broker is a privilege execution boundary, not a third human
 profile. Profile projection itself grants no permission.
@@ -313,9 +346,10 @@ Every new executable capability must answer:
 
 P7 is **COMPLETE / ACCEPTED** at `092ac57`.
 
-P8.0 plus the P8.1/P8.2 Evidence foundation is implemented on `main`, but its focused
-dependency-light/Odoo checks and P8 real gates remain unexecuted. Implementation
-presence is not P8 acceptance.
+The reconciled P8.0 + P8.1/P8.2 checkpoint, including the first live
+provider-neutral Evidence search/fetch/trust projection, is implemented on `main`.
+Its focused dependency-light/Odoo checks and P8 real gates remain unexecuted.
+Implementation presence is not P8 acceptance.
 
 See:
 
