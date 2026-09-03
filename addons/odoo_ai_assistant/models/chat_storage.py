@@ -248,27 +248,7 @@ class AssistantConversation(models.Model):
         )
         result = {}
         for turn in turns:
-            manifest = turn.knowledge_attachment_manifest
-            if not isinstance(manifest, list):
-                continue
-            rows = []
-            for item in manifest[:8]:
-                if not isinstance(item, dict):
-                    continue
-                name = item.get("name")
-                mimetype = item.get("mimetype")
-                size = item.get("size")
-                if not isinstance(name, str) or not name.strip():
-                    continue
-                rows.append(
-                    {
-                        "name": name[:255],
-                        "mimetype": mimetype[:120]
-                        if isinstance(mimetype, str)
-                        else "application/octet-stream",
-                        "size": size if type(size) is int and size >= 0 else 0,
-                    }
-                )
+            rows = turn.visible_knowledge_attachment_manifest()
             if rows:
                 result[turn.user_message_id.id] = rows
         return result

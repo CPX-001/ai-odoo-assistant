@@ -41,6 +41,9 @@ _SEARCH_STOP_WORDS = frozenset(
         "for",
         "from",
         "how",
+        "info",
+        "informacion",
+        "información",
         "la",
         "las",
         "los",
@@ -57,6 +60,8 @@ _SEARCH_STOP_WORDS = frozenset(
         "quién",
         "segun",
         "según",
+        "sobre",
+        "sore",
         "the",
         "tiene",
         "tienes",
@@ -556,6 +561,7 @@ class AssistantKnowledgeSource(models.Model):
         if not terms:
             return []
         lexical_query = " | ".join(terms)
+        metadata_patterns = [f"%{term}%" for term in terms]
         minimum_matches = 1 if len(terms) == 1 else min(3, (len(terms) * 3 + 4) // 5)
         self.env.cr.execute(
             """
@@ -565,6 +571,11 @@ class AssistantKnowledgeSource(models.Model):
                             OR translate(COALESCE(s.filename, ''), '_-', '  ') ILIKE %s
                        THEN 3
                        WHEN c.content ILIKE %s THEN 2
+                       WHEN lower(
+                                translate(COALESCE(s.name, ''), '_-', '  ') || ' ' ||
+                                translate(COALESCE(s.filename, ''), '_-', '  ')
+                            ) LIKE ANY(%s)
+                       THEN 1
                        ELSE 0
                    END AS exact_match,
                    ts_rank_cd(
@@ -593,6 +604,11 @@ class AssistantKnowledgeSource(models.Model):
                             translate(COALESCE(s.filename, ''), '_-', '  ')
                         )
                             @@ to_tsquery('simple', %s)
+                        OR lower(
+                               translate(COALESCE(s.name, ''), '_-', '  ') || ' ' ||
+                               translate(COALESCE(s.filename, ''), '_-', '  ')
+                           ) LIKE ANY(%s)
+                    )
                         AND (
                             SELECT COUNT(*)
                               FROM unnest(%s::text[]) AS search_term
@@ -603,8 +619,13 @@ class AssistantKnowledgeSource(models.Model):
                                        translate(COALESCE(s.filename, ''), '_-', '  ')
                                    )
                                    @@ plainto_tsquery('simple', search_term)
+                                OR position(
+                                       search_term IN lower(
+                                           translate(COALESCE(s.name, ''), '_-', '  ') || ' ' ||
+                                           translate(COALESCE(s.filename, ''), '_-', '  ')
+                                       )
+                                   ) > 0
                         ) >= %s
-                    )
                )
              ORDER BY exact_match DESC, rank DESC, c.source_id, c.sequence
              LIMIT %s
@@ -613,6 +634,7 @@ class AssistantKnowledgeSource(models.Model):
                 exact,
                 exact,
                 exact,
+                metadata_patterns,
                 lexical_query,
                 lexical_query,
                 source_ids,
@@ -620,6 +642,7 @@ class AssistantKnowledgeSource(models.Model):
                 exact,
                 exact,
                 lexical_query,
+                metadata_patterns,
                 list(terms),
                 minimum_matches,
                 int(limit),

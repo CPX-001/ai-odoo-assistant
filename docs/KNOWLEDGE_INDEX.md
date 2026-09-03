@@ -297,7 +297,7 @@ It does not grant any authority from file content.
 ### Deferred intentionally
 
 ```text
-PDF/OCR
+OCR for image-only PDFs
 XLSX-specific parsing
 embeddings/vector store/semantic reranking
 bulk source import

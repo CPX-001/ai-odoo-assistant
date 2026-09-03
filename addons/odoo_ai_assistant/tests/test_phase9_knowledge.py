@@ -197,6 +197,11 @@ class TestPhase9Knowledge(TransactionCase):
             name="Architecture_Hardening_Packet",
             text="The recovery boundary rejects an unverified write barrier.",
         )
+        dori_source = self._source(
+            env,
+            name="DoriDori_Inventario_IT",
+            text="Inventario interno de equipos y sistemas.",
+        )
 
         by_name = env["odoo.ai.knowledge.source"].lexical_search(
             "¿Tienes alguna referencia de architecture hardening?"
@@ -204,9 +209,15 @@ class TestPhase9Knowledge(TransactionCase):
         by_content = env["odoo.ai.knowledge.source"].lexical_search(
             "recovery boundary unverified write barrier"
         )
+        by_noisy_name = env["odoo.ai.knowledge.source"].lexical_search(
+            "tienes alguna info sore dori dori?"
+        )
 
         self.assertTrue(any(chunk.source_id == source for chunk, _score in by_name))
         self.assertTrue(any(chunk.source_id == source for chunk, _score in by_content))
+        self.assertTrue(
+            any(chunk.source_id == dori_source for chunk, _score in by_noisy_name)
+        )
 
     def test_company_private_acl_and_host_owned_index(self):
         env_a = self._env(self.user_a)
@@ -277,7 +288,7 @@ class TestPhase9Knowledge(TransactionCase):
         self.assertIn(f'"attachment_id":{attachment.id}', turn.input_message)
         self.assertEqual(attachment.turn_id.id, turn.id)
         self.assertEqual(
-            turn.knowledge_attachment_manifest,
+            turn.visible_knowledge_attachment_manifest(),
             [{"name": "chat-source.txt", "mimetype": "text/plain", "size": 21}],
         )
 
