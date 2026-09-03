@@ -44,12 +44,14 @@ Required properties:
 
 - current-turn CSV inspection returns bounded columns/examples and only effective-user
   safe scalar import fields;
+- the selected/mapped rows are normalized once into the durable session rather than
+  reparsing the full source file for every chunk;
 - start is idempotent for the same turn/artifact/model/mapping/chunk-size request;
 - a 2-row fixture with `chunk_size=1` creates exactly two target records and two
   completed receipts;
 - rerunning the worker after completion creates no duplicate record;
-- an invalid second chunk leaves the first committed chunk/receipt intact and rejects
-  the second chunk without writing its row;
+- an invalid second native-import chunk leaves the first committed chunk/receipt
+  intact and writes zero rows from the rejected chunk;
 - `company_id` or another host-blocked field cannot enter the final mapping;
 - another user cannot inspect the originating turn/session;
 - `assistant.data_import.start_csv` remains PLAN + policy-controlled + segmented and
@@ -79,8 +81,9 @@ Use the normal browser/chat -> durable turn -> embedded runtime path with:
 - a low chunk size for replay/interrupt testing where useful.
 
 Record tested SHA, Odoo/PostgreSQL version, user/profile/autonomy, session uuid,
-chunk size/counts, sanitized receipts and timing. Do not persist raw customer files or
-provider-private reasoning as evidence.
+chunk size/planned chunk count/actual chunk count, sanitized receipts and timing. Do
+not persist raw customer files, staged row payloads or provider-private reasoning as
+evidence.
 
 ## 4. P11-REAL-CSV-IMPORT
 
@@ -91,7 +94,7 @@ Procedure:
 1. ask the Assistant to inspect the file for the intended model;
 2. confirm the proposed mapping uses only returned safe fields;
 3. inspect the host preview including exact row count, duplicate count, mapping
-   fingerprint and chunk size;
+   fingerprint, chunk size and planned chunk count;
 4. authorize according to current policy;
 5. wait/poll through `assistant.data_import.status`;
 6. verify created records and completed receipts.
@@ -109,13 +112,18 @@ the chosen chunk size.
 
 Pass:
 
+- preparation stages the selected mapped rows once and stays within the documented
+  staged-payload/chunk-count ceilings;
 - the session advances through multiple durable chunks;
+- each worker invocation consumes only the next bounded staged chunk rather than
+  reparsing the entire original file;
 - ordinary Odoo navigation and an unrelated Assistant conversation remain usable;
 - each worker transaction remains bounded;
 - final imported count equals actual created records;
 - there is no requirement to issue hundreds/thousands of individual CRUD tool calls.
 
-Record per-chunk timing and total duration where available.
+Record preparation time, representative per-chunk timing and total duration where
+available.
 
 ## 6. P11-REAL-MAPPING-CORRECTION
 
@@ -136,12 +144,14 @@ This gate tests mapping correction, not row-enrichment correction.
 ## 7. P11-REAL-PARTIAL-INVALID
 
 Use at least two chunks where an earlier chunk is valid and a later chunk contains a
-value rejected by Odoo validation.
+value rejected by Odoo native import validation.
 
 Pass for the declared first-slice semantics:
 
 - earlier valid chunk commits and has a completed receipt;
-- the invalid chunk is dry-run rejected as a whole and writes zero rows;
+- native import/load rejects the invalid chunk and the chunk transaction leaves zero
+  business rows from that chunk;
+- a bounded rejected receipt is persisted after rollback;
 - session becomes `partial`;
 - imported, failed and remaining counts are exact for the processed/rejected windows;
 - the Assistant does not claim row-level salvage that was not performed.
@@ -174,6 +184,7 @@ failed_rows
 corrected_rows
 remaining_rows
 duplicate_rows
+planned_chunk_count
 chunk_count
 per-chunk row window
 per-chunk imported/failed count
