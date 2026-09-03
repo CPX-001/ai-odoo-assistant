@@ -7,32 +7,32 @@ direction and validation evidence.
 
 ```text
 P0-P10 COMPLETE / ACCEPTED
-P11 DURABLE CSV FIRST SLICE IMPLEMENTED
+P11 ADVANCED IMPORTS CSV CORE IMPLEMENTED
+P11 CLEANUP + REJECTED-WINDOW REPAIR IMPLEMENTED
 P11 FOCUSED + REAL VALIDATION PENDING
 P11 NOT ACCEPTED
 ```
 
 P10 remains the latest accepted phase through
-`bde508b737c132140e237cdfde31aee9b37eca5f`. Its focused and real
-broker/profile/config/service/PostgreSQL/privilege/module gates are recorded in
+`bde508b737c132140e237cdfde31aee9b37eca5f`; its evidence is
 [`research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`](research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md).
 
-P11 now has executable durable CSV session/chunk code and three Assistant capabilities,
-but no P11 gate is represented as PASS yet. The exact cursor remains
-[`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
+P11 now has executable durable CSV staging/chunks, deterministic cleanup, rejected-row
+inspection and explicit repair/resume. No P11 gate is represented as PASS yet. The
+exact cursor is [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
 
 ## Primary reading path
 
-1. [`CURRENT_STATE.md`](CURRENT_STATE.md) — implementation snapshot in human terms.
+1. [`CURRENT_STATE.md`](CURRENT_STATE.md) — current supported product snapshot.
 2. [`ARCHITECTURE.md`](ARCHITECTURE.md) — runtime and authority boundaries.
-3. [`PRODUCT_VISION.md`](PRODUCT_VISION.md) — product direction and confirmed decisions.
+3. [`PRODUCT_VISION.md`](PRODUCT_VISION.md) — product direction.
 4. [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) — executable/provider/Skill/Context/Evidence contract.
 5. [`EVIDENCE_ARCHITECTURE.md`](EVIDENCE_ARCHITECTURE.md) — retrieval/Evidence contract.
-6. [`KNOWLEDGE_INDEX.md`](KNOWLEDGE_INDEX.md) — P9 Knowledge lifecycle and retrieval.
-7. [`adr/ADR-024-technical-host-privilege-broker.md`](adr/ADR-024-technical-host-privilege-broker.md) — accepted P10 privilege boundary.
-8. [`research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md`](research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md) — current P11 implementation contract.
-9. [`research/P11_FOCUSED_VALIDATION_RUNBOOK.md`](research/P11_FOCUSED_VALIDATION_RUNBOOK.md) — immediate P11 focused/real gates.
-10. [`research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`](research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md) — latest phase acceptance evidence.
+6. [`KNOWLEDGE_INDEX.md`](KNOWLEDGE_INDEX.md) — P9 Knowledge lifecycle.
+7. [`adr/ADR-024-technical-host-privilege-broker.md`](adr/ADR-024-technical-host-privilege-broker.md) — accepted P10 host boundary.
+8. [`research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md`](research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md) — durable CSV staging/chunk contract.
+9. [`research/P11_IMPORT_CLEANUP_REPAIR_SLICE.md`](research/P11_IMPORT_CLEANUP_REPAIR_SLICE.md) — deterministic cleanup + repair/resume contract.
+10. [`research/P11_FOCUSED_VALIDATION_RUNBOOK.md`](research/P11_FOCUSED_VALIDATION_RUNBOOK.md) — immediate focused and real P11 gates.
 11. [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) — exact roadmap cursor.
 
 ## Architecture at a glance
@@ -42,31 +42,28 @@ flowchart TB
     UI[OWL chat / admin surfaces / future invocations] --> TURN[Odoo conversation + durable turn]
     TURN --> HOST[Provider-neutral host decision loop]
     HOST <--> MODEL[Codex App Server adapter today]
-    HOST --> EXT[Effective Skills + JIT Context + Manifest]
-    HOST --> EVC[Effective EvidenceProviderCatalog]
-    EVC --> LEDGER[Bounded turn EvidenceLedger]
-    EVC --> EDATA[Host structure + untrusted Evidence data]
+    HOST --> EXT[Skills + JIT Context + Manifest]
+    HOST --> EVC[EvidenceProviderCatalog + bounded ledger]
     HOST --> CAT[Effective CapabilityRegistry]
     CAT --> EXEC[CapabilityExecutor + policy]
     EXEC --> ORM[Effective-user Odoo ORM, su=False]
     HOST --> EFFECT[EffectPlan -> preview -> policy/approval -> execute -> verify]
     EFFECT --> ORM
-    EFFECT --> BROKER[Optional typed host broker]
-    BROKER --> TARGET[Policy-owned config/service/module target]
-    EFFECT --> IMPORT[Durable P11 import session]
-    IMPORT --> CHUNK[Bounded effective-user chunks + receipts]
+    EFFECT --> BROKER[Optional typed P10 host broker]
+    EFFECT --> IMPORT[P11 durable import session]
+    IMPORT --> CLEAN[Finite cleanup / explicit repair]
+    CLEAN --> CHUNK[Bounded effective-user chunks + receipts]
     CHUNK --> ORM
-    HOST --> LIVE[TaskPlan/activity/answer/final projection]
+    HOST --> LIVE[Sanitized activity / answer / final projection]
     LIVE --> UI
 ```
 
 `CapabilityDefinition` remains executable authority. Skills, ContextProviders,
-EvidenceProviders, manifests, ledgers and file contents enrich reasoning but cannot
-bypass registry, executor, Odoo ACLs or policy.
+EvidenceProviders, manifests, file contents and cleanup proposals cannot bypass the
+registry, executor, Odoo ACLs or policy.
 
-The optional host broker is a second authority boundary only for explicitly configured
-machine targets. P11 imports do not use it: their business writes stay inside Odoo
-under the originating user and `su=False`.
+P11 imports do not use the P10 broker. Their business writes remain inside Odoo under
+the originating user and `su=False`.
 
 ## Current subsystem documents
 
@@ -88,6 +85,7 @@ under the originating user and `su=False`.
 - [`QUERY_CONTRACT.md`](QUERY_CONTRACT.md)
 - [`adr/ADR-022-evidence-core-and-ledger.md`](adr/ADR-022-evidence-core-and-ledger.md)
 - [`research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md`](research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md)
+- [`research/P11_IMPORT_CLEANUP_REPAIR_SLICE.md`](research/P11_IMPORT_CLEANUP_REPAIR_SLICE.md)
 
 ### Observability and Technical boundary
 
@@ -96,53 +94,28 @@ under the originating user and `su=False`.
 - [`adr/ADR-024-technical-host-privilege-broker.md`](adr/ADR-024-technical-host-privilege-broker.md)
 - [`../host_broker/README.md`](../host_broker/README.md)
 
-ADR-024, the broker-backed capabilities and the external module-update maintenance
-adapter are accepted on the recorded P10 lineage.
-
 ### Execution, evals and evidence
 
 - [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md)
-- [`research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md`](research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md)
 - [`research/P11_FOCUSED_VALIDATION_RUNBOOK.md`](research/P11_FOCUSED_VALIDATION_RUNBOOK.md)
-- [`research/P10_HOST_OPERATIONS_FIRST_SLICE.md`](research/P10_HOST_OPERATIONS_FIRST_SLICE.md)
-- [`research/P10_FOCUSED_VALIDATION_RUNBOOK.md`](research/P10_FOCUSED_VALIDATION_RUNBOOK.md)
-- [`research/P9_KNOWLEDGE_FIRST_SLICE.md`](research/P9_KNOWLEDGE_FIRST_SLICE.md)
-- [`research/P8_EVIDENCE_CORE_IMPLEMENTATION.md`](research/P8_EVIDENCE_CORE_IMPLEMENTATION.md)
 - [`research/REAL_ENV_VALIDATION_PROTOCOL.md`](research/REAL_ENV_VALIDATION_PROTOCOL.md)
 - [`research/PRODUCT_BEHAVIOR_EVALS_V1.md`](research/PRODUCT_BEHAVIOR_EVALS_V1.md)
 - [`research/PERIODIC_FULL_REGRESSION_RUNBOOK.md`](research/PERIODIC_FULL_REGRESSION_RUNBOOK.md)
 
-## Supported-path cleanup
+## Supported runtime boundary
 
-The embedded Odoo addon remains the product runtime. Historical `service/`,
-`installer/`, migration/task/evidence records may remain for lineage, but are excluded
-from current source context by [`CONTEXT_SOURCE_POLICY.md`](CONTEXT_SOURCE_POLICY.md).
+The embedded Odoo addon is the product runtime. Historical `service/`, `installer/`,
+root migration/task/evidence artifacts may remain for lineage but are excluded from
+current source context by [`CONTEXT_SOURCE_POLICY.md`](CONTEXT_SOURCE_POLICY.md).
+`host_broker/` is the finite accepted P10 machine adapter, not a restored Assistant
+sidecar.
 
-The P10 `host_broker/` directory is not a restored sidecar. It has no reasoning/model
-logic and exposes only the finite ADR-024 machine-operation protocol.
+## Status notation
 
-## Current versus target notation
-
-- **Implemented:** code exists on the supported path.
-- **Implemented / validation pending:** code exists but required gates are open.
+- **Implemented / validation pending:** code exists but required gates remain open.
 - **Accepted:** required validation/evidence is green for that lineage.
 - **Target/proposed:** product direction not yet implemented.
-- **Historical:** retained only for lineage/evidence.
+- **Historical:** retained for lineage/evidence only.
 
-## Authority when documents disagree
-
-Prefer:
-
-1. current code and accepted ADRs;
-2. current architecture/subsystem documents;
-3. current tests and accepted real evidence;
-4. active execution state;
-5. dated research, reports and external references.
-
-External projects and Project PDFs provide patterns, not execution authority.
-
-## Documentation maintenance
-
-When a subsystem changes, update its current contract and execution cursor in the
-same coherent checkpoint. Do not rewrite historical evidence to look current and
-never label an unexecuted gate PASS.
+When documents disagree, prefer current code + accepted ADRs, then current subsystem
+docs/tests/evidence, then dated research. Never label an unexecuted gate PASS.
