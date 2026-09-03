@@ -21,7 +21,7 @@ foundation. P12.2 code exists but is not PASS evidence until its focused gate ex
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Supported addon: `addons/odoo_ai_assistant`.
-- Current addon version: `18.0.13.36.0`.
+- Current addon version: `18.0.13.37.0`.
 - Dependencies: `account`, `base`, `base_import`, `sale`, `web`.
 - Runtime is embedded in Odoo; the browser talks only to authenticated Odoo routes.
 - Business capabilities execute under the effective Odoo user with `su=False`.
@@ -49,6 +49,11 @@ after commit, and an event-store failure cannot orphan a scheduler claim or undo
 approval, cancellation, recovery or reversion. Verified incomplete outcomes close
 immediately with host-grounded exact counts, and the verified receipt compacts old
 working context when necessary so finalization retains bounded transcript headroom.
+
+Natural-language model discovery normalizes Unicode and ranks close lexical inflections
+against the live Odoo registry before applying effective-user access checks. Requests
+such as `contacts` or `contactos` therefore resolve the installed `Contact` model
+without a hardcoded business-alias table, while unrelated terms still return no model.
 
 ## Durable agent, Evidence and Knowledge
 

@@ -362,8 +362,9 @@ def _aggregate_records_activity(context, arguments):
     name="odoo.search_models",
     title="Search Odoo models",
     description=(
-        "Search the installed Odoo model registry under the effective user. Use this "
-        "before guessing model names; discovery itself grants no record authority."
+        "Resolve a natural-language business entity against the installed Odoo model "
+        "registry under the effective user. Labels, technical names and close lexical "
+        "inflections are matched without granting record authority."
     ),
     input_schema={
         "type": "object",

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import unicodedata
+from difflib import SequenceMatcher
 from typing import Protocol
 
 QUERY_FIELD_PRIORITY = (
@@ -215,11 +217,7 @@ def search_agent_models(
         or not 1 <= limit <= 32
     ):
         raise TurnContextError("invalid_request")
-    terms = tuple(
-        token
-        for token in re.findall(r"[A-Za-z0-9_]+", query.casefold())
-        if token
-    )
+    terms = _search_terms(query)
     if not terms:
         raise TurnContextError("invalid_request")
     try:
@@ -227,20 +225,67 @@ def search_agent_models(
     except Exception:  # noqa: BLE001 - sanitize registry discovery
         raise TurnContextError("model_catalog_unavailable") from None
 
-    matches: list[tuple[int, str, str]] = []
+    matches: list[tuple[tuple[int, int, str], str, str]] = []
     for model in registry_models:
-        if not agent_model_is_eligible(env, model):
+        if not isinstance(model, str):
             continue
         description = _safe_model_label(getattr(env[model], "_description", model), model)
-        searchable = f"{model} {description}".casefold()
-        if not all(term in searchable for term in terms):
+        rank = _model_search_rank(terms, model=model, label=description)
+        if rank is None:
             continue
-        exact = 0 if query.casefold() in {model.casefold(), description.casefold()} else 1
-        matches.append((exact, model, description))
-    return [
-        {"label": label, "model": model}
-        for _, model, label in sorted(matches)[:limit]
+        matches.append((rank, model, description))
+
+    result = []
+    for _rank, model, label in sorted(matches):
+        if not agent_model_is_eligible(env, model):
+            continue
+        result.append({"label": label, "model": model})
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _search_terms(value: str) -> tuple[str, ...]:
+    normalized = unicodedata.normalize("NFKD", value.casefold())
+    without_marks = "".join(
+        character
+        for character in normalized
+        if not unicodedata.combining(character)
+    )
+    return tuple(token for token in re.findall(r"[^\W_]+", without_marks) if token)
+
+
+def _model_search_rank(
+    query_terms: tuple[str, ...],
+    *,
+    model: str,
+    label: str,
+) -> tuple[int, int, str] | None:
+    """Rank lexical and close morphological matches without a business alias table."""
+
+    model_terms = _search_terms(model.replace(".", " "))
+    label_terms = _search_terms(label)
+    candidate_terms = (*model_terms, *label_terms)
+    if not candidate_terms:
+        return None
+
+    query_phrase = " ".join(query_terms)
+    model_phrase = " ".join(model_terms)
+    label_phrase = " ".join(label_terms)
+    if query_phrase in {model_phrase, label_phrase}:
+        return (0, 0, model)
+    if all(term in candidate_terms for term in query_terms):
+        return (1, 0, model)
+
+    similarities = [
+        max(SequenceMatcher(None, term, candidate).ratio() for candidate in candidate_terms)
+        for term in query_terms
     ]
+    thresholds = [0.82 if len(term) <= 4 else 0.72 for term in query_terms]
+    if any(similarity < threshold for similarity, threshold in zip(similarities, thresholds)):
+        return None
+    distance = round(sum(1.0 - similarity for similarity in similarities) * 10_000)
+    return (2, distance, model)
 
 
 def _safe_model_label(value: object, fallback: str) -> str:

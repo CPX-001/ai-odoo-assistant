@@ -4,7 +4,10 @@ from odoo import Command
 from odoo.tests.common import TransactionCase
 
 from ..runtime.agent import AgentReasoningResult, AgentTurnService
-from ..runtime.agent.codex import _provider_timing_recorder, _with_completed_agent_messages
+from ..runtime.agent.codex import (
+    _provider_timing_recorder,
+    _with_completed_agent_messages,
+)
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -144,6 +147,42 @@ class TestEmbeddedAgentRuntime(TransactionCase):
             [item["fields"]["name"] for item in records.data["records"]],
             ["AI EMBEDDED QUERY ALPHA", "AI EMBEDDED QUERY BETA"],
         )
+        self.assertFalse(context.env.su)
+
+    def test_model_discovery_resolves_natural_inflections_without_static_aliases(self):
+        context = self._context()
+        executor = CapabilityExecutor(
+            discover_capabilities(),
+            context,
+            policy=CapabilityPolicy(),
+            config=CapabilityConfigResolver(),
+        )
+
+        english = asyncio.run(
+            executor.execute(
+                "odoo.search_models",
+                {"query": "contacts", "limit": 10},
+            )
+        )
+        spanish_inflection = asyncio.run(
+            executor.execute(
+                "odoo.search_models",
+                {"query": "contactos", "limit": 10},
+            )
+        )
+        unrelated = asyncio.run(
+            executor.execute(
+                "odoo.search_models",
+                {"query": "zzzznonexistententity", "limit": 10},
+            )
+        )
+
+        self.assertIn("res.partner", {item["model"] for item in english.data["models"]})
+        self.assertIn(
+            "res.partner",
+            {item["model"] for item in spanish_inflection.data["models"]},
+        )
+        self.assertEqual(unrelated.data["models"], [])
         self.assertFalse(context.env.su)
 
     def test_query_provider_exposes_deterministic_continuation_pages(self):
