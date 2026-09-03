@@ -281,10 +281,10 @@ focused HOOT + browser/asset smoke
 P10 status:
 
 ```text
-focused static/compile/lint                        NOT EXECUTED
-dependency-light broker/client tests               NOT EXECUTED
-focused Odoo Technical/host tests                  NOT EXECUTED
-broker deployment/systemd smoke                    NOT EXECUTED
+focused static/compile/lint                        PASS — bbfa78b
+dependency-light broker/client tests               PASS — 14 tests
+focused Odoo Technical/host tests                  PASS — 4 tests, 0 failures/errors
+broker deployment/systemd smoke                    NOT EXECUTED — deployment absent
 P10-REAL-PROFILE-DENIAL                            NOT EXECUTED
 P10-REAL-CONFIG-PATCH                              NOT EXECUTED
 P10-REAL-SERVICE-OPERATION                         NOT EXECUTED
@@ -302,7 +302,7 @@ requires them.
 
 The next blocking work is:
 
-1. run and repair focused P10 deterministic/Odoo tests;
+1. deploy the broker against disposable config/service targets and pass its smoke;
 2. execute the implemented real profile/config/service/PostgreSQL/boundary gates on
    disposable targets;
 3. design and implement the lifecycle-safe module-maintenance adapter;

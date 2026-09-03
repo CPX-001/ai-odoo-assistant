@@ -22,7 +22,8 @@ Unexecuted validation is never PASS.
 P0-P9 COMPLETE / ACCEPTED
 P10 PRIVILEGE-BOUNDARY ADR ACCEPTED
 P10 TYPED HOST-OPERATIONS FIRST SLICE IMPLEMENTED
-P10 FOCUSED + REAL VALIDATION PENDING
+P10 FOCUSED VALIDATION PASS
+P10 REAL VALIDATION PENDING
 P10 MODULE-UPDATE ADAPTER NOT IMPLEMENTED
 ```
 
@@ -108,15 +109,15 @@ be used by a User/non-technical profile merely because autonomy is high.
 
 ## Validation truth
 
-Accepted P8/P9 evidence remains immutable. P10 currently has prepared deterministic
-and Odoo tests plus a real-environment runbook, but none of those P10 gates is recorded
-as PASS yet.
+Accepted P8/P9 evidence remains immutable. P10 focused static, dependency-light and
+Odoo tests pass at `bbfa78b`; the real-environment runbook remains pending.
 
 Current P10 blockers:
 
 ```text
-focused dependency-light tests                   NOT EXECUTED
-focused Odoo tests                               NOT EXECUTED
+focused dependency-light tests                   PASS — 14 tests
+focused Odoo tests                               PASS — 4 tests, 0 failures/errors
+broker deployment/systemd smoke                  NOT EXECUTED — deployment absent
 profile/config/service/postgres/boundary gates   NOT EXECUTED
 P10-REAL-MODULE-UPDATE                           BLOCKED — maintenance adapter missing
 P10 acceptance                                   NOT COMPLETE

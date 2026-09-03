@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 65
+State format: 66
 Updated: 2026-09-03
 
 ## Accepted lineage
@@ -21,7 +21,7 @@ P8 final acceptance through e370af8acb7df175c0a90c8e17520c8576b4c6ce
 P9 final acceptance through 77d470febf67ddee46562907718dc47e975922bb
 ```
 
-No Phase-10 implementation or prepared test is accepted evidence yet.
+P10 focused validation is recorded below, but Phase 10 has no acceptance evidence yet.
 
 ## Current cursor
 
@@ -29,15 +29,15 @@ No Phase-10 implementation or prepared test is accepted evidence yet.
 phase: 10
 phase_name: developer/operator host operations
 active_slice: P10-TYPED-HOST-OPERATIONS-FIRST-SLICE
-slice_state: IMPLEMENTED_VALIDATION_PENDING
-current_gate_type: HARD_FOCUSED_AND_REAL
+slice_state: REAL_ENV_VALIDATION_REQUIRED
+current_gate_type: HARD_REAL
 blocking_implementation: lifecycle-safe odoo.module.update maintenance adapter is still missing
-blocking_validation: all focused and real P10 gates for the implemented first slice remain unexecuted
+blocking_validation: broker deployment smoke and all named real P10 gates remain unexecuted
 latest_accepted_evidence: docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
 latest_phase_acceptance: docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
 latest_implementation_record: docs/research/P10_HOST_OPERATIONS_FIRST_SLICE.md
-latest_validation_record: docs/research/P10_FOCUSED_VALIDATION_RUNBOOK.md
-next_action: execute the focused P10 dependency-light and Odoo gates, then the implemented real profile/config/service/postgres/boundary gates; repair failures before designing the module-maintenance adapter
+latest_validation_record: docs/research/evidence/phase10/2026-09-03/P10-FOCUSED-bbfa78b.md
+next_action: provision the disposable broker/config/service environment, execute its deployment smoke and the implemented real profile/config/service/postgres/boundary gates, and repair failures before designing the module-maintenance adapter
 ```
 
 ## P10 design and implementation lineage
@@ -47,6 +47,7 @@ next_action: execute the focused P10 dependency-light and Odoo gates, then the i
 f45f29cbc5861b66cc32fcc14d52564636439114  typed broker + first Technical capabilities
 a516aa6c5e2a448ed4145ba7fc49834a4ba25e8f  post-dispatch certainty regression coverage
 80ffdd6a0153323987516d5e458c985e143c8f75  post-dispatch transport uncertainty repair
+bbfa78b87d2870fb4b79cbd1854d00f5d1087375  focused validation repair and executable PASS
 ```
 
 The intervening `9d5eca969f05fad66365136cdaed37028986b1af` product-menu change
@@ -98,10 +99,10 @@ run.
 ## P10 validation status
 
 ```text
-static/compile/lint                                      NOT EXECUTED
-focused dependency-light broker tests                    NOT EXECUTED
-focused Odoo Technical/host tests                        NOT EXECUTED
-broker deployment/systemd smoke                          NOT EXECUTED
+static/compile/lint                                      PASS — bbfa78b
+focused dependency-light broker tests                    PASS — 14 tests
+focused Odoo Technical/host tests                        PASS — 4 tests, 0 failures/errors
+broker deployment/systemd smoke                          NOT EXECUTED — deployment absent
 P10-REAL-PROFILE-DENIAL                                  NOT EXECUTED
 P10-REAL-CONFIG-PATCH                                    NOT EXECUTED
 P10-REAL-SERVICE-OPERATION                               NOT EXECUTED
@@ -113,8 +114,10 @@ P10-REAL-COMMAND-APPROVAL                                NOT APPLICABLE
 P10 acceptance                                           NOT COMPLETE
 ```
 
-Use `docs/research/P10_FOCUSED_VALIDATION_RUNBOOK.md`. No local author-side syntax
-check or isolated simulation is counted as repository/Odoo/real PASS evidence.
+Focused evidence is recorded in
+`docs/research/evidence/phase10/2026-09-03/P10-FOCUSED-bbfa78b.md`. Use
+`docs/research/P10_FOCUSED_VALIDATION_RUNBOOK.md` for the remaining deployment and
+real gates. Focused PASS is not real-gate or Phase-10 acceptance.
 
 ## P9 accepted baseline
 

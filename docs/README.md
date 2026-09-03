@@ -9,7 +9,8 @@ direction and validation evidence.
 P0-P9 COMPLETE / ACCEPTED
 P10 PRIVILEGE-BOUNDARY ADR ACCEPTED
 P10 TYPED HOST-OPERATIONS FIRST SLICE IMPLEMENTED
-P10 FOCUSED + REAL VALIDATION PENDING
+P10 FOCUSED VALIDATION PASS
+P10 REAL VALIDATION PENDING
 P10 MODULE-UPDATE ADAPTER MISSING
 P10 NOT ACCEPTED
 ```
@@ -19,8 +20,9 @@ Its acceptance record is
 [`research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`](research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md).
 
 P10's design is accepted in ADR-024 and the first implementation slice is present on
-`main`, but no P10 focused or real gate is currently recorded as PASS. Code or a
-prepared test never counts as PASS evidence by itself.
+`main`. Its focused static, dependency-light and Odoo gates pass at `bbfa78b`, while
+the broker deployment smoke and named real gates remain pending. Focused PASS is not
+Phase-10 acceptance.
 
 ## Primary reading path
 
@@ -33,7 +35,8 @@ prepared test never counts as PASS evidence by itself.
 7. [`adr/ADR-024-technical-host-privilege-broker.md`](adr/ADR-024-technical-host-privilege-broker.md) — accepted P10 privilege boundary.
 8. [`research/P10_HOST_OPERATIONS_FIRST_SLICE.md`](research/P10_HOST_OPERATIONS_FIRST_SLICE.md) — implemented P10 scope and deferrals.
 9. [`research/P10_FOCUSED_VALIDATION_RUNBOOK.md`](research/P10_FOCUSED_VALIDATION_RUNBOOK.md) — pending P10 gates.
-10. [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) — exact roadmap cursor.
+10. [`research/evidence/phase10/2026-09-03/P10-FOCUSED-bbfa78b.md`](research/evidence/phase10/2026-09-03/P10-FOCUSED-bbfa78b.md) — focused validation evidence.
+11. [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) — exact roadmap cursor.
 
 ## Architecture at a glance
 
