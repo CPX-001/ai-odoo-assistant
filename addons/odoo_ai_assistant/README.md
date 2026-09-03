@@ -8,7 +8,7 @@ App Server is an ephemeral reasoning-provider subprocess, not a product daemon.
 
 ```text
 P0-P11 COMPLETE / ACCEPTED
-P12.1 BOUNDED SOURCE WORKSPACES IMPLEMENTED / FOCUSED VALIDATION PENDING
+P12.1 BOUNDED SOURCE WORKSPACES FOCUSED ACCEPTED / P12.2 ELIGIBLE
 P12 NOT ACCEPTED
 ```
 
@@ -58,8 +58,9 @@ Future P12 work must proceed as workspace diff/patch -> exact-fingerprint tests 
 separately authorized deploy/verify/recovery. Protected production deployment remains
 behind ADR-024 or an equivalently narrow finite host adapter, never generic shell/Git.
 
-Focused dependency-light workspace tests passed during author preparation; the focused
-3-method Odoo P12.1 gate remains unexecuted, so P12.2 is not yet eligible.
+Focused compile/Ruff, all 10 dependency-light workspace tests and the 3-method Odoo
+P12.1 authority gate pass on `ad1378b`; P12.2 is now eligible. This does not authorize
+production source mutation or accept full Phase 12.
 
 See:
 
@@ -67,4 +68,5 @@ See:
 ../../docs/adr/ADR-025-controlled-source-workspaces.md
 ../../docs/research/P12_SOURCE_WORKSPACE_FOUNDATION.md
 ../../docs/research/P12_FOCUSED_VALIDATION_RUNBOOK.md
+../../docs/research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md
 ```

@@ -1,8 +1,11 @@
 # P12 focused validation runbook
 
-State: `P12.1 READY / PARTIAL DEPENDENCY-LIGHT CHECK ONLY`  
+State: `P12.1 EXECUTED / PASS / P12.2 ELIGIBLE`
 Scope: bounded source roots/workspace identity/fingerprint authority; no source editing
 or deployment yet.
+
+Acceptance evidence:
+`evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md`.
 
 Implementation authority:
 
@@ -42,8 +45,8 @@ Required properties:
 - delete cannot escape the managed workspace root;
 - different binding cannot inspect/delete another workspace.
 
-The author-side preparation run executed 10 dependency-light tests successfully, but
-rerun them on the committed SHA before recording formal focused evidence.
+The formal committed-SHA rerun executed all 10 dependency-light tests successfully;
+the exact command and environment are recorded in the acceptance evidence above.
 
 ## 2. Focused Odoo gate — HARD before P12.2
 
@@ -68,12 +71,13 @@ Pass requires:
 - owner-bound cleanup succeeds;
 - no P12 source-edit/patch/test/deploy capability is registered by this slice.
 
-If this fails, repair the smallest owning P12.1 layer and rerun it before P12.2.
+This gate passed with 3 selected methods, 0 failures and 0 errors after the static-only
+repair recorded in the acceptance evidence.
 
 ## 3. P12.1 acceptance boundary
 
-P12.1 may advance to P12.2 only when the focused dependency-light/static check and the
-focused Odoo authority gate are green on a recorded SHA.
+The focused dependency-light/static check and Odoo authority gate are green on
+`ad1378be0836fa3d49e4f24019288aa3a6e71b46`; P12.1 is accepted and P12.2 is eligible.
 
 Do **not** interpret workspace creation as permission to modify production source.
 

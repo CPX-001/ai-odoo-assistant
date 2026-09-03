@@ -1,7 +1,7 @@
 # P12.1 — bounded source-workspace foundation
 
 Date: 2026-09-03  
-Status: **IMPLEMENTED / FOCUSED ODOO VALIDATION PENDING**
+Status: **IMPLEMENTED / FOCUSED ACCEPTED / P12.2 ELIGIBLE**
 
 P11 is accepted. This record covers only the Phase-12 authority prerequisite for
 controlled source modification. It does **not** expose source editing, patching, test
@@ -145,22 +145,16 @@ equivalently narrow deployment adapter. Direct production `shell`, arbitrary `gi
 
 ## Validation truth
 
-Author-side dependency-light checks executed while preparing the exact P12.1 runtime
-and unit-test content:
+Formal checks executed on committed SHA
+`ad1378be0836fa3d49e4f24019288aa3a6e71b46`:
 
 ```text
-python py_compile                                     PASS
+python compileall                                     PASS
+Ruff                                                  PASS
 SourceWorkspaceTests                                  PASS — 10 tests
+TestPhase12SourceWorkspace                            PASS — 3 methods
 ```
 
-These prove only the stdlib workspace contract. They are **not** the focused Odoo gate
-and are not P12 acceptance evidence.
-
-Prepared Odoo coverage:
-
-```text
-TestPhase12SourceWorkspace                            3 methods / NOT EXECUTED
-```
-
-Use `P12_FOCUSED_VALIDATION_RUNBOOK.md`. P12.2 must not start until the focused P12.1
-Odoo/path-authority gate passes or a concrete failure is repaired.
+P12.1 focused acceptance is recorded at
+`evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md`. This accepts only the bounded
+workspace foundation. P12.2 may now begin, but no source-edit capability exists yet.

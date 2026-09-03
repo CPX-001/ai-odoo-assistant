@@ -9,7 +9,7 @@ execution authority; the reasoning model proposes work through typed host contra
 ```text
 P0-P11 COMPLETE / ACCEPTED
 P11 accepted through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
-P12.1 BOUNDED SOURCE WORKSPACES IMPLEMENTED / FOCUSED VALIDATION PENDING
+P12.1 BOUNDED SOURCE WORKSPACES FOCUSED ACCEPTED / P12.2 ELIGIBLE
 P12 NOT ACCEPTED
 ```
 
@@ -77,16 +77,17 @@ an equivalent narrow adapter. Generic shell/Git/sudo is not the implementation p
 
 ## Validation
 
-P11 is fully accepted on immutable evidence. For P12.1, 10 dependency-light workspace
-tests and Python compilation passed during preparation, while the focused Odoo
-`TestPhase12SourceWorkspace` gate is prepared but not executed. P12.2 remains blocked
-until the focused P12.1 authority gate is green.
+P11 is fully accepted on immutable evidence. For P12.1, compile/Ruff, all 10
+dependency-light workspace tests and the focused 3-method Odoo
+`TestPhase12SourceWorkspace` gate pass on `ad1378b`. P12.2 is eligible; full P12 is
+not accepted until its remaining contracts and real gates pass.
 
 See:
 
 - [`docs/adr/ADR-025-controlled-source-workspaces.md`](docs/adr/ADR-025-controlled-source-workspaces.md)
 - [`docs/research/P12_SOURCE_WORKSPACE_FOUNDATION.md`](docs/research/P12_SOURCE_WORKSPACE_FOUNDATION.md)
 - [`docs/research/P12_FOCUSED_VALIDATION_RUNBOOK.md`](docs/research/P12_FOCUSED_VALIDATION_RUNBOOK.md)
+- [`docs/research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md`](docs/research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md)
 
 ## Installation
 

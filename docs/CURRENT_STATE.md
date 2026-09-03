@@ -9,13 +9,13 @@ For the exact roadmap cursor and validation truth use
 ```text
 P0-P11 COMPLETE / ACCEPTED
 P11 accepted through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
-P12.1 BOUNDED SOURCE WORKSPACES IMPLEMENTED / FOCUSED ODOO VALIDATION PENDING
+P12.1 BOUNDED SOURCE WORKSPACES FOCUSED ACCEPTED / P12.2 ELIGIBLE
 P12 NOT ACCEPTED
 ```
 
-P11 remains the latest accepted phase. P12.1 establishes only the source/workspace
-authority boundary required before patch/test/deploy; it does not expose production
-source editing.
+P11 remains the latest fully accepted phase. P12.1 has passed its focused authority
+gate and establishes the source/workspace boundary required before patch/test/deploy;
+it does not expose production source editing.
 
 ## Product baseline
 
@@ -61,7 +61,7 @@ repair/resume under the originating effective user.
 P11 focused tests and all six named real gates are PASS on the accepted evidence at:
 `research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`.
 
-## P12.1 controlled source workspace — implemented, validation pending
+## P12.1 controlled source workspace — focused accepted
 
 ADR-025 establishes a workspace-first source-modification boundary.
 
@@ -113,22 +113,19 @@ write remains outside the product contract.
 
 ## P12.1 validation truth
 
-Author-side dependency-light preparation executed:
+Formal committed-SHA validation executed:
 
 ```text
-py_compile source_workspace + prepared tests        PASS
+compileall + focused Ruff                           PASS
 SourceWorkspaceTests                               PASS — 10 tests
+TestPhase12SourceWorkspace                         PASS — 3 methods
 ```
 
-This is not the focused Odoo gate and does not accept P12.1. Prepared Odoo coverage:
-
-```text
-TestPhase12SourceWorkspace                         NOT EXECUTED — 3 methods
-```
-
-The immediate HARD boundary is to execute the focused P12.1 static/dependency-light
-check on the committed SHA plus the 3-method Odoo test. P12.2 must not start until that
-focused authority gate passes or any failure is repaired.
+P12.1 is accepted on
+`research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md`. P12.2 is eligible;
+the immediate next action is to define a typed workspace-only proposed patch/diff
+contract with exact before/after fingerprints and no physical-path or free-form command
+input.
 
 The later Phase-12 real gates remain unexecuted:
 

@@ -8,8 +8,8 @@ immutable evidence. Current code plus accepted ADRs outrank dated research.
 ```text
 P0-P11 COMPLETE / ACCEPTED
 P11 accepted through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
-P12.1 BOUNDED SOURCE WORKSPACES IMPLEMENTED
-P12.1 FOCUSED ODOO VALIDATION PENDING
+P12.1 BOUNDED SOURCE WORKSPACES FOCUSED ACCEPTED
+P12.2 PROPOSED PATCH/DIFF CONTRACT ELIGIBLE / NOT STARTED
 P12 NOT ACCEPTED
 ```
 
@@ -21,7 +21,8 @@ Use `EXECUTION_STATE.md` for exact lineage, blockers and next action.
 | --- | --- |
 | `EXECUTION_STATE.md` | Exact roadmap cursor and validation truth. |
 | `P12_SOURCE_WORKSPACE_FOUNDATION.md` | P12.1 source/workspace identity, bounds and no-production-mutation contract. |
-| `P12_FOCUSED_VALIDATION_RUNBOOK.md` | Focused P12.1 gate and five later Phase-12 real gates. |
+| `P12_FOCUSED_VALIDATION_RUNBOOK.md` | Executed P12.1 gate and five later Phase-12 real gates. |
+| `evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md` | P12.1 focused authority acceptance. |
 | `../adr/ADR-025-controlled-source-workspaces.md` | Accepted P12 staging/path/fingerprint authority decision. |
 | `P11_IMPORT_CLEANUP_REPAIR_SLICE.md` | Latest accepted P11 implementation record. |
 | `evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md` | P11 immutable acceptance. |
@@ -48,10 +49,9 @@ or an equivalently narrow deployment adapter; generic shell/Git/sudo remains for
 
 ## P12 validation truth
 
-Author-side dependency-light preparation currently records 10 workspace tests PASS and
-Python compilation PASS. The focused Odoo 3-method authority test is prepared but not
-executed. Therefore P12.1 remains validation pending and P12.2 is blocked by the active
-HARD focused gate.
+Committed-SHA compile/Ruff, all 10 workspace unit tests and the focused 3-method Odoo
+authority gate passed. P12.1 is focused accepted and P12.2 may begin; full Phase-12
+acceptance still requires the later contracts and real gates.
 
 Later HARD real gates remain:
 

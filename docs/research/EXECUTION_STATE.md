@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 71
+State format: 72
 Updated: 2026-09-03
 
 ## Accepted lineage
@@ -16,24 +16,24 @@ P10 final acceptance through bde508b737c132140e237cdfde31aee9b37eca5f
 P11 final acceptance through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
 ```
 
-P11 remains the latest accepted phase. P12.1 now has an implemented authority
-foundation but is not validated/accepted yet.
+P11 remains the latest fully accepted phase. P12.1 has passed its focused authority
+gate and is accepted as a Phase-12 slice; full P12 remains incomplete.
 
 ## Current cursor
 
 ```text
 phase: 12
 phase_name: controlled source-code modification
-active_slice: P12.1-BOUNDED-WORKSPACE-SOURCE-ROOTS
-slice_state: IMPLEMENTED_FOCUSED_VALIDATION_PENDING
-current_gate_type: HARD_FOCUSED_AUTHORITY
-blocking_implementation: none for P12.1; P12.2 patch/diff remains intentionally unimplemented until the P12.1 focused authority gate passes
-blocking_validation: committed-SHA dependency-light/static rerun plus focused Odoo TestPhase12SourceWorkspace are unexecuted
-latest_accepted_evidence: docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md
+active_slice: P12.2-PROPOSED-PATCH-DIFF-CONTRACT
+slice_state: READY_NOT_STARTED
+current_gate_type: HARD_AUTHORITY_AND_DESIGN
+blocking_implementation: P12.2 is not implemented; no typed workspace patch/diff capability or approved-diff fingerprint exists
+blocking_validation: none for P12.1; P12 real gates remain pending until their corresponding P12.2-P12.4 contracts exist
+latest_accepted_evidence: docs/research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md
 latest_phase_acceptance: docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md
 latest_implementation_record: docs/research/P12_SOURCE_WORKSPACE_FOUNDATION.md
-latest_validation_record: docs/research/P12_FOCUSED_VALIDATION_RUNBOOK.md
-next_action: run P12.1 focused compile/unit/Odoo path-authority gates on the committed SHA; repair any failure; only then begin P12.2 proposed patch/diff contract
+latest_validation_record: docs/research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md
+next_action: begin P12.2 by defining a typed proposed patch/diff contract restricted to the bound workspace, with exact before/after/diff fingerprints and no physical-path or free-form command input
 ```
 
 ## P12.1 implementation
@@ -90,28 +90,25 @@ installed source baseline fingerprint
 A later deploy must also prove that the installed source baseline remains current. A
 stale source must be reprepared/rebased rather than overwritten.
 
-## P12.1 validation status
+## P12.1 validation and acceptance
 
-Author-side preparation checks before publication:
+Formal committed-SHA checks on `ad1378be0836fa3d49e4f24019288aa3a6e71b46`:
 
 ```text
-python py_compile                                      PASS
+python compileall                                      PASS
+Ruff                                                   PASS
 SourceWorkspaceTests                                   PASS — 10 tests
+TestPhase12SourceWorkspace                             PASS — 3 methods / 0 failures / 0 errors
 ```
 
-These checks are not the formal committed-SHA/Odoo gate.
+They cover Technical access, path-free installed-addon workspace preparation, source
+freshness, non-Technical denial, cross-user denial, cross-turn denial, source
+immutability, path/symlink/secret bounds and owner-bound cleanup.
 
-Prepared focused Odoo gate:
+P12.1 acceptance: **COMPLETE / P12.2 ELIGIBLE**.
 
-```text
-TestPhase12SourceWorkspace                             NOT EXECUTED — 3 methods
-```
-
-It covers Technical access, path-free installed-addon workspace preparation, source
-freshness, non-Technical denial, cross-user denial, cross-turn denial and owner-bound
-cleanup.
-
-P12.1 acceptance: **NOT COMPLETE**.
+Evidence:
+`docs/research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md`.
 
 ## Later Phase-12 real gates
 
@@ -125,8 +122,8 @@ P12-REAL-DEPLOY-VERIFY
 P12-REAL-FAILED-DEPLOY-RECOVERY
 ```
 
-P12.1 is a prerequisite for the first gate; P12.2-P12.4 must implement the remaining
-contracts before their gates can run.
+P12.1 supplies the tested foundation for the first gate; P12.2-P12.4 must implement
+the remaining contracts before any Phase-12 real gate can be claimed PASS.
 
 ## P11 accepted baseline
 
@@ -161,6 +158,7 @@ docs/adr/ADR-025-controlled-source-workspaces.md
 docs/research/P12_SOURCE_WORKSPACE_FOUNDATION.md
 docs/research/P12_FOCUSED_VALIDATION_RUNBOOK.md
 docs/research/REAL_ENV_VALIDATION_PROTOCOL.md
+docs/research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md
 docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md
 docs/CURRENT_STATE.md
 docs/ARCHITECTURE.md

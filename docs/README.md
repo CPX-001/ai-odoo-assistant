@@ -8,15 +8,15 @@ summarize that code; dated research/PDFs and external projects are design eviden
 ```text
 P0-P11 COMPLETE / ACCEPTED
 P11 accepted through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
-P12.1 BOUNDED SOURCE WORKSPACES IMPLEMENTED / FOCUSED VALIDATION PENDING
+P12.1 BOUNDED SOURCE WORKSPACES FOCUSED ACCEPTED / P12.2 ELIGIBLE
 P12 NOT ACCEPTED
 ```
 
 P11 acceptance evidence:
 [`research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`](research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md).
 
-P12.1 adds no source-edit capability. It establishes the path/fingerprint/workspace
-authority prerequisite defined by ADR-025 before P12.2 patch/diff work can begin.
+P12.1 adds no source-edit capability. Its focused authority gate passed, so the
+path/fingerprint/workspace prerequisite defined by ADR-025 is ready for P12.2.
 
 ## Primary reading path
 
@@ -29,7 +29,7 @@ authority prerequisite defined by ADR-025 before P12.2 patch/diff work can begin
 7. [`adr/ADR-024-technical-host-privilege-broker.md`](adr/ADR-024-technical-host-privilege-broker.md) — finite privileged host boundary.
 8. [`adr/ADR-025-controlled-source-workspaces.md`](adr/ADR-025-controlled-source-workspaces.md) — P12 source/workspace/deploy authority prerequisite.
 9. [`research/P12_SOURCE_WORKSPACE_FOUNDATION.md`](research/P12_SOURCE_WORKSPACE_FOUNDATION.md) — implemented P12.1 contract.
-10. [`research/P12_FOCUSED_VALIDATION_RUNBOOK.md`](research/P12_FOCUSED_VALIDATION_RUNBOOK.md) — P12.1 focused gate and later real gates.
+10. [`research/P12_FOCUSED_VALIDATION_RUNBOOK.md`](research/P12_FOCUSED_VALIDATION_RUNBOOK.md) — executed P12.1 focused gate and later real gates.
 11. [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) — exact roadmap cursor.
 
 ## Architecture at a glance
