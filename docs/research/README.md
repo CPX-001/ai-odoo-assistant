@@ -1,8 +1,8 @@
 # Research and execution guidance
 
 This directory contains implementation records, validation runbooks, product-eval
-specifications and named evidence. Research history does not override current code or
-accepted ADRs.
+specifications and immutable evidence. Research history does not override current code
+or accepted ADRs.
 
 ## Authority
 
@@ -20,146 +20,122 @@ Unexecuted validation is never PASS.
 
 ```text
 P0-P10 COMPLETE / ACCEPTED
-P10 PRIVILEGE-BOUNDARY ADR ACCEPTED
-P10 TYPED HOST-OPERATIONS FIRST SLICE IMPLEMENTED
-P10 MODULE-UPDATE MAINTENANCE ADAPTER IMPLEMENTED
-P10 FOCUSED VALIDATION PASS
-P10 REAL VALIDATION PASS
-P11 READY FOR DESIGN
+P10 latest accepted phase at bde508b737c132140e237cdfde31aee9b37eca5f
+P11 ADVANCED IMPORTS CSV CORE IMPLEMENTED
+P11 DETERMINISTIC CLEANUP + REPAIR/RESUME IMPLEMENTED
+P11 FOCUSED + REAL VALIDATION PENDING
+P11 NOT ACCEPTED
 ```
 
-P10 is the latest accepted phase, anchored at
-`bde508b737c132140e237cdfde31aee9b37eca5f` and documented in
-`evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`.
-
-Use `EXECUTION_STATE.md` for the exact cursor, implementation lineage, blockers and
-validation debt.
+Use `EXECUTION_STATE.md` for exact lineage, blockers, gates and next action.
 
 ## Primary current documents
 
 | Document | Purpose |
 | --- | --- |
-| `EXECUTION_STATE.md` | Compact current cursor, blockers, accepted evidence and exact next action. |
-| `P10_HOST_OPERATIONS_FIRST_SLICE.md` | Implemented Technical/broker boundary and explicit deferrals. |
-| `P10_FOCUSED_VALIDATION_RUNBOOK.md` | Focused and real validation required for the first P10 slice. |
-| `P9_KNOWLEDGE_FIRST_SLICE.md` | Accepted P9 Knowledge implementation record. |
-| `P9_FOCUSED_VALIDATION_RUNBOOK.md` | Executed P9 validation scope and acceptance link. |
-| `P8_EVIDENCE_CORE_IMPLEMENTATION.md` | Accepted P8 implementation and explicit deferrals. |
+| `EXECUTION_STATE.md` | Exact roadmap cursor, validation truth and next action. |
+| `P11_ADVANCED_IMPORTS_FIRST_SLICE.md` | Durable CSV artifact/staging/chunk contract. |
+| `P11_IMPORT_CLEANUP_REPAIR_SLICE.md` | Deterministic cleanup and rejected-window repair/resume contract. |
+| `P11_FOCUSED_VALIDATION_RUNBOOK.md` | Focused and six HARD real P11 gates. |
+| `P10_HOST_OPERATIONS_FIRST_SLICE.md` | Accepted Technical/broker implementation record. |
+| `P10_FOCUSED_VALIDATION_RUNBOOK.md` | Executed P10 validation contract. |
+| `P9_KNOWLEDGE_FIRST_SLICE.md` | Accepted P9 Knowledge record. |
+| `P8_EVIDENCE_CORE_IMPLEMENTATION.md` | Accepted P8 Evidence record. |
 | `CONTINUOUS_EXECUTION_PROTOCOL.md` | Restartable execution/validation rules. |
-| `REAL_ENV_VALIDATION_PROTOCOL.md` | Named gates requiring real Odoo/provider/host/browser paths. |
-| `PERIODIC_FULL_REGRESSION_RUNBOOK.md` | Canonical expensive broad regression when required. |
-| `PRODUCT_BEHAVIOR_EVALS_V1.md` | Permanent user-visible product behavior baseline. |
-| `P7_MINI_FRAMEWORK_IMPLEMENTATION.md` | Accepted Phase-7 extension-framework record. |
+| `REAL_ENV_VALIDATION_PROTOCOL.md` | Named real Odoo/provider/host/browser gates. |
+| `PERIODIC_FULL_REGRESSION_RUNBOOK.md` | Expensive broad regression when required. |
+| `PRODUCT_BEHAVIOR_EVALS_V1.md` | Permanent product-behavior baseline. |
 
-Older preparation records are historical and must not be read as the current cursor.
+Older preparation records are historical rather than the current cursor.
 
-## Current P7-P10 boundary
+## Current architecture lineage
 
-Accepted P7 provides:
+Accepted P7 provides installed-addon `CapabilityProvider`, Skills, ContextProviders,
+effective manifests and progressive disclosure. Accepted P8/P9 extend the same seam
+with Evidence and Knowledge. Accepted P10 adds the typed Technical host boundary and
+external lifecycle-safe module update.
 
-```text
-CapabilityProvider installed-addon discovery/composition
-SkillDefinition / SkillCatalog
-ContextProvider / ContextProviderCatalog
-AssistantExtensionCatalog
-ProviderProfile
-EffectiveAssistantManifest
-progressive-disclosure state model
-```
-
-Accepted P8/P9 extend that same seam with Evidence and Knowledge:
+P11 reuses those contracts rather than adding another tool registry or queue system:
 
 ```text
-EvidenceProvider / EvidenceProviderCatalog
-EvidenceRoutingPolicy / EvidenceLedger
-assistant.runtime_inventory
-assistant.source_evidence
-assistant.log_evidence
-assistant.company_knowledge
-assistant.knowledge.ingest_attachment
-browser-safe citations and stale/freshness checks
+current-turn bounded artifact ref
+ -> Odoo base_import inspection
+ -> host-filtered direct scalar mapping
+ -> staged mapped rows + fingerprints
+ -> PLAN/policy
+ -> durable ir.cron chunks under effective user, su=False
+ -> per-chunk receipts
+ -> finite deterministic cleanup when proposed
+ -> bounded rejected-window inspection
+ -> explicit mapped-row repair + resume from committed cursor
 ```
 
-The implemented P10 first slice adds:
+Current P11 capability surface:
 
 ```text
-accepted ADR-024 machine privilege boundary
-odoo.module.inspect
-postgres.health
-odoo.config.inspect / odoo.config.patch
-host.service.status / host.service.restart
-odoo.module.update through a policy-bound external systemd maintenance unit
-fresh-registry module version verification
-optional AF_UNIX broker with logical-target policy
-peer credentials, bounded protocol and durable replay ledger
-post-dispatch uncertainty preservation
+assistant.data_import.inspect_csv
+assistant.data_import.start_csv
+assistant.data_import.status
+assistant.data_import.inspect_cleanup
+assistant.data_import.start_clean_csv
+assistant.data_import.inspect_rejected
+assistant.data_import.resume_csv
 ```
 
-Trust/authority remains:
-
-```text
-Skill instructions       trusted behavior guidance, not authority
-ContextProvider output   untrusted contextual data
-Evidence content         untrusted data, never authority
-manifest/provider data   derived host metadata, not authority
-CapabilityDefinition     atomic executable unit
-host registry/executor   final Odoo permission/policy authority
-broker policy            final privileged target/operation authority
-```
-
-The broker is not a third human profile and not another Assistant runtime. It cannot
-be used by a User/non-technical profile merely because autonomy is high.
+Cleanup is limited to `trim`, `normalize_whitespace`, `replace_exact` and
+`set_if_empty` over already-mapped fields. Repair accepts only explicit row + mapped
+field + replacement value inside the current rejected window. Neither creates new
+execution authority.
 
 ## Validation truth
 
-Accepted P8/P9 evidence remains immutable. P10 focused and real-environment gates pass
-on the accepted lineage and have an immutable acceptance record.
+P10 acceptance evidence remains immutable at:
 
-Accepted P10 status:
+`evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`
+
+P11 currently has 8 prepared focused Odoo methods across:
 
 ```text
-focused dependency-light tests                   PASS — 18 tests
-focused Odoo tests                               PASS — 5 methods, 0 failures/errors
-broker deployment/systemd smoke                  PASS
-profile/config/service/postgres/boundary gates   PASS
-P10-REAL-MODULE-UPDATE                           PASS
-P10 acceptance                                   COMPLETE / ACCEPTED
+TestPhase11DataImportSession
+TestPhase11DataImportCleanupRepair
 ```
 
-The full repository/addon/HOOT/Product Behavior regressions remain periodic debt
-unless a focused failure or explicit instruction widens the required scope.
+None has been executed in the supported Odoo environment in this ChatGPT run. The six
+HARD real gates are also unexecuted:
 
-## Accepted evidence
+```text
+P11-REAL-CSV-IMPORT
+P11-REAL-LARGE-IMPORT
+P11-REAL-MAPPING-CORRECTION
+P11-REAL-PARTIAL-INVALID
+P11-REAL-RESUME-NO-DUPLICATE
+P11-REAL-IMPORT-RECEIPT
+```
 
-Important immutable anchors:
+Full repository/addon/HOOT/Product Behavior regression remains periodic debt unless a
+focused failure or explicit instruction widens scope.
+
+## Accepted evidence anchors
 
 ```text
 P5.8 evidence/phase5/2026-08-30/P5.8-REAL-ACCEPTANCE-688f569.md
 P6 final evidence/regression/2026-08-31/FULL-REGRESSION-fc022a6.md
 P7 acceptance evidence/phase7/2026-09-02/P7-ACCEPTANCE-092ac57.md
-P7 final regression evidence/regression/2026-09-02/FULL-REGRESSION-092ac57.md
 P8 acceptance evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
 P9 acceptance evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
 P10 acceptance evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
 ```
 
-Older preparation/blocker records remain historical and must not be rewritten to
-pretend they were already PASS at the time.
+Historical blocker/focused records are not rewritten after later acceptance.
 
-## External implementation references
+## External references
 
-External projects are design references, not requirements. Useful patterns include:
-
-- Odoo Agents/Skills/Sources and Odoo-native module/lifecycle behavior;
-- Pydantic AI capability composition/progressive disclosure;
-- FastMCP provider composition;
-- Apexive/OCA reusable tool/provider patterns;
-- ERPipe typed safe-write/diagnostic workflows;
-- OpenTelemetry GenAI naming/sensitive-content discipline;
-- Linux AF_UNIX peer credentials, systemd hardening and fixed-argv service control.
-
-The project keeps its stronger Odoo/host authority boundary and does not introduce a
-framework or general shell merely to resemble a reference.
+External projects are design references, not requirements. Relevant patterns include
+Odoo native import/lifecycle behavior, OCA asynchronous import chunking, Pydantic AI
+progressive disclosure, FastMCP/provider composition, Apexive/OCA reusable tools,
+ERPipe typed writes and Linux/systemd hardening. The project keeps its stronger
+Odoo/host authority boundary and does not add a framework or shell merely to resemble
+a reference.
 
 ## Execution rule
 
@@ -167,12 +143,11 @@ Every future run reconstructs from Git:
 
 ```text
 inspect current main
- -> read EXECUTION_STATE + current implementation record
+ -> read EXECUTION_STATE + active implementation records
  -> process new validation evidence first
  -> repair failed HARD gate if present
- -> otherwise follow exact current next action
+ -> otherwise follow exact next action
  -> update code/tests/docs/evidence coherently
 ```
 
-No GitHub Actions are used for this roadmap while repository policy says runners are
-not the supported validation path.
+Repository policy does not use GitHub Actions as the roadmap validation path.
