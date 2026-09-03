@@ -6,6 +6,9 @@ from odoo import Command
 from odoo.addons.odoo_ai_assistant.runtime.capabilities.contracts import (
     CapabilityContext,
 )
+from odoo.addons.odoo_ai_assistant.runtime.capabilities.registry import (
+    discover_capabilities_for_env,
+)
 from odoo.addons.odoo_ai_assistant.runtime.source_workspace import (
     SourceWorkspaceError,
     delete_installed_module_workspace,
@@ -70,6 +73,8 @@ class TestPhase12SourceWorkspace(TransactionCase):
             self.assertNotIn("workspace_path", public)
             self.assertNotIn("addons_path", public)
             self.assertNotIn("data_dir", public)
+            self.assertNotIn(context.env.cr.dbname, repr(public))
+            self.assertNotIn("/odoo/", repr(public))
 
             checked = inspect_installed_module_workspace(context, receipt.workspace_id)
             self.assertEqual(
@@ -77,6 +82,21 @@ class TestPhase12SourceWorkspace(TransactionCase):
                 receipt.current_workspace_fingerprint,
             )
             self.assertEqual(checked.binding_fingerprint, receipt.binding_fingerprint)
+
+            registry = discover_capabilities_for_env(context.env)
+            self.assertFalse(
+                any(
+                    definition.source_module.endswith(".runtime.source_workspace")
+                    for definition in registry.definitions
+                )
+            )
+            for namespace in (
+                "assistant.source",
+                "assistant.workspace",
+                "odoo.source",
+                "odoo.workspace",
+            ):
+                self.assertFalse(registry.by_namespace(namespace))
         finally:
             delete_installed_module_workspace(context, receipt.workspace_id)
 

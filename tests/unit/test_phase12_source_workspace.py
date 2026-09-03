@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+import stat
 import sys
 import tempfile
 import unittest
@@ -37,7 +39,11 @@ class SourceWorkspaceTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_prepare_is_path_free_and_does_not_mutate_source(self):
-        before = (self.source / "models" / "sale.py").read_text()
+        before = {
+            path.relative_to(self.source).as_posix(): path.read_bytes()
+            for path in self.source.rglob("*")
+            if path.is_file()
+        }
         receipt = self.store.prepare(
             module="fixture_addon",
             source_root=self.source,
@@ -55,9 +61,35 @@ class SourceWorkspaceTests(unittest.TestCase):
         self.assertFalse(public["source_stale"])
         self.assertNotIn(str(self.source), repr(public))
         self.assertNotIn(str(self.workspace_root), repr(public))
-        self.assertEqual((self.source / "models" / "sale.py").read_text(), before)
         self.assertFalse((receipt.workspace_path / ".env").exists())
         self.assertTrue((receipt.workspace_path / "models" / "sale.py").is_file())
+        self.assertEqual(
+            stat.S_IMODE(receipt.workspace_path.stat().st_mode),
+            0o700,
+        )
+        self.assertEqual(
+            stat.S_IMODE((receipt.workspace_path / "models" / "sale.py").stat().st_mode),
+            0o600,
+        )
+        self.assertEqual(
+            stat.S_IMODE(
+                (receipt.workspace_path / ".odoo-ai-workspace.json").stat().st_mode
+            ),
+            0o600,
+        )
+
+        self.store.inspect(
+            receipt.workspace_id,
+            source_root=self.source,
+            binding=self.binding,
+        )
+        self.store.delete(receipt.workspace_id, binding=self.binding)
+        after = {
+            path.relative_to(self.source).as_posix(): path.read_bytes()
+            for path in self.source.rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(after, before)
 
     def test_workspace_change_and_source_staleness_are_independent(self):
         receipt = self.store.prepare(
@@ -104,6 +136,18 @@ class SourceWorkspaceTests(unittest.TestCase):
         self.assertNotEqual(first.workspace_id, second.workspace_id)
         self.assertEqual(first.source_fingerprint, second.source_fingerprint)
 
+        mirror = self.root / "different-physical-root" / "fixture_addon"
+        shutil.copytree(self.source, mirror)
+        for path in mirror.rglob("*"):
+            if path.is_file():
+                path.touch()
+        mirrored = self.store.prepare(
+            module="fixture_addon",
+            source_root=mirror,
+            binding=self.binding,
+        )
+        self.assertEqual(first.source_fingerprint, mirrored.source_fingerprint)
+
     def test_symlink_source_entry_fails_closed(self):
         outside = self.root / "outside.py"
         outside.write_text("secret = True\n")
@@ -115,6 +159,18 @@ class SourceWorkspaceTests(unittest.TestCase):
             self.store.prepare(
                 module="fixture_addon",
                 source_root=self.source,
+                binding=self.binding,
+            )
+
+        linked_root = self.root / "linked-source-root"
+        linked_root.symlink_to(self.source, target_is_directory=True)
+        with self.assertRaisesRegex(
+            SourceWorkspaceError,
+            "source_workspace_source_symlink",
+        ):
+            self.store.prepare(
+                module="fixture_addon",
+                source_root=linked_root,
                 binding=self.binding,
             )
 
@@ -147,22 +203,44 @@ class SourceWorkspaceTests(unittest.TestCase):
             self.store.inspect("../../etc/passwd", binding=self.binding)
 
     def test_bounds_are_enforced_before_publish(self):
-        tiny = SourceWorkspaceStore(
-            self.root / "tiny",
-            max_files=2,
-            max_total_bytes=1024,
-            max_file_bytes=1024,
-        ).ensure()
-        with self.assertRaisesRegex(
-            SourceWorkspaceError,
-            "source_workspace_too_many_files",
-        ):
-            tiny.prepare(
-                module="fixture_addon",
-                source_root=self.source,
-                binding=self.binding,
-            )
-        self.assertEqual(list(tiny.workspace_root.glob("[0-9a-f]*")), [])
+        cases = (
+            (
+                SourceWorkspaceStore(
+                    self.root / "too-many",
+                    max_files=2,
+                    max_total_bytes=1024,
+                    max_file_bytes=1024,
+                ).ensure(),
+                "source_workspace_too_many_files",
+            ),
+            (
+                SourceWorkspaceStore(
+                    self.root / "file-too-large",
+                    max_files=10,
+                    max_total_bytes=1024,
+                    max_file_bytes=8,
+                ).ensure(),
+                "source_workspace_file_too_large",
+            ),
+            (
+                SourceWorkspaceStore(
+                    self.root / "total-too-large",
+                    max_files=10,
+                    max_total_bytes=40,
+                    max_file_bytes=32,
+                ).ensure(),
+                "source_workspace_total_too_large",
+            ),
+        )
+        for store, error_code in cases:
+            with self.subTest(error_code=error_code):
+                with self.assertRaisesRegex(SourceWorkspaceError, error_code):
+                    store.prepare(
+                        module="fixture_addon",
+                        source_root=self.source,
+                        binding=self.binding,
+                    )
+                self.assertEqual(list(store.workspace_root.iterdir()), [])
 
     def test_secret_named_workspace_tamper_is_not_hidden(self):
         receipt = self.store.prepare(
@@ -183,12 +261,18 @@ class SourceWorkspaceTests(unittest.TestCase):
             source_root=self.source,
             binding=self.binding,
         )
-        other = dict(self.binding, odoo_uid=8)
-        with self.assertRaisesRegex(
-            SourceWorkspaceError,
-            "source_workspace_binding_mismatch",
-        ):
-            self.store.inspect(receipt.workspace_id, binding=other)
+        changed_bindings = (
+            dict(self.binding, odoo_uid=8),
+            dict(self.binding, company_id=4),
+            dict(self.binding, database_fingerprint="sha256:" + "e" * 64),
+            dict(self.binding, turn_id="turn-test-0002"),
+        )
+        for other in changed_bindings:
+            with self.subTest(binding=other), self.assertRaisesRegex(
+                SourceWorkspaceError,
+                "source_workspace_binding_mismatch",
+            ):
+                self.store.inspect(receipt.workspace_id, binding=other)
 
     def test_delete_cannot_escape_managed_root(self):
         receipt = self.store.prepare(
