@@ -1,5 +1,6 @@
 import { expect, test } from "@odoo/hoot";
 import {
+    actionExecutionPending,
     loadChatHistory,
     loadDraft,
     loadRuntimeStatus,
@@ -462,6 +463,207 @@ test("approve uses native plan decision then status until verified completion", 
     expect(panelState.result.plan.state).toBe("completed");
     expect(panelState.actionReceipt.state).toBe("completed");
     expect(recoveryPending(panelState)).toBe(false);
+});
+
+test("approval becomes a visible background execution before terminal status arrives", async () => {
+    const panelState = state();
+    const awaiting = agentPlan("awaiting_confirmation", true, [capabilityStep()]);
+    panelState.result = chatResponse(awaiting, "He preparado el cambio.");
+    let releaseStatus;
+    let statusRequested;
+    const statusStarted = new Promise((resolve) => {
+        statusRequested = resolve;
+    });
+    const terminalStatus = new Promise((resolve) => {
+        releaseStatus = resolve;
+    });
+    const projections = [];
+
+    const pending = submitActionDecision({
+        state: panelState,
+        decision: "approve",
+        waitCall: async () => {},
+        onStateChange: () => {
+            projections.push({
+                loading: panelState.decisionLoading,
+                plan: panelState.result?.plan?.state,
+                turn: panelState.turnState,
+            });
+        },
+        rpcCall: async (path) => {
+            if (path === "/odoo_ai/v1/turn/plan-decision") {
+                return {
+                    ok: true,
+                    plan_id: awaiting.plan_id,
+                    state: "authorized",
+                    plan: agentPlan("authorized", true, [capabilityStep()]),
+                    response: null,
+                };
+            }
+            statusRequested();
+            return terminalStatus;
+        },
+    });
+
+    await statusStarted;
+    expect(panelState.decisionLoading).toBe(false);
+    expect(panelState.result.plan.state).toBe("authorized");
+    expect(panelState.turnState).toBe("running");
+    expect(
+        projections.some(
+            (projection) =>
+                projection.loading === false &&
+                projection.plan === "authorized" &&
+                projection.turn === "running"
+        )
+    ).toBe(true);
+
+    const completed = agentPlan("completed", true, [capabilityStep("completed")]);
+    releaseStatus({
+        ok: true,
+        plan_id: awaiting.plan_id,
+        state: "completed",
+        turn_state: "completed",
+        plan: completed,
+        response: chatResponse(completed, "He completado y verificado la acción."),
+        error_code: null,
+    });
+    expect(await pending).toBe(true);
+});
+
+test("terminal failure overrides a stale executing plan projection", async () => {
+    const panelState = state();
+    const awaiting = agentPlan("awaiting_confirmation", true, [capabilityStep()]);
+    panelState.result = chatResponse(awaiting, "He preparado el cambio.");
+
+    const finished = await submitActionDecision({
+        state: panelState,
+        decision: "approve",
+        waitCall: async () => {},
+        rpcCall: async (path) => {
+            if (path === "/odoo_ai/v1/turn/plan-decision") {
+                return {
+                    ok: true,
+                    plan_id: awaiting.plan_id,
+                    state: "authorized",
+                    plan: agentPlan("authorized", true, [capabilityStep()]),
+                    response: null,
+                };
+            }
+            return {
+                ok: true,
+                plan_id: awaiting.plan_id,
+                state: "executing",
+                turn_state: "failed",
+                plan: agentPlan("executing", true, [capabilityStep("executing")]),
+                response: null,
+                error_code: "runtime_unavailable",
+            };
+        },
+    });
+
+    expect(finished).toBe(true);
+    expect(panelState.turnState).toBe("failed");
+    expect(panelState.result.plan.state).toBe("failed");
+    expect(panelState.result.plan.steps[0].state).toBe("failed");
+    expect(panelState.actionReceipt.state).toBe("failed");
+    expect(actionExecutionPending(panelState)).toBe(false);
+    expect(recoveryPending(panelState)).toBe(false);
+});
+
+test("lost status transport retries automatically without repeating the action", async () => {
+    const panelState = state();
+    const awaiting = agentPlan("awaiting_confirmation", true, [capabilityStep()]);
+    panelState.result = chatResponse(awaiting, "He preparado el cambio.");
+    const paths = [];
+    const connectionStates = [];
+    let statusAttempts = 0;
+    const completed = agentPlan("completed", true, [capabilityStep("completed")]);
+
+    const finished = await submitActionDecision({
+        state: panelState,
+        decision: "approve",
+        waitCall: async () => {},
+        onStateChange: () => {
+            connectionStates.push(panelState.actionStatusConnectionInterrupted === true);
+        },
+        rpcCall: async (path) => {
+            paths.push(path);
+            if (path === "/odoo_ai/v1/turn/plan-decision") {
+                return {
+                    ok: true,
+                    plan_id: awaiting.plan_id,
+                    state: "authorized",
+                    plan: agentPlan("authorized", true, [capabilityStep()]),
+                    response: null,
+                };
+            }
+            statusAttempts += 1;
+            if (statusAttempts <= 4) {
+                throw new Error("network unavailable");
+            }
+            return {
+                ok: true,
+                plan_id: awaiting.plan_id,
+                state: "completed",
+                turn_state: "completed",
+                plan: completed,
+                response: chatResponse(completed, "Operación completada."),
+                error_code: null,
+            };
+        },
+    });
+
+    expect(finished).toBe(true);
+    expect(paths.filter((path) => path === "/odoo_ai/v1/turn/plan-decision")).toHaveLength(1);
+    expect(paths.filter((path) => path === "/odoo_ai/v1/turn/plan-status")).toHaveLength(5);
+    expect(connectionStates).toInclude(true);
+    expect(panelState.actionStatusConnectionInterrupted).toBe(false);
+    expect(actionExecutionPending(panelState)).toBe(false);
+    expect(recoveryPending(panelState)).toBe(false);
+});
+
+test("invalid transient status payload cannot terminate an approved operation", async () => {
+    const panelState = state();
+    const awaiting = agentPlan("awaiting_confirmation", true, [capabilityStep()]);
+    panelState.result = chatResponse(awaiting, "He preparado el cambio.");
+    const completed = agentPlan("completed", true, [capabilityStep("completed")]);
+    let statusAttempts = 0;
+
+    const finished = await submitActionDecision({
+        state: panelState,
+        decision: "approve",
+        waitCall: async () => {},
+        rpcCall: async (path) => {
+            if (path === "/odoo_ai/v1/turn/plan-decision") {
+                return {
+                    ok: true,
+                    plan_id: awaiting.plan_id,
+                    state: "authorized",
+                    plan: agentPlan("authorized", true, [capabilityStep()]),
+                    response: null,
+                };
+            }
+            statusAttempts += 1;
+            if (statusAttempts === 1) {
+                return { ok: false, error: { code: "runtime_unavailable" } };
+            }
+            return {
+                ok: true,
+                plan_id: awaiting.plan_id,
+                state: "completed",
+                turn_state: "completed",
+                plan: completed,
+                response: chatResponse(completed, "Operación completada."),
+                error_code: null,
+            };
+        },
+    });
+
+    expect(finished).toBe(true);
+    expect(statusAttempts).toBe(2);
+    expect(panelState.result.plan.state).toBe("completed");
+    expect(panelState.actionReceipt.state).toBe("completed");
 });
 
 test("reject is terminal and never polls or executes", async () => {

@@ -50,7 +50,7 @@ class AssistantTurnScheduler(models.Model):
         turn_id, lease_token = claimed
         try:
             _execute_claimed_turn(dbname, turn_id, lease_token)
-        except Exception as error:  # noqa: BLE001 - cron boundary stays sanitized
+        except Exception as error:
             code = _runtime_error_code(error)
             _logger.exception("Embedded Assistant turn %s crashed: %s", turn_id, code)
             if isinstance(getattr(error, "failure", None), FailureEnvelope):
@@ -380,5 +380,5 @@ def _schedule_postcommit_wake(cr):
 def _wake_turn_crons_safely(dbname):
     try:
         _trigger_turn_crons(dbname)
-    except Exception:  # noqa: BLE001 - wake failure must not rewrite a turn outcome
+    except Exception:
         _logger.exception("Could not wake pending Assistant turns after capacity release")

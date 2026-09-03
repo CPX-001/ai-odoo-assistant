@@ -21,7 +21,7 @@ foundation. P12.2 code exists but is not PASS evidence until its focused gate ex
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Supported addon: `addons/odoo_ai_assistant`.
-- Current addon version: `18.0.13.35.0`.
+- Current addon version: `18.0.13.36.0`.
 - Dependencies: `account`, `base`, `base_import`, `sale`, `web`.
 - Runtime is embedded in Odoo; the browser talks only to authenticated Odoo routes.
 - Business capabilities execute under the effective Odoo user with `su=False`.
@@ -32,6 +32,23 @@ foundation. P12.2 code exists but is not PASS evidence until its focused gate ex
 
 Product-facing human profiles remain exactly `user` and `technical`. Autonomy cannot
 create Odoo permissions or enlarge host/filesystem authority.
+
+Capability handlers now execute behind an effective-user savepoint that restores the
+Odoo cursor before structured failure/recovery handling. Bulk deletion declares
+`continue_on_error`: it keeps protected contacts, isolates ordinary per-record Odoo
+or database rejections, verifies the resulting applied/excluded/failed scope and gives
+the post-effect agent a bounded partial receipt. The browser keeps TaskPlan exclusive
+to explicit Plan turns, follows approved operations automatically and lets terminal
+turn state override stale execution projections; manual status inspection is reserved
+for genuinely uncertain recovery.
+
+Turn state, approval, the write barrier and EffectJournal are authoritative; event
+history and live activity are derived projections. Authoritative writes are flushed
+before an optional event attempt, state-asserting live activity is published only
+after commit, and an event-store failure cannot orphan a scheduler claim or undo
+approval, cancellation, recovery or reversion. Verified incomplete outcomes close
+immediately with host-grounded exact counts, and the verified receipt compacts old
+working context when necessary so finalization retains bounded transcript headroom.
 
 ## Durable agent, Evidence and Knowledge
 

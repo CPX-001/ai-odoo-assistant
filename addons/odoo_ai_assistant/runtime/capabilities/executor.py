@@ -23,6 +23,7 @@ from .contracts import (
 )
 from .policy import CapabilityPolicy, ExecutionAuthority
 from .registry import CapabilityRegistry
+from .transaction import isolated_savepoint
 from .validation import validate_payload
 
 _PUBLIC_MODEL = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
@@ -77,7 +78,8 @@ class CapabilityExecutor:
             activity_id=_new_activity_id(),
             semantic_group_key=semantic_group_key,
         )
-        context.emit(
+        _emit_lifecycle_event(
+            context,
             "tool.preview.started",
             definition.title or definition.name,
             public,
@@ -92,23 +94,15 @@ class CapabilityExecutor:
             capability=definition.name,
             stage="preview",
             public_payload=public,
+            finalize=lambda raw: _validated_preview_output(definition, raw),
         )
-        if not isinstance(raw, CapabilityPreview):
-            raise CapabilityError("capability_preview_invalid")
-        _validate_bounded_mapping(
-            raw.summary,
-            maximum=definition.max_output_bytes,
-            code="capability_preview_invalid",
-        )
-        context.emit(
+        _emit_lifecycle_event(
+            context,
             "tool.preview.completed",
             definition.title or definition.name,
             public,
         )
-        return CapabilityPreview(
-            summary=dict(raw.summary),
-            precondition_fingerprint=raw.precondition_fingerprint,
-        )
+        return raw
 
     async def execute(
         self,
@@ -140,7 +134,8 @@ class CapabilityExecutor:
             activity_id=_new_activity_id(),
             semantic_group_key=semantic_group_key,
         )
-        context.emit(
+        _emit_lifecycle_event(
+            context,
             "tool.started",
             definition.title or definition.name,
             public,
@@ -155,31 +150,16 @@ class CapabilityExecutor:
             capability=definition.name,
             stage="execute",
             public_payload=public,
+            finalize=lambda raw: _validated_execution_output(definition, raw),
         )
-        if isinstance(raw, CapabilityResult):
-            result = raw
-        elif isinstance(raw, Mapping):
-            result = CapabilityResult(data=raw)
-        else:
-            raise CapabilityError("capability_output_invalid")
-        output = dict(result.data)
-        validate_payload(
-            output,
-            definition.output_schema,
-            max_bytes=definition.max_output_bytes,
-            error_code="capability_output_invalid",
-        )
-        completed_public = _public_result_payload(context, public, output)
-        context.emit(
+        completed_public = _public_result_payload(context, public, raw.data)
+        _emit_lifecycle_event(
+            context,
             "tool.completed",
             definition.title or definition.name,
             completed_public,
         )
-        return CapabilityResult(
-            data=output,
-            evidence=result.evidence,
-            changes_preconditions=result.changes_preconditions,
-        )
+        return raw
 
     async def verify(
         self,
@@ -205,7 +185,8 @@ class CapabilityExecutor:
             activity_id=_new_activity_id(),
             semantic_group_key=semantic_group_key,
         )
-        context.emit(
+        _emit_lifecycle_event(
+            context,
             "tool.verify.started",
             definition.title or definition.name,
             public,
@@ -220,23 +201,11 @@ class CapabilityExecutor:
             capability=definition.name,
             stage="verify",
             public_payload=public,
+            finalize=lambda raw: _validated_verification_output(definition, raw),
         )
-        if not isinstance(raw, CapabilityVerification):
-            raise CapabilityError("capability_verification_invalid")
-        _validate_bounded_mapping(
-            raw.summary,
-            maximum=definition.max_output_bytes,
-            code="capability_verification_invalid",
-        )
-        if not raw.verified:
-            context.emit(
-                "tool.verify.failed",
-                definition.title or definition.name,
-                {**public, "code": "capability_verification_failed"},
-            )
-            raise CapabilityError("capability_verification_failed")
         completed_public = _public_verified_payload(public, raw.summary)
-        context.emit(
+        _emit_lifecycle_event(
+            context,
             "tool.verify.completed",
             definition.title or definition.name,
             completed_public,
@@ -282,20 +251,28 @@ class CapabilityExecutor:
         capability,
         stage,
         public_payload,
+        finalize,
     ):
         started_at = time.monotonic()
         outcome = "ok"
         try:
-            raw = handler(context, payload)
-            if inspect.isawaitable(raw):
-                if timeout_seconds is None:
-                    raw = await raw
-                else:
-                    raw = await asyncio.wait_for(raw, timeout=timeout_seconds)
+            # A capability may fail in PostgreSQL before its provider can translate the
+            # error into a bounded CapabilityError.  Roll that attempt back before
+            # emitting/persisting the failure so the host loop can keep using the same
+            # effective-user Environment instead of surfacing InFailedSqlTransaction.
+            with isolated_savepoint(context.env):
+                raw = handler(context, payload)
+                if inspect.isawaitable(raw):
+                    if timeout_seconds is None:
+                        raw = await raw
+                    else:
+                        raw = await asyncio.wait_for(raw, timeout=timeout_seconds)
+                raw = finalize(raw)
             return raw
         except TimeoutError as error:
             outcome = "capability_timeout"
-            context.emit(
+            _emit_lifecycle_event(
+                context,
                 failure_event,
                 title,
                 {**public_payload, "code": "capability_timeout"},
@@ -303,7 +280,8 @@ class CapabilityExecutor:
             raise CapabilityError("capability_timeout") from error
         except CapabilityError as error:
             outcome = error.code
-            context.emit(
+            _emit_lifecycle_event(
+                context,
                 failure_event,
                 title,
                 {**public_payload, "code": error.code},
@@ -311,7 +289,8 @@ class CapabilityExecutor:
             raise
         except Exception as error:
             outcome = "capability_handler_failed"
-            context.emit(
+            _emit_lifecycle_event(
+                context,
                 failure_event,
                 title,
                 {**public_payload, "code": "capability_handler_failed"},
@@ -341,26 +320,83 @@ class CapabilityExecutor:
             )
 
 
+def _validated_preview_output(definition, raw):
+    if not isinstance(raw, CapabilityPreview):
+        raise CapabilityError("capability_preview_invalid")
+    _validate_bounded_mapping(
+        raw.summary,
+        maximum=definition.max_output_bytes,
+        code="capability_preview_invalid",
+    )
+    return CapabilityPreview(
+        summary=dict(raw.summary),
+        precondition_fingerprint=raw.precondition_fingerprint,
+    )
+
+
+def _validated_execution_output(definition, raw):
+    if isinstance(raw, CapabilityResult):
+        result = raw
+    elif isinstance(raw, Mapping):
+        result = CapabilityResult(data=raw)
+    else:
+        raise CapabilityError("capability_output_invalid")
+    output = dict(result.data)
+    validate_payload(
+        output,
+        definition.output_schema,
+        max_bytes=definition.max_output_bytes,
+        error_code="capability_output_invalid",
+    )
+    return CapabilityResult(
+        data=output,
+        evidence=result.evidence,
+        changes_preconditions=result.changes_preconditions,
+    )
+
+
+def _validated_verification_output(definition, raw):
+    if not isinstance(raw, CapabilityVerification):
+        raise CapabilityError("capability_verification_invalid")
+    _validate_bounded_mapping(
+        raw.summary,
+        maximum=definition.max_output_bytes,
+        code="capability_verification_invalid",
+    )
+    if not raw.verified:
+        raise CapabilityError("capability_verification_failed")
+    return CapabilityVerification(verified=True, summary=dict(raw.summary))
+
+
 def _new_activity_id():
     return f"activity:v1:{secrets.token_hex(16)}"
+
+
+def _emit_lifecycle_event(context, event_type, title, payload):
+    """Best-effort lifecycle projection that can never control business execution."""
+
+    if context.event_sink is None:
+        return
+    try:
+        context.emit(event_type, title, payload)
+    except Exception:  # noqa: BLE001 - preserve the bounded capability failure
+        return
 
 
 def _emit_capability_timing(context, *, capability, stage, elapsed_ms, outcome):
     """Persist content-free timing without making diagnostics product authority."""
 
-    try:
-        context.emit(
-            "diagnostic.capability_timing",
-            "Capability timing checkpoint",
-            {
-                "capability": capability,
-                "stage": stage,
-                "elapsed_ms": elapsed_ms,
-                "outcome": outcome,
-            },
-        )
-    except Exception:  # noqa: BLE001 - timing diagnostics must never fail a product turn
-        return
+    _emit_lifecycle_event(
+        context,
+        "diagnostic.capability_timing",
+        "Capability timing checkpoint",
+        {
+            "capability": capability,
+            "stage": stage,
+            "elapsed_ms": elapsed_ms,
+            "outcome": outcome,
+        },
+    )
 
 
 def _public_operation_payload(
@@ -446,16 +482,17 @@ def _public_result_payload(context, public, output):
         return result
 
     try:
-        records = context.env[operation_model].browse(ids).exists()
-        if records.ids != ids:
-            return result
-        records.check_access("read")
-        names = []
-        for record in records:
-            name = " ".join(str(record.display_name or "").split())
-            if not name:
-                name = f"#{record.id}"
-            names.append(name[:_MAX_PUBLIC_DISPLAY_NAME])
+        with isolated_savepoint(context.env):
+            records = context.env[operation_model].browse(ids).exists()
+            if records.ids != ids:
+                return result
+            records.check_access("read")
+            names = []
+            for record in records:
+                name = " ".join(str(record.display_name or "").split())
+                if not name:
+                    name = f"#{record.id}"
+                names.append(name[:_MAX_PUBLIC_DISPLAY_NAME])
     except Exception:  # noqa: BLE001 - presentation projection never controls business success
         return result
     result["record_ids"] = ids
@@ -527,7 +564,8 @@ def _safe_activity_projection(projector, context, payload):
     """Fail isolated: presentation code must never become business-operation authority."""
 
     try:
-        value = projector(context, payload)
+        with isolated_savepoint(context.env):
+            value = projector(context, payload)
     except Exception:  # noqa: BLE001 - capability remains executable without presentation hints
         return {}
     if not isinstance(value, Mapping):
@@ -591,11 +629,12 @@ def _public_model_label(context, model):
     if not isinstance(model, str) or _PUBLIC_MODEL.fullmatch(model) is None:
         return None
     try:
-        model_set = context.env[model]
-        label = str(getattr(model_set, "_description", "") or model)
-        translator = getattr(context.env, "_", None)
-        if callable(translator):
-            label = str(translator(label))
+        with isolated_savepoint(context.env):
+            model_set = context.env[model]
+            label = str(getattr(model_set, "_description", "") or model)
+            translator = getattr(context.env, "_", None)
+            if callable(translator):
+                label = str(translator(label))
     except Exception:  # noqa: BLE001 - presentation remains non-authoritative
         return None
     normalized = " ".join(label.split())

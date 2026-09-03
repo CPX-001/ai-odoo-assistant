@@ -5,6 +5,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from odoo import SUPERUSER_ID, api, fields
+from odoo.exceptions import ValidationError
 from odoo.modules.registry import Registry
 from odoo.tests.common import TransactionCase
 
@@ -184,6 +185,42 @@ class TestAssistantTurnScheduler(TransactionCase):
         self.assertEqual(len(claimed), 1)
         self.assertEqual(claimed[0][0], only_turn)
         self.assertEqual(self._states([only_turn])[only_turn], "running")
+
+    def test_event_failure_after_claim_does_not_orphan_dispatch(self):
+        only_turn = self._create_turns([1])[0][0]
+        event_model_type = type(self.env["odoo.ai.turn.event"])
+
+        with patch.object(
+            event_model_type,
+            "append_for_turn",
+            side_effect=ValidationError("injected event failure"),
+        ):
+            claimed = _claim_next_turn(self.dbname)
+
+        self.assertIsNotNone(claimed)
+        self.assertEqual(claimed[0], only_turn)
+        self.assertEqual(self._states([only_turn])[only_turn], "running")
+
+    def test_event_failure_does_not_rollback_stale_recovery(self):
+        only_turn = self._create_turns([1])[0][0]
+        claimed = _claim_next_turn(self.dbname)
+        self.assertEqual(claimed[0], only_turn)
+        with Registry(self.dbname).cursor() as cr:
+            env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+            env["odoo.ai.turn"].browse(only_turn).write(
+                {"lease_expires_at": fields.Datetime.now() - timedelta(seconds=1)}
+            )
+            cr.commit()
+
+        event_model_type = type(self.env["odoo.ai.turn.event"])
+        with patch.object(
+            event_model_type,
+            "append_for_turn",
+            side_effect=ValidationError("injected event failure"),
+        ):
+            scheduler_module._recover_stale_turns(self.dbname)
+
+        self.assertEqual(self._states([only_turn])[only_turn], "queued")
 
     def test_capacity_two_allows_independent_conversations(self):
         self._set_capacity(2)

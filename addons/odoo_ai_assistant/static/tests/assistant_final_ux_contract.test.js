@@ -164,3 +164,30 @@ test("approval takes precedence over stale failure metadata", () => {
     expect(presentation.show_approval).toBe(true);
     expect(presentation.show_failure).toBe(false);
 });
+
+test("terminal turn state wins over a stale executing operation projection", () => {
+    const failed = scope();
+    failed.loading = false;
+    failed.turnState = "failed";
+    failed.errorCode = "runtime_unavailable";
+    failed.result = { plan: { state: "executing" } };
+
+    const presentation = finalTurnPresentation(failed);
+
+    expect(presentation.state).toBe("failure");
+    expect(presentation.show_failure).toBe(true);
+    expect(presentation.show_recovery).toBe(false);
+});
+
+test("ordinary execution is running while uncertain effects remain recovery", () => {
+    const executing = scope();
+    executing.loading = false;
+    executing.turnState = "running";
+    executing.result = { plan: { state: "executing" } };
+    expect(finalTurnPresentation(executing).state).toBe("running");
+    expect(finalTurnPresentation(executing).show_recovery).toBe(false);
+
+    executing.turnState = "recovery_required";
+    expect(finalTurnPresentation(executing).state).toBe("recovery");
+    expect(finalTurnPresentation(executing).show_recovery).toBe(true);
+});

@@ -35,8 +35,11 @@ from .odoo_actions import (
     _write_descriptions,
 )
 from .odoo_bulk import (
+    _BULK_DELETE_RECORD_IDS_SCHEMA,
+    _BULK_DELETE_RETAINED_GROUPS_SCHEMA,
     _bulk_delete_preview,
     _protected_delete_records,
+    _validated_delete_outcomes,
     bulk_delete,
 )
 
@@ -104,6 +107,50 @@ _BATCH_OUTPUT = {
         "count": {"type": "integer"},
     },
     "required": ["operation", "model", "record_ids", "count"],
+    "additionalProperties": False,
+}
+_BATCH_DELETE_OUTPUT = {
+    "type": "object",
+    "properties": {
+        "operation": {"type": "string", "enum": ["delete"]},
+        "model": {"type": "string"},
+        "record_ids": {
+            "type": "array",
+            "maxItems": _MAX_BATCH_ROWS,
+            "items": {"type": "integer", "minimum": 1},
+        },
+        "outcome": {"type": "string", "enum": ["completed", "partial", "blocked"]},
+        "count": {"type": "integer", "minimum": 0, "maximum": _MAX_BATCH_ROWS},
+        "requested_count": {"type": "integer", "minimum": 1, "maximum": _MAX_BATCH_ROWS},
+        "excluded_count": {"type": "integer", "minimum": 0, "maximum": _MAX_BATCH_ROWS},
+        "failed_count": {"type": "integer", "minimum": 0, "maximum": _MAX_BATCH_ROWS},
+        "failed_record_ids": _BULK_DELETE_RECORD_IDS_SCHEMA,
+        "excluded_record_ids": _BULK_DELETE_RECORD_IDS_SCHEMA,
+        "retained_groups": _BULK_DELETE_RETAINED_GROUPS_SCHEMA,
+        "omitted_retained_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": _MAX_BATCH_ROWS,
+        },
+        "selection_fingerprint": {"type": "string", "minLength": 71, "maxLength": 71},
+        "content_trust": {"type": "string", "enum": ["untrusted"]},
+    },
+    "required": [
+        "operation",
+        "model",
+        "record_ids",
+        "outcome",
+        "count",
+        "requested_count",
+        "excluded_count",
+        "failed_count",
+        "failed_record_ids",
+        "excluded_record_ids",
+        "retained_groups",
+        "omitted_retained_count",
+        "selection_fingerprint",
+        "content_trust",
+    ],
     "additionalProperties": False,
 }
 
@@ -187,19 +234,32 @@ def _batch_verify(context: CapabilityContext, arguments):
         remaining = _model_set(context, model).browse(list(requested_ids)).exists()
         protected = _protected_delete_records(context, model, remaining)
         protected_ids = {item["record"].id for item in protected}
-        eligible_ids = [
-            record_id for record_id in requested_ids if record_id not in protected_ids
+        applied_ids, failed_ids, excluded_ids = _validated_delete_outcomes(
+            result,
+            model=model,
+            record_ids=requested_ids,
+            excluded_ids=protected_ids,
+        )
+        expected_applied = [
+            record_id for record_id in requested_ids if record_id in applied_ids
         ]
-        if eligible_ids != record_ids:
+        if expected_applied != record_ids:
             return CapabilityVerification(verified=False, summary={"count": len(record_ids)})
-        if set(remaining.ids) != protected_ids:
+        if set(remaining.ids) != failed_ids | excluded_ids:
             return CapabilityVerification(verified=False, summary={"count": len(record_ids)})
     else:
         raise CapabilityError("capability_verification_invalid")
-    return CapabilityVerification(
-        verified=True,
-        summary={"operation": operation, "model": model, "count": len(record_ids)},
-    )
+    summary = {"operation": operation, "model": model, "count": len(record_ids)}
+    if operation == "delete":
+        summary.update(
+            {
+                "outcome": result["outcome"],
+                "requested_count": result["requested_count"],
+                "failed_count": result["failed_count"],
+                "excluded_count": result["excluded_count"],
+            }
+        )
+    return CapabilityVerification(verified=True, summary=summary)
 
 
 @tool(
@@ -257,13 +317,14 @@ def batch_patch(context: CapabilityContext, arguments):
     name="odoo.records.batch_mutate",
     title="Delete multiple Odoo records",
     description=(
-        "Permanently delete 1 to 50 eligible Odoo records in one bounded operation. This legacy "
-        "capability name is retained for compatibility, but it is now delete-only so reversible "
-        "batch creates and updates cannot be misclassified as irreversible."
+        "Permanently delete 1 to 50 eligible Odoo records with verified continue-on-error "
+        "semantics. This legacy capability name is retained for compatibility, but it is now "
+        "delete-only so reversible batch creates and updates cannot be misclassified as "
+        "irreversible."
     ),
-    version="2",
+    version="3",
     input_schema=_BATCH_DELETE_INPUT,
-    output_schema=_BATCH_OUTPUT,
+    output_schema=_BATCH_DELETE_OUTPUT,
     risk=CapabilityRisk.ACTION,
     effect=CapabilityEffect.INTERNAL_IRREVERSIBLE,
     exposure=CapabilityExposure.PLAN,
@@ -274,7 +335,10 @@ def batch_patch(context: CapabilityContext, arguments):
     max_calls=_MAX_BATCH_CALLS_PER_PLAN,
     max_input_bytes=_MAX_BATCH_INPUT_BYTES,
     max_output_bytes=_MAX_BATCH_OUTPUT_BYTES,
-    developer_metadata={"approval_refinement": "record_id_subset"},
+    developer_metadata={
+        "approval_refinement": "record_id_subset",
+        "partial_failure_semantics": "continue_on_error",
+    },
 )
 def batch_mutate(context: CapabilityContext, arguments):
     return _execute_batch(context, arguments, expected_operation="delete")
@@ -291,10 +355,10 @@ def _execute_batch(context: CapabilityContext, arguments, *, expected_operation)
         try:
             records = model_set.create(rows)
         except (AccessError, MissingError, RedirectWarning, ValidationError, UserError):
-            details = {"model": model, "operation": "delete"}
-            if model == "res.partner":
-                details["exclusion_hint"] = "active_user_and_company_partners"
-            raise CapabilityError("action_rejected", details=details) from None
+            raise CapabilityError(
+                "action_rejected",
+                details={"model": model, "operation": "create"},
+            ) from None
         record_ids = records.ids
     elif operation == "patch":
         record_ids, checked = _patch_input(context, model, arguments)
@@ -308,14 +372,13 @@ def _execute_batch(context: CapabilityContext, arguments, *, expected_operation)
     elif operation == "delete":
         requested_ids = _delete_input(model, arguments)
         result = bulk_delete(context, arguments)
-        remaining = _model_set(context, model).browse(list(requested_ids)).exists()
-        protected = _protected_delete_records(context, model, remaining)
-        protected_ids = {item["record"].id for item in protected}
+        retained_ids = set(result["failed_record_ids"]) | set(result["excluded_record_ids"])
         record_ids = [
-            record_id for record_id in requested_ids if record_id not in protected_ids
+            record_id for record_id in requested_ids if record_id not in retained_ids
         ]
         if result.get("count") != len(record_ids):
             raise CapabilityError("capability_output_invalid")
+        return {**result, "record_ids": record_ids}
     else:
         raise CapabilityError("batch_operation_invalid")
     if not 0 <= len(record_ids) <= _MAX_BATCH_ROWS or (
@@ -380,9 +443,27 @@ def _record_ids(value):
 
 def _batch_result(context):
     raw = context.metadata.get("capability_result")
-    if not isinstance(raw, dict) or set(raw) != {"operation", "model", "record_ids", "count"}:
+    if not isinstance(raw, dict):
         raise CapabilityError("capability_verification_invalid")
     operation = raw.get("operation")
+    expected_keys = {"operation", "model", "record_ids", "count"}
+    if operation == "delete":
+        expected_keys.update(
+            {
+                "outcome",
+                "requested_count",
+                "excluded_count",
+                "failed_count",
+                "failed_record_ids",
+                "excluded_record_ids",
+                "retained_groups",
+                "omitted_retained_count",
+                "selection_fingerprint",
+                "content_trust",
+            }
+        )
+    if set(raw) != expected_keys:
+        raise CapabilityError("capability_verification_invalid")
     model = raw.get("model")
     record_ids = raw.get("record_ids")
     count = raw.get("count")
@@ -392,7 +473,7 @@ def _batch_result(context):
         raise CapabilityError("capability_verification_invalid")
     if type(count) is not int or count != len(record_ids):
         raise CapabilityError("capability_verification_invalid")
-    if not 1 <= count <= _MAX_BATCH_ROWS:
+    if not (0 if operation == "delete" else 1) <= count <= _MAX_BATCH_ROWS:
         raise CapabilityError("capability_verification_invalid")
     if any(type(record_id) is not int or record_id <= 0 for record_id in record_ids):
         raise CapabilityError("capability_verification_invalid")

@@ -192,7 +192,7 @@ model proposes typed step(s), one NextDecision at a time
  -> revalidate version/binding/preconditions
  -> final turn-control check for the recovery unit
  -> durable checkpoint / write barrier
- -> execute as effective user
+ -> execute as effective user inside an isolated transaction boundary
  -> verify each step
  -> authoritative receipt + EffectJournal / recovery state
 ```
@@ -209,6 +209,15 @@ external     non-transactional/external unit whose interrupted outcome may be un
 
 A persisted in-flight unit is never blindly replayed.
 
+A verified partial operation is not an exception and does not roll back the valid subset.
+For capabilities whose trusted contract declares row-level `continue_on_error`, a
+`partial` or `blocked` result completes the attempted step but leaves its EffectPlan
+dependency unsatisfied. The host marks only causally dependent future steps `skipped`,
+continues independent steps, checkpoints the terminal skipped state with the recovery
+unit and exposes the causal evidence through the EffectJournal and verified receipt.
+Resumption reconstructs the same satisfied/terminal distinction, so neither the partial
+step nor its skipped dependents are executed again without a new model decision.
+
 For one Odoo-local atomic unit, a capability rejection after the write barrier is recoverable only when the host rolls
 back the transaction and every durable journal row proves `rolled_back`. The host then appends a sanitized
 `plan_execution_error` and lets the model narrow or correct the complete plan within the original intent. That repair
@@ -216,6 +225,26 @@ does not create new approval authority: the original approval is reused only for
 equal subset of its approved record identities. Expanding the scope, changing capability/model/operation, an
 unproven rollback, or an external/uncertain effect stops automatic repair and follows the normal approval/recovery
 path.
+
+Capability invocation itself is transaction-isolated across preview, execute and
+verify. A PostgreSQL/Odoo rejection is rolled back before failure activity or repair
+evidence is persisted, so it cannot poison the cursor and later masquerade as
+`runtime_unavailable`. This nested savepoint never commits independently and does not
+make an external effect safe to replay.
+
+For a declared `continue_on_error` batch, the authorized execution first tries the
+efficient recordset operation in a savepoint and falls back to bounded per-record
+savepoints only if needed. The final verified receipt distinguishes applied,
+protected/excluded and failed records with sanitized business reasons. The provider
+then reports exact completed/outstanding counts and the safest useful next action;
+it never repeats already verified work. An operation with a genuine all-or-nothing
+business invariant remains atomic instead of being silently split.
+
+Preview does not execute arbitrary destructive Odoo methods before approval. Their
+custom hooks may have non-database side effects that rollback cannot undo. Before
+confirmation the host therefore uses schema, ACL, record-rule, scope, protection and
+capability-specific deterministic prechecks; recoverable execution errors are
+handled automatically only after the approved write boundary.
 
 Preparation and preflight failures cross no write barrier. They are also returned to the same bounded decision loop
 as structured evidence (`code`, phase, capability and sanitized details), so the model may inspect effective schema,
@@ -229,7 +258,8 @@ Completed effect checkpoints retain bounded exact resource references (`model` p
 This lets later turns resolve ordinary follow-ups such as “elimínalos” or “todos los que creaste” without forcing the
 user to repeat technical identifiers. The target is always revalidated under current ACLs, record rules and preview.
 For contact deletion, both the current bulk capability and its legacy bounded route exclude active-user and company
-partners host-side, show those exclusions in the approval preview, and verify only the eligible deletion scope.
+partners host-side, show those exclusions in the approval preview, and verify the applied, excluded and retained
+scope. This protection is independent from the generic partial-failure mechanism.
 
 ## 9. Safe compensation and recent effect journal
 
@@ -278,7 +308,13 @@ The normal surface deliberately avoids a spinner, nested Assistant cards and pro
 headings. Only the current semantic text receives the subtle wave animation. Isolated raw headings such as
 `**Planning model discovery**` are presentation noise and are not rendered as public reasoning.
 
-Running status separately projects the latest validated TaskPlan when Plan mode is in use. The UI chooses the newest valid revision and prefers the authoritative final response on equal revisions, so a stale final live poll cannot hide the terminal plan.
+Running status separately projects the latest validated TaskPlan only when the submitted
+turn explicitly captured Plan mode. Direct turns never expose the internal EffectPlan as
+a TaskPlan. After an approval the browser follows the durable operation automatically;
+there is no normal manual “Actualizar estado” step. An authoritative terminal turn state
+overrides a stale `authorized`/`executing` plan projection immediately. A manual
+“Comprobar estado” action remains only for explicit `recovery_required`, where an effect
+may genuinely be uncertain and blind replay is forbidden.
 
 ## 11. Answer streaming
 

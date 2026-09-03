@@ -26,7 +26,7 @@
                         <button t-if="state.runtimeState === 'authenticated'" type="button"
                             class="btn btn-sm btn-outline-secondary"
                             title="Nuevo chat" aria-label="Nuevo chat"
-                            t-att-disabled="recoveryPending" t-on-click="newConversation">
+                            t-att-disabled="state.historyLoading" t-on-click="newConversation">
                             <i class="fa fa-plus" aria-hidden="true"/>
                         </button>
 
@@ -91,7 +91,7 @@
 
                 <div t-if="!ui.isMinimized and state.runtimeState === 'authenticated'" class="mt-2">
                     <select class="form-select form-select-sm" aria-label="Historial de chats"
-                        t-att-disabled="state.loading or state.historyLoading or state.decisionLoading or recoveryPending"
+                        t-att-disabled="state.historyLoading"
                         t-on-change="selectConversation">
                         <option value="" t-att-selected="!state.conversationId">Nuevo chat</option>
                         <option t-foreach="state.conversations" t-as="conversation"
@@ -231,11 +231,6 @@
                                 <div t-if="batchPreviewOmitted(step)" class="small text-muted mt-1">
                                     Hay <t t-esc="batchPreviewOmitted(step)"/> registro(s) adicional(es) no mostrados en esta vista previa.
                                 </div>
-                                <div class="small text-muted mt-1 text-break">
-                                    <span t-esc="step.capability"/>
-                                    <span class="mx-1">·</span>
-                                    <span t-esc="step.approval"/>
-                                </div>
                             </div>
                         </div>
                         <div class="d-flex gap-2 mt-3">
@@ -254,29 +249,34 @@
                     <section t-if="executionPending and !recoveryReviewRequired"
                         class="o_ai_assistant_execution_status mt-3" role="status">
                         <div class="fw-semibold mb-1">
-                            <t t-if="recoveryExecuting">Ejecutando la acción</t>
-                            <t t-else="">Acción aprobada en cola</t>
+                            <t t-if="recoveryExecuting">Aplicando los cambios</t>
+                            <t t-else="">Operación aprobada en cola</t>
                         </div>
                         <div class="small text-muted mb-2">
                             <t t-if="recoveryExecuting">
-                                Odoo está ejecutando el plan una sola vez y verificará el resultado.
+                                Odoo está aplicando la operación una sola vez y verificará el resultado.
                             </t>
                             <t t-else="">
-                                El plan aprobado espera al worker; todavía no implica que se haya escrito ningún dato.
+                                La operación espera a un worker; todavía no implica que se haya escrito ningún dato.
                             </t>
                         </div>
-                        <button type="button" class="btn btn-link btn-sm p-0"
-                            t-att-disabled="state.decisionLoading" t-on-click="retryAction">
-                            <i t-if="state.decisionLoading" class="fa fa-spinner fa-spin me-1"
-                                aria-hidden="true"/>
-                            Actualizar estado
-                        </button>
+                        <div class="small text-muted" aria-label="Estado actualizado automáticamente">
+                            <i class="fa fa-spinner fa-spin me-1" aria-hidden="true"/>
+                            <t t-if="state.actionStatusConnectionInterrupted">
+                                Conexión interrumpida; reintentando automáticamente…
+                            </t>
+                            <t t-else="">Actualizando automáticamente…</t>
+                        </div>
                     </section>
 
                     <section t-if="recoveryReviewRequired" class="alert alert-warning mt-3 mb-0" role="status">
                         <div class="fw-semibold mb-1">Revisión de ejecución pendiente</div>
-                        <div class="small mb-2">
+                        <div t-if="state.actionReceipt and state.actionReceipt.state === 'recovery_required'"
+                            class="small mb-2">
                             Odoo sí cruzó la barrera de escritura y no puede confirmar el resultado. No se repetirá la acción a ciegas.
+                        </div>
+                        <div t-else="" class="small mb-2">
+                            Odoo ha marcado el resultado como incierto. No se repetirá la acción; sólo se consultará su estado.
                         </div>
                         <button type="button" class="btn btn-warning btn-sm"
                             t-att-disabled="state.decisionLoading" t-on-click="retryAction">

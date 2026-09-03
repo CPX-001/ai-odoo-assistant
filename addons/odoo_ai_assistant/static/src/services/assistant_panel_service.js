@@ -23,8 +23,12 @@ const TURN_TERMINAL_STATES = new Set([
     "cancelled",
     "recovery_required",
 ]);
+const NON_RECOVERY_TERMINAL_STATES = new Set(["completed", "failed", "cancelled"]);
+const ACTIVE_EXECUTION_PLAN_STATES = new Set(["authorized", "executing"]);
 const MAX_NATIVE_POLL_ATTEMPTS = 360;
 const NATIVE_POLL_DELAY_MS = 500;
+const BACKGROUND_POLL_DELAY_MS = 5000;
+const MAX_TRANSIENT_PLAN_POLL_FAILURES = 3;
 const KNOWN_ERROR_CODES = new Set([
     "access_denied",
     "action_rejected",
@@ -282,10 +286,25 @@ function errorCode(response, fallback = "invalid_response") {
     return KNOWN_ERROR_CODES.has(code) ? code : fallback;
 }
 
+export function actionExecutionPending(state) {
+    if (
+        state?.actionReceipt?.state === "recovery_required" ||
+        state?.turnState === "recovery_required" ||
+        NON_RECOVERY_TERMINAL_STATES.has(state?.turnState) ||
+        ["completed", "partial", "failed", "rejected"].includes(
+            state?.actionReceipt?.state
+        )
+    ) {
+        return false;
+    }
+    return ACTIVE_EXECUTION_PLAN_STATES.has(state?.result?.plan?.state);
+}
+
 export function recoveryPending(state) {
     return (
         state?.actionReceipt?.state === "recovery_required" ||
-        ["authorized", "executing"].includes(state?.result?.plan?.state)
+        state?.turnState === "recovery_required" ||
+        actionExecutionPending(state)
     );
 }
 
@@ -514,6 +533,9 @@ export function resetForNewConversation(state, storage) {
     state.draft = "";
     state.result = null;
     state.actionReceipt = null;
+    state.actionStatusConnectionInterrupted = false;
+    state.turnState = null;
+    state.taskPlanRequested = false;
     state.errorCode = null;
     saveDraft(storage, null, "");
 }
@@ -588,6 +610,7 @@ export async function submitAssistantRequest({
     state.loading = true;
     state.errorCode = null;
     state.actionReceipt = null;
+    state.actionStatusConnectionInterrupted = false;
     try {
         const queued = await rpcCall("/odoo_ai/v1/turn", {
             message: normalized,
@@ -741,6 +764,20 @@ export async function saveAgentPolicy({ state, rpcCall, confirmationMode, maxAut
     }
 }
 
+function terminalPlanProjection(plan, turnState) {
+    if (!plan || !["failed", "cancelled"].includes(turnState)) {
+        return plan;
+    }
+    const planState = turnState === "cancelled" ? "rejected" : "failed";
+    return {
+        ...plan,
+        state: planState,
+        steps: plan.steps.map((step) =>
+            step.state === "executing" ? { ...step, state: "failed" } : step
+        ),
+    };
+}
+
 async function applyPlanStatus(state, rawStatus, planId) {
     const normalized = normalizeCapabilityPlanStatus(rawStatus, planId);
     if (!normalized.status) {
@@ -748,8 +785,10 @@ async function applyPlanStatus(state, rawStatus, planId) {
         return false;
     }
     const status = normalized.status;
-    if (status.plan && state.result) {
-        state.result = { ...state.result, plan: status.plan };
+    state.turnState = status.turn_state;
+    const projectedPlan = terminalPlanProjection(status.plan, status.turn_state);
+    if (projectedPlan && state.result) {
+        state.result = { ...state.result, plan: projectedPlan };
     }
     if (status.turn_state === "completed" && status.response) {
         const parsed = normalizeChatResponse(status.response);
@@ -774,7 +813,7 @@ async function applyPlanStatus(state, rawStatus, planId) {
             ok: true,
             plan_id: planId,
             state: "recovery_required",
-            plan: status.plan,
+            plan: projectedPlan,
             response: null,
         };
         state.errorCode = status.error_code || "worker_lost_after_write_barrier";
@@ -785,7 +824,7 @@ async function applyPlanStatus(state, rawStatus, planId) {
             ok: true,
             plan_id: planId,
             state: "failed",
-            plan: status.plan,
+            plan: projectedPlan,
             response: null,
         };
         state.errorCode = status.error_code || "runtime_unavailable";
@@ -800,20 +839,52 @@ async function pollCapabilityPlan({
     planId,
     waitCall,
     once = false,
+    onStateChange = () => {},
 }) {
-    const attempts = once ? 1 : MAX_NATIVE_POLL_ATTEMPTS;
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
+    let transientFailures = 0;
+    for (let attempt = 0; once || actionExecutionPending(state); attempt += 1) {
         if (!once || attempt > 0) {
-            await waitCall(NATIVE_POLL_DELAY_MS);
+            await waitCall(
+                attempt < MAX_NATIVE_POLL_ATTEMPTS
+                    ? NATIVE_POLL_DELAY_MS
+                    : BACKGROUND_POLL_DELAY_MS
+            );
         }
-        const status = await rpcCall("/odoo_ai/v1/turn/plan-status", { plan_id: planId });
-        const terminal = await applyPlanStatus(state, status, planId);
-        if (terminal !== null) {
-            return terminal;
+        try {
+            const status = await rpcCall("/odoo_ai/v1/turn/plan-status", { plan_id: planId });
+            const terminal = await applyPlanStatus(state, status, planId);
+            if (terminal === false) {
+                if (once) {
+                    return false;
+                }
+                transientFailures += 1;
+                state.actionStatusConnectionInterrupted =
+                    transientFailures > MAX_TRANSIENT_PLAN_POLL_FAILURES;
+                onStateChange();
+                continue;
+            }
+            transientFailures = 0;
+            state.actionStatusConnectionInterrupted = false;
+            if (terminal === null) {
+                state.errorCode = null;
+            }
+            onStateChange();
+            if (terminal === true) {
+                return terminal;
+            }
+        } catch (error) {
+            if (once) {
+                throw error;
+            }
+            transientFailures += 1;
+            state.actionStatusConnectionInterrupted =
+                transientFailures > MAX_TRANSIENT_PLAN_POLL_FAILURES;
+            onStateChange();
+            continue;
         }
-    }
-    if (!once) {
-        state.errorCode = "engine_timeout";
+        if (once) {
+            return false;
+        }
     }
     return false;
 }
@@ -823,6 +894,7 @@ export async function submitActionDecision({
     rpcCall,
     decision,
     waitCall = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    onStateChange = () => {},
 }) {
     const planId = state.result?.plan?.plan_id;
     if (
@@ -837,6 +909,8 @@ export async function submitActionDecision({
     }
     state.decisionLoading = true;
     state.errorCode = null;
+    state.actionStatusConnectionInterrupted = false;
+    onStateChange();
     try {
         const response = await rpcCall("/odoo_ai/v1/turn/plan-decision", {
             plan_id: planId,
@@ -858,16 +932,31 @@ export async function submitActionDecision({
                 return false;
             }
             state.result = parsed.result;
+            state.turnState = "completed";
             appendAssistantMessage(state, parsed.result, "rejected");
+            onStateChange();
             return true;
         }
-        return await pollCapabilityPlan({ state, rpcCall, planId, waitCall });
+        // Approval has already been durably accepted. Stop presenting the confirmation button as
+        // busy while the same operation is followed automatically in the background.
+        state.turnState = "running";
+        state.decisionLoading = false;
+        state.actionStatusConnectionInterrupted = false;
+        onStateChange();
+        return await pollCapabilityPlan({
+            state,
+            rpcCall,
+            planId,
+            waitCall,
+            onStateChange,
+        });
     } catch (error) {
         state.actionReceipt = null;
         state.errorCode = KNOWN_ERROR_CODES.has(error?.message) ? error.message : "service_unavailable";
         return false;
     } finally {
         state.decisionLoading = false;
+        onStateChange();
     }
 }
 
@@ -875,6 +964,7 @@ export async function submitActionRetry({
     state,
     rpcCall,
     waitCall = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    onStateChange = () => {},
 }) {
     const planId = state.result?.plan?.plan_id;
     if (
@@ -886,6 +976,7 @@ export async function submitActionRetry({
         return false;
     }
     state.decisionLoading = true;
+    onStateChange();
     try {
         // Recovery never executes a capability from the browser. This is status-only;
         // a recovery_required turn remains host-controlled until a safe recovery path exists.
@@ -895,12 +986,14 @@ export async function submitActionRetry({
             planId,
             waitCall,
             once: true,
+            onStateChange,
         });
     } catch {
         state.errorCode = "service_unavailable";
         return false;
     } finally {
         state.decisionLoading = false;
+        onStateChange();
     }
 }
 
@@ -925,6 +1018,9 @@ export const assistantPanelService = {
             draft: loadDraft(storage, null),
             result: null,
             actionReceipt: null,
+            actionStatusConnectionInterrupted: false,
+            turnState: null,
+            taskPlanRequested: false,
             agentPolicy: {
                 confirmation_mode: "risk_based",
                 max_auto_risk: "low",

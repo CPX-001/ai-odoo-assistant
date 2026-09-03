@@ -13,20 +13,31 @@ from ..runtime.agent import (
     AgentTurnService,
     AssistantExtensionDecisionEngine,
     CapabilityPlanError,
-    CapabilityPlanStepError,
     CapabilityPlanService,
+    CapabilityPlanStepError,
     PostEffectDecisionEngine,
     current_codex_provider_profile,
 )
+from ..runtime.agent.business_outcome import (
+    incomplete_effect_answer,
+    incomplete_effect_summary,
+)
 from ..runtime.agent.interactive_codex import InteractiveCodexDecisionEngine
 from ..runtime.agent.planning import PlanningDecisionEngine
-from ..runtime.agent.provider_failure import FailureNormalizingDecisionEngine
+from ..runtime.agent.provider_failure import (
+    FailureNormalizingDecisionEngine,
+    ProviderFailureError,
+)
 from ..runtime.agent.social import simple_social_answer
+from ..runtime.agent.telemetry import emit_optional_telemetry
 from ..runtime.agent.turn_effect_boundary import acquire_turn_effect_lock
 from ..runtime.agent.working_transcript import (
+    MAX_TRANSCRIPT_BYTES,
+    WorkingItem,
     WorkingTranscriptError,
     append_working_item,
     transcript_payload,
+    working_transcript_bytes,
 )
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
@@ -41,6 +52,24 @@ from ..runtime.capabilities import (
 from .chat_policy import resolve_capability_policy
 from .embedded_runtime import EmbeddedRuntimeError, _commit_plan_barrier, _plan_envelope
 from .turn_working_transcript import persist_working_transcript
+
+_COMPACT_RECEIPT_SCALARS = (
+    "operation",
+    "model",
+    "outcome",
+    "reason",
+    "executed",
+    "verified",
+    "count",
+    "requested_count",
+    "failed_count",
+    "excluded_count",
+    "omitted_retained_count",
+)
+_COMPACT_RECEIPT_ID_SAMPLE = 20
+_COMPACT_RECEIPT_GROUP_SAMPLE = 5
+_COMPACT_RECEIPT_GROUP_ID_SAMPLE = 10
+_POST_EFFECT_CONTINUATION_HEADROOM_BYTES = 64 * 1024
 
 
 class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
@@ -180,7 +209,8 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             if reasoning_activity_id is not None:
                 return
             reasoning_activity_id = _new_reasoning_activity_id()
-            event_sink(
+            emit_optional_telemetry(
+                context,
                 "reasoning.started",
                 "Procesando solicitud",
                 {
@@ -214,7 +244,8 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             turn._capture_public_navigation_references(service.working_items)
         except Exception:
             if reasoning_activity_id is not None:
-                event_sink(
+                emit_optional_telemetry(
+                    context,
                     "reasoning.failed",
                     "Procesamiento no completado",
                     {"activity_id": reasoning_activity_id},
@@ -250,7 +281,8 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 turn._capture_public_navigation_references(service.working_items)
 
         if reasoning_activity_id is not None:
-            event_sink(
+            emit_optional_telemetry(
+                context,
                 "reasoning.completed",
                 "Respuesta preparada",
                 {"confidence": result.confidence, "activity_id": reasoning_activity_id},
@@ -366,6 +398,32 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
     ):
         """Reason from the verified receipt without exposing another PLAN authority surface."""
 
+        incomplete = incomplete_effect_summary(completed["plan"].get("steps", []))
+        if incomplete is not None:
+            natural = dict(completed)
+            natural["answer"] = incomplete_effect_answer(
+                incomplete,
+                spanish=(
+                    not isinstance(turn.lang, str)
+                    or turn.lang.lower().startswith("es")
+                ),
+            )
+            natural["confidence"] = "high"
+            grounded_items = append_working_item(
+                working_items,
+                "final_answer",
+                {
+                    "answer": natural["answer"],
+                    "confidence": "high",
+                    "host_grounded_outcome": True,
+                },
+            )
+            try:
+                persist_working_transcript(turn, lease_token, grounded_items)
+            except RuntimeError as error:
+                raise EmbeddedRuntimeError(str(error)) from error
+            return self._plan_response(turn, natural, policy)
+
         dbname = self.env.cr.dbname
 
         def cancellation_requested():
@@ -408,11 +466,13 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             allow_plan_proposals=False,
         )
         reasoning_activity_id = _new_reasoning_activity_id()
-        context.emit(
+        emit_optional_telemetry(
+            context,
             "reasoning.started",
             "Sintetizando resultado verificado",
             {"post_effect": True, "activity_id": reasoning_activity_id},
         )
+        synthesis_failed = False
         try:
             result = await service.run(
                 message=turn.input_message,
@@ -420,8 +480,18 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             )
             _ensure_turn_control_current(turn)
             turn._capture_public_navigation_references(service.working_items)
+        except ProviderFailureError as error:
+            synthesis_failed = True
+            emit_optional_telemetry(
+                context,
+                "reasoning.failed",
+                "Síntesis no completada",
+                {"post_effect": True, "activity_id": reasoning_activity_id},
+            )
+            result = await service.finish_safely(error.code)
         except Exception:
-            context.emit(
+            emit_optional_telemetry(
+                context,
                 "reasoning.failed",
                 "Síntesis no completada",
                 {"post_effect": True, "activity_id": reasoning_activity_id},
@@ -429,18 +499,24 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             raise
         if result.plan:
             raise EmbeddedRuntimeError("agent_post_effect_plan_forbidden")
-        context.emit(
-            "reasoning.completed",
-            "Respuesta final preparada",
-            {
-                "confidence": result.confidence,
-                "post_effect": True,
-                "activity_id": reasoning_activity_id,
-            },
-        )
+        if not synthesis_failed:
+            emit_optional_telemetry(
+                context,
+                "reasoning.completed",
+                "Respuesta final preparada",
+                {
+                    "confidence": result.confidence,
+                    "post_effect": True,
+                    "activity_id": reasoning_activity_id,
+                },
+            )
         natural = dict(completed)
-        natural["answer"] = result.answer
-        natural["confidence"] = result.confidence
+        natural["answer"], natural["confidence"] = _grounded_post_effect_result(
+            completed["plan"],
+            provider_answer=result.answer,
+            provider_confidence=result.confidence,
+            lang=turn.lang,
+        )
         return self._plan_response(turn, natural, policy)
 
 
@@ -470,6 +546,23 @@ def _ensure_turn_control_current(turn):
 
 def _new_reasoning_activity_id():
     return f"activity:v1:{secrets.token_hex(16)}"
+
+
+def _grounded_post_effect_result(
+    plan,
+    *,
+    provider_answer,
+    provider_confidence,
+    lang,
+):
+    """Keep a provider summary only when it cannot contradict an incomplete receipt."""
+
+    steps = plan.get("steps", []) if isinstance(plan, dict) else []
+    incomplete = incomplete_effect_summary(steps)
+    if incomplete is None:
+        return provider_answer, provider_confidence
+    spanish = not isinstance(lang, str) or lang.lower().startswith("es")
+    return incomplete_effect_answer(incomplete, spanish=spanish), "high"
 
 
 def _append_prepare_error(working_items, error):
@@ -549,10 +642,16 @@ def _append_verified_effect_receipt(working_items, plan):
             raise EmbeddedRuntimeError("capability_plan_corrupt")
         result = step.get("result")
         verification = step.get("verification")
+        step_state = step.get("state")
         if (
-            step.get("state") != "completed"
+            step_state not in {"completed", "skipped"}
             or not isinstance(result, dict)
             or not isinstance(verification, dict)
+            or step_state == "skipped"
+            and (
+                not isinstance(step.get("step_id"), str)
+                or not _valid_skipped_receipt(result, verification)
+            )
         ):
             raise EmbeddedRuntimeError("capability_plan_corrupt")
         receipt_steps.append(
@@ -561,36 +660,236 @@ def _append_verified_effect_receipt(working_items, plan):
                 "step_id": step.get("step_id"),
                 "capability": step.get("capability"),
                 "title": step.get("title"),
+                "state": step_state,
                 "result": dict(result),
                 "verification": dict(verification),
             }
         )
+    skipped_step_ids = [
+        step["step_id"] for step in receipt_steps if step["state"] == "skipped"
+    ]
     rich = {
         "verified": True,
         "plan_state": "completed",
         "step_count": len(receipt_steps),
+        "skipped_step_count": len(skipped_step_ids),
+        "skipped_step_ids": skipped_step_ids,
         "steps": receipt_steps,
     }
-    try:
-        return append_working_item(working_items, "verified_effect_receipt", rich)
-    except WorkingTranscriptError as error:
-        if error.code not in {
-            "agent_working_item_too_large",
-            "agent_working_transcript_too_large",
-        }:
-            raise EmbeddedRuntimeError(error.code) from error
-        compact = {
-            "verified": True,
-            "plan_state": "completed",
-            "step_count": len(receipt_steps),
-            "details_omitted": True,
-            "capabilities": [step["capability"] for step in receipt_steps],
-        }
+    compact = {
+        "verified": True,
+        "plan_state": "completed",
+        "step_count": len(receipt_steps),
+        "skipped_step_count": len(skipped_step_ids),
+        "skipped_step_ids": skipped_step_ids,
+        "details_omitted": True,
+        "capabilities": [step["capability"] for step in receipt_steps],
+        "steps": [_compact_receipt_step(step) for step in receipt_steps],
+    }
+    minimal = {
+        "verified": True,
+        "plan_state": "completed",
+        "step_count": len(receipt_steps),
+        "skipped_step_count": len(skipped_step_ids),
+        "skipped_step_ids": skipped_step_ids,
+        "details_omitted": True,
+        "capabilities": [step["capability"] for step in receipt_steps],
+        "steps": [_minimal_receipt_step(step) for step in receipt_steps],
+    }
+    baseline = None
+    last_error = None
+    for payload in (rich, compact, minimal):
         try:
-            return append_working_item(
+            candidate = append_working_item(
                 working_items,
                 "verified_effect_receipt",
-                compact,
+                payload,
             )
-        except WorkingTranscriptError as compact_error:
-            raise EmbeddedRuntimeError(compact_error.code) from compact_error
+        except WorkingTranscriptError as error:
+            if error.code not in {
+                "agent_working_item_too_large",
+                "agent_working_transcript_too_large",
+            }:
+                raise EmbeddedRuntimeError(error.code) from error
+            last_error = error
+            if error.code != "agent_working_transcript_too_large":
+                continue
+        else:
+            if (
+                working_transcript_bytes(candidate)
+                <= MAX_TRANSCRIPT_BYTES - _POST_EFFECT_CONTINUATION_HEADROOM_BYTES
+            ):
+                return candidate
+        if baseline is None:
+            baseline = _post_effect_transcript_baseline(working_items)
+        try:
+            return append_working_item(
+                baseline,
+                "verified_effect_receipt",
+                payload,
+            )
+        except WorkingTranscriptError as baseline_error:
+            if baseline_error.code not in {
+                "agent_working_item_too_large",
+                "agent_working_transcript_too_large",
+            }:
+                raise EmbeddedRuntimeError(baseline_error.code) from baseline_error
+            last_error = baseline_error
+    raise EmbeddedRuntimeError(last_error.code) from last_error
+
+
+def _post_effect_transcript_baseline(working_items):
+    """Free bounded headroom while retaining the user's request and latest TaskPlan."""
+
+    user_input = next(
+        (item for item in working_items if item.kind == "user_input"),
+        None,
+    )
+    if user_input is None:
+        raise EmbeddedRuntimeError("agent_working_transcript_invalid")
+    latest_task_plan = next(
+        (item for item in reversed(working_items) if item.kind == "task_plan"),
+        None,
+    )
+    retained = [user_input]
+    if latest_task_plan is not None:
+        retained.append(latest_task_plan)
+    return tuple(
+        WorkingItem(sequence, item.kind, dict(item.data))
+        for sequence, item in enumerate(retained, 1)
+    )
+
+
+def _compact_receipt_step(step):
+    return {
+        "position": step["position"],
+        "step_id": step["step_id"],
+        "capability": step["capability"],
+        "title": step["title"],
+        "state": step["state"],
+        "result": _compact_receipt_result(step["result"]),
+        "verification": _compact_receipt_result(step["verification"]),
+    }
+
+
+def _minimal_receipt_step(step):
+    return {
+        "step_id": step["step_id"],
+        "capability": step["capability"],
+        "state": step["state"],
+        "result": _minimal_receipt_result(step["result"]),
+        "verification": _minimal_receipt_result(step["verification"]),
+    }
+
+
+def _minimal_receipt_result(value):
+    compact = {
+        key: value[key]
+        for key in _COMPACT_RECEIPT_SCALARS
+        if key in value and _compact_scalar(value[key])
+    }
+    dependencies = value.get("dependencies")
+    if isinstance(dependencies, list):
+        compact["dependencies"] = [
+            {"step_id": item["step_id"], "outcome": item["outcome"]}
+            for item in dependencies[:5]
+            if isinstance(item, dict)
+            and isinstance(item.get("step_id"), str)
+            and isinstance(item.get("outcome"), str)
+        ]
+    return compact
+
+
+def _compact_receipt_result(value):
+    """Retain bounded business outcome evidence when the full receipt is too large."""
+
+    compact = {
+        key: value[key]
+        for key in _COMPACT_RECEIPT_SCALARS
+        if key in value and _compact_scalar(value[key])
+    }
+    for key in ("failed_record_ids", "excluded_record_ids"):
+        record_ids = value.get(key)
+        if not isinstance(record_ids, list):
+            continue
+        compact[f"{key}_sample"] = list(record_ids[:_COMPACT_RECEIPT_ID_SAMPLE])
+        compact[f"{key}_omitted_count"] = max(
+            0,
+            len(record_ids) - _COMPACT_RECEIPT_ID_SAMPLE,
+        )
+    retained_groups = value.get("retained_groups")
+    if isinstance(retained_groups, list):
+        compact["retained_groups_sample"] = [
+            _compact_retained_group(group)
+            for group in retained_groups[:_COMPACT_RECEIPT_GROUP_SAMPLE]
+            if isinstance(group, dict)
+        ]
+        compact["retained_groups_omitted_count"] = max(
+            0,
+            len(retained_groups) - _COMPACT_RECEIPT_GROUP_SAMPLE,
+        )
+    dependencies = value.get("dependencies")
+    if isinstance(dependencies, list):
+        compact["dependencies"] = [
+            {"step_id": item["step_id"], "outcome": item["outcome"]}
+            for item in dependencies[:5]
+            if isinstance(item, dict)
+            and isinstance(item.get("step_id"), str)
+            and isinstance(item.get("outcome"), str)
+        ]
+    return compact
+
+
+def _valid_skipped_receipt(result, verification):
+    dependencies = result.get("dependencies")
+    return (
+        set(result) == {"outcome", "reason", "executed", "dependencies"}
+        and result.get("outcome") == "skipped"
+        and result.get("reason") == "dependency_incomplete"
+        and result.get("executed") is False
+        and isinstance(dependencies, list)
+        and bool(dependencies)
+        and len(dependencies) <= 5
+        and all(
+            isinstance(item, dict)
+            and set(item) == {"step_id", "outcome"}
+            and isinstance(item.get("step_id"), str)
+            and item.get("outcome") in {"partial", "blocked", "skipped"}
+            for item in dependencies
+        )
+        and verification == {"verified": True, **result}
+    )
+
+
+def _compact_retained_group(group):
+    compact = {
+        key: group[key]
+        for key in (
+            "state",
+            "error_code",
+            "message",
+            "resolution",
+            "blocking_model",
+            "count",
+        )
+        if key in group and _compact_scalar(group[key])
+    }
+    record_ids = group.get("record_ids")
+    if isinstance(record_ids, list):
+        compact["record_ids_sample"] = list(
+            record_ids[:_COMPACT_RECEIPT_GROUP_ID_SAMPLE]
+        )
+        compact["record_ids_omitted_count"] = max(
+            0,
+            len(record_ids) - _COMPACT_RECEIPT_GROUP_ID_SAMPLE,
+        )
+    return compact
+
+
+def _compact_scalar(value):
+    return (
+        value is None
+        or type(value) in {bool, int, float}
+        or isinstance(value, str)
+        and len(value) <= 512
+    )

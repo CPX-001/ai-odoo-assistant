@@ -89,8 +89,8 @@ export function normalizeLiveTaskPlan(value) {
     });
 }
 
-export function selectVisibleTaskPlan(liveTaskPlan, finalTaskPlan) {
-    const live = normalizeLiveTaskPlan(liveTaskPlan);
+export function selectVisibleTaskPlan(liveTaskPlan, finalTaskPlan, livePlanRequested = true) {
+    const live = livePlanRequested ? normalizeLiveTaskPlan(liveTaskPlan) : null;
     const final = normalizeLiveTaskPlan(finalTaskPlan);
     if (live === undefined && final === undefined) {
         return null;
@@ -146,6 +146,20 @@ patch(assistantPanelService, {
             const taskPlan = normalizeLiveTaskPlan(status.task_plan);
             if (taskPlan === undefined) {
                 return false;
+            }
+            if (taskPlan) {
+                // A TaskPlan returned by the turn-status boundary has already been validated by
+                // Odoo. This also restores the one-turn presentation choice after a page reload,
+                // where the browser no longer remembers which mode submitted the active turn.
+                scope.taskPlanRequested = true;
+            }
+            if (activeScope() !== scope || scope.turnId !== turnId) {
+                // Navigation may complete while the status RPC is in flight. Keep the validated
+                // fact on its owning scope, but never project that turn into the newly active chat.
+                return true;
+            }
+            if (taskPlan) {
+                state.taskPlanRequested = true;
             }
             if (taskPlan && (!state.liveTaskPlan || taskPlan.revision >= state.liveTaskPlan.revision)) {
                 state.liveTaskPlan = taskPlan;

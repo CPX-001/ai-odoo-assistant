@@ -134,7 +134,7 @@
         t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
         <xpath expr="//button[@title='Nuevo chat']" position="attributes">
             <attribute name="t-if">state.runtimeState === 'authenticated' and !state.historyView</attribute>
-            <attribute name="t-att-disabled">state.loading or state.historyLoading or state.decisionLoading or recoveryPending</attribute>
+            <attribute name="t-att-disabled">state.historyLoading</attribute>
         </xpath>
 
         <xpath expr="//div[select[@aria-label='Historial de chats']]" position="replace">
@@ -143,7 +143,7 @@
                 <button type="button"
                     class="btn btn-sm btn-link text-body o_ai_assistant_history_button px-1"
                     title="Volver al historial" aria-label="Volver al historial"
-                    t-att-disabled="state.loading or state.historyLoading or state.decisionLoading or recoveryPending"
+                    t-att-disabled="state.historyLoading"
                     t-on-click="showHistory">
                     <i class="fa fa-arrow-left" aria-hidden="true"/>
                 </button>

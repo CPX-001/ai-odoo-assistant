@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 from ..capabilities import CapabilityContext
-from .contracts import NextDecision, PlanStepProposal, ReasoningCapabilityCall, TaskPlanUpdate
+from .contracts import (
+    NextDecision,
+    PlanStepProposal,
+    ReasoningCapabilityCall,
+    TaskPlanUpdate,
+)
 from .decision_validation import NextDecisionValidationError
 from .task_plan import TaskPlan, TaskPlanError, parse_task_plan
+from .telemetry import emit_optional_telemetry
 
 # ``auto`` is retained only for legacy snapshots created by the short-lived automatic planning UI.
 # New product preferences expose adaptive/direct and deliberate/Plan only.
@@ -305,14 +311,12 @@ def _emit_provider_decision_timing(
     """Persist safe diagnostic timing without making observability part of authority."""
 
     duration_ms = max(0.0, (time.perf_counter() - started) * 1000)
-    try:
-        context.emit(
-            "diagnostic.provider.decision",
-            "Provider decision timing",
-            {"duration_ms": round(duration_ms, 3), "outcome": outcome},
-        )
-    except Exception:  # noqa: BLE001 - diagnostics cannot change turn success/failure
-        return
+    emit_optional_telemetry(
+        context,
+        "diagnostic.provider.decision",
+        "Provider decision timing",
+        {"duration_ms": round(duration_ms, 3), "outcome": outcome},
+    )
 
 
 def _latest_task_plan(

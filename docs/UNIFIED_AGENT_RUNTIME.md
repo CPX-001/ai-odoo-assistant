@@ -95,6 +95,18 @@ For each `reasoning_capability_call` the host:
 
 Hidden/disabled capabilities cannot be called by guessing their names.
 
+Every preview, reasoning, execution and verification handler invocation uses a nested
+savepoint on the effective-user cursor. The boundary restores transaction health
+before the host records a bounded capability failure, while preserving the caller's
+outer transaction and recovery semantics. This is deliberately not a generic
+pre-approval dry run and provides no replay guarantee for external effects.
+
+Lifecycle history, streaming and public activity are projections, never transition
+authority. Pending authoritative state is flushed outside their fail-soft boundary;
+state-asserting live events are deferred until the matching historical event commits.
+Consequently a broken event sink cannot consume a scheduler lease, roll back approval
+or the write barrier, or prevent stale-turn recovery.
+
 ## Bounded EffectPlan
 
 A `plan_step_proposal` remains stage-only. Phase 6 now lets the product host accumulate up to **5** distinct typed proposals before preparation. Legacy/custom callers remain single-step unless they receive the Phase-6 policy opt-in.
@@ -136,6 +148,13 @@ propose distinct typed steps
 ```
 
 The business effects currently share the normal Odoo transaction. A failure before commit rolls that Odoo-local transaction back normally.
+
+Declared `continue_on_error` batch handlers may recover more locally: try the bounded
+recordset/chunk in a savepoint, fall back to independent rows after a normal Odoo or
+database rejection, and verify one final outcome. Their receipt separates applied,
+excluded and failed records and carries only bounded safe reasons. The post-effect
+provider must describe partial/blocked business outcomes accurately and must not
+repeat records already verified as applied. Atomic capabilities are not split.
 
 This does **not** imply that future external/non-transactional effects will be atomic. P6.4 must model segmented recovery units explicitly before those effects can participate safely.
 
@@ -188,6 +207,12 @@ Current user-facing channels include:
 - final validated response;
 - latest validated TaskPlan during execution and on approval/final responses;
 - typed navigation references revalidated by Odoo before navigation.
+
+Only an explicitly submitted Plan turn may render the TaskPlan channel. The internal
+EffectPlan remains execution infrastructure in Direct mode. Approval hands control
+back to automatic durable polling; the normal UI has no refresh-status button, and a
+terminal turn state always wins over a stale executing projection. Manual inspection
+is reserved for genuine uncertain-effect recovery.
 
 Generic reasoning activity is deferred until the host accepts a non-final capability, effect or
 useful TaskPlan decision. Direct answers may stream provisional answer text but do not create a

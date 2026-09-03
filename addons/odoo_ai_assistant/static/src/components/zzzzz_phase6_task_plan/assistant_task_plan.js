@@ -6,6 +6,10 @@ import { selectVisibleTaskPlan } from "@odoo_ai_assistant/services/zzzzzz_phase6
 
 patch(AssistantPanel.prototype, {
     get visibleTaskPlan() {
-        return selectVisibleTaskPlan(this.state.liveTaskPlan, this.state.result?.task_plan);
+        return selectVisibleTaskPlan(
+            this.state.liveTaskPlan,
+            this.state.result?.task_plan,
+            this.state.taskPlanRequested === true
+        );
     },
 });

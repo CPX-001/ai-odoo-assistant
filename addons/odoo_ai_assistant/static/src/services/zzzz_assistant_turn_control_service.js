@@ -38,12 +38,15 @@ function projectScope(state, scope) {
         "decisionLoading",
         "result",
         "actionReceipt",
+        "actionStatusConnectionInterrupted",
         "errorCode",
         "failure",
         "streamingText",
         "activityEvents",
         "currentActivity",
         "lastSubmittedMessage",
+        "taskPlanRequested",
+        "turnState",
         "messages",
     ]) {
         state[key] = scope[key];

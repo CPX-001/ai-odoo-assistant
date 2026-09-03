@@ -9,6 +9,7 @@ import {
     normalizeVisibleAttachments,
     projectConversationTurnScope,
     refreshTurnScopeModelPreferences,
+    submitScopedTurn,
 } from "@odoo_ai_assistant/services/zzz_assistant_turn_scope_service";
 
 test("transport-only attachment markers never enter the optimistic user projection", () => {
@@ -134,9 +135,76 @@ test("conversation runtime state stays compact and product-facing", () => {
     scope.errorCode = "engine_timeout";
     expect(conversationRuntimeState(scope)).toBe("failed");
 
+    scope.result = { plan: { state: "executing" } };
+    expect(conversationRuntimeState(scope)).toBe("failed");
+
     scope.errorCode = null;
     scope.turnState = "completed";
     expect(conversationRuntimeState(scope)).toBe("completed");
+});
+
+test("ordinary approved execution is not mislabeled as recovery", () => {
+    const scope = createConversationTurnScope({ key: "new:1" });
+    scope.turnState = "running";
+    scope.result = { plan: { state: "authorized" } };
+    expect(conversationRuntimeState(scope)).toBe("queued");
+
+    scope.result = { plan: { state: "executing" } };
+    expect(conversationRuntimeState(scope)).toBe("running");
+
+    scope.turnState = "recovery_required";
+    expect(conversationRuntimeState(scope)).toBe("recovery");
+});
+
+test("turn-scoped submit forwards Direct mode and suppresses TaskPlan presentation", async () => {
+    const state = scopedState();
+    state.planningMode = "adaptive";
+    const scope = createConversationTurnScope({ key: "new:1" });
+    state.turnScopes[scope.key] = scope;
+    let submittedPayload;
+
+    const sent = await submitScopedTurn({
+        state,
+        scope,
+        screenContext: { capture: () => ({ model: null, res_id: null }) },
+        message: "Elimina los contactos restantes",
+        displayMessage: null,
+        displayAttachments: [],
+        onConversationBound: () => {},
+        streamCall: async ({ payload }) => {
+            submittedPayload = payload;
+            throw new Error("stop after inspecting payload");
+        },
+    });
+
+    expect(sent).toBe(false);
+    expect(submittedPayload.planning_mode).toBe("adaptive");
+    expect(scope.taskPlanRequested).toBe(false);
+});
+
+test("turn-scoped submit preserves explicit Plan as a one-turn presentation choice", async () => {
+    const state = scopedState();
+    state.planningMode = "deliberate";
+    const scope = createConversationTurnScope({ key: "new:1" });
+    state.turnScopes[scope.key] = scope;
+    let submittedPayload;
+
+    await submitScopedTurn({
+        state,
+        scope,
+        screenContext: { capture: () => ({ model: null, res_id: null }) },
+        message: "Planifica el cierre trimestral",
+        displayMessage: null,
+        displayAttachments: [],
+        onConversationBound: () => {},
+        streamCall: async ({ payload }) => {
+            submittedPayload = payload;
+            throw new Error("stop after inspecting payload");
+        },
+    });
+
+    expect(submittedPayload.planning_mode).toBe("deliberate");
+    expect(scope.taskPlanRequested).toBe(true);
 });
 
 test("reopening a scoped chat preserves the model-catalog refresh hook", async () => {

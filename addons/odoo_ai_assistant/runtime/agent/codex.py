@@ -30,6 +30,7 @@ from .response_detail import (
     response_detail_instructions,
 )
 from .service import AgentReasoningResult, AgentTurnError, PlannedCapability
+from .telemetry import emit_optional_telemetry
 
 _MAX_FRAME_BYTES = 256 * 1024
 _MAX_STDOUT_BYTES = 4 * 1024 * 1024
@@ -622,14 +623,12 @@ def _provider_timing_recorder(context: CapabilityContext) -> Callable[[str], Non
             max(0.0, asyncio.get_running_loop().time() - started_at) * 1000,
             3,
         )
-        try:
-            context.emit(
-                "diagnostic.timing",
-                "Provider timing checkpoint",
-                {"point": point, "elapsed_ms": elapsed_ms},
-            )
-        except Exception:  # noqa: BLE001 - diagnostics must never fail the product turn
-            return
+        emit_optional_telemetry(
+            context,
+            "diagnostic.timing",
+            "Provider timing checkpoint",
+            {"point": point, "elapsed_ms": elapsed_ms},
+        )
 
     return record
 
@@ -638,14 +637,12 @@ def _planning_diagnostic(context: CapabilityContext, point: str, **payload) -> N
     """Persist only content-free provider planning metadata needed for diagnosis."""
 
     safe = {"point": point, **payload}
-    try:
-        context.emit(
-            "diagnostic.planning",
-            "Provider planning checkpoint",
-            safe,
-        )
-    except Exception:  # noqa: BLE001 - diagnostics must never fail the product turn
-        return
+    emit_optional_telemetry(
+        context,
+        "diagnostic.planning",
+        "Provider planning checkpoint",
+        safe,
+    )
 
 
 def _turn_input(*, message, conversation_summary, context, reasoning, planning):

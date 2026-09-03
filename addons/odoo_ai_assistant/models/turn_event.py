@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
+
+_logger = logging.getLogger(__name__)
 
 _MAX_EVENT_PAYLOAD_BYTES = 16 * 1024
 _MAX_EVENT_STRING = 2_048
@@ -69,6 +72,48 @@ class AssistantTurnEvent(models.Model):
             "Turn event sequence must be unique.",
         ),
     ]
+
+    @api.model
+    def append_optional_for_turn(
+        self,
+        *,
+        turn,
+        event_type,
+        title,
+        payload=None,
+        diagnostic_code=None,
+    ):
+        """Append lifecycle history without letting it decide the owning transition.
+
+        The first flush deliberately lives outside the fail-soft boundary.  It proves that
+        authoritative state already staged by the caller is valid before an event failure can be
+        ignored.  Only the event attempt is rolled back; cancellation and other ``BaseException``
+        signals are cleaned up and re-raised.
+        """
+
+        self.env.cr.flush()
+        try:
+            with self.env.cr.savepoint(flush=False):
+                self.append_for_turn(
+                    turn=turn,
+                    event_type=event_type,
+                    title=title,
+                    payload=payload,
+                    diagnostic_code=diagnostic_code,
+                )
+                self.env.cr.flush()
+        except Exception as error:  # noqa: BLE001 - event history is not transition authority
+            self.env.cr.clear()
+            _logger.warning(
+                "Assistant turn event projection failed for %s (%s)",
+                event_type,
+                type(error).__name__,
+            )
+            return False
+        except BaseException:
+            self.env.cr.clear()
+            raise
+        return True
 
     @api.model
     def append_for_turn(

@@ -91,12 +91,14 @@ export function createConversationTurnScope({ key, conversationId = null } = {})
         decisionLoading: false,
         result: null,
         actionReceipt: null,
+        actionStatusConnectionInterrupted: false,
         errorCode: null,
         failure: null,
         streamingText: "",
         activityEvents: [],
         currentActivity: null,
         lastSubmittedMessage: "",
+        taskPlanRequested: false,
         messages: [],
     };
 }
@@ -124,12 +126,16 @@ function copyVisibleIntoScope(state, scope) {
     scope.decisionLoading = Boolean(state.decisionLoading);
     scope.result = state.result || null;
     scope.actionReceipt = state.actionReceipt || null;
+    scope.actionStatusConnectionInterrupted = Boolean(
+        state.actionStatusConnectionInterrupted
+    );
     scope.errorCode = state.errorCode || null;
     scope.failure = state.failure || null;
     scope.streamingText = state.streamingText || "";
     scope.activityEvents = Array.isArray(state.activityEvents) ? [...state.activityEvents] : [];
     scope.currentActivity = state.currentActivity || null;
     scope.lastSubmittedMessage = state.lastSubmittedMessage || "";
+    scope.taskPlanRequested = state.taskPlanRequested === true;
     scope.messages = Array.isArray(state.messages) ? [...state.messages] : [];
 }
 
@@ -138,12 +144,17 @@ export function projectConversationTurnScope(state, scope) {
     state.decisionLoading = Boolean(scope.decisionLoading);
     state.result = scope.result || null;
     state.actionReceipt = scope.actionReceipt || null;
+    state.actionStatusConnectionInterrupted = Boolean(
+        scope.actionStatusConnectionInterrupted
+    );
     state.errorCode = scope.errorCode || null;
     state.failure = scope.failure || null;
     state.streamingText = scope.streamingText || "";
     state.activityEvents = Array.isArray(scope.activityEvents) ? [...scope.activityEvents] : [];
     state.currentActivity = scope.currentActivity || null;
     state.lastSubmittedMessage = scope.lastSubmittedMessage || "";
+    state.taskPlanRequested = scope.taskPlanRequested === true;
+    state.turnState = scope.turnState || null;
     state.messages = Array.isArray(scope.messages) ? [...scope.messages] : [];
     return scope;
 }
@@ -184,10 +195,15 @@ export function conversationRuntimeState(scope) {
     }
     if (
         scope.actionReceipt?.state === "recovery_required" ||
-        ["authorized", "executing"].includes(scope.result?.plan?.state) ||
         scope.turnState === "recovery_required"
     ) {
         return "recovery";
+    }
+    if (["failed", "cancelled", "completed"].includes(scope.turnState)) {
+        if (scope.failure || scope.errorCode || scope.turnState === "failed") {
+            return "failed";
+        }
+        return "completed";
     }
     if (
         scope.result?.plan?.state === "awaiting_confirmation" ||
@@ -198,11 +214,11 @@ export function conversationRuntimeState(scope) {
     if (scope.loading) {
         return scope.turnState === "queued" ? "queued" : "running";
     }
+    if (["authorized", "executing"].includes(scope.result?.plan?.state)) {
+        return scope.result.plan.state === "authorized" ? "queued" : "running";
+    }
     if (scope.failure || scope.errorCode || scope.turnState === "failed") {
         return "failed";
-    }
-    if (["completed", "cancelled"].includes(scope.turnState)) {
-        return "completed";
     }
     return null;
 }
@@ -470,7 +486,7 @@ export function normalizeVisibleAttachments(value) {
     });
 }
 
-async function submitScopedTurn({
+export async function submitScopedTurn({
     state,
     screenContext,
     scope,
@@ -478,6 +494,7 @@ async function submitScopedTurn({
     displayMessage,
     displayAttachments,
     onConversationBound,
+    streamCall = streamAssistantChatLive,
 }) {
     if (scope.loading || scope.decisionLoading || recoveryPending(scope)) {
         return false;
@@ -492,6 +509,7 @@ async function submitScopedTurn({
     }
 
     state.context = screenContext.capture();
+    scope.turnId = null;
     scope.loading = true;
     scope.turnState = "queued";
     scope.streamingText = "";
@@ -500,7 +518,11 @@ async function submitScopedTurn({
     scope.errorCode = null;
     scope.failure = null;
     scope.actionReceipt = null;
+    scope.actionStatusConnectionInterrupted = false;
     scope.lastSubmittedMessage = submission.transport;
+    const submittedPlanningMode =
+        state.planningMode === "deliberate" ? "deliberate" : "adaptive";
+    scope.taskPlanRequested = submittedPlanningMode === "deliberate";
     scope.messages = [
         ...scope.messages,
         {
@@ -520,11 +542,12 @@ async function submitScopedTurn({
     });
 
     try {
-        const response = await streamAssistantChatLive({
+        const response = await streamCall({
             payload: {
                 message: submission.transport,
                 screen: state.context,
                 conversation_id: scope.conversationId,
+                planning_mode: submittedPlanningMode,
             },
             onTiming: async (timing) => {
                 if (
@@ -546,6 +569,13 @@ async function submitScopedTurn({
                         // A transient status read must not fail an otherwise durable turn.
                         projectIfActive(state, scope);
                     }
+                }
+                if (
+                    timing?.point === "turn_persisted" &&
+                    submittedPlanningMode === "deliberate" &&
+                    state.planningMode === "deliberate"
+                ) {
+                    state.planningMode = "adaptive";
                 }
             },
             onActivity: async (event) => {
@@ -823,14 +853,23 @@ patch(assistantPanelService, {
                     state: scope,
                     rpcCall: rpc,
                     decision,
+                    onStateChange: () => projectIfActive(state, scope),
                 });
                 if (decided) {
-                    scope.turnState =
-                        scope.result?.plan?.state === "awaiting_confirmation"
-                            ? "awaiting_confirmation"
-                            : scope.result?.plan?.state === "authorized"
-                              ? "running"
-                              : "completed";
+                    if (
+                        !["completed", "failed", "cancelled", "recovery_required"].includes(
+                            scope.turnState
+                        )
+                    ) {
+                        scope.turnState =
+                            scope.result?.plan?.state === "awaiting_confirmation"
+                                ? "awaiting_confirmation"
+                                : ["authorized", "executing"].includes(
+                                        scope.result?.plan?.state
+                                    )
+                                  ? "running"
+                                  : "completed";
+                    }
                     updateConversationList(state, scope);
                 }
                 return decided;
@@ -850,7 +889,11 @@ patch(assistantPanelService, {
                 state.decisionLoading = true;
             }
             try {
-                return await submitActionRetry({ state: scope, rpcCall: rpc });
+                return await submitActionRetry({
+                    state: scope,
+                    rpcCall: rpc,
+                    onStateChange: () => projectIfActive(state, scope),
+                });
             } finally {
                 scope.decisionLoading = false;
                 projectIfActive(state, scope);

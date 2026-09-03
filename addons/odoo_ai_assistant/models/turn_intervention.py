@@ -160,7 +160,9 @@ class AssistantTurnInterventionControl(models.Model):
                 plan["state"] = "rejected"
                 envelope = {**envelope, "plan": plan}
             # Record the explicit supersession before clearing executable state.
-            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            self.env["odoo.ai.turn.event"].with_user(
+                SUPERUSER_ID
+            ).append_optional_for_turn(
                 turn=turn.with_user(SUPERUSER_ID),
                 event_type="approval.rejected",
                 title="Plan sustituido por una nueva indicación",
@@ -190,7 +192,9 @@ class AssistantTurnInterventionControl(models.Model):
                 values["public_reference_payload"] = False
             turn.with_user(SUPERUSER_ID).write(values)
         elif previous_state == "queued":
-            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            self.env["odoo.ai.turn.event"].with_user(
+                SUPERUSER_ID
+            ).append_optional_for_turn(
                 turn=turn.with_user(SUPERUSER_ID),
                 event_type="redirect.requested",
                 title="Nueva indicación recibida",

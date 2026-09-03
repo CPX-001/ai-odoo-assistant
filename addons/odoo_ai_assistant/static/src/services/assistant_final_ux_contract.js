@@ -7,11 +7,23 @@ function safeMessages(scope) {
 }
 
 function hasRecovery(scope) {
-    return (
+    return Boolean(
         scope?.actionReceipt?.state === "recovery_required" ||
-        ["authorized", "executing"].includes(scope?.result?.plan?.state) ||
         scope?.turnState === "recovery_required"
     );
+}
+
+function hasExecution(scope) {
+    if (hasRecovery(scope)) {
+        return false;
+    }
+    if (["completed", "failed", "cancelled"].includes(scope?.turnState)) {
+        return false;
+    }
+    if (["completed", "partial", "failed", "rejected"].includes(scope?.actionReceipt?.state)) {
+        return false;
+    }
+    return ["authorized", "executing"].includes(scope?.result?.plan?.state);
 }
 
 function hasApproval(scope) {
@@ -100,8 +112,9 @@ export function finalTurnPresentation(scope) {
     const streamingAnswer = loading && Boolean(scope?.streamingText);
     const activity = Boolean(scope?.currentActivity);
     const recovery = hasRecovery(scope);
-    const approval = !recovery && hasApproval(scope);
-    const failure = !recovery && !approval && hasFailure(scope);
+    const execution = hasExecution(scope);
+    const approval = !recovery && !execution && hasApproval(scope);
+    const failure = !recovery && !execution && !approval && hasFailure(scope);
 
     let state = "idle";
     if (recovery) {
@@ -110,7 +123,7 @@ export function finalTurnPresentation(scope) {
         state = "approval";
     } else if (failure) {
         state = "failure";
-    } else if (loading) {
+    } else if (loading || execution) {
         state = "running";
     } else if (scope?.result || scope?.turnState === "completed") {
         state = "completed";

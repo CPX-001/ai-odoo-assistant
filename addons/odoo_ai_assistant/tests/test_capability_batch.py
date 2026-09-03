@@ -8,8 +8,8 @@ from odoo.tests.common import TransactionCase
 from ..models.embedded_runtime import _browser_capability_plan
 from ..runtime.agent import (
     CapabilityPlanError,
-    CapabilityPlanStepError,
     CapabilityPlanService,
+    CapabilityPlanStepError,
     PlannedCapability,
 )
 from ..runtime.capabilities import (
@@ -426,6 +426,58 @@ class TestCapabilityBatchMutations(TransactionCase):
             set(protected_ids),
         )
         self.assertEqual(executed.results[0].data["count"], 2)
+        self.assertEqual(executed.results[0].data["outcome"], "partial")
+        self.assertEqual(executed.results[0].data["failed_count"], 0)
+        self.assertEqual(executed.results[0].data["excluded_count"], 2)
+        self.assertEqual(
+            set(executed.results[0].data["excluded_record_ids"]),
+            set(protected_ids),
+        )
+
+    def test_legacy_batch_delete_continues_after_referential_rejection(self):
+        _context, _registry, plans = self._runtime()
+        blocked = self.targets[0]
+        quotation = self.env["sale.order"].create({"partner_id": blocked.id})
+        requested_ids = self.targets.ids
+        plan = (
+            PlannedCapability(
+                capability="odoo.records.batch_mutate",
+                arguments={
+                    "operation": "delete",
+                    "model": "res.partner",
+                    "record_ids": requested_ids,
+                },
+                summary="Eliminar contactos eliminables",
+            ),
+        )
+
+        prepared = asyncio.run(plans.prepare(plan))
+        authorized = dict(prepared)
+        authorized["state"] = "authorized"
+        executed = asyncio.run(plans.execute(authorized, human_approved=True))
+        result = executed.results[0].data
+
+        self.assertEqual(set(self.targets.exists().ids), {blocked.id})
+        self.assertTrue(quotation.exists())
+        self.assertEqual(result["outcome"], "partial")
+        self.assertEqual(result["record_ids"], [requested_ids[1]])
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["failed_count"], 1)
+        self.assertEqual(result["failed_record_ids"], [blocked.id])
+        self.assertEqual(result["excluded_count"], 0)
+        self.assertEqual(result["retained_groups"][0]["blocking_model"], "sale.order")
+        self.assertEqual(
+            executed.payload["steps"][0]["verification"],
+            {
+                "operation": "delete",
+                "model": "res.partner",
+                "count": 1,
+                "outcome": "partial",
+                "requested_count": 2,
+                "failed_count": 1,
+                "excluded_count": 0,
+            },
+        )
 
     def test_batch_delete_executes_all_pages_in_one_approved_plan(self):
         context, registry, plans = self._runtime()

@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from .transaction import isolated_savepoint
+
 type JsonValue = (
     None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 )
@@ -294,7 +296,8 @@ class CapabilityContext:
         payload: Mapping[str, JsonValue] | None = None,
     ) -> None:
         if self.event_sink is not None:
-            self.event_sink(event_type, title, payload or {})
+            with isolated_savepoint(self.env):
+                self.event_sink(event_type, title, payload or {})
 
 
 @dataclass(frozen=True, slots=True)

@@ -79,6 +79,15 @@ test("visible TaskPlan never lets a stale live revision hide a newer final revis
     expect(visible.steps[0].title).toBe("Plan final más reciente");
 });
 
+test("Direct mode suppresses live TaskPlan while preserving host-validated final history", () => {
+    const live = taskPlan(2, "Plan interno en curso");
+    const final = taskPlan(3, "Plan interno final", "replan");
+
+    expect(selectVisibleTaskPlan(live, null, false)).toBe(null);
+    expect(selectVisibleTaskPlan(live, final, false)?.revision).toBe(3);
+    expect(selectVisibleTaskPlan(live, final, true)?.revision).toBe(3);
+});
+
 test("final TaskPlan wins an equal-revision race and legacy payloads remain readable", () => {
     const live = taskPlan(2, "Live");
     const final = taskPlan(2, "Final");

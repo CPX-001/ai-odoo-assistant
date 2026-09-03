@@ -147,7 +147,7 @@ class AssistantTurnQueue(models.Model):
         }
         turn = self.with_user(SUPERUSER_ID).create(values)
         conversation.write({"last_message_at": fields.Datetime.now()})
-        self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+        self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_optional_for_turn(
             turn=turn,
             event_type="queued",
             title="Petición en cola",
@@ -213,7 +213,9 @@ class AssistantTurnQueue(models.Model):
                     "lease_expires_at": False,
                 }
             )
-            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            self.env["odoo.ai.turn.event"].with_user(
+                SUPERUSER_ID
+            ).append_optional_for_turn(
                 turn=turn.with_user(SUPERUSER_ID),
                 event_type="cancelled",
                 title="Petición cancelada",
@@ -225,7 +227,9 @@ class AssistantTurnQueue(models.Model):
                     "cancel_requested_at": fields.Datetime.now(),
                 }
             )
-            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            self.env["odoo.ai.turn.event"].with_user(
+                SUPERUSER_ID
+            ).append_optional_for_turn(
                 turn=turn.with_user(SUPERUSER_ID),
                 event_type="cancel_requested",
                 title="Cancelación solicitada",
@@ -614,21 +618,30 @@ def _append_event(
     payload=None,
     diagnostic_code=None,
 ):
-    with Registry(dbname).cursor() as cr:
-        env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
-        turn = env["odoo.ai.turn"].browse(turn_id).exists()
-        if not turn:
-            return
-        cr.execute("SELECT id FROM odoo_ai_turn WHERE id = %s FOR UPDATE", [turn_id])
-        _append_event_in_env(
-            env,
-            turn,
+    try:
+        with Registry(dbname).cursor() as cr:
+            env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+            turn = env["odoo.ai.turn"].browse(turn_id).exists()
+            if not turn:
+                return False
+            cr.execute("SELECT id FROM odoo_ai_turn WHERE id = %s FOR UPDATE", [turn_id])
+            appended = _append_event_in_env(
+                env,
+                turn,
+                event_type,
+                title,
+                payload=payload,
+                diagnostic_code=diagnostic_code,
+            )
+            cr.commit()
+    except Exception as error:  # noqa: BLE001 - the owning transition already committed
+        _logger.warning(
+            "Assistant post-commit turn event failed for %s (%s)",
             event_type,
-            title,
-            payload=payload,
-            diagnostic_code=diagnostic_code,
+            type(error).__name__,
         )
-        cr.commit()
+        return False
+    return appended
 
 
 def _append_event_in_env(
@@ -640,7 +653,7 @@ def _append_event_in_env(
     payload=None,
     diagnostic_code=None,
 ):
-    env["odoo.ai.turn.event"].append_for_turn(
+    return env["odoo.ai.turn.event"].append_optional_for_turn(
         turn=turn,
         event_type=event_type,
         title=title,

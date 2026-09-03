@@ -96,7 +96,7 @@ function nextStep(failure) {
         return "";
     }
     if (failureRequiresReview(failure)) {
-        return _t("Comprueba los datos afectados o el estado del plan antes de realizar otra acción.");
+        return _t("Comprueba los datos afectados o el estado de la operación antes de realizar otra acción.");
     }
     if (failure.provider_code === "usageLimitExceeded") {
         return _t(

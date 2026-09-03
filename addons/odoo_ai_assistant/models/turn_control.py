@@ -171,7 +171,9 @@ class AssistantTurnControl(models.Model):
                     "max_attempts": next_max_attempts,
                 }
             )
-            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            self.env["odoo.ai.turn.event"].with_user(
+                SUPERUSER_ID
+            ).append_optional_for_turn(
                 turn=turn.with_user(SUPERUSER_ID),
                 event_type="approval.rejected",
                 title="Plan sustituido por una nueva indicación",
@@ -180,7 +182,9 @@ class AssistantTurnControl(models.Model):
         elif previous_state == "queued":
             # No worker owns the row yet, so a historical audit event is cheap. While running we
             # deliberately avoid touching the turn row; the independent control row is the signal.
-            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            self.env["odoo.ai.turn.event"].with_user(
+                SUPERUSER_ID
+            ).append_optional_for_turn(
                 turn=turn.with_user(SUPERUSER_ID),
                 event_type="redirect.requested",
                 title="Nueva indicación recibida",
@@ -313,7 +317,9 @@ class AssistantTurnControl(models.Model):
                 }
             )
             turn._finalize_interrupted_answer()
-            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            self.env["odoo.ai.turn.event"].with_user(
+                SUPERUSER_ID
+            ).append_optional_for_turn(
                 turn=turn.with_user(SUPERUSER_ID),
                 event_type="cancelled",
                 title="Petición cancelada",
@@ -396,7 +402,9 @@ class AssistantTurnControl(models.Model):
         enablement = resolver.enablement_overrides(registry.definitions)
 
         def event_sink(event_type, title, payload):
-            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            self.env["odoo.ai.turn.event"].with_user(
+                SUPERUSER_ID
+            ).append_for_turn(
                 turn=turn.with_user(SUPERUSER_ID),
                 event_type=event_type,
                 title=title,
@@ -429,7 +437,9 @@ class AssistantTurnControl(models.Model):
             with self.env.cr.savepoint():
                 execution = asyncio.run(compensation.compensate(plan))
         except CapabilityCompensationError as error:
-            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            self.env["odoo.ai.turn.event"].with_user(
+                SUPERUSER_ID
+            ).append_optional_for_turn(
                 turn=turn.with_user(SUPERUSER_ID),
                 event_type="reversion.failed",
                 title="No se pudieron revertir los cambios",
@@ -464,7 +474,7 @@ class AssistantTurnControl(models.Model):
             turn.conversation_id.with_user(SUPERUSER_ID).write(
                 {"last_message_at": fields.Datetime.now()}
             )
-        self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+        self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_optional_for_turn(
             turn=technical,
             event_type="reversion.completed",
             title="Cambios revertidos",

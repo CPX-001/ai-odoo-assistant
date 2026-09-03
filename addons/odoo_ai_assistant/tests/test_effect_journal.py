@@ -234,7 +234,9 @@ class TestAssistantEffectJournal(TransactionCase):
             internal_turn.turn_uuid
         )
         internal_turn.invalidate_recordset(["state", "failure_payload"])
+        self.assertEqual(status["state"], "failed")
         self.assertEqual(status["turn_state"], "failed")
+        self.assertEqual(status["plan"]["state"], "failed")
         self.assertEqual(internal_turn.state, "failed")
         self.assertEqual(internal_turn.failure_payload["effect_state"], "none")
         self.assertEqual(internal_turn.failure_payload["user_action"], "retry")
@@ -298,3 +300,72 @@ class TestAssistantEffectJournal(TransactionCase):
         journal._cron_cleanup_effect_journal()
 
         self.assertFalse(row.exists())
+
+    def test_dependency_skipped_step_is_terminal_and_keeps_causal_receipt(self):
+        env = self._env()
+        turn = self._turn(env, "dependency-skipped")
+        skipped_result = {
+            "outcome": "skipped",
+            "reason": "dependency_incomplete",
+            "executed": False,
+            "dependencies": [{"step_id": "source", "outcome": "partial"}],
+        }
+        plan = {
+            "format_version": 3,
+            "state": "completed",
+            "requires_confirmation": False,
+            "recovery_units": [
+                {
+                    "unit_id": "unit-1",
+                    "mode": "odoo_atomic",
+                    "step_ids": ["source", "dependent"],
+                    "state": "completed",
+                }
+            ],
+            "steps": [
+                {
+                    "step_id": "source",
+                    "recovery_unit_id": "unit-1",
+                    "capability": "test.effect_source",
+                    "version": "1",
+                    "recovery_mode": "odoo_atomic",
+                    "journal_classification": "irreversible",
+                    "preview": {"operation": "synthetic"},
+                    "precondition_fingerprint": f"sha256:{'a' * 64}",
+                    "binding_fingerprint": f"sha256:{'b' * 64}",
+                    "state": "completed",
+                    "result": {"outcome": "partial"},
+                    "verification": {"outcome": "partial"},
+                },
+                {
+                    "step_id": "dependent",
+                    "recovery_unit_id": "unit-1",
+                    "capability": "test.effect_dependent",
+                    "version": "1",
+                    "recovery_mode": "odoo_atomic",
+                    "journal_classification": "irreversible",
+                    "preview": {"operation": "synthetic"},
+                    "precondition_fingerprint": f"sha256:{'c' * 64}",
+                    "binding_fingerprint": f"sha256:{'d' * 64}",
+                    "state": "skipped",
+                    "result": skipped_result,
+                    "verification": {"verified": True, **skipped_result},
+                },
+            ],
+        }
+        journal = self.env["odoo.ai.effect.journal"].with_user(SUPERUSER_ID)
+
+        journal._sync_plan(turn, plan)
+
+        rows = journal.search([("turn_id", "=", turn.id)], order="id")
+        self.assertEqual(rows.mapped("state"), ["verified", "skipped"])
+        skipped = rows.filtered(lambda row: row.step_id == "dependent")
+        self.assertEqual(skipped.after_payload["result"], skipped_result)
+        self.assertEqual(skipped.receipt_payload["step_state"], "skipped")
+        self.assertEqual(skipped.receipt_payload["outcome"], "skipped")
+        self.assertEqual(
+            skipped.receipt_payload["verification"]["dependencies"],
+            [{"step_id": "source", "outcome": "partial"}],
+        )
+        visible = journal._browser_rows(turn)
+        self.assertEqual(visible[1]["state"], "skipped")

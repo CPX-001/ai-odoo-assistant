@@ -33,12 +33,15 @@ export function prepareFreshAssistantEntry(
     state.draft = "";
     state.result = null;
     state.actionReceipt = null;
+    state.actionStatusConnectionInterrupted = false;
     state.errorCode = null;
     state.failure = null;
     state.streamingText = "";
     state.activityEvents = [];
     state.currentActivity = null;
     state.lastSubmittedMessage = "";
+    state.taskPlanRequested = false;
+    state.turnState = null;
     state.loading = false;
     state.decisionLoading = false;
     state.publicReferenceNotice = "";

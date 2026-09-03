@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 from dataclasses import replace
 
 from odoo import Command
@@ -11,16 +12,112 @@ from ..runtime.agent.decision_validation import (
 )
 from ..runtime.agent.plan import CapabilityPlanService
 from ..runtime.agent.planning import PlanningDecisionEngine, resolve_planning_strategy
-from ..runtime.agent.service import AgentTurnError, AgentTurnService
+from ..runtime.agent.service import AgentTurnError, AgentTurnService, PlannedCapability
 from ..runtime.agent.task_plan import TaskPlan, TaskPlanStep
 from ..runtime.agent.working_transcript import append_working_item
 from ..runtime.capabilities import (
+    CapabilityApproval,
     CapabilityConfigResolver,
     CapabilityContext,
+    CapabilityDefinition,
+    CapabilityEffect,
     CapabilityExecutor,
+    CapabilityExposure,
     CapabilityPolicy,
+    CapabilityPreview,
+    CapabilityRegistry,
+    CapabilityResult,
+    CapabilityRisk,
+    CapabilityVerification,
     discover_capabilities,
 )
+
+_EMPTY_OBJECT_SCHEMA = {"type": "object", "additionalProperties": False}
+
+
+def _unused_effect_handler(_context, _arguments):
+    return {}
+
+
+def _effect_definition(
+    name,
+    *,
+    partial_failure_semantics=None,
+    recovery_mode="odoo_atomic",
+):
+    developer_metadata = {}
+    if partial_failure_semantics is not None:
+        developer_metadata["partial_failure_semantics"] = partial_failure_semantics
+    return CapabilityDefinition(
+        name=name,
+        description="Synthetic typed effect used to verify generic plan orchestration.",
+        input_schema=_EMPTY_OBJECT_SCHEMA,
+        output_schema={"type": "object"},
+        risk=CapabilityRisk.ACTION,
+        effect=CapabilityEffect.INTERNAL_IRREVERSIBLE,
+        exposure=CapabilityExposure.PLAN,
+        approval=CapabilityApproval.ALWAYS,
+        handler=_unused_effect_handler,
+        preview_handler=_unused_effect_handler,
+        verify_handler=_unused_effect_handler,
+        audit_metadata={"recovery_mode": recovery_mode},
+        developer_metadata=developer_metadata,
+    )
+
+
+class _OutcomeExecutor:
+    def __init__(self, outcomes):
+        self.outcomes = dict(outcomes)
+        self.execute_calls = []
+        self.preview_calls = []
+        self.verify_calls = []
+
+    async def preview(self, name, arguments, *, semantic_group_key=None):
+        del arguments, semantic_group_key
+        self.preview_calls.append(name)
+        return CapabilityPreview(
+            summary={"operation": "synthetic", "target": name},
+            precondition_fingerprint=f"sha256:{'a' * 64}",
+        )
+
+    def approval_required(self, name, *, approved=False):
+        del name, approved
+        return False
+
+    async def execute(
+        self,
+        name,
+        arguments,
+        *,
+        authority,
+        approved,
+        semantic_group_key=None,
+    ):
+        del arguments, authority, approved, semantic_group_key
+        self.execute_calls.append(name)
+        outcome = self.outcomes[name]
+        return CapabilityResult(data={"outcome": outcome})
+
+    async def verify(
+        self,
+        name,
+        arguments,
+        result,
+        *,
+        semantic_group_key=None,
+    ):
+        del arguments, semantic_group_key
+        self.verify_calls.append(name)
+        return CapabilityVerification(
+            verified=True,
+            summary={"outcome": result.data["outcome"]},
+        )
+
+
+def _outcome_plan_service(definitions, outcomes):
+    registry = CapabilityRegistry(tuple(definitions))
+    executor = _OutcomeExecutor(outcomes)
+    return executor, CapabilityPlanService(registry=registry, executor=executor)
 
 
 class _PlanDecisionEngine:
@@ -408,6 +505,254 @@ class TestCanonicalPlanHostLoop(TransactionCase):
         self.assertEqual(second.name, "CANONICAL PLAN B")
         self.assertEqual(len(executed.results), 2)
         self.assertTrue(all(step["verification"] for step in executed.payload["steps"]))
+
+    def test_declared_partial_outcome_skips_dependent_and_runs_independent_step(self):
+        names = {
+            "source": "test.effect_source",
+            "dependent": "test.effect_dependent",
+            "independent": "test.effect_independent",
+        }
+        executor, plans = _outcome_plan_service(
+            (
+                _effect_definition(
+                    names["source"],
+                    partial_failure_semantics="continue_on_error",
+                ),
+                _effect_definition(names["dependent"]),
+                _effect_definition(names["independent"]),
+            ),
+            {
+                names["source"]: "partial",
+                names["dependent"]: "completed",
+                names["independent"]: "completed",
+            },
+        )
+        requested = (
+            PlannedCapability(names["source"], {}, "Aplicar origen", "source"),
+            PlannedCapability(
+                names["dependent"],
+                {},
+                "Aplicar dependiente",
+                "dependent",
+                ("source",),
+            ),
+            PlannedCapability(
+                names["independent"],
+                {},
+                "Aplicar independiente",
+                "independent",
+            ),
+        )
+        prepared = asyncio.run(plans.prepare(requested))
+        executed = asyncio.run(
+            plans.execute(prepared, human_approved=True, before_effect=lambda: None)
+        )
+        steps = {step["step_id"]: step for step in executed.payload["steps"]}
+
+        self.assertEqual(
+            executor.execute_calls,
+            [names["source"], names["independent"]],
+        )
+        self.assertEqual(len(executed.results), 2)
+        self.assertEqual(steps["source"]["state"], "completed")
+        self.assertEqual(steps["source"]["result"]["outcome"], "partial")
+        self.assertEqual(steps["dependent"]["state"], "skipped")
+        self.assertEqual(
+            steps["dependent"]["result"],
+            {
+                "outcome": "skipped",
+                "reason": "dependency_incomplete",
+                "executed": False,
+                "dependencies": [{"step_id": "source", "outcome": "partial"}],
+            },
+        )
+        self.assertTrue(steps["dependent"]["verification"]["verified"])
+        self.assertEqual(steps["independent"]["state"], "completed")
+        self.assertEqual(executed.payload["state"], "completed")
+        self.assertEqual(executed.payload["recovery_units"][0]["state"], "completed")
+
+    def test_declared_blocked_outcome_transitively_skips_dependents(self):
+        names = {
+            "source": "test.blocked_source",
+            "child": "test.blocked_child",
+            "grandchild": "test.blocked_grandchild",
+        }
+        executor, plans = _outcome_plan_service(
+            (
+                _effect_definition(
+                    names["source"],
+                    partial_failure_semantics="continue_on_error",
+                ),
+                _effect_definition(names["child"]),
+                _effect_definition(names["grandchild"]),
+            ),
+            {
+                names["source"]: "blocked",
+                names["child"]: "completed",
+                names["grandchild"]: "completed",
+            },
+        )
+        requested = (
+            PlannedCapability(names["source"], {}, "Origen", "source"),
+            PlannedCapability(names["child"], {}, "Hijo", "child", ("source",)),
+            PlannedCapability(
+                names["grandchild"],
+                {},
+                "Nieto",
+                "grandchild",
+                ("child",),
+            ),
+        )
+        prepared = asyncio.run(plans.prepare(requested))
+        executed = asyncio.run(
+            plans.execute(prepared, human_approved=True, before_effect=lambda: None)
+        )
+        steps = {step["step_id"]: step for step in executed.payload["steps"]}
+
+        self.assertEqual(executor.execute_calls, [names["source"]])
+        self.assertEqual(steps["child"]["state"], "skipped")
+        self.assertEqual(
+            steps["child"]["result"]["dependencies"],
+            [{"step_id": "source", "outcome": "blocked"}],
+        )
+        self.assertEqual(steps["grandchild"]["state"], "skipped")
+        self.assertEqual(
+            steps["grandchild"]["result"]["dependencies"],
+            [{"step_id": "child", "outcome": "skipped"}],
+        )
+
+    def test_unrelated_partial_failure_metadata_does_not_change_dependencies(self):
+        source = "test.chunk_source"
+        dependent = "test.chunk_dependent"
+        executor, plans = _outcome_plan_service(
+            (
+                _effect_definition(
+                    source,
+                    partial_failure_semantics="whole_invalid_chunk_rejected",
+                ),
+                _effect_definition(dependent),
+            ),
+            {source: "partial", dependent: "completed"},
+        )
+        prepared = asyncio.run(
+            plans.prepare(
+                (
+                    PlannedCapability(source, {}, "Procesar lote", "source"),
+                    PlannedCapability(
+                        dependent,
+                        {},
+                        "Continuar flujo",
+                        "dependent",
+                        ("source",),
+                    ),
+                )
+            )
+        )
+
+        executed = asyncio.run(
+            plans.execute(prepared, human_approved=True, before_effect=lambda: None)
+        )
+
+        self.assertEqual(executor.execute_calls, [source, dependent])
+        self.assertTrue(
+            all(step["state"] == "completed" for step in executed.payload["steps"])
+        )
+
+    def test_resume_does_not_replay_partial_or_execute_its_dependent(self):
+        names = {
+            "source": "test.resume_source",
+            "dependent": "test.resume_dependent",
+            "independent": "test.resume_independent",
+        }
+        executor, plans = _outcome_plan_service(
+            (
+                _effect_definition(
+                    names["source"],
+                    partial_failure_semantics="continue_on_error",
+                    recovery_mode="segmented",
+                ),
+                _effect_definition(names["dependent"], recovery_mode="segmented"),
+                _effect_definition(names["independent"], recovery_mode="segmented"),
+            ),
+            {
+                names["source"]: "partial",
+                names["dependent"]: "completed",
+                names["independent"]: "completed",
+            },
+        )
+        prepared = asyncio.run(
+            plans.prepare(
+                (
+                    PlannedCapability(names["source"], {}, "Origen", "source"),
+                    PlannedCapability(
+                        names["dependent"],
+                        {},
+                        "Dependiente",
+                        "dependent",
+                        ("source",),
+                    ),
+                    PlannedCapability(
+                        names["independent"],
+                        {},
+                        "Independiente",
+                        "independent",
+                    ),
+                )
+            )
+        )
+        interrupted = {}
+
+        def interrupt_after_skipped_unit(phase, plan_snapshot, unit, _is_last):
+            if phase == "after_unit" and unit["unit_id"] == "unit-2":
+                interrupted["plan"] = deepcopy(plan_snapshot)
+                raise RuntimeError("simulated_worker_stop")
+
+        with self.assertRaisesRegex(RuntimeError, "simulated_worker_stop"):
+            asyncio.run(
+                plans.execute(
+                    prepared,
+                    human_approved=True,
+                    recovery_checkpoint=interrupt_after_skipped_unit,
+                )
+            )
+
+        durable = interrupted["plan"]
+        durable_steps = {step["step_id"]: step for step in durable["steps"]}
+        self.assertEqual(durable["state"], "executing")
+        self.assertEqual(durable_steps["source"]["result"]["outcome"], "partial")
+        self.assertEqual(durable_steps["dependent"]["state"], "skipped")
+        self.assertEqual(
+            [unit["state"] for unit in durable["recovery_units"]],
+            ["completed", "completed", "prepared"],
+        )
+        self.assertEqual(executor.execute_calls, [names["source"]])
+        executor.execute_calls.clear()
+        checkpoints = []
+
+        executed = asyncio.run(
+            plans.execute(
+                durable,
+                human_approved=True,
+                recovery_checkpoint=lambda phase, _plan, unit, _last: checkpoints.append(
+                    (phase, unit["unit_id"])
+                ),
+            )
+        )
+        steps = {step["step_id"]: step for step in executed.payload["steps"]}
+
+        self.assertEqual(executor.execute_calls, [names["independent"]])
+        self.assertEqual(executor.preview_calls.count(names["source"]), 2)
+        self.assertEqual(executor.preview_calls.count(names["dependent"]), 1)
+        self.assertEqual(executor.preview_calls.count(names["independent"]), 2)
+        self.assertEqual(steps["dependent"]["state"], "skipped")
+        self.assertEqual(steps["independent"]["state"], "completed")
+        self.assertEqual(
+            checkpoints,
+            [("before_unit", "unit-3")],
+        )
+        self.assertTrue(
+            all(unit["state"] == "completed" for unit in executed.payload["recovery_units"])
+        )
 
     def test_task_plan_revision_is_durable_progress_separate_from_two_effect_steps(self):
         context, registry, executor, _plans = self._runtime()

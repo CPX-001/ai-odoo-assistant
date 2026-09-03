@@ -10,6 +10,11 @@ from odoo.exceptions import AccessError, ValidationError
 
 from ..runtime import RuntimePaths, detect_codex
 from ..runtime.agent import AgentTurnService, CapabilityPlanError, CapabilityPlanService
+from ..runtime.agent.business_outcome import (
+    incomplete_effect_answer,
+    incomplete_effect_summary,
+    normalized_business_outcome,
+)
 from ..runtime.agent.codex import CodexAgentSettings, CodexReasoningEngine
 from ..runtime.agent.failure import (
     FailureEnvelope,
@@ -17,6 +22,7 @@ from ..runtime.agent.failure import (
     failure_envelope_payload,
     parse_failure_envelope,
 )
+from ..runtime.agent.telemetry import emit_optional_telemetry
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -123,7 +129,8 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
             executor=executor,
             reasoning_engine=reasoning,
         )
-        event_sink(
+        emit_optional_telemetry(
+            context,
             "reasoning.started",
             "Analizando petición",
             {"reasoning_capabilities": len(registry.for_reasoning(context))},
@@ -134,7 +141,8 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
                 conversation_summary=self._conversation_summary(turn),
             )
         )
-        event_sink(
+        emit_optional_telemetry(
+            context,
             "reasoning.completed",
             "Respuesta preparada",
             {"confidence": result.confidence},
@@ -210,7 +218,7 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
             turn.conversation_id.with_user(SUPERUSER_ID).write(
                 {"last_message_at": fields.Datetime.now()}
             )
-        self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+        self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_optional_for_turn(
             turn=technical,
             event_type="approval.required",
             title="Esperando confirmación",
@@ -325,7 +333,9 @@ class AssistantTurnEmbeddedStatus(models.Model):
                     "lease_expires_at": False,
                 }
             )
-            self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+            self.env["odoo.ai.turn.event"].with_user(
+                SUPERUSER_ID
+            ).append_optional_for_turn(
                 turn=technical,
                 event_type="approval.rejected",
                 title="Acción rechazada",
@@ -360,7 +370,7 @@ class AssistantTurnEmbeddedStatus(models.Model):
                 "lease_expires_at": False,
             }
         )
-        self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+        self.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_optional_for_turn(
             turn=technical,
             event_type="approval.approved",
             title="Acción aprobada",
@@ -387,6 +397,18 @@ class AssistantTurnEmbeddedStatus(models.Model):
         if plan is None and envelope is not None:
             policy = resolve_capability_policy(turn.policy_payload or {})
             plan = _browser_capability_plan(turn, envelope["plan"], policy)
+        if isinstance(plan, dict) and turn.state in {"failed", "cancelled"}:
+            terminal_plan_state = "failed" if turn.state == "failed" else "rejected"
+            plan = {
+                **plan,
+                "state": terminal_plan_state,
+                "steps": [
+                    {**step, "state": "failed"}
+                    if isinstance(step, dict) and step.get("state") == "executing"
+                    else step
+                    for step in plan.get("steps", [])
+                ],
+            }
         state = plan.get("state") if isinstance(plan, dict) else turn.state
         return {
             "ok": True,
@@ -431,7 +453,7 @@ def _reconcile_confirmed_atomic_rollback(turn):
             "failure_payload": failure_envelope_payload(resolved),
         }
     )
-    turn.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_for_turn(
+    turn.env["odoo.ai.turn.event"].with_user(SUPERUSER_ID).append_optional_for_turn(
         turn=technical,
         event_type="recovery.rolled_back",
         title="La operación se revirtió por completo",
@@ -470,7 +492,7 @@ def _commit_plan_barrier(turn, lease_token, envelope, *, working_items_payload=N
     if working_items_payload is not None:
         values["working_items_payload"] = working_items_payload
     technical.write(values)
-    technical.env["odoo.ai.turn.event"].append_for_turn(
+    technical.env["odoo.ai.turn.event"].append_optional_for_turn(
         turn=technical,
         event_type="execution.barrier",
         title="Ejecutando acción autorizada",
@@ -540,6 +562,7 @@ def _browser_capability_plan(turn, plan, policy):
         raise EmbeddedRuntimeError("capability_plan_corrupt")
     risk = "low"
     browser_steps = []
+    has_partial_business_outcome = False
     for step in steps:
         if not isinstance(step, dict):
             raise EmbeddedRuntimeError("capability_plan_corrupt")
@@ -549,11 +572,28 @@ def _browser_capability_plan(turn, plan, policy):
             raise EmbeddedRuntimeError("capability_plan_corrupt")
         receipt = None
         result = step.get("result")
+        business_outcome = normalized_business_outcome(result)
+        result_outcome = (
+            business_outcome["outcome"] if business_outcome is not None else None
+        )
+        is_skipped = step.get("state") == "skipped"
+        is_partial_business_outcome = result_outcome in {"partial", "blocked"}
+        has_partial_business_outcome = (
+            has_partial_business_outcome or is_partial_business_outcome or is_skipped
+        )
         if isinstance(result, dict):
             receipt = {
-                "error_code": None,
+                "error_code": result.get("reason") if is_skipped else None,
                 "evidence_id": None,
-                "outcome": "verified" if step.get("verification") is not None else "completed",
+                "outcome": (
+                    "skipped"
+                    if is_skipped
+                    else result_outcome
+                    if is_partial_business_outcome
+                    else "verified"
+                    if step.get("verification") is not None
+                    else "completed"
+                ),
                 "record_id": result.get("record_id"),
                 "record_model": result.get("model"),
             }
@@ -563,7 +603,13 @@ def _browser_capability_plan(turn, plan, policy):
                 "capability": step.get("capability"),
                 "title": step.get("title") or step.get("capability"),
                 "summary": _preview_summary(preview),
-                "state": step.get("state"),
+                "state": (
+                    "skipped"
+                    if is_skipped
+                    else "partial"
+                    if is_partial_business_outcome
+                    else step.get("state")
+                ),
                 "risk": step.get("risk"),
                 "effect_scope": step.get("effect"),
                 "approval": step.get("approval"),
@@ -571,9 +617,12 @@ def _browser_capability_plan(turn, plan, policy):
                 "receipt": receipt,
             }
         )
+    plan_state = plan.get("state")
+    if plan_state == "completed" and has_partial_business_outcome:
+        plan_state = "partial"
     return {
         "plan_id": turn.turn_uuid,
-        "state": plan.get("state"),
+        "state": plan_state,
         "risk": risk,
         "metadata": {
             "needs_read": False,
@@ -644,6 +693,9 @@ def _goal(turn):
 
 def _completion_answer(plan):
     steps = plan.get("steps", []) if isinstance(plan, dict) else []
+    incomplete = incomplete_effect_summary(steps)
+    if incomplete is not None:
+        return incomplete_effect_answer(incomplete, spanish=True)
     if len(steps) == 1:
         title = steps[0].get("title") if isinstance(steps[0], dict) else None
         if isinstance(title, str) and title.strip():

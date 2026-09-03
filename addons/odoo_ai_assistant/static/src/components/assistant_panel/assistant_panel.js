@@ -351,10 +351,10 @@ export class AssistantPanel extends Component {
             authorized: _t(
                 "El resultado del lote quedó pendiente de recuperar. Se conserva el mismo intento y no se crea una nueva autorización."
             ),
-            completed: _t("Plan completado y verificado en Odoo."),
-            rejected: _t("Plan cancelado. No se realizó ningún cambio."),
-            partial: _t("El plan terminó parcialmente; revisa el resultado antes de continuar."),
-            failed: _t("El plan falló y no se presenta como completado."),
+            completed: _t("Operación completada y verificada en Odoo."),
+            rejected: _t("Operación cancelada. No se realizó ningún cambio."),
+            partial: _t("La operación terminó parcialmente; revisa el resultado antes de continuar."),
+            failed: _t("La operación falló y no se presenta como completada."),
         };
         return messages[this.state.actionReceipt?.state] || "";
     }
@@ -575,15 +575,10 @@ export class AssistantPanel extends Component {
     }
 
     newConversation() {
-        if (!this.recoveryPending) {
-            this.panel.newConversation();
-        }
+        this.panel.newConversation();
     }
 
     async selectConversation(event) {
-        if (this.recoveryPending) {
-            return;
-        }
         const value = event.target.value;
         if (value) {
             await this.panel.selectConversation(value);

@@ -3,6 +3,7 @@
 import { _t } from "@web/core/l10n/translation";
 import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
+import { actionExecutionPending } from "@odoo_ai_assistant/services/assistant_panel_service";
 
 const PROFILE_LABELS = {
     strict: _t("Estricto"),
@@ -32,13 +33,13 @@ patch(AssistantPanel.prototype, {
     },
 
     get executionPending() {
-        return ["authorized", "executing"].includes(this.state.result?.plan?.state);
+        return actionExecutionPending(this.state);
     },
 
     get recoveryReviewRequired() {
         return (
             this.state.actionReceipt?.state === "recovery_required" ||
-            typeof this.state.recoveryPlanId === "string"
+            this.state.turnState === "recovery_required"
         );
     },
 
@@ -49,7 +50,7 @@ patch(AssistantPanel.prototype, {
     get actionDecisionMessage() {
         const messages = {
             authorized: _t(
-                "La acción aprobada está en cola. Odoo conserva el mismo plan y no crea una autorización nueva."
+                "La acción aprobada está en cola. Odoo conserva el mismo intento y no crea una autorización nueva."
             ),
             executing: _t(
                 "La ejecución sigue en curso. El Assistant sólo comprobará su estado hasta que Odoo confirme un resultado o habilite una recuperación segura."

@@ -91,9 +91,11 @@ export async function submitStreamingAssistantRequest({
     state.errorCode = null;
     state.failure = null;
     state.actionReceipt = null;
+    state.actionStatusConnectionInterrupted = false;
     state.lastSubmittedMessage = normalized;
     const previousConversationId = state.conversationId;
     const submittedPlanningMode = state.planningMode === "deliberate" ? "deliberate" : "adaptive";
+    state.taskPlanRequested = submittedPlanningMode === "deliberate";
     const submittedAt = new Date().toISOString();
     state.messages = [
         ...state.messages,

@@ -24,6 +24,7 @@ from . import test_host_loop_agent_runtime as test_host_loop_agent_runtime
 from . import test_latency_routing as test_latency_routing
 from . import test_model_catalog as test_model_catalog
 from . import test_next_decision_validation as test_next_decision_validation
+from . import test_optional_telemetry as test_optional_telemetry
 from . import (
     test_phase2_browser_failure_projection as test_phase2_browser_failure_projection,
 )

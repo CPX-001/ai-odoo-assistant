@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
+from typing import ClassVar
 from uuid import UUID
 
 from odoo import SUPERUSER_ID, api, fields, models
@@ -71,6 +72,7 @@ class AssistantEffectJournal(models.Model):
             ("prepared", "Prepared"),
             ("executing", "Executing"),
             ("verified", "Verified"),
+            ("skipped", "Skipped by dependency outcome"),
             ("rolled_back", "Rolled back"),
             ("uncertain", "Uncertain"),
             ("reverted", "Reverted"),
@@ -85,7 +87,7 @@ class AssistantEffectJournal(models.Model):
     receipt_payload = fields.Json(readonly=True, copy=False, default=dict)
     expires_at = fields.Datetime(required=True, readonly=True, index=True)
 
-    _sql_constraints = [
+    _sql_constraints: ClassVar[list[tuple[str, str, str]]] = [
         (
             "effect_journal_turn_step_unique",
             "unique(turn_id, step_id)",
@@ -166,7 +168,7 @@ class AssistantEffectJournal(models.Model):
             if isinstance(unit, dict) and isinstance(unit.get("unit_id"), str)
         }
         for row in rows:
-            if row.state in {"verified", "reverted"}:
+            if row.state in {"verified", "skipped", "reverted"}:
                 continue
             unit = by_unit.get(row.unit_id)
             if not isinstance(unit, dict):
@@ -178,12 +180,12 @@ class AssistantEffectJournal(models.Model):
             if unit_state == "completed":
                 if row.state != "verified":
                     row.write({"state": "uncertain"})
-            elif unit_state == "executing":
+            elif unit_state == "executing" or (
+                unit_state == "prepared" and row.state == "executing"
+            ):
                 row.write(
                     {"state": "uncertain" if mode == "external" else "rolled_back"}
                 )
-            elif unit_state == "prepared" and row.state == "executing":
-                row.write({"state": "uncertain" if mode == "external" else "rolled_back"})
 
     @api.model
     def _mark_reverted(self, turn):
@@ -202,7 +204,9 @@ class AssistantEffectJournal(models.Model):
         """Return true only when the durable journal proves the whole effect rolled back."""
 
         rows = self.with_user(SUPERUSER_ID).search([("turn_id", "=", turn.id)])
-        return bool(rows) and all(row.state == "rolled_back" for row in rows)
+        return bool(rows) and all(
+            row.state in {"rolled_back", "skipped"} for row in rows
+        )
 
     @api.model
     def _cron_cleanup_effect_journal(self):
@@ -282,8 +286,12 @@ def _row_values(turn, step, unit_by_id, expires_at):
     after = _after_payload(step)
     receipt = _receipt_payload(step)
     unit_state = unit_by_id[unit_id].get("state")
-    if step.get("state") == "completed":
+    step_state = step.get("state")
+    if step_state == "completed":
         state = "verified"
+    elif step_state == "skipped":
+        _validate_skipped_step_payload(step)
+        state = "skipped"
     elif unit_state == "executing":
         state = "executing"
     else:
@@ -314,6 +322,8 @@ def _row_updates(row, values):
         target_state = "reverted"
     elif row.state == "verified" and target_state != "verified":
         target_state = "verified"
+    elif row.state == "skipped" and target_state != "skipped":
+        target_state = "skipped"
     if row.state != target_state:
         updates["state"] = target_state
     for field_name in ("after_payload", "receipt_payload"):
@@ -387,12 +397,39 @@ def _receipt_payload(step):
         return {}
     return {
         "verified": True,
+        "step_state": step.get("state"),
+        "outcome": result.get("outcome"),
         "capability": step.get("capability"),
         "step_id": step.get("step_id"),
         "record_model": result.get("model"),
         "record_id": result.get("record_id"),
         "verification": dict(verification),
     }
+
+
+def _validate_skipped_step_payload(step):
+    result = step.get("result")
+    verification = step.get("verification")
+    dependencies = result.get("dependencies") if isinstance(result, dict) else None
+    if not (
+        isinstance(result, dict)
+        and set(result) == {"outcome", "reason", "executed", "dependencies"}
+        and result.get("outcome") == "skipped"
+        and result.get("reason") == "dependency_incomplete"
+        and result.get("executed") is False
+        and isinstance(dependencies, list)
+        and bool(dependencies)
+        and len(dependencies) <= 5
+        and all(
+            isinstance(item, dict)
+            and set(item) == {"step_id", "outcome"}
+            and isinstance(item.get("step_id"), str)
+            and item.get("outcome") in {"partial", "blocked", "skipped"}
+            for item in dependencies
+        )
+        and verification == {"verified": True, **result}
+    ):
+        raise EffectJournalError("effect_journal_plan_invalid")
 
 
 def _bounded_payload(value):

@@ -91,7 +91,17 @@ items are already part of the pending EffectPlan: never repeat them. When remain
 more effect_steps and another distinct requested effect is required, propose the next one. When the
 requested EffectPlan is fully staged, return a final_answer describing it as prepared, never as
 executed. A proposal never means an action happened and never grants approval. Only a later
-verified_effect_receipt proves execution and verification.
+verified_effect_receipt proves execution and verification. A verified receipt may describe a
+partial business outcome even though the host successfully completed and verified the capability.
+When it contains failed, retained or excluded records, state the exact completed and outstanding
+counts, summarize the host-provided business reasons in normal language, and offer the safest
+useful next action. Use the available read capabilities when a bounded follow-up read is needed to
+turn retained record ids or dependency metadata into a useful business explanation. Never
+describe a partial receipt as complete success and never expose raw technical exception or
+constraint names. A receipt step marked skipped with reason dependency_incomplete was deliberately
+not executed because an earlier typed dependency remained partial, blocked or skipped. Explain that
+causal boundary and decide from the receipt whether to inspect, safely repair or stop; never claim
+the skipped effect happened, replay it blindly or request approval for an identical plan.
 When plan_execution_error reports effect_state=none, a prepare or preflight failure has crossed no
 write barrier; an execution failure is repairable only when rolled_back=true. Treat its
 sanitized code, phase and details as authoritative corrective evidence. Use available schema,

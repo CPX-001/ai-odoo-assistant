@@ -82,12 +82,20 @@ resolve
  -> resolve configuration
  -> check effective availability
  -> policy / authority
- -> execute trusted handler
+ -> execute trusted handler in an isolated Odoo savepoint
  -> validate bounded output
  -> emit safe host-known activity
 ```
 
 Normal business handlers use the effective Odoo user with `su=False`.
+
+The savepoint is a transaction-health boundary, not a second authority layer. If
+PostgreSQL or Odoo rejects a handler, the failed attempt is rolled back before the
+executor persists a bounded failure event or returns structured evidence to the
+agent loop. This prevents one database exception from poisoning the shared cursor
+and being misreported later as a runtime outage. It does not commit independently,
+change users, make an external effect retryable or weaken the enclosing EffectPlan
+recovery unit.
 
 ## 5. Reads and effects
 
@@ -108,6 +116,34 @@ model proposes typed step
  -> verify
  -> receipt / recovery
 ```
+
+A preview performs deterministic validation and reads declared by the capability;
+it is not permission to call an arbitrary destructive handler and roll it back as a
+fake dry run. Custom Odoo methods may send mail, webhooks or other external effects
+that a database rollback cannot undo. Recoverable transactional probing therefore
+happens only inside an already-authorized execution, while external or otherwise
+non-transactional capabilities retain explicit uncertainty semantics.
+
+Batch capabilities declare their own partial-failure contract. For
+`continue_on_error`, the trusted handler first attempts the efficient recordset/chunk
+operation in a savepoint. If Odoo rejects that set, the handler retries bounded rows
+in independent savepoints, verifies the final database state and returns a bounded
+per-record/aggregate receipt. Valid records continue; protected, permission-denied,
+referenced or business-rule-rejected records remain untouched. Operations with a
+real all-or-nothing invariant must instead declare an atomic recovery contract.
+
+The provider receives only bounded error codes, safe business summaries and verified
+outcomes. It may explain a partial result or propose a narrower/safe next action, but
+raw SQL, constraint names and tracebacks never become normal browser output.
+
+Incomplete outcomes affect EffectPlan dependencies only through a trusted capability
+contract. A definition declaring `partial_failure_semantics=continue_on_error` may
+return a verified `partial` or `blocked` result: that step is terminal but does not
+satisfy dependent steps. The host records those dependents as causally `skipped`
+without invoking them, while unrelated steps continue. Other metadata vocabularies or
+arbitrary fields named `outcome` do not activate this rule. The skipped state and its
+bounded dependency evidence survive recovery snapshots, EffectJournal projection and
+the verified receipt used for post-effect reasoning.
 
 Approval is policy/autonomy-driven. Full-control can avoid a redundant confirmation
 only for an operation already available to the effective user and explicitly allowed

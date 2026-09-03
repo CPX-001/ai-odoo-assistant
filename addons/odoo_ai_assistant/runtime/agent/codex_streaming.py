@@ -35,6 +35,7 @@ from .codex_decision import (
     CodexDecisionEngine as _BaseCodexDecisionEngine,
 )
 from .decision_validation import validate_next_decision
+from .telemetry import emit_optional_telemetry
 
 _MAX_PROVIDER_DELTA = 16 * 1024
 _MAX_PUBLIC_REASONING_DELTA = 2 * 1024
@@ -327,20 +328,23 @@ def _reasoning_summary_delta(
 
 
 def _emit_answer_delta(context, text: str) -> bool:
-    try:
-        context.emit("answer.delta", "Respuesta", {"text": text})
-    except Exception:  # noqa: BLE001 - live UX cannot become business authority
-        return False
-    return True
+    return emit_optional_telemetry(
+        context,
+        "answer.delta",
+        "Respuesta",
+        {"text": text},
+    )
 
 
 def _emit_streaming_diagnostic(context, event_type: str, *, chars: int) -> None:
     """Record only timing-stage metadata; never persist provisional answer text here."""
 
-    try:
-        context.emit(event_type, "Streaming timing", {"chars": chars})
-    except Exception:  # noqa: BLE001 - diagnostic observability cannot control the turn
-        return
+    emit_optional_telemetry(
+        context,
+        event_type,
+        "Streaming timing",
+        {"chars": chars},
+    )
 
 
 def _emit_reasoning_summary_delta(
@@ -350,21 +354,19 @@ def _emit_reasoning_summary_delta(
     summary_index: int,
     text: str,
 ) -> bool:
-    try:
-        for start in range(0, len(text), _MAX_PUBLIC_REASONING_DELTA):
-            chunk = text[start : start + _MAX_PUBLIC_REASONING_DELTA]
-            if chunk:
-                context.emit(
-                    "reasoning.summary.delta",
-                    "Resumen de razonamiento",
-                    {
-                        "item_id": item_id,
-                        "summary_index": summary_index,
-                        "text": chunk,
-                    },
-                )
-    except Exception:  # noqa: BLE001 - readable summaries cannot become business authority
-        return False
+    for start in range(0, len(text), _MAX_PUBLIC_REASONING_DELTA):
+        chunk = text[start : start + _MAX_PUBLIC_REASONING_DELTA]
+        if chunk and not emit_optional_telemetry(
+            context,
+            "reasoning.summary.delta",
+            "Resumen de razonamiento",
+            {
+                "item_id": item_id,
+                "summary_index": summary_index,
+                "text": chunk,
+            },
+        ):
+            return False
     return True
 
 

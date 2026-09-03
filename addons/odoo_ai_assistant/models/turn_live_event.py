@@ -9,6 +9,7 @@ worker's business cursor, authorizes a capability, or changes write/recovery aut
 
 from __future__ import annotations
 
+import logging
 import re
 from contextlib import contextmanager
 
@@ -21,6 +22,8 @@ from ..runtime.agent.public_activity import (
     PublicTurnEventError,
     public_turn_event_payload,
 )
+
+_logger = logging.getLogger(__name__)
 
 _MAX_LIVE_EVENTS = 1024
 _MAX_LIVE_PAGE = 100
@@ -51,6 +54,17 @@ _INTERNAL_ACTIVITY = {
     "recovery_required": ("turn.failed", "finalization", "failed"),
     "cancelled": ("turn.cancelled", "finalization", "cancelled"),
 }
+_POSTCOMMIT_ACTIVITY_EVENTS = frozenset(
+    {
+        "started",
+        "approval.required",
+        "execution.barrier",
+        "completed",
+        "failed",
+        "recovery_required",
+        "cancelled",
+    }
+)
 
 
 class AssistantTurnLiveEvent(models.Model):
@@ -239,17 +253,38 @@ class AssistantTurnEventLiveBridge(models.Model):
             )
             return self.browse()
 
-        # Project before the historical event mutates ``turn.last_event_sequence`` on the worker
-        # cursor. With no FK this is non-blocking even when other business fields are already dirty.
         projection = _public_projection(event_type, title, payload, diagnostic_code)
+        if projection is not None and event_type in _POSTCOMMIT_ACTIVITY_EVENTS:
+            historical = super().append_for_turn(
+                turn=turn,
+                event_type=event_type,
+                title=title,
+                payload=payload,
+                diagnostic_code=diagnostic_code,
+            )
+            _schedule_committed_activity_projection(
+                self.env.cr,
+                event_id=historical.id,
+                turn_id=turn.id,
+                event_type=event_type,
+                projection=projection,
+            )
+            return historical
+
+        # Attempt/progress activity remains independently visible while a provider or capability
+        # is working. It is explicitly provisional and never asserts a committed turn transition.
         if projection is not None:
             try:
                 self.env["odoo.ai.turn.live.event"].append_activity_independent(
                     turn_id=turn.id,
                     **projection,
                 )
-            except Exception:  # noqa: BLE001 - public UX never controls business success
-                pass
+            except Exception as error:  # noqa: BLE001 - public UX is fail-soft
+                _logger.warning(
+                    "Assistant provisional activity projection failed for %s (%s)",
+                    event_type,
+                    type(error).__name__,
+                )
         return super().append_for_turn(
             turn=turn,
             event_type=event_type,
@@ -348,6 +383,58 @@ def _public_projection(event_type, title, payload, diagnostic_code):
         "diagnostic_code": code,
         "semantic": data.get("semantic"),
     }
+
+
+def _schedule_committed_activity_projection(
+    cr,
+    *,
+    event_id,
+    turn_id,
+    event_type,
+    projection,
+):
+    """Publish state-asserting activity only if its historical event commits."""
+
+    dbname = cr.dbname
+    projected = dict(projection)
+    cr.postcommit.add(
+        lambda: _append_committed_activity_projection(
+            dbname,
+            event_id=event_id,
+            turn_id=turn_id,
+            event_type=event_type,
+            projection=projected,
+        )
+    )
+
+
+def _append_committed_activity_projection(
+    dbname,
+    *,
+    event_id,
+    turn_id,
+    event_type,
+    projection,
+):
+    try:
+        with Registry(dbname).cursor() as cr:
+            env = api.Environment(cr, SUPERUSER_ID, {}, su=True)
+            historical = env["odoo.ai.turn.event"].browse(event_id).exists()
+            if (
+                not historical
+                or historical.turn_id.id != turn_id
+                or historical.event_type != event_type
+            ):
+                return False
+        _append_activity(dbname, turn_id=turn_id, **projection)
+    except Exception as error:  # noqa: BLE001 - post-commit presentation is fail-soft
+        _logger.warning(
+            "Assistant committed activity projection failed for %s (%s)",
+            event_type,
+            type(error).__name__,
+        )
+        return False
+    return True
 
 
 def _resource_from_payload(payload):

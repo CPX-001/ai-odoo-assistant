@@ -12,6 +12,7 @@ from ..runtime.agent import (
 )
 from ..runtime.agent.interactive_codex import InteractiveCodexDecisionEngine
 from ..runtime.agent.provider_failure import FailureNormalizingDecisionEngine
+from ..runtime.agent.telemetry import emit_optional_telemetry
 from ..runtime.agent.turn_effect_boundary import acquire_turn_effect_lock
 from ..runtime.agent.working_transcript import (
     WorkingTranscriptError,
@@ -22,8 +23,8 @@ from ..runtime.capabilities import CapabilityConfigResolver, CapabilityError
 from .effect_journal import EffectJournalError
 from .embedded_runtime import EmbeddedRuntimeError, _commit_plan_barrier
 from .embedded_runtime_host_loop import (
-    _append_verified_effect_receipt,
     _append_plan_prepared,
+    _append_verified_effect_receipt,
     _ensure_turn_control_current,
     _new_reasoning_activity_id,
     _with_assistant_extensions,
@@ -273,7 +274,8 @@ class EmbeddedAssistantEffectRecoveryRuntime(models.AbstractModel):
             result = await service.finish_safely(error.code)
             return self._read_only_response(turn, result, policy)
         activity_id = _new_reasoning_activity_id()
-        context.emit(
+        emit_optional_telemetry(
+            context,
             "reasoning.started",
             "Corrigiendo ejecución",
             {"activity_id": activity_id, "replan": replan_count + 1},
@@ -285,14 +287,16 @@ class EmbeddedAssistantEffectRecoveryRuntime(models.AbstractModel):
             )
             turn._capture_public_navigation_references(service.working_items)
         except Exception:
-            context.emit(
+            emit_optional_telemetry(
+                context,
                 "reasoning.failed",
                 "Corrección no completada",
                 {"activity_id": activity_id},
             )
             raise
         _ensure_turn_control_current(turn)
-        context.emit(
+        emit_optional_telemetry(
+            context,
             "reasoning.completed",
             "Ejecución corregida",
             {"activity_id": activity_id, "confidence": result.confidence},

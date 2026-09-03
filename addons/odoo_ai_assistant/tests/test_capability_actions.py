@@ -1,7 +1,9 @@
 import asyncio
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 from odoo import SUPERUSER_ID, Command
+from odoo.exceptions import ValidationError
 from odoo.tests.common import TransactionCase
 
 from ..models.chat_policy import resolve_capability_policy
@@ -343,10 +345,16 @@ class TestCapabilityActions(TransactionCase):
 
         preference.set_current_reasoning_model("approval-model-b")
         preference.set_current_agent_profile("full_access")
-        decision = user_env["odoo.ai.turn"].decide_capability_plan_for_current_user(
-            turn.turn_uuid,
-            "approve",
-        )
+        event_model_type = type(user_env["odoo.ai.turn.event"])
+        with patch.object(
+            event_model_type,
+            "append_for_turn",
+            side_effect=ValidationError("injected approval event failure"),
+        ):
+            decision = user_env["odoo.ai.turn"].decide_capability_plan_for_current_user(
+                turn.turn_uuid,
+                "approve",
+            )
 
         turn.invalidate_recordset(
             [

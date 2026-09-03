@@ -23,6 +23,7 @@ from ..capabilities import (
 )
 from ..capabilities.validation import validate_payload
 from .budgets import AgentBudgetError, resolve_agent_budgets
+from .business_outcome import incomplete_effect_answer, incomplete_effect_summary
 from .contracts import (
     FinalAnswer,
     NextDecision,
@@ -37,6 +38,7 @@ from .decision_validation import (
     validate_next_decision,
 )
 from .task_plan import TaskPlan, TaskPlanError, parse_task_plan
+from .telemetry import emit_optional_telemetry
 from .working_transcript import (
     WorkingItem,
     WorkingTranscriptError,
@@ -610,7 +612,8 @@ class AgentTurnService:
             plan.payload(),
         )
         await self._persist()
-        self._context.emit(
+        emit_optional_telemetry(
+            self._context,
             "task_plan.updated",
             "Plan de trabajo actualizado",
             {
@@ -924,16 +927,30 @@ def _terminal_error_pending(items: tuple[WorkingItem, ...]) -> str | None:
 
 
 def _safe_failure_answer(context, items: tuple[WorkingItem, ...], code: str) -> str:
-    confirmed = any(item.kind == "verified_effect_receipt" for item in items)
+    receipt = next(
+        (item for item in reversed(items) if item.kind == "verified_effect_receipt"),
+        None,
+    )
+    confirmed = receipt is not None
     env_context = getattr(getattr(context, "env", None), "context", {})
     lang = env_context.get("lang") if isinstance(env_context, dict) else None
     spanish = not isinstance(lang, str) or lang.lower().startswith("es")
+    incomplete = (
+        incomplete_effect_summary(receipt.data.get("steps"))
+        if receipt is not None
+        else None
+    )
+    if incomplete is not None:
+        return incomplete_effect_answer(incomplete, spanish=spanish)
     if confirmed:
         return (
-            "La acción se completó y quedó verificada en Odoo, pero no pude generar el "
+            "El resultado de la acción quedó verificado en Odoo, pero no pude generar el "
             "resumen detallado."
             if spanish
-            else "The action completed and was verified in Odoo, but I could not produce the detailed summary."
+            else (
+                "The action result was verified in Odoo, but I could not produce the "
+                "detailed summary."
+            )
         )
     if code == "access_denied":
         return (

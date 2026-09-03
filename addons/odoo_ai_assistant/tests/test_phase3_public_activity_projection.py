@@ -170,6 +170,35 @@ class TestPhase3PublicActivityProjection(TransactionCase):
                     any(event["kind"] == "capability.started" for event in public["events"])
                 )
 
+    def test_state_asserting_activity_waits_for_historical_commit(self):
+        turn_id, turn_uuid, user_id = self._committed_turn()
+        dbname = self.env.cr.dbname
+        with Registry(dbname).cursor() as worker_cr:
+            worker = api.Environment(worker_cr, SUPERUSER_ID, {}, su=True)
+            worker["odoo.ai.turn.event"].append_for_turn(
+                turn=worker["odoo.ai.turn"].browse(turn_id),
+                event_type="execution.barrier",
+                title="Ejecutando acción autorizada",
+            )
+            with Registry(dbname).cursor() as observer_cr:
+                observer = api.Environment(observer_cr, user_id, {}, su=False)
+                before_commit = observer[
+                    "odoo.ai.turn"
+                ].public_events_for_current_user(turn_uuid, after_sequence=0)
+                self.assertFalse(before_commit["events"])
+
+            worker_cr.commit()
+
+        with Registry(dbname).cursor() as observer_cr:
+            observer = api.Environment(observer_cr, user_id, {}, su=False)
+            after_commit = observer["odoo.ai.turn"].public_events_for_current_user(
+                turn_uuid, after_sequence=0
+            )
+            self.assertEqual(
+                [event["kind"] for event in after_commit["events"]],
+                ["execution.started"],
+            )
+
     def test_private_or_malformed_public_event_fails_closed(self):
         turn_id, _, user_id = self._committed_turn()
         with self.assertRaises(ValidationError):

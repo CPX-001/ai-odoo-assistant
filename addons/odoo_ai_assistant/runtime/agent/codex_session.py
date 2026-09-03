@@ -34,6 +34,7 @@ from .codex_streaming import (
 )
 from .decision_validation import validate_next_decision
 from .reasoning_effort import AutoReasoningRoute, resolve_auto_reasoning_route
+from .telemetry import emit_optional_telemetry
 
 _INSTALLED = False
 _CODEX_AUTO_EFFORT = {"light": "low", "balanced": "medium", "deep": "high"}
@@ -221,35 +222,31 @@ def _settings_for_decision(settings, *, message, screen, working_items):
 
 
 def _emit_reasoning_route(context, route: AutoReasoningRoute, effort: str | None) -> None:
-    try:
-        context.emit(
-            "diagnostic.reasoning_route",
-            "Adaptive reasoning route",
-            {
-                "mode": "auto",
-                "tier": route.tier,
-                "provider_effort": effort,
-                "complexity_score": route.complexity_score,
-                "reasons": list(route.reasons),
-            },
-        )
-    except Exception:  # noqa: BLE001 - diagnostics do not control the turn
-        return
+    emit_optional_telemetry(
+        context,
+        "diagnostic.reasoning_route",
+        "Adaptive reasoning route",
+        {
+            "mode": "auto",
+            "tier": route.tier,
+            "provider_effort": effort,
+            "complexity_score": route.complexity_score,
+            "reasons": list(route.reasons),
+        },
+    )
 
 
 def _emit_session_diagnostic(context, *, reused: bool, decision_index: int) -> None:
-    try:
-        context.emit(
-            "diagnostic.provider.session",
-            "Provider session lifecycle",
-            {
-                "process_reused": reused,
-                "decision_index": decision_index,
-                "thread_reused": False,
-            },
-        )
-    except Exception:  # noqa: BLE001 - diagnostics do not control the turn
-        return
+    emit_optional_telemetry(
+        context,
+        "diagnostic.provider.session",
+        "Provider session lifecycle",
+        {
+            "process_reused": reused,
+            "decision_index": decision_index,
+            "thread_reused": False,
+        },
+    )
 
 
 def _legacy_model_thread_options(settings):

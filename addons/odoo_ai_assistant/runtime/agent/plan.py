@@ -58,6 +58,9 @@ _RECOVERY_MODES = frozenset({"odoo_atomic", "segmented", "external"})
 _JOURNAL_CLASSES = frozenset(
     {"none", "reversible", "reconstructable", "irreversible", "external_or_unknown"}
 )
+_TERMINAL_STEP_STATES = frozenset({"completed", "skipped"})
+_INCOMPLETE_DEPENDENCY_OUTCOMES = frozenset({"partial", "blocked"})
+_DEPENDENCY_OUTCOME_SEMANTICS = "continue_on_error"
 
 
 class CapabilityPlanService:
@@ -177,10 +180,23 @@ class CapabilityPlanService:
             raise CapabilityPlanError("capability_plan_recovery_checkpoint_required")
 
         steps = [dict(item) for item in plan["steps"]]
-        _validate_execution_call_budget(self._registry, steps)
+        outcome_contracts = _step_outcome_contracts(self._registry, steps)
+        _validate_skipped_dependency_evidence(steps, outcome_contracts)
+        _validate_execution_call_budget(
+            self._registry,
+            steps,
+            outcome_contracts=outcome_contracts,
+        )
         results: list[CapabilityResult] = []
-        completed_ids = {
-            step["step_id"] for step in steps if step.get("state") == "completed"
+        terminal_ids = {
+            step["step_id"]
+            for step in steps
+            if step.get("state") in _TERMINAL_STEP_STATES
+        }
+        satisfied_ids = {
+            step["step_id"]
+            for step in steps
+            if _step_satisfies_dependencies(step, outcome_contracts)
         }
         barrier_crossed = False
 
@@ -193,7 +209,8 @@ class CapabilityPlanService:
             definitions = await self._preflight_unit(
                 unit,
                 steps=steps,
-                completed_ids=completed_ids,
+                terminal_ids=terminal_ids,
+                satisfied_ids=satisfied_ids,
                 human_approved=human_approved,
             )
             unit["state"] = "executing"
@@ -225,12 +242,24 @@ class CapabilityPlanService:
             for step_id in unit["step_ids"]:
                 index = _step_index(steps, step_id)
                 step = dict(steps[index])
-                if step["state"] == "completed":
-                    completed_ids.add(step_id)
+                if step["state"] in _TERMINAL_STEP_STATES:
+                    terminal_ids.add(step_id)
+                    if _step_satisfies_dependencies(step, outcome_contracts):
+                        satisfied_ids.add(step_id)
                     continue
                 depends_on = tuple(step["depends_on"])
-                if any(dependency not in completed_ids for dependency in depends_on):
-                    raise CapabilityPlanError("capability_plan_dependency_unsatisfied")
+                if any(dependency not in satisfied_ids for dependency in depends_on):
+                    result, verification = _dependency_skip_evidence(
+                        step,
+                        steps,
+                        outcome_contracts,
+                    )
+                    step["state"] = "skipped"
+                    step["result"] = result
+                    step["verification"] = verification
+                    steps[index] = step
+                    terminal_ids.add(step_id)
+                    continue
                 definition = definitions[step_id]
                 step["state"] = "executing"
                 steps[index] = step
@@ -268,7 +297,9 @@ class CapabilityPlanService:
                 step["verification"] = dict(verification.summary)
                 steps[index] = step
                 results.append(result)
-                completed_ids.add(step_id)
+                terminal_ids.add(step_id)
+                if _step_satisfies_dependencies(step, outcome_contracts):
+                    satisfied_ids.add(step_id)
 
             unit["state"] = "completed"
             recovery_units[unit_index] = unit
@@ -313,25 +344,31 @@ class CapabilityPlanService:
         unit,
         *,
         steps,
-        completed_ids,
+        terminal_ids,
+        satisfied_ids,
         human_approved,
     ):
         unit_ids = list(unit["step_ids"])
         unit_seen: set[str] = set()
+        known_unsatisfied = set(terminal_ids) - set(satisfied_ids)
         definitions = {}
         for step_id in unit_ids:
             index = _step_index(steps, step_id)
             step = steps[index]
-            if step["state"] == "completed":
+            if step["state"] in _TERMINAL_STEP_STATES:
                 unit_seen.add(step_id)
                 continue
             if step["state"] not in {"previewed", "executing"}:
                 raise CapabilityPlanError("capability_plan_invalid")
             if any(
-                dependency not in completed_ids and dependency not in unit_seen
+                dependency not in terminal_ids and dependency not in unit_seen
                 for dependency in step["depends_on"]
             ):
                 raise CapabilityPlanError("capability_plan_dependency_unsatisfied")
+            if any(dependency in known_unsatisfied for dependency in step["depends_on"]):
+                known_unsatisfied.add(step_id)
+                unit_seen.add(step_id)
+                continue
             definition = self._registry.resolve(step["capability"])
             if definition.version != step["version"]:
                 raise CapabilityPlanError("capability_plan_version_mismatch")
@@ -385,16 +422,111 @@ class CapabilityPlanService:
         return definitions
 
 
-def _validate_execution_call_budget(registry, steps):
+def _validate_execution_call_budget(registry, steps, *, outcome_contracts):
     """Reject an internally impossible plan before crossing the write barrier."""
 
     pending = Counter(
-        step["capability"] for step in steps if step.get("state") != "completed"
+        step["capability"]
+        for step in _potentially_executable_steps(steps, outcome_contracts)
     )
     for capability, count in pending.items():
         definition = registry.resolve(capability)
         if count > definition.max_calls:
             raise CapabilityPlanError("capability_call_limit_exceeded")
+
+
+def _step_outcome_contracts(registry, steps):
+    """Bind dependency semantics to trusted capability metadata, never result field names alone."""
+
+    contracts = {}
+    for step in steps:
+        definition = registry.resolve(step["capability"])
+        if definition.version != step["version"]:
+            raise CapabilityPlanError("capability_plan_version_mismatch")
+        semantics = definition.developer_metadata.get("partial_failure_semantics")
+        contracts[step["step_id"]] = semantics == _DEPENDENCY_OUTCOME_SEMANTICS
+    return contracts
+
+
+def _step_satisfies_dependencies(step, outcome_contracts):
+    if step.get("state") != "completed":
+        return False
+    if outcome_contracts.get(step.get("step_id")) is not True:
+        return True
+    result = step.get("result")
+    return not (
+        isinstance(result, dict)
+        and result.get("outcome") in _INCOMPLETE_DEPENDENCY_OUTCOMES
+    )
+
+
+def _potentially_executable_steps(steps, outcome_contracts):
+    """Exclude only steps already proven impossible by a terminal dependency outcome."""
+
+    blocked_ids = set()
+    executable = []
+    for step in steps:
+        step_id = step["step_id"]
+        if step.get("state") in _TERMINAL_STEP_STATES:
+            if not _step_satisfies_dependencies(step, outcome_contracts):
+                blocked_ids.add(step_id)
+            continue
+        if any(dependency in blocked_ids for dependency in step["depends_on"]):
+            blocked_ids.add(step_id)
+            continue
+        executable.append(step)
+    return executable
+
+
+def _dependency_skip_evidence(step, steps, outcome_contracts):
+    by_id = {item["step_id"]: item for item in steps}
+    dependencies = []
+    for dependency_id in step["depends_on"]:
+        dependency = by_id.get(dependency_id)
+        outcome = _unsatisfied_dependency_outcome(dependency, outcome_contracts)
+        if outcome is not None:
+            dependencies.append({"step_id": dependency_id, "outcome": outcome})
+    if not dependencies:
+        raise CapabilityPlanError("capability_plan_dependency_unsatisfied")
+    result = {
+        "outcome": "skipped",
+        "reason": "dependency_incomplete",
+        "executed": False,
+        "dependencies": dependencies,
+    }
+    verification = {"verified": True, **result}
+    return result, verification
+
+
+def _unsatisfied_dependency_outcome(step, outcome_contracts):
+    if not isinstance(step, dict):
+        return None
+    if step.get("state") == "skipped":
+        return "skipped"
+    if (
+        step.get("state") == "completed"
+        and outcome_contracts.get(step.get("step_id")) is True
+        and isinstance(step.get("result"), dict)
+        and step["result"].get("outcome") in _INCOMPLETE_DEPENDENCY_OUTCOMES
+    ):
+        return step["result"]["outcome"]
+    return None
+
+
+def _validate_skipped_dependency_evidence(steps, outcome_contracts):
+    for step in steps:
+        if step.get("state") != "skipped":
+            continue
+        expected_result, expected_verification = _dependency_skip_evidence(
+            step,
+            steps,
+            outcome_contracts,
+        )
+        if (
+            step.get("result") != expected_result
+            or step.get("verification") != expected_verification
+        ):
+            raise CapabilityPlanError("capability_plan_invalid")
 
 
 def _approval_scopes(registry, steps):
@@ -578,7 +710,8 @@ def _validated_plan(payload):
             or step.get("approval") not in {"none", "policy", "always"}
             or type(step.get("approval_required")) is not bool
             or not isinstance(step.get("preview"), dict)
-            or step.get("state") not in {"previewed", "executing", "completed"}
+            or step.get("state")
+            not in {"previewed", "executing", "completed", "skipped"}
         ):
             raise CapabilityPlanError("capability_plan_invalid")
         if version in {1, 2}:

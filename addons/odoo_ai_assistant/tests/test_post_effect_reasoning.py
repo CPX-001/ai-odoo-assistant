@@ -1,10 +1,15 @@
 import asyncio
+from types import SimpleNamespace
 from uuid import uuid4
 
 from odoo import SUPERUSER_ID, Command
 from odoo.tests.common import TransactionCase
 
-from ..models.embedded_runtime_host_loop import _append_verified_effect_receipt
+from ..models.embedded_runtime import _browser_capability_plan, _completion_answer
+from ..models.embedded_runtime_host_loop import (
+    _append_verified_effect_receipt,
+    _grounded_post_effect_result,
+)
 from ..models.turn_queue import _stage_completed_turn
 from ..runtime.agent import AgentTurnService, PostEffectDecisionEngine
 from ..runtime.agent.contracts import FinalAnswer, PlanStepProposal
@@ -13,7 +18,13 @@ from ..runtime.agent.provider_failure import (
     FailureNormalizingDecisionEngine,
     ProviderFailureError,
 )
-from ..runtime.agent.working_transcript import append_working_item
+from ..runtime.agent.service import _safe_failure_answer
+from ..runtime.agent.working_transcript import (
+    MAX_TRANSCRIPT_BYTES,
+    WorkingTranscriptError,
+    append_working_item,
+    working_transcript_bytes,
+)
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -244,7 +255,371 @@ class TestPostEffectReasoning(TransactionCase):
         self.assertTrue(receipt.data["details_omitted"])
         self.assertEqual(receipt.data["step_count"], 1)
         self.assertEqual(receipt.data["capabilities"], ["odoo.record.patch"])
-        self.assertNotIn("steps", receipt.data)
+        self.assertEqual(receipt.data["steps"][0]["result"], {"model": "res.partner"})
+
+    def test_verified_receipt_reclaims_headroom_after_effect(self):
+        items = append_working_item((), "user_input", {"message": "Haz el cambio"})
+        items = append_working_item(
+            items,
+            "task_plan",
+            {
+                "goal": "Completar el cambio",
+                "revision": 1,
+                "revision_kind": "initial",
+                "revision_summary": "",
+                "steps": [
+                    {
+                        "step_id": "change",
+                        "title": "Aplicar cambio",
+                        "state": "in_progress",
+                        "depends_on": [],
+                    }
+                ],
+            },
+        )
+        for size in (8_000, 4_000, 2_000, 1_000, 500, 250, 100, 50, 10, 1):
+            while True:
+                try:
+                    items = append_working_item(
+                        items,
+                        "task_plan_error",
+                        {"padding": "x" * size},
+                    )
+                except WorkingTranscriptError as error:
+                    self.assertEqual(error.code, "agent_working_transcript_too_large")
+                    break
+        self.assertGreater(working_transcript_bytes(items), MAX_TRANSCRIPT_BYTES - 250)
+
+        result = _append_verified_effect_receipt(
+            items,
+            {
+                "state": "completed",
+                "steps": [
+                    {
+                        "position": 0,
+                        "step_id": "change",
+                        "capability": "odoo.record.patch",
+                        "title": "Aplicar cambio",
+                        "state": "completed",
+                        "result": {"model": "res.partner", "record_id": self.partner.id},
+                        "verification": {"name": "POST EFFECT VERIFIED"},
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(
+            [item.kind for item in result],
+            ["user_input", "task_plan", "verified_effect_receipt"],
+        )
+        self.assertEqual(result[0].data["message"], "Haz el cambio")
+        self.assertEqual(result[1].data["goal"], "Completar el cambio")
+        self.assertTrue(result[2].data["verified"])
+
+    def test_compact_verified_receipt_keeps_partial_counts_and_reason_sample(self):
+        items = append_working_item((), "user_input", {"message": "Elimina contactos"})
+        retained_ids = list(range(1, 121))
+        result = {
+            "operation": "delete",
+            "model": "res.partner",
+            "outcome": "partial",
+            "count": 80,
+            "requested_count": 200,
+            "failed_count": 120,
+            "excluded_count": 0,
+            "failed_record_ids": retained_ids,
+            "excluded_record_ids": [],
+            "retained_groups": [
+                {
+                    "state": "failed",
+                    "error_code": "record_is_referenced",
+                    "message": "Another Odoo record requires these contacts.",
+                    "resolution": "archive_or_remove_dependencies",
+                    "blocking_model": "sale.order",
+                    "record_ids": retained_ids,
+                    "count": 120,
+                }
+            ],
+            "omitted_retained_count": 0,
+            "padding": "x" * 40_000,
+        }
+        completed_plan = {
+            "state": "completed",
+            "steps": [
+                {
+                    "position": 0,
+                    "step_id": "delete-contacts",
+                    "capability": "odoo.records.bulk_delete",
+                    "title": "Eliminar contactos",
+                    "state": "completed",
+                    "result": result,
+                    "verification": {
+                        "operation": "delete",
+                        "model": "res.partner",
+                        "outcome": "partial",
+                        "count": 80,
+                        "requested_count": 200,
+                        "failed_count": 120,
+                        "excluded_count": 0,
+                    },
+                }
+            ],
+        }
+
+        items_with_receipt = _append_verified_effect_receipt(items, completed_plan)
+        receipt = items_with_receipt[-1]
+
+        self.assertTrue(receipt.data["details_omitted"])
+        compact_result = receipt.data["steps"][0]["result"]
+        self.assertEqual(compact_result["outcome"], "partial")
+        self.assertEqual(compact_result["count"], 80)
+        self.assertEqual(compact_result["requested_count"], 200)
+        self.assertEqual(compact_result["failed_count"], 120)
+        self.assertEqual(len(compact_result["failed_record_ids_sample"]), 20)
+        self.assertEqual(compact_result["failed_record_ids_omitted_count"], 100)
+        reason = compact_result["retained_groups_sample"][0]
+        self.assertEqual(reason["blocking_model"], "sale.order")
+        self.assertEqual(reason["count"], 120)
+        self.assertEqual(len(reason["record_ids_sample"]), 10)
+        self.assertEqual(reason["record_ids_omitted_count"], 110)
+        fallback = _safe_failure_answer(
+            SimpleNamespace(env=SimpleNamespace(context={"lang": "es_ES"})),
+            items_with_receipt,
+            "agent_provider_decision_budget_exceeded",
+        )
+        self.assertEqual(
+            fallback,
+            "El resultado quedó verificado, pero la operación fue parcial: se aplicó a "
+            "80 de 200 registros; 120 fallaron y 0 quedaron excluidos.",
+        )
+
+    def test_verified_receipt_keeps_dependency_skips_even_when_compacted(self):
+        items = append_working_item((), "user_input", {"message": "Completa el flujo"})
+        skipped = {
+            "outcome": "skipped",
+            "reason": "dependency_incomplete",
+            "executed": False,
+            "dependencies": [{"step_id": "source", "outcome": "blocked"}],
+        }
+        completed_plan = {
+            "state": "completed",
+            "steps": [
+                {
+                    "position": 0,
+                    "step_id": "source",
+                    "capability": "test.effect_source",
+                    "title": "Aplicar origen",
+                    "state": "completed",
+                    "result": {
+                        "outcome": "blocked",
+                        "count": 0,
+                        "requested_count": 1,
+                        "failed_count": 1,
+                        "excluded_count": 0,
+                        "padding": "x" * 40_000,
+                    },
+                    "verification": {"outcome": "blocked"},
+                },
+                {
+                    "position": 1,
+                    "step_id": "dependent",
+                    "capability": "test.effect_dependent",
+                    "title": "Aplicar dependiente",
+                    "state": "skipped",
+                    "result": skipped,
+                    "verification": {"verified": True, **skipped},
+                },
+            ],
+        }
+
+        receipt = _append_verified_effect_receipt(items, completed_plan)[-1]
+
+        self.assertTrue(receipt.data["details_omitted"])
+        self.assertEqual(receipt.data["skipped_step_count"], 1)
+        self.assertEqual(receipt.data["skipped_step_ids"], ["dependent"])
+        compact_skip = receipt.data["steps"][1]
+        self.assertEqual(compact_skip["state"], "skipped")
+        self.assertEqual(compact_skip["result"]["reason"], "dependency_incomplete")
+        self.assertFalse(compact_skip["result"]["executed"])
+        self.assertEqual(
+            compact_skip["result"]["dependencies"],
+            [{"step_id": "source", "outcome": "blocked"}],
+        )
+
+    def test_partial_business_outcome_is_projected_without_rewriting_effect_plan(self):
+        internal_plan = {
+            "state": "completed",
+            "requires_confirmation": True,
+            "steps": [
+                {
+                    "position": 0,
+                    "capability": "odoo.records.bulk_delete",
+                    "title": "Eliminar contactos",
+                    "state": "completed",
+                    "risk": "protected",
+                    "effect": "internal_irreversible",
+                    "approval": "always",
+                    "preview": {"operation": "delete", "count": 3},
+                    "result": {
+                        "operation": "delete",
+                        "model": "res.partner",
+                        "outcome": "blocked",
+                        "count": 0,
+                        "requested_count": 3,
+                        "failed_count": 3,
+                        "excluded_count": 0,
+                    },
+                    "verification": {"outcome": "blocked", "count": 0},
+                },
+                {
+                    "position": 1,
+                    "capability": "test.effect_dependent",
+                    "title": "Aplicar paso dependiente",
+                    "state": "skipped",
+                    "risk": "moderate",
+                    "effect": "internal_reversible",
+                    "approval": "policy",
+                    "preview": {"operation": "synthetic", "count": 1},
+                    "result": {
+                        "outcome": "skipped",
+                        "reason": "dependency_incomplete",
+                        "executed": False,
+                        "dependencies": [
+                            {"step_id": "delete-source", "outcome": "blocked"}
+                        ],
+                    },
+                    "verification": {
+                        "verified": True,
+                        "outcome": "skipped",
+                        "reason": "dependency_incomplete",
+                        "executed": False,
+                        "dependencies": [
+                            {"step_id": "delete-source", "outcome": "blocked"}
+                        ],
+                    },
+                },
+                {
+                    "position": 2,
+                    "step_id": "independent",
+                    "capability": "test.effect_independent",
+                    "title": "Aplicar paso independiente",
+                    "state": "completed",
+                    "risk": "moderate",
+                    "effect": "internal_reversible",
+                    "approval": "policy",
+                    "preview": {"operation": "synthetic", "count": 1},
+                    "result": {
+                        "outcome": "completed",
+                        "count": 1,
+                        "requested_count": 1,
+                        "failed_count": 0,
+                        "excluded_count": 0,
+                    },
+                    "verification": {"verified": True},
+                },
+            ],
+        }
+
+        browser_plan = _browser_capability_plan(
+            SimpleNamespace(
+                turn_uuid="partial-business-outcome-test",
+                input_message="Elimina los contactos",
+            ),
+            internal_plan,
+            {
+                "confirmation_mode": "always_confirm",
+                "max_auto_risk": "low",
+                "allow_synthetic_data": False,
+            },
+        )
+
+        self.assertEqual(internal_plan["state"], "completed")
+        self.assertEqual(internal_plan["steps"][0]["state"], "completed")
+        self.assertEqual(browser_plan["state"], "partial")
+        self.assertEqual(browser_plan["steps"][0]["state"], "partial")
+        self.assertEqual(browser_plan["steps"][0]["receipt"]["outcome"], "blocked")
+        self.assertEqual(browser_plan["steps"][1]["state"], "skipped")
+        self.assertEqual(browser_plan["steps"][1]["receipt"]["outcome"], "skipped")
+        self.assertEqual(
+            browser_plan["steps"][1]["receipt"]["error_code"],
+            "dependency_incomplete",
+        )
+        self.assertEqual(
+            _completion_answer(internal_plan),
+            "El resultado quedó verificado: no se pudo aplicar la operación a ninguno de "
+            "los 3 registros; 3 fallaron y 0 quedaron excluidos.",
+        )
+
+    def test_malformed_outcome_field_does_not_change_completion_semantics(self):
+        internal_plan = {
+            "state": "completed",
+            "requires_confirmation": False,
+            "steps": [
+                {
+                    "position": 0,
+                    "capability": "test.arbitrary_result",
+                    "title": "Completar acción",
+                    "state": "completed",
+                    "risk": "low",
+                    "effect": "none",
+                    "approval": "never",
+                    "preview": {"operation": "inspect", "count": 1},
+                    "result": {"outcome": "partial", "note": "domain value"},
+                    "verification": {"verified": True},
+                }
+            ],
+        }
+
+        browser_plan = _browser_capability_plan(
+            SimpleNamespace(
+                turn_uuid="arbitrary-outcome-test",
+                input_message="Inspecciona el registro",
+            ),
+            internal_plan,
+            {
+                "confirmation_mode": "risk_based",
+                "max_auto_risk": "moderate",
+                "allow_synthetic_data": False,
+            },
+        )
+
+        self.assertEqual(browser_plan["state"], "completed")
+        self.assertEqual(browser_plan["steps"][0]["state"], "completed")
+        self.assertEqual(browser_plan["steps"][0]["receipt"]["outcome"], "verified")
+        self.assertEqual(
+            _completion_answer(internal_plan),
+            "He completado y verificado la acción: Completar acción",
+        )
+
+    def test_incomplete_receipt_overrides_contradictory_provider_summary(self):
+        answer, confidence = _grounded_post_effect_result(
+            {
+                "state": "completed",
+                "steps": [
+                    {
+                        "state": "completed",
+                        "result": {
+                            "outcome": "partial",
+                            "count": 7,
+                            "requested_count": 10,
+                            "failed_count": 3,
+                            "excluded_count": 0,
+                        },
+                    }
+                ],
+            },
+            provider_answer="Todo se completó correctamente: 10 de 10.",
+            provider_confidence="high",
+            lang="es_ES",
+        )
+
+        self.assertEqual(confidence, "high")
+        self.assertNotIn("10 de 10", answer)
+        self.assertEqual(
+            answer,
+            "El resultado quedó verificado, pero la operación fue parcial: se aplicó a "
+            "7 de 10 registros; 3 fallaron y 0 quedaron excluidos.",
+        )
 
     def test_post_effect_boundary_requires_verified_receipt_before_provider_call(self):
         context, registry, _executor = self._runtime()
@@ -309,6 +684,36 @@ class TestPostEffectReasoning(TransactionCase):
             )
 
         self.assertEqual(captured.exception.failure.effect_state, "confirmed")
+
+    def test_confirmed_provider_failure_can_finish_from_verified_receipt(self):
+        context, registry, executor = self._runtime()
+        service = AgentTurnService(
+            registry=registry,
+            context=context,
+            executor=executor,
+            decision_engine=PostEffectDecisionEngine(
+                FailureNormalizingDecisionEngine(
+                    _FailingPostEffectProvider(),
+                    component="codex",
+                    effect_state="confirmed",
+                )
+            ),
+            working_items=self._verified_working_items(),
+            allow_plan_proposals=False,
+        )
+
+        with self.assertRaises(ProviderFailureError) as captured:
+            asyncio.run(service.run(message="Actualiza el contacto"))
+        result = asyncio.run(service.finish_safely(captured.exception.code))
+
+        self.assertEqual(result.plan, ())
+        self.assertIn("quedó verificado en Odoo", result.answer)
+        self.assertNotIn("error", result.answer.lower())
+        self.assertEqual(service.working_items[-1].kind, "final_answer")
+        self.assertEqual(
+            service.working_items[-1].data["host_fallback_code"],
+            captured.exception.code,
+        )
 
     def test_post_effect_boundary_rejects_repeat_plan_and_allows_natural_final_answer(self):
         context, registry, executor = self._runtime()
