@@ -144,8 +144,13 @@ class HostBrokerClient:
         if len(raw_request) > MAX_REQUEST_BYTES:
             raise CapabilityError("host_broker_request_too_large")
 
-        receipt = self._exchange(raw_request)
-        validate_receipt(receipt, request)
+        receipt = self._exchange(raw_request, effectful=effectful)
+        try:
+            validate_receipt(receipt, request)
+        except CapabilityError as error:
+            if effectful:
+                raise _uncertain_transport_error(error.code) from error
+            raise
         status = receipt["status"]
         if status == "ok":
             return receipt
@@ -167,27 +172,52 @@ class HostBrokerClient:
             details={"broker_code": safe_error_code(code)},
         )
 
-    def _exchange(self, raw_request: bytes) -> dict[str, Any]:
+    def _exchange(
+        self,
+        raw_request: bytes,
+        *,
+        effectful: bool = False,
+    ) -> dict[str, Any]:
         connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         connection.settimeout(float(self.timeout_seconds))
+        dispatched = False
         try:
             connection.connect(self.socket_path)
             verify_peer_uid(connection, self.expected_uid)
+            # Once sending starts, the broker may have received a complete request even if the
+            # client loses the socket before receiving its durable receipt. Effectful callers
+            # must therefore fail closed as uncertain rather than as a safe-to-retry outage.
+            dispatched = True
             connection.sendall(raw_request)
             raw = recv_line(connection, MAX_RESPONSE_BYTES)
-        except CapabilityError:
+        except CapabilityError as error:
+            if effectful and dispatched:
+                raise _uncertain_transport_error(error.code) from error
             raise
-        except (OSError, TimeoutError):
+        except (OSError, TimeoutError) as error:
+            if effectful and dispatched:
+                raise _uncertain_transport_error("broker_transport_uncertain") from error
             raise CapabilityError("host_broker_unavailable") from None
         finally:
             connection.close()
         try:
             value = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            if effectful:
+                raise _uncertain_transport_error("broker_response_uncertain") from error
             raise CapabilityError("host_broker_response_invalid") from None
         if not isinstance(value, dict):
+            if effectful:
+                raise _uncertain_transport_error("broker_response_uncertain")
             raise CapabilityError("host_broker_response_invalid")
         return value
+
+
+def _uncertain_transport_error(code: str) -> CapabilityError:
+    return CapabilityError(
+        "host_effect_uncertain",
+        details={"broker_code": safe_error_code(code)},
+    )
 
 
 def _binding_from_durable_plan(
