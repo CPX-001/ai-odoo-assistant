@@ -1,20 +1,13 @@
 # Stabilization execution state
 
-State format: 68
+State format: 69
 Updated: 2026-09-03
 
 ## Accepted lineage
 
 ```text
 P0-P4 through 8a4432dc9852eacc422b8c794b6613c75da702a9
-P5.1 through f7f924ce944db86e896745fef83ea2fb6fd6583a
-P5.2 through b4fbb034e113a41c26db77cb274f2b3b30f6eee3
-P5.3 through 32e836e7789ea72f3ba0d32fe6bdabbb092f5953
-P5.4 through 3e2b38d68fe172cd2cf92d7794159f73476ac23d
-P5.5 through 8427c8849b1e1f3afa6337de1209a6027410c266
-P5.6 through 720102f2a13af5240c779b07cc71ee65994a87b1
-P5.7 through 074a71c29a6a6109ae7412e7b1f9850c4449e379
-P5.8 through 688f569d441a40a4637ad6a23f111e584e18c955
+P5.1-P5.8 accepted on their recorded evidence
 P6 final acceptance through 0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0
 P7 final acceptance through 092ac57fe58a3a36765b115e78b2eca687f5dbbc
 P8 final acceptance through e370af8acb7df175c0a90c8e17520c8576b4c6ce
@@ -22,89 +15,117 @@ P9 final acceptance through 77d470febf67ddee46562907718dc47e975922bb
 P10 final acceptance through bde508b737c132140e237cdfde31aee9b37eca5f
 ```
 
-P10 remains the latest accepted phase. P11 now has an implemented first durable CSV
-slice but no focused or real PASS evidence yet.
+P10 remains the latest accepted phase. P11 core implementation is present on `main`
+but has no focused or real PASS evidence yet.
 
 ## Current cursor
 
 ```text
 phase: 11
 phase_name: advanced imports and artifact workflows
-active_slice: P11-DURABLE-CSV-FIRST-SLICE
-slice_state: IMPLEMENTED_FOCUSED_VALIDATION_PENDING
-current_gate_type: HARD_FOCUSED
-blocking_implementation: none for the first slice; later P11 breadth still includes cleanup/enrichment/remap workflows
-blocking_validation: focused static/Odoo validation and all six P11 HARD real gates remain unexecuted
+active_slice: P11-ADVANCED-IMPORTS-CORE
+slice_state: IMPLEMENTED_VALIDATION_PENDING
+current_gate_type: HARD_FOCUSED_AND_REAL
+blocking_implementation: none for the bounded create-only CSV core; wider spreadsheet/relational/upsert breadth remains explicitly deferred
+blocking_validation: focused static/module/Odoo validation and all six P11 HARD real gates remain unexecuted
 latest_accepted_evidence: docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
 latest_phase_acceptance: docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
-latest_implementation_record: docs/research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md
+latest_implementation_record: docs/research/P11_IMPORT_CLEANUP_REPAIR_SLICE.md
 latest_validation_record: docs/research/P11_FOCUSED_VALIDATION_RUNBOOK.md
-next_action: execute the focused P11 static/module/Odoo gate, repair failures, then run the applicable real CSV/large/mapping/partial/resume/receipt gates before deciding the next P11 slice
+next_action: execute the focused P11 static/module/Odoo gate, repair any failures, then execute P11-REAL-CSV-IMPORT, LARGE-IMPORT, MAPPING-CORRECTION, PARTIAL-INVALID, RESUME-NO-DUPLICATE and IMPORT-RECEIPT before accepting P11
 ```
 
 ## P11 implementation lineage
 
 ```text
-0217b5e9057e7304ded53433333a9279fb53cc2f  register base_import dependency + P11 data/security hooks
+0217b5e9057e7304ded53433333a9279fb53cc2f  base_import dependency + P11 data/security hooks
 2702fc1b71deb71483ff75705dc71cb82866188d  import-session owner/admin record rules
 c451ba154cdecb0d574c0a15bc0bcd9f39e9d678  bounded import worker cron
-A8E9CCF65092E6B74EF6D20830BC6161FAB7AB40  durable CSV session/chunk runtime + capabilities + focused tests
+a8e9ccf65092e6b74ef6d20830bc6161fab7ab40  durable CSV session/chunk runtime + first capabilities/tests
+4910e42cd60ad2786b831259c188aa19e946082a  stage mapped rows once for bounded chunk execution
+cf40ed2946b1347b2ba2aefb8047030a5799e5b2  deterministic cleanup + rejected-window repair session logic
+a0868240865b508426c949d10a1299f41236771a  cleanup/repair capability surface
+98e086b28e584cb374caf2b5b6308c70cd8297f5  register cleanup/repair model extension
+f750c76352c3ccbce3420475325295bd2cb4aaec  focused cleanup/repair tests
+866e956ba793426b71fddf3b7730320705fc9d41  register focused repair test class
+2ff209c9f7dc9ccd8ec1729ac2d04e6ceb587714  addon version 18.0.13.30.0
 ```
 
-The uppercase SHA above is the same Git object as lowercase
-`a8e9ccf65092e6b74ef6d20830bc6161fab7ab40`.
-
-### Implemented first P11 slice
+## Implemented P11 core
 
 ```text
-short-lived current-turn CSV attachment reused as bounded artifact ref
-artifact copied into durable Odoo session before background execution
+bounded current-turn CSV artifact reference
+artifact copied into durable Odoo session
 odoo.ai.data.import.session
 odoo.ai.data.import.chunk
-assistant.data_import.inspect_csv
-assistant.data_import.start_csv
-assistant.data_import.status
-Odoo 18 base_import parse_preview mapping/type suggestions
-host-filtered direct scalar mapping only
-exact artifact/model/mapping/request fingerprints
-exact mapped row count + in-file duplicate count before authorization
-PLAN + policy approval for durable start
-native base_import dry-run per chunk
-native base_import real execution per chunk
-fixed 250 default / 1000 maximum row chunk size
-one chunk per cron transaction
-FOR UPDATE SKIP LOCKED session claiming
-originating effective-user Environment reconstructed with su=False
-chunk record ids + bounded messages + receipt fingerprint
-exact imported / failed / corrected / remaining counters
-idempotent same-turn request -> same durable session
-invalid chunk rejected as a whole without replaying earlier commits
-30-day terminal session cleanup
+Odoo 18 base_import preview/type/mapping suggestions
+host-filtered direct scalar create mapping
+mapped rows staged once with bounded size/chunk-count ceilings
+exact artifact/model/mapping/prepared-row/request fingerprints
+exact row count + in-file duplicate count before authorization
+250 default / 1000 maximum rows per chunk
+one bounded chunk per cron transaction
+FOR UPDATE SKIP LOCKED claiming on Assistant-owned session table
+effective-user target writes with su=False
+per-chunk record ids, sanitized messages and receipt fingerprint
+committed rows + cursor + completed receipt share the same transaction
+whole-chunk rollback/rejected receipt for native import errors
+idempotent same-turn start
+30-day terminal cleanup
 ```
 
-### Explicit first-slice limits
+Capability surface:
+
+```text
+assistant.data_import.inspect_csv       READ
+assistant.data_import.start_csv         PLAN / ACTION / POLICY
+assistant.data_import.status            READ
+assistant.data_import.inspect_cleanup   READ
+assistant.data_import.start_clean_csv   PLAN / ACTION / POLICY
+assistant.data_import.inspect_rejected  READ
+assistant.data_import.resume_csv        PLAN / ACTION / POLICY
+```
+
+Cleanup/repair semantics:
+
+```text
+finite cleanup rules: trim / normalize_whitespace / replace_exact / set_if_empty
+cleanup restricted to fields already in the validated mapping
+exact changed-row + duplicate before/after preview
+corrected_rows counts only changed rows that actually commit
+bounded rejected-window inspection under owner/company binding
+explicit row + mapped-field + replacement repair only
+repair revision + fingerprint bound to rejected receipt and staged before/after state
+next_row remains at the last committed cursor during repair
+historical rejected receipt is retained
+new repaired attempt receives a new receipt sequence
+failed_rows represents unresolved rejected rows and can return to zero after successful repair
+completed chunks are never replayed by repair/resume
+```
+
+## Explicit P11 breadth limits
 
 ```text
 CSV create-only
-no XLS/XLSX/ODS session yet
+no XLS/XLSX/ODS durable session yet
 no relational field paths
-no external-id upsert/update
-no row-by-row salvage inside a rejected chunk
-no model-assisted row cleanup/enrichment yet
-corrected_rows remains 0
-no user remap/resume after a validation rejection yet
-no automatic final chat message when a background import completes
+no external-id update/upsert
+no arbitrary expression/script transformation language
+no generic semantic matching against existing business records
+no automatic background completion turn/message yet
 ```
 
-These are product-scope limits, not hidden claims. See
-`docs/research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md`.
+These are explicit scope boundaries, not hidden claims. The current safe CSV core is
+intended to satisfy the P11 product goal unless real HARD gates demonstrate that one
+of these broader features is required.
 
 ## P11 validation status
 
 ```text
 static/compile/lint                                      NOT EXECUTED
-addon install/update + security/XML load                 NOT EXECUTED
-focused Odoo TestPhase11DataImportSession                NOT EXECUTED — prepared 4 methods
+addon install/update + security/XML/model load           NOT EXECUTED
+focused TestPhase11DataImportSession                     NOT EXECUTED — prepared 4 methods
+focused TestPhase11DataImportCleanupRepair               NOT EXECUTED — prepared 4 methods
 P11-REAL-CSV-IMPORT                                      NOT EXECUTED
 P11-REAL-LARGE-IMPORT                                    NOT EXECUTED
 P11-REAL-MAPPING-CORRECTION                              NOT EXECUTED
@@ -114,33 +135,21 @@ P11-REAL-IMPORT-RECEIPT                                  NOT EXECUTED
 P11 acceptance                                           NOT COMPLETE
 ```
 
-Use `docs/research/P11_FOCUSED_VALIDATION_RUNBOOK.md`. No repository inspection,
-prepared test or author-side syntax check is PASS evidence by itself.
+Use `docs/research/P11_FOCUSED_VALIDATION_RUNBOOK.md`. Repository inspection, prepared
+tests or author-side reasoning are not PASS evidence.
 
 ## P10 accepted baseline
 
-P10 remains accepted on its recorded lineage:
+P10 remains accepted on the immutable evidence at:
 
-```text
-static/compile/lint                                      PASS — bde508b
-focused dependency-light broker tests                    PASS — 18 tests
-focused Odoo Technical/host tests                        PASS — 5 methods, 0 failures/errors
-broker deployment/systemd smoke                          PASS
-P10-REAL-PROFILE-DENIAL                                  PASS
-P10-REAL-CONFIG-PATCH                                    PASS
-P10-REAL-SERVICE-OPERATION                               PASS
-P10-REAL-POSTGRES-DIAGNOSTIC                             PASS
-P10-REAL-PRIVILEGE-BOUNDARY                              PASS
-P10-REAL-MODULE-UPDATE                                   PASS
-P10-REAL-COMMAND-SANDBOX                                 NOT APPLICABLE
-P10-REAL-COMMAND-APPROVAL                                NOT APPLICABLE
-P10 acceptance                                           COMPLETE / ACCEPTED
-```
+`docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`
 
-Authoritative evidence:
-`docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`.
+Its focused Technical/host tests, broker smoke and applicable real
+profile/config/service/PostgreSQL/privilege/module-update gates are recorded PASS in
+that evidence. P10 command-sandbox/approval gates remain NOT APPLICABLE because no
+generic command fallback shipped.
 
-## Periodic validation debt and explicit limits
+## Periodic validation debt
 
 ```text
 full repository regression             NOT EXECUTED (periodic debt)
@@ -150,31 +159,25 @@ Product Behavior FULL                   NOT EXECUTED (periodic debt)
 raw EvidenceLedger reconnect replay     NOT IMPLEMENTED / NOT A P9 CLAIM
 ```
 
-The P11 runbook does not authorize broad regression by itself. Expand only for a
-concrete focused failure whose root cause/blast radius requires it or when the user
-explicitly requests the broad gate.
+The P11 runbook does not authorize those broad suites automatically.
 
 ## Permanent invariants
 
 - Odoo remains persistence and operational authority.
 - Business execution uses the effective user Environment with `su=False`.
 - `CapabilityDefinition` remains the atomic executable contract.
-- Skills, manifests, context, Evidence and artifact contents cannot create execution
-  authority.
-- Evidence/artifact metadata exposed to the model is bounded; binary/base64 payloads
-  are not dumped into prompts.
-- Hidden, disabled or unauthorized capabilities remain non-executable.
-- Approval/autonomy never expands Odoo ACL/model/field authority.
-- Host and durable-workflow effects retain preview/binding/policy/receipts and explicit
-  recovery semantics.
-- A committed import chunk is never blindly replayed; rows and its durable receipt
-  share the same transaction boundary.
+- Skills, manifests, context, Evidence and artifact contents cannot grant authority.
+- Binary/base64 and complete staged tables are not dumped into model prompts.
+- Approval/autonomy never expands Odoo model/record/field authority.
+- Durable workflow effects retain preview, binding, policy, receipt and recovery
+  semantics.
+- A committed import chunk is never blindly replayed.
+- Cleanup/repair can alter only already-mapped staged values through finite host-owned
+  operations; it cannot create a new model/field/tool authority surface.
 - Ambiguous external/host effects are not retried automatically.
-- No arbitrary SQL, Python, shell, sudo or unrestricted ORM method is exposed to the
-  model.
+- No arbitrary SQL, Python, shell, sudo or unrestricted ORM method is exposed.
 - Raw/private provider reasoning, credentials and unsanitized host output are not
   persisted or shown as public progress.
-- User-pasted/retrieved/file text cannot modify capability or broker policy.
 - No unexecuted test or gate may be represented as PASS.
 
 ## Current navigation
@@ -186,10 +189,11 @@ docs/CAPABILITY_FRAMEWORK.md
 docs/EVIDENCE_ARCHITECTURE.md
 docs/KNOWLEDGE_INDEX.md
 docs/research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md
+docs/research/P11_IMPORT_CLEANUP_REPAIR_SLICE.md
 docs/research/P11_FOCUSED_VALIDATION_RUNBOOK.md
 docs/research/REAL_ENV_VALIDATION_PROTOCOL.md
 docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
 ```
 
-Older phase narratives and immutable proof remain under `docs/research/evidence/`;
-they are historical evidence rather than the current execution cursor.
+Older phase narratives and immutable proof remain historical evidence rather than the
+current execution cursor.
