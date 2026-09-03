@@ -16,7 +16,7 @@ from .policy import BrokerPolicy
 from .protocol import (
     PROTOCOL_VERSION,
     BrokerProtocolError,
-    canonical_sha256,
+    replay_sha256,
     validate_request,
 )
 from .service_ops import CommandRunner, ServiceOperations
@@ -104,7 +104,7 @@ class BrokerEngine:
         started_at = int(time.time())
         state, existing = self.ledger.begin(
             request_id=request["request_id"],
-            request_hash=canonical_sha256(request),
+            request_hash=replay_sha256(request),
             operation=request["operation"],
             started_at=started_at,
         )

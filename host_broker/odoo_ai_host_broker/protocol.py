@@ -91,6 +91,27 @@ def canonical_sha256(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_json(value)).hexdigest()
 
 
+def replay_sha256(request: Mapping[str, Any]) -> str:
+    """Hash the durable effect identity without volatile transport timestamps.
+
+    Every retry is validated against its own lifetime before this digest is used.
+    Excluding only ``issued_at`` and ``expires_at`` lets a refreshed request recover
+    the original terminal receipt while preserving all capability, plan, argument,
+    precondition and caller bindings.
+    """
+
+    return canonical_sha256(
+        {
+            "protocol_version": request["protocol_version"],
+            "request_id": request["request_id"],
+            "operation": request["operation"],
+            "phase": request["phase"],
+            "binding": request["binding"],
+            "payload": request["payload"],
+        }
+    )
+
+
 def validate_request(value: Any, *, now: int | None = None) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) != _REQUEST_KEYS:
         raise BrokerProtocolError("broker_request_invalid")
@@ -240,6 +261,7 @@ __all__ = [
     "BrokerProtocolError",
     "canonical_json",
     "canonical_sha256",
+    "replay_sha256",
     "validate_receipt",
     "validate_request",
 ]

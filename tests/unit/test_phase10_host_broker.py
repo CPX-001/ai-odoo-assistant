@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "host_broker"))
 from odoo_ai_host_broker.ledger import ExecutionLedger
 from odoo_ai_host_broker.operations import BrokerEngine
 from odoo_ai_host_broker.policy import BrokerPolicy
-from odoo_ai_host_broker.protocol import canonical_sha256
+from odoo_ai_host_broker.protocol import canonical_sha256, replay_sha256
 
 
 def _fingerprint(char="a"):
@@ -140,6 +140,35 @@ class Phase10BrokerTests(unittest.TestCase):
         text = self.config.read_text(encoding="utf-8")
         self.assertIn("workers = 4", text)
         self.assertIn("admin_passwd = secret-value", text)
+        self.assertEqual(len(list((Path(self.temp.name) / "backups").glob("*.bak"))), 1)
+
+    def test_replay_accepts_refreshed_transport_lifetime(self):
+        preview = self.engine.handle(
+            peer_uid=1000,
+            request=_request(
+                "odoo.config.patch",
+                "preview",
+                {"target": "odoo", "key": "workers", "value": "4"},
+                request_id="req:v1:" + "2" * 32,
+            ),
+        )
+        execute_request = _request(
+            "odoo.config.patch",
+            "execute",
+            {"target": "odoo", "key": "workers", "value": "4"},
+            request_id="req:v1:" + "3" * 32,
+            precondition=preview["precondition_fingerprint"],
+        )
+        first = self.engine.handle(peer_uid=1000, request=execute_request)
+
+        refreshed = {
+            **execute_request,
+            "issued_at": execute_request["issued_at"] + 1,
+            "expires_at": execute_request["expires_at"] + 1,
+        }
+        second = self.engine.handle(peer_uid=1000, request=refreshed)
+
+        self.assertEqual(first, second)
         self.assertEqual(len(list((Path(self.temp.name) / "backups").glob("*.bak"))), 1)
 
     def test_config_patch_rejects_stale_precondition(self):
@@ -282,7 +311,7 @@ class Phase10BrokerTests(unittest.TestCase):
         )
         state, _ = self.ledger.begin(
             request_id=request["request_id"],
-            request_hash=canonical_sha256(request),
+            request_hash=replay_sha256(request),
             operation=request["operation"],
             started_at=int(time.time()),
         )
