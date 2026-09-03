@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import UTC, datetime
 
 from odoo import Command
 from odoo.addons.odoo_ai_assistant.runtime.capabilities.contracts import (
@@ -64,7 +65,7 @@ class TestPhase11DataImportSession(TransactionCase):
             screen={
                 "action_id": None,
                 "allowed_context_subset": {},
-                "captured_at": "2026-09-03T12:00:00Z",
+                "captured_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 "menu_id": None,
                 "model": "res.partner",
                 "res_id": None,
