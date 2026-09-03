@@ -1,35 +1,37 @@
 # Architecture Decision Records
 
-ADRs capture decisions that intentionally constrain the current architecture. They are authoritative together with current code; if implementation and an accepted ADR diverge, investigate the divergence rather than falling back to older milestone documents.
+ADRs capture accepted constraints on the current architecture. Current code plus
+accepted ADRs are primary technical authority; older milestone documents and Project
+PDFs are design/history references.
 
-## Current accepted decisions
+## Current decisions
 
 | ADR | Status | Decision |
 | --- | --- | --- |
-| ADR-014 | accepted | Unified host-authorized agent runtime; retire rigid workflow routing as the target architecture. |
-| ADR-015 | accepted | Controlled batch capability/action foundation. |
-| ADR-016 | accepted | Embedded Odoo runtime, Odoo-native persistence/cron queue, ephemeral Codex provider; retire operational sidecar. |
-| ADR-017 | accepted | Addon Capability Framework with `CapabilityDefinition` as the atomic executable contract. |
-| ADR-018 | superseded by ADR-020 | Installation-scoped provider credentials plus database-scoped non-secret Codex activation. |
-| ADR-019 | accepted, partially superseded by ADR-021 | Odoo-owned iterative `NextDecision` loop and private durable working transcript; its exact three-branch/one-PLAN-step limit is superseded. |
-| ADR-020 | accepted | One host-configured primary Codex session is consumed automatically by the Odoo installation; Odoo keeps per-user business authority isolated. |
-| ADR-021 | accepted | Provider-neutral TaskPlan + bounded multi-step EffectPlan, host-owned recovery units and short-TTL EffectJournal. |
+| ADR-014 | accepted | Unified host-authorized agent direction instead of rigid intent/workflow routing. |
+| ADR-015 | accepted | Controlled batch/file-ingestion foundation. |
+| ADR-016 | accepted | Embedded Odoo runtime, Odoo-native persistence/cron queue, ephemeral provider; retired operational Assistant sidecar. |
+| ADR-017 | accepted | Addon Capability Framework; `CapabilityDefinition` is atomic executable authority. |
+| ADR-018 | superseded by ADR-020 | Earlier database-scoped Codex activation decision. |
+| ADR-019 | accepted, partly superseded by ADR-021 | Host-owned iterative provider decision loop. |
+| ADR-020 | accepted | Host-configured primary Codex session with Odoo user/business authority kept separate. |
+| ADR-021 | accepted | Provider-neutral TaskPlan, bounded multi-step EffectPlan, recovery units and EffectJournal. |
+| ADR-022 | accepted | Bounded provider-neutral Evidence/ledger; provenance/freshness/access are host-owned and Evidence is non-executable. |
+| ADR-023 | accepted | Host-owned observability with sanitized bounded telemetry rather than raw prompts/reasoning/secrets. |
+| ADR-024 | accepted | Optional finite Technical host privilege broker; no root shell/passwordless sudo/general command surface. |
+| ADR-025 | accepted | Controlled source changes are workspace-first; logical module roots + fingerprints before typed patch/test/deploy. |
 
 `ADR-000-template.md` is only the template.
 
-## Authority
+## Authority order
 
-Use this order when deciding what is true now:
+When sources disagree, normally use:
 
-1. current code + accepted ADR;
+1. current code + accepted ADRs;
 2. current docs indexed by `../README.md`;
-3. current tests;
-4. historical milestone reports/task packets/research PDFs.
+3. current tests and accepted real evidence;
+4. active execution state;
+5. older research/PDFs/external references.
 
-The old `docs/source-of-truth/` name does not make those PDFs more authoritative than newer ADRs/code. Their own recent Atlas/Benchmark snapshots require revalidation against `main`.
-
-## Creating/superseding an ADR
-
-Use an ADR for changes to durable architecture boundaries such as deployment unit, authority, persistence, capability contract, credential ownership or a major execution protocol. Do not edit an old accepted ADR to pretend a later decision was always part of it; add a superseding ADR and update this index/current docs.
-
-Implementation-only refinements that remain inside an accepted decision normally belong in code/tests/current docs rather than a new ADR.
+Do not rewrite an older accepted ADR to make a later decision look retroactive. Add a
+new/superseding ADR and update the current index/state.
