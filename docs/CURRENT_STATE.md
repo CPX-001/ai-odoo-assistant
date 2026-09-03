@@ -13,11 +13,11 @@ P6 COMPLETE / ACCEPTED
 P7 COMPLETE / ACCEPTED at 092ac57fe58a3a36765b115e78b2eca687f5dbbc
 P8 COMPLETE / ACCEPTED at e370af8acb7df175c0a90c8e17520c8576b4c6ce
 P9 COMPLETE / ACCEPTED at 77d470febf67ddee46562907718dc47e975922bb
-P10 IMPLEMENTED IN PART / VALIDATION PENDING / NOT ACCEPTED
+P10 COMPLETE / ACCEPTED at bde508b737c132140e237cdfde31aee9b37eca5f
 ```
 
-P9 remains the latest accepted phase. Its evidence is
-`research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`.
+P10 is the latest accepted phase. Its evidence is
+`research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`.
 
 P10's accepted design and current implementation records are:
 
@@ -33,7 +33,7 @@ Code or a prepared test is not PASS evidence.
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Supported addon: `addons/odoo_ai_assistant`.
-- Current addon manifest version: `18.0.13.25.0`.
+- Current addon manifest version: `18.0.13.26.0`.
 - Current dependencies remain `account`, `base`, `sale`, `web`.
 - The addon is exposed as an Odoo application with Knowledge, Diagnostics and
   Configuration menus; chat remains globally available from the systray.
@@ -203,7 +203,7 @@ form the lexical baseline. Company/private record rules apply before retrieval.
 Fingerprint/version changes make old references stale. Embeddings/vector search remain
 conditional on measured gain.
 
-## 7. P10 Technical and host operations — implemented, validation pending
+## 7. P10 Technical and host operations — accepted
 
 ADR-024 is accepted. The first slice implements two Odoo-local Technical reads:
 
@@ -212,7 +212,7 @@ odoo.module.inspect
 postgres.health
 ```
 
-It also implements an optional Linux AF_UNIX privilege broker and four broker-backed
+It also implements an optional Linux AF_UNIX privilege broker and five broker-backed
 capabilities:
 
 ```text
@@ -220,6 +220,7 @@ odoo.config.inspect
 odoo.config.patch
 host.service.status
 host.service.restart
+odoo.module.update
 ```
 
 The broker boundary provides:
@@ -229,6 +230,8 @@ The broker boundary provides:
 - bounded versioned request/receipt schemas;
 - canonical args and EffectPlan binding fingerprints;
 - fixed-argv service operations with `shell=False`;
+- policy-bound module/database/runtime/UID/GID maintenance targets;
+- external transient systemd module update plus fresh-registry verification;
 - atomic config replacement, fsync and private backup;
 - a durable SQLite execution ledger;
 - terminal receipt replay for the exact request;
@@ -249,7 +252,7 @@ recovery classification.
 Not implemented:
 
 ```text
-odoo.module.install/update/uninstall
+odoo.module.install/uninstall
 repository acquisition/promotion
 host package installation
 config rollback capability
@@ -258,9 +261,9 @@ generic command fallback
 arbitrary SQL/Python/shell/sudo
 ```
 
-Odoo 18 immediate module maintenance is deliberately not called from the Assistant
-cron worker. A separate maintenance/restart reconciliation adapter is required before
-`P10-REAL-MODULE-UPDATE` can run.
+Odoo module update is deliberately not called as an immediate ORM action from the
+Assistant cron worker. It runs in a separate transient systemd unit under the
+configured non-root identity and must pass a fresh-registry version check.
 
 The reference systemd broker unit must be adapted and tested against exact deployment
 paths. A disposable auxiliary service should be used for the first restart gate;
@@ -281,17 +284,17 @@ focused HOOT + browser/asset smoke
 P10 status:
 
 ```text
-focused static/compile/lint                        PASS — bbfa78b
-dependency-light broker/client tests               PASS — 14 tests
-focused Odoo Technical/host tests                  PASS — 4 tests, 0 failures/errors
-broker deployment/systemd smoke                    NOT EXECUTED — deployment absent
-P10-REAL-PROFILE-DENIAL                            NOT EXECUTED
-P10-REAL-CONFIG-PATCH                              NOT EXECUTED
-P10-REAL-SERVICE-OPERATION                         NOT EXECUTED
-P10-REAL-POSTGRES-DIAGNOSTIC                       NOT EXECUTED
-P10-REAL-PRIVILEGE-BOUNDARY                        NOT EXECUTED
-P10-REAL-MODULE-UPDATE                             BLOCKED — adapter missing
-P10 acceptance                                     NOT COMPLETE
+focused static/compile/lint                        PASS — bde508b
+dependency-light broker/client tests               PASS — 18 tests
+focused Odoo Technical/host tests                  PASS — 5 methods, 0 failures/errors
+broker deployment/systemd smoke                    PASS
+P10-REAL-PROFILE-DENIAL                            PASS
+P10-REAL-CONFIG-PATCH                              PASS
+P10-REAL-SERVICE-OPERATION                         PASS
+P10-REAL-POSTGRES-DIAGNOSTIC                       PASS
+P10-REAL-PRIVILEGE-BOUNDARY                        PASS
+P10-REAL-MODULE-UPDATE                             PASS
+P10 acceptance                                     COMPLETE / ACCEPTED
 ```
 
 Use `research/P10_FOCUSED_VALIDATION_RUNBOOK.md`. Broad repository/addon/HOOT/Product
@@ -300,14 +303,8 @@ requires them.
 
 ## 9. Current follow-up scope
 
-The next blocking work is:
-
-1. deploy the broker against disposable config/service targets and pass its smoke;
-2. execute the implemented real profile/config/service/PostgreSQL/boundary gates on
-   disposable targets;
-3. design and implement the lifecycle-safe module-maintenance adapter;
-4. execute `P10-REAL-MODULE-UPDATE`;
-5. record immutable P10 acceptance only after all applicable gates pass.
+The next roadmap work is Phase 11: inspect the current artifact/import seams and
+design the largest coherent durable `DataImportSession` slice before implementation.
 
 Other later work still includes richer citation navigation, durable Evidence-ledger
 reconnect restoration, masked/reveal secret UX, PDF/OCR/XLSX parsing, optional

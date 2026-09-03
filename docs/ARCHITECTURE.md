@@ -397,7 +397,6 @@ changed contract
  -> periodic full regression only when required
 ```
 
-P0-P9 are accepted. P10's typed operations and module-maintenance adapter are
-implemented; focused checks pass and named real gates require acceptance evidence.
-See `research/P10_FOCUSED_VALIDATION_RUNBOOK.md` and
+P0-P10 are accepted. P10's typed operations and module-maintenance adapter passed the
+focused and named real gates. See `research/P10_FOCUSED_VALIDATION_RUNBOOK.md` and
 `research/EXECUTION_STATE.md`.

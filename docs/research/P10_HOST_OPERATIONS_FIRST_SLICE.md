@@ -1,6 +1,6 @@
 # P10 typed host-operations first slice
 
-State: `IMPLEMENTED / REAL VALIDATION IN PROGRESS / PHASE NOT YET ACCEPTED`
+State: `IMPLEMENTED / VALIDATED / ACCEPTED`
 Date: 2026-09-03  
 ADR: `docs/adr/ADR-024-technical-host-privilege-broker.md`
 
@@ -211,7 +211,7 @@ remain outside the surface.
 | Module update fails or times out | Durable uncertain receipt; no blind replay |
 | Module update succeeds | Fresh-registry source/database versions must match |
 
-## 9. Prepared validation surface
+## 9. Executed validation surface
 
 Dependency-light tests:
 
@@ -226,18 +226,12 @@ Odoo-focused tests:
 addons/odoo_ai_assistant/tests/test_phase10_host_operations.py
 ```
 
-These files are prepared but are not PASS evidence until run in the applicable
-interpreter/Odoo environment. Real acceptance is defined by
-`P10_FOCUSED_VALIDATION_RUNBOOK.md` and `REAL_ENV_VALIDATION_PROTOCOL.md`.
+These files were executed in the applicable interpreter/Odoo environment. The gate
+contract remains in `P10_FOCUSED_VALIDATION_RUNBOOK.md`; immutable results are in the
+acceptance evidence linked below.
 
-## 10. Next action
+## 10. Acceptance and next action
 
-1. Run the focused static, dependency-light and Odoo checks on current `main`.
-2. Repair any failure and rerun the affected gate.
-3. Execute the implemented real gates for profile denial, config patch, service
-   operation, PostgreSQL diagnostics and privilege-boundary denial on disposable
-   targets.
-4. Execute `P10-REAL-MODULE-UPDATE` against a disposable addon through the real
-   cron/provider/broker/systemd path, including replay and fresh-registry proof.
-5. Only after all P10 gates pass create immutable acceptance evidence and advance to
-   Phase 11.
+All applicable focused and real gates passed on the lineage recorded in
+`evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`. P10 is accepted. The next
+roadmap action is to design the first coherent Phase-11 `DataImportSession` slice.

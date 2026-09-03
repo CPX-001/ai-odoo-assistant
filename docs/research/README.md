@@ -19,17 +19,18 @@ Unexecuted validation is never PASS.
 ## Current cursor
 
 ```text
-P0-P9 COMPLETE / ACCEPTED
+P0-P10 COMPLETE / ACCEPTED
 P10 PRIVILEGE-BOUNDARY ADR ACCEPTED
 P10 TYPED HOST-OPERATIONS FIRST SLICE IMPLEMENTED
 P10 MODULE-UPDATE MAINTENANCE ADAPTER IMPLEMENTED
 P10 FOCUSED VALIDATION PASS
-P10 REAL VALIDATION IN PROGRESS
+P10 REAL VALIDATION PASS
+P11 READY FOR DESIGN
 ```
 
-P9 remains the latest accepted phase, anchored at
-`77d470febf67ddee46562907718dc47e975922bb` and documented in
-`evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`.
+P10 is the latest accepted phase, anchored at
+`bde508b737c132140e237cdfde31aee9b37eca5f` and documented in
+`evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`.
 
 Use `EXECUTION_STATE.md` for the exact cursor, implementation lineage, blockers and
 validation debt.
@@ -111,19 +112,18 @@ be used by a User/non-technical profile merely because autonomy is high.
 
 ## Validation truth
 
-Accepted P8/P9 evidence remains immutable. P10 focused static, dependency-light and
-Odoo checks pass on the current work; the real-environment runbook is in progress and
-still requires an immutable acceptance record.
+Accepted P8/P9 evidence remains immutable. P10 focused and real-environment gates pass
+on the accepted lineage and have an immutable acceptance record.
 
-Current P10 blockers:
+Accepted P10 status:
 
 ```text
-focused dependency-light tests                   PASS — 18 tests on current work
+focused dependency-light tests                   PASS — 18 tests
 focused Odoo tests                               PASS — 5 methods, 0 failures/errors
-broker deployment/systemd smoke                  EXECUTED — evidence record pending
-profile/config/service/postgres/boundary gates   EXECUTED — evidence record pending
-P10-REAL-MODULE-UPDATE                           IN PROGRESS
-P10 acceptance                                   NOT COMPLETE
+broker deployment/systemd smoke                  PASS
+profile/config/service/postgres/boundary gates   PASS
+P10-REAL-MODULE-UPDATE                           PASS
+P10 acceptance                                   COMPLETE / ACCEPTED
 ```
 
 The full repository/addon/HOOT/Product Behavior regressions remain periodic debt
@@ -140,6 +140,7 @@ P7 acceptance evidence/phase7/2026-09-02/P7-ACCEPTANCE-092ac57.md
 P7 final regression evidence/regression/2026-09-02/FULL-REGRESSION-092ac57.md
 P8 acceptance evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
 P9 acceptance evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
+P10 acceptance evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
 ```
 
 Older preparation/blocker records remain historical and must not be rewritten to

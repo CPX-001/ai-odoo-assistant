@@ -405,9 +405,8 @@ For broker-backed operations additionally answer:
 
 ## 20. Validation state
 
-P0-P9 contracts are accepted on their recorded lineages. P10's typed operations,
-module-maintenance adapter and focused test surfaces exist; named real gates still
-require acceptance evidence.
+P0-P10 contracts are accepted on their recorded lineages. P10's typed operations and
+module-maintenance adapter passed the focused and named real gates.
 
 See:
 

@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 66
+State format: 67
 Updated: 2026-09-03
 
 ## Accepted lineage
@@ -19,25 +19,26 @@ P6 final acceptance through 0b1bcab39b71dfbe02526cda7cf7ac8e218ac4b0
 P7 final acceptance through 092ac57fe58a3a36765b115e78b2eca687f5dbbc
 P8 final acceptance through e370af8acb7df175c0a90c8e17520c8576b4c6ce
 P9 final acceptance through 77d470febf67ddee46562907718dc47e975922bb
+P10 final acceptance through bde508b737c132140e237cdfde31aee9b37eca5f
 ```
 
-P10 focused validation is recorded below, but Phase 10 has no acceptance evidence yet.
+P10 acceptance is recorded below. Phase 11 is the next implementation phase.
 
 ## Current cursor
 
 ```text
-phase: 10
-phase_name: developer/operator host operations
-active_slice: P10-TYPED-HOST-OPERATIONS-FIRST-SLICE
-slice_state: REAL_ENV_VALIDATION_REQUIRED
-current_gate_type: HARD_REAL
-blocking_implementation: lifecycle-safe odoo.module.update maintenance adapter is still missing
-blocking_validation: broker deployment smoke and all named real P10 gates remain unexecuted
-latest_accepted_evidence: docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
-latest_phase_acceptance: docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
+phase: 11
+phase_name: advanced imports and artifact workflows
+active_slice: P11-ADVANCED-IMPORTS
+slice_state: READY_FOR_DESIGN
+current_gate_type: NONE
+blocking_implementation: none recorded; P11 design/implementation has not started
+blocking_validation: P11 HARD real gates are unexecuted because implementation has not started
+latest_accepted_evidence: docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
+latest_phase_acceptance: docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
 latest_implementation_record: docs/research/P10_HOST_OPERATIONS_FIRST_SLICE.md
-latest_validation_record: docs/research/evidence/phase10/2026-09-03/P10-FOCUSED-bbfa78b.md
-next_action: provision the disposable broker/config/service environment, execute its deployment smoke and the implemented real profile/config/service/postgres/boundary gates, and repair failures before designing the module-maintenance adapter
+latest_validation_record: docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
+next_action: inspect current import/artifact seams and design the largest coherent P11 DataImportSession slice before implementation
 ```
 
 ## P10 design and implementation lineage
@@ -48,6 +49,8 @@ f45f29cbc5861b66cc32fcc14d52564636439114  typed broker + first Technical capabil
 a516aa6c5e2a448ed4145ba7fc49834a4ba25e8f  post-dispatch certainty regression coverage
 80ffdd6a0153323987516d5e458c985e143c8f75  post-dispatch transport uncertainty repair
 bbfa78b87d2870fb4b79cbd1854d00f5d1087375  focused validation repair and executable PASS
+bda2b1918c9e2231fadeab527b86ac6399294671  replay identity repair from real broker testing
+bde508b737c132140e237cdfde31aee9b37eca5f  module maintenance adapter and P10 accepted implementation
 ```
 
 The intervening `9d5eca969f05fad66365136cdaed37028986b1af` product-menu change
@@ -61,6 +64,7 @@ optional stdlib-only Linux AF_UNIX broker package
 versioned bounded request/receipt protocol
 bidirectional SO_PEERCRED identity checks
 deployment-owned logical config/service target policy
+deployment-owned logical module/database/runtime maintenance policy
 secure policy/executable owner-mode validation
 durable SQLite request ledger and terminal receipt replay
 uncertain-state preservation for in-flight effects
@@ -68,6 +72,8 @@ odoo.config.inspect
 odoo.config.patch with preview, atomic replace, private backup and verify
 host.service.status
 host.service.restart with fixed argv, preview and health verify
+odoo.module.update through a separate policy-bound systemd maintenance unit
+fresh-registry module source/database version verification
 odoo.module.inspect as an Odoo-local Technical read
 postgres.health using fixed host-owned read SQL
 Technical group/profile gating independent from autonomy
@@ -81,7 +87,6 @@ focused/real validation runbook
 
 ```text
 odoo.module.install
-odoo.module.update
 odoo.module.uninstall
 repository acquire/promote
 host package install
@@ -91,33 +96,31 @@ secret-value reveal
 automatic retry of ambiguous host effects
 ```
 
-Odoo 18 immediate module maintenance is not wrapped inside the Assistant cron worker.
-A separate maintenance/restart reconciliation adapter must produce a durable
-exactly-once receipt and verify the fresh registry before `P10-REAL-MODULE-UPDATE` can
-run.
+Odoo module update is not wrapped inside the Assistant cron worker. It uses the
+accepted external maintenance adapter. Install/uninstall and repository acquisition
+remain outside P10.
 
 ## P10 validation status
 
 ```text
-static/compile/lint                                      PASS — bbfa78b
-focused dependency-light broker tests                    PASS — 14 tests
-focused Odoo Technical/host tests                        PASS — 4 tests, 0 failures/errors
-broker deployment/systemd smoke                          NOT EXECUTED — deployment absent
-P10-REAL-PROFILE-DENIAL                                  NOT EXECUTED
-P10-REAL-CONFIG-PATCH                                    NOT EXECUTED
-P10-REAL-SERVICE-OPERATION                               NOT EXECUTED
-P10-REAL-POSTGRES-DIAGNOSTIC                             NOT EXECUTED
-P10-REAL-PRIVILEGE-BOUNDARY                              NOT EXECUTED
-P10-REAL-MODULE-UPDATE                                   BLOCKED — adapter missing
+static/compile/lint                                      PASS — bde508b
+focused dependency-light broker tests                    PASS — 18 tests
+focused Odoo Technical/host tests                        PASS — 5 methods, 0 failures/errors
+broker deployment/systemd smoke                          PASS
+P10-REAL-PROFILE-DENIAL                                  PASS
+P10-REAL-CONFIG-PATCH                                    PASS
+P10-REAL-SERVICE-OPERATION                               PASS
+P10-REAL-POSTGRES-DIAGNOSTIC                             PASS
+P10-REAL-PRIVILEGE-BOUNDARY                              PASS
+P10-REAL-MODULE-UPDATE                                   PASS
 P10-REAL-COMMAND-SANDBOX                                 NOT APPLICABLE
 P10-REAL-COMMAND-APPROVAL                                NOT APPLICABLE
-P10 acceptance                                           NOT COMPLETE
+P10 acceptance                                           COMPLETE / ACCEPTED
 ```
 
-Focused evidence is recorded in
-`docs/research/evidence/phase10/2026-09-03/P10-FOCUSED-bbfa78b.md`. Use
-`docs/research/P10_FOCUSED_VALIDATION_RUNBOOK.md` for the remaining deployment and
-real gates. Focused PASS is not real-gate or Phase-10 acceptance.
+Acceptance evidence is recorded in
+`docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`. The earlier
+focused-only record remains immutable historical evidence.
 
 ## P9 accepted baseline
 
@@ -153,7 +156,7 @@ Product Behavior FULL                   NOT EXECUTED (periodic debt)
 raw EvidenceLedger reconnect replay     NOT IMPLEMENTED / NOT A P9 CLAIM
 ```
 
-The P10 focused runbook does not authorize broad regression by itself. Expand only
+The P11 runbooks do not authorize broad regression by themselves. Expand only
 for a concrete focused failure whose blast radius requires it or when the user/current
 runbook explicitly requires the broad gate.
 

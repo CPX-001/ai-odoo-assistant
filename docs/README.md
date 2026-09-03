@@ -6,23 +6,23 @@ direction and validation evidence.
 ## Current formal state
 
 ```text
-P0-P9 COMPLETE / ACCEPTED
+P0-P10 COMPLETE / ACCEPTED
 P10 PRIVILEGE-BOUNDARY ADR ACCEPTED
 P10 TYPED HOST-OPERATIONS FIRST SLICE IMPLEMENTED
 P10 MODULE-UPDATE MAINTENANCE ADAPTER IMPLEMENTED
 P10 FOCUSED VALIDATION PASS
-P10 REAL VALIDATION IN PROGRESS
-P10 NOT ACCEPTED
+P10 REAL VALIDATION PASS
+P11 READY FOR DESIGN
 ```
 
 P9 remains accepted through `77d470febf67ddee46562907718dc47e975922bb`.
 Its acceptance record is
 [`research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`](research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md).
 
-P10's design is accepted in ADR-024 and the first implementation slice is present on
-`main`. Its focused static, dependency-light and Odoo gates pass at `bbfa78b`, while
-the broker deployment smoke and named real gates remain pending. Focused PASS is not
-Phase-10 acceptance.
+P10 is accepted through `bde508b737c132140e237cdfde31aee9b37eca5f`. Its focused
+and real broker/profile/config/service/PostgreSQL/privilege/module gates are recorded
+in
+[`research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`](research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md).
 
 ## Primary reading path
 
@@ -34,8 +34,8 @@ Phase-10 acceptance.
 6. [`KNOWLEDGE_INDEX.md`](KNOWLEDGE_INDEX.md) — P9 Knowledge lifecycle and retrieval.
 7. [`adr/ADR-024-technical-host-privilege-broker.md`](adr/ADR-024-technical-host-privilege-broker.md) — accepted P10 privilege boundary.
 8. [`research/P10_HOST_OPERATIONS_FIRST_SLICE.md`](research/P10_HOST_OPERATIONS_FIRST_SLICE.md) — implemented P10 scope and deferrals.
-9. [`research/P10_FOCUSED_VALIDATION_RUNBOOK.md`](research/P10_FOCUSED_VALIDATION_RUNBOOK.md) — pending P10 gates.
-10. [`research/evidence/phase10/2026-09-03/P10-FOCUSED-bbfa78b.md`](research/evidence/phase10/2026-09-03/P10-FOCUSED-bbfa78b.md) — focused validation evidence.
+9. [`research/P10_FOCUSED_VALIDATION_RUNBOOK.md`](research/P10_FOCUSED_VALIDATION_RUNBOOK.md) — executed P10 gate contract.
+10. [`research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`](research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md) — P10 acceptance evidence.
 11. [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) — exact roadmap cursor.
 
 ## Architecture at a glance
@@ -55,7 +55,7 @@ flowchart TB
     HOST --> EFFECT[EffectPlan -> preview -> policy/approval -> execute -> verify]
     EFFECT --> ORM
     EFFECT --> BROKER[Optional typed host broker]
-    BROKER --> TARGET[Policy-owned config/service target]
+    BROKER --> TARGET[Policy-owned config/service/module target]
     HOST --> LIVE[TaskPlan/activity/answer/final projection]
     LIVE --> UI
 ```
@@ -95,9 +95,8 @@ Transport loss after dispatch of a host effect is treated as uncertain.
 - [`adr/ADR-024-technical-host-privilege-broker.md`](adr/ADR-024-technical-host-privilege-broker.md)
 - [`../host_broker/README.md`](../host_broker/README.md)
 
-ADR-024 is accepted. The broker-backed capabilities and external module-update
-maintenance adapter exist; named real validation and acceptance evidence remain the
-gate to Phase 10 acceptance.
+ADR-024, the broker-backed capabilities and the external module-update maintenance
+adapter are accepted on the recorded P10 lineage.
 
 ### Execution, evals and evidence
 

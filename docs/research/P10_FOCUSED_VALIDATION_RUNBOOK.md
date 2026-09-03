@@ -1,9 +1,11 @@
 # P10 focused validation runbook
 
-State: `FOCUSED PASS / REAL VALIDATION IN PROGRESS`
+State: `EXECUTED / PASS / P10 ACCEPTED`
 Scope: typed Technical/host operations plus the Phase-10 privilege boundary
 
-Focused execution evidence: `evidence/phase10/2026-09-03/P10-FOCUSED-bbfa78b.md`.
+Acceptance evidence: `evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`.
+The earlier focused-only record remains at
+`evidence/phase10/2026-09-03/P10-FOCUSED-bbfa78b.md`.
 
 This runbook validates the implementation recorded in
 `P10_HOST_OPERATIONS_FIRST_SLICE.md`. It does not convert prepared code into PASS

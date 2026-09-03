@@ -8,15 +8,15 @@ and performs controlled actions through host-owned contracts.
 ## Current state
 
 ```text
-P0-P9 COMPLETE / ACCEPTED
+P0-P10 COMPLETE / ACCEPTED
 P10 PRIVILEGE-BOUNDARY ADR ACCEPTED
 P10 TYPED HOST-OPERATIONS FIRST SLICE IMPLEMENTED
-P10 FOCUSED + REAL VALIDATION PENDING
-P10 MODULE-UPDATE ADAPTER MISSING
-P10 NOT ACCEPTED
+P10 MODULE-UPDATE MAINTENANCE ADAPTER IMPLEMENTED
+P10 FOCUSED + REAL VALIDATION PASS
+P11 READY FOR DESIGN
 ```
 
-P9 remains the latest accepted phase. The exact cursor is
+P10 is the latest accepted phase through `bde508b`. The exact cursor is
 [`docs/research/EXECUTION_STATE.md`](docs/research/EXECUTION_STATE.md). Code or a
 prepared test never counts as PASS evidence by itself.
 
@@ -64,7 +64,7 @@ flowchart TB
     POLICY --> EFFECT[Preview / approval / execute / verify]
     EFFECT --> ORM[Effective Odoo Environment, su=False]
     EFFECT --> BROKER[Optional typed AF_UNIX host broker]
-    BROKER --> TARGET[Deployment-policy config/service target]
+    BROKER --> TARGET[Deployment-policy config/service/module target]
     HOST --> PUBLIC[Sanitized activity / answer / final]
     PUBLIC --> UI
 ```
@@ -150,6 +150,7 @@ odoo.config.inspect       broker-backed managed config read
 odoo.config.patch         preview + policy + atomic patch + backup + verify
 host.service.status       broker-backed exact service status
 host.service.restart      preview + policy + fixed-argv restart + verify
+odoo.module.update        external systemd maintenance + fresh-registry verify
 ```
 
 The optional stdlib-only Linux broker uses:
@@ -159,6 +160,7 @@ The optional stdlib-only Linux broker uses:
 - bounded canonical request/receipt protocol;
 - exact EffectPlan step/args/precondition binding;
 - fixed-argv systemd operations with `shell=False`;
+- policy-bound module/database/runtime/UID/GID maintenance targets;
 - atomic config replacement and private backup;
 - durable SQLite replay ledger;
 - terminal receipt replay and replay-mismatch denial;
@@ -170,15 +172,15 @@ autonomy.
 Not implemented yet:
 
 ```text
-odoo.module.install/update/uninstall
+odoo.module.install/uninstall
 repository/package promotion
 generic command fallback
 secret reveal
 ```
 
-Odoo 18 immediate module maintenance is deliberately not called from the Assistant
-cron worker. A lifecycle-safe maintenance adapter is required before
-`P10-REAL-MODULE-UPDATE` can run.
+Odoo module update is deliberately not called as an immediate ORM action from the
+Assistant cron worker. The accepted adapter launches a separate fixed systemd unit
+under the configured non-root identity and verifies a fresh registry.
 
 See:
 
@@ -236,10 +238,11 @@ tests/unit/test_phase10_host_broker_client.py
 addons/odoo_ai_assistant/tests/test_phase10_host_operations.py
 ```
 
-Focused static, dependency-light, Odoo and real P10 gates have not yet been recorded
-as PASS. `P10-REAL-MODULE-UPDATE` is additionally blocked by the missing maintenance
-adapter. Broad regressions remain periodic debt unless explicitly required or a
-focused failure shows a wider blast radius.
+Focused static, dependency-light and Odoo checks plus all applicable real P10 gates
+are PASS in
+[`P10-ACCEPTANCE-bde508b.md`](docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md).
+Broad regressions remain periodic debt unless explicitly required or a focused
+failure shows a wider blast radius.
 
 ## Development rules
 
