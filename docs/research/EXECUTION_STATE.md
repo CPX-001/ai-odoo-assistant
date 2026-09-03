@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 67
+State format: 68
 Updated: 2026-09-03
 
 ## Accepted lineage
@@ -22,85 +22,104 @@ P9 final acceptance through 77d470febf67ddee46562907718dc47e975922bb
 P10 final acceptance through bde508b737c132140e237cdfde31aee9b37eca5f
 ```
 
-P10 acceptance is recorded below. Phase 11 is the next implementation phase.
+P10 remains the latest accepted phase. P11 now has an implemented first durable CSV
+slice but no focused or real PASS evidence yet.
 
 ## Current cursor
 
 ```text
 phase: 11
 phase_name: advanced imports and artifact workflows
-active_slice: P11-ADVANCED-IMPORTS
-slice_state: READY_FOR_DESIGN
-current_gate_type: NONE
-blocking_implementation: none recorded; P11 design/implementation has not started
-blocking_validation: P11 HARD real gates are unexecuted because implementation has not started
+active_slice: P11-DURABLE-CSV-FIRST-SLICE
+slice_state: IMPLEMENTED_FOCUSED_VALIDATION_PENDING
+current_gate_type: HARD_FOCUSED
+blocking_implementation: none for the first slice; later P11 breadth still includes cleanup/enrichment/remap workflows
+blocking_validation: focused static/Odoo validation and all six P11 HARD real gates remain unexecuted
 latest_accepted_evidence: docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
 latest_phase_acceptance: docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
-latest_implementation_record: docs/research/P10_HOST_OPERATIONS_FIRST_SLICE.md
-latest_validation_record: docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
-next_action: inspect current import/artifact seams and design the largest coherent P11 DataImportSession slice before implementation
+latest_implementation_record: docs/research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md
+latest_validation_record: docs/research/P11_FOCUSED_VALIDATION_RUNBOOK.md
+next_action: execute the focused P11 static/module/Odoo gate, repair failures, then run the applicable real CSV/large/mapping/partial/resume/receipt gates before deciding the next P11 slice
 ```
 
-## P10 design and implementation lineage
+## P11 implementation lineage
 
 ```text
-8b97d3ea012f05122c4c0cf7774c72653306cf02  ADR-024 accepted
-f45f29cbc5861b66cc32fcc14d52564636439114  typed broker + first Technical capabilities
-a516aa6c5e2a448ed4145ba7fc49834a4ba25e8f  post-dispatch certainty regression coverage
-80ffdd6a0153323987516d5e458c985e143c8f75  post-dispatch transport uncertainty repair
-bbfa78b87d2870fb4b79cbd1854d00f5d1087375  focused validation repair and executable PASS
-bda2b1918c9e2231fadeab527b86ac6399294671  replay identity repair from real broker testing
-bde508b737c132140e237cdfde31aee9b37eca5f  module maintenance adapter and P10 accepted implementation
+0217b5e9057e7304ded53433333a9279fb53cc2f  register base_import dependency + P11 data/security hooks
+2702fc1b71deb71483ff75705dc71cb82866188d  import-session owner/admin record rules
+c451ba154cdecb0d574c0a15bc0bcd9f39e9d678  bounded import worker cron
+A8E9CCF65092E6B74EF6D20830BC6161FAB7AB40  durable CSV session/chunk runtime + capabilities + focused tests
 ```
 
-The intervening `9d5eca969f05fad66365136cdaed37028986b1af` product-menu change
-is preserved and is not Phase-10 acceptance evidence.
+The uppercase SHA above is the same Git object as lowercase
+`a8e9ccf65092e6b74ef6d20830bc6161fab7ab40`.
 
-### Implemented first slice
+### Implemented first P11 slice
 
 ```text
-accepted ADR-024 Technical/host privilege boundary
-optional stdlib-only Linux AF_UNIX broker package
-versioned bounded request/receipt protocol
-bidirectional SO_PEERCRED identity checks
-deployment-owned logical config/service target policy
-deployment-owned logical module/database/runtime maintenance policy
-secure policy/executable owner-mode validation
-durable SQLite request ledger and terminal receipt replay
-uncertain-state preservation for in-flight effects
-odoo.config.inspect
-odoo.config.patch with preview, atomic replace, private backup and verify
-host.service.status
-host.service.restart with fixed argv, preview and health verify
-odoo.module.update through a separate policy-bound systemd maintenance unit
-fresh-registry module source/database version verification
-odoo.module.inspect as an Odoo-local Technical read
-postgres.health using fixed host-owned read SQL
-Technical group/profile gating independent from autonomy
-durable EffectPlan step/binding/precondition binding
-post-dispatch transport/receipt loss normalized to host_effect_uncertain
-dependency-light and focused Odoo test surfaces
-focused/real validation runbook
+short-lived current-turn CSV attachment reused as bounded artifact ref
+artifact copied into durable Odoo session before background execution
+odoo.ai.data.import.session
+odoo.ai.data.import.chunk
+assistant.data_import.inspect_csv
+assistant.data_import.start_csv
+assistant.data_import.status
+Odoo 18 base_import parse_preview mapping/type suggestions
+host-filtered direct scalar mapping only
+exact artifact/model/mapping/request fingerprints
+exact mapped row count + in-file duplicate count before authorization
+PLAN + policy approval for durable start
+native base_import dry-run per chunk
+native base_import real execution per chunk
+fixed 250 default / 1000 maximum row chunk size
+one chunk per cron transaction
+FOR UPDATE SKIP LOCKED session claiming
+originating effective-user Environment reconstructed with su=False
+chunk record ids + bounded messages + receipt fingerprint
+exact imported / failed / corrected / remaining counters
+idempotent same-turn request -> same durable session
+invalid chunk rejected as a whole without replaying earlier commits
+30-day terminal session cleanup
 ```
 
-### Deliberately not implemented
+### Explicit first-slice limits
 
 ```text
-odoo.module.install
-odoo.module.uninstall
-repository acquire/promote
-host package install
-generic command fallback
-arbitrary SQL/Python/shell/sudo/ORM method execution
-secret-value reveal
-automatic retry of ambiguous host effects
+CSV create-only
+no XLS/XLSX/ODS session yet
+no relational field paths
+no external-id upsert/update
+no row-by-row salvage inside a rejected chunk
+no model-assisted row cleanup/enrichment yet
+corrected_rows remains 0
+no user remap/resume after a validation rejection yet
+no automatic final chat message when a background import completes
 ```
 
-Odoo module update is not wrapped inside the Assistant cron worker. It uses the
-accepted external maintenance adapter. Install/uninstall and repository acquisition
-remain outside P10.
+These are product-scope limits, not hidden claims. See
+`docs/research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md`.
 
-## P10 validation status
+## P11 validation status
+
+```text
+static/compile/lint                                      NOT EXECUTED
+addon install/update + security/XML load                 NOT EXECUTED
+focused Odoo TestPhase11DataImportSession                NOT EXECUTED — prepared 4 methods
+P11-REAL-CSV-IMPORT                                      NOT EXECUTED
+P11-REAL-LARGE-IMPORT                                    NOT EXECUTED
+P11-REAL-MAPPING-CORRECTION                              NOT EXECUTED
+P11-REAL-PARTIAL-INVALID                                 NOT EXECUTED
+P11-REAL-RESUME-NO-DUPLICATE                             NOT EXECUTED
+P11-REAL-IMPORT-RECEIPT                                  NOT EXECUTED
+P11 acceptance                                           NOT COMPLETE
+```
+
+Use `docs/research/P11_FOCUSED_VALIDATION_RUNBOOK.md`. No repository inspection,
+prepared test or author-side syntax check is PASS evidence by itself.
+
+## P10 accepted baseline
+
+P10 remains accepted on its recorded lineage:
 
 ```text
 static/compile/lint                                      PASS — bde508b
@@ -118,33 +137,8 @@ P10-REAL-COMMAND-APPROVAL                                NOT APPLICABLE
 P10 acceptance                                           COMPLETE / ACCEPTED
 ```
 
-Acceptance evidence is recorded in
-`docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`. The earlier
-focused-only record remains immutable historical evidence.
-
-## P9 accepted baseline
-
-P9 remains accepted on the exact recorded lineage:
-
-```text
-static/compile/lint                            PASS
-focused dependency-light                      PASS — 49 tests
-focused Odoo                                  PASS — 25 tests, 0 failures/errors
-focused HOOT                                  PASS — 1 test / 1 assertion
-focused browser/asset smoke                    PASS
-P9-REAL-UPLOAD-INGEST                         PASS
-P9-REAL-CHAT-INGEST                           PASS
-P9-REAL-FTS                                   PASS
-P9-REAL-CITATIONS                             PASS
-P9-REAL-ACL                                   PASS
-P9-REAL-REINDEX                               PASS
-P9-REAL-LARGE-DOCUMENT                        PASS
-P9-REAL-SEMANTIC-GAIN                         NOT APPLICABLE unless vector backend is introduced
-P9 acceptance                                 COMPLETE / ACCEPTED
-```
-
-The authoritative record is
-`docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`.
+Authoritative evidence:
+`docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`.
 
 ## Periodic validation debt and explicit limits
 
@@ -156,34 +150,31 @@ Product Behavior FULL                   NOT EXECUTED (periodic debt)
 raw EvidenceLedger reconnect replay     NOT IMPLEMENTED / NOT A P9 CLAIM
 ```
 
-The P11 runbooks do not authorize broad regression by themselves. Expand only
-for a concrete focused failure whose blast radius requires it or when the user/current
-runbook explicitly requires the broad gate.
+The P11 runbook does not authorize broad regression by itself. Expand only for a
+concrete focused failure whose root cause/blast radius requires it or when the user
+explicitly requests the broad gate.
 
 ## Permanent invariants
 
 - Odoo remains persistence and operational authority.
 - Business execution uses the effective user Environment with `su=False`.
 - `CapabilityDefinition` remains the atomic executable contract.
-- Skills, manifests, context and Evidence cannot create execution authority.
-- Evidence is bounded untrusted data with host-owned provenance/access/freshness.
-- Product-facing human profiles are User/non-technical and Technical only; public
-  values are `user` and `technical`.
-- The accepted optional host broker is a machine execution boundary, not a third
-  human profile or a replacement runtime.
-- Hidden, disabled or unauthorized capabilities remain non-executable.
-- Approval is policy/autonomy-driven but never expands the user's Odoo or broker
+- Skills, manifests, context, Evidence and artifact contents cannot create execution
   authority.
-- Host effects retain preview, plan/request binding, policy/approval when required,
-  execute, receipt, verification and recovery semantics.
-- Transport loss after host-effect dispatch is uncertain, never proof of no effect.
-- Ambiguous Odoo or host writes are not retried automatically.
-- No arbitrary SQL, Python, shell, sudo or unrestricted ORM method is exposed.
-- Raw/private provider reasoning, credentials, config secrets and unsanitized broker
-  output are not persisted or shown as public progress.
-- User-pasted or retrieved text cannot modify broker policy or grant authority.
-- Optional extension/broker unavailability is isolated; required authority fails
-  closed.
+- Evidence/artifact metadata exposed to the model is bounded; binary/base64 payloads
+  are not dumped into prompts.
+- Hidden, disabled or unauthorized capabilities remain non-executable.
+- Approval/autonomy never expands Odoo ACL/model/field authority.
+- Host and durable-workflow effects retain preview/binding/policy/receipts and explicit
+  recovery semantics.
+- A committed import chunk is never blindly replayed; rows and its durable receipt
+  share the same transaction boundary.
+- Ambiguous external/host effects are not retried automatically.
+- No arbitrary SQL, Python, shell, sudo or unrestricted ORM method is exposed to the
+  model.
+- Raw/private provider reasoning, credentials and unsanitized host output are not
+  persisted or shown as public progress.
+- User-pasted/retrieved/file text cannot modify capability or broker policy.
 - No unexecuted test or gate may be represented as PASS.
 
 ## Current navigation
@@ -194,12 +185,10 @@ docs/ARCHITECTURE.md
 docs/CAPABILITY_FRAMEWORK.md
 docs/EVIDENCE_ARCHITECTURE.md
 docs/KNOWLEDGE_INDEX.md
-docs/OBSERVABILITY_ARCHITECTURE.md
-docs/CONTEXT_SOURCE_POLICY.md
-docs/adr/ADR-024-technical-host-privilege-broker.md
-docs/research/P10_HOST_OPERATIONS_FIRST_SLICE.md
-docs/research/P10_FOCUSED_VALIDATION_RUNBOOK.md
-host_broker/README.md
+docs/research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md
+docs/research/P11_FOCUSED_VALIDATION_RUNBOOK.md
+docs/research/REAL_ENV_VALIDATION_PROTOCOL.md
+docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
 ```
 
 Older phase narratives and immutable proof remain under `docs/research/evidence/`;
