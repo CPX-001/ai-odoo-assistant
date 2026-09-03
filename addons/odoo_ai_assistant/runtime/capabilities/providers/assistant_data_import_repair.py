@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from odoo.exceptions import AccessError, UserError, ValidationError
 
+from ....models.data_import import DataImportWorkflowError
 from ..contracts import (
     CapabilityApproval,
     CapabilityContext,
@@ -16,7 +17,6 @@ from ..contracts import (
 )
 from ..decorators import tool
 from .assistant_data_import import _turn_bound
-from ....models.data_import import DataImportWorkflowError
 
 _DEFAULT_CHUNK_SIZE = 250
 _MAX_MAPPING_ITEMS = 64

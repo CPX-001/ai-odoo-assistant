@@ -9,6 +9,7 @@ import io
 import json
 import math
 from datetime import timedelta
+from typing import ClassVar
 from uuid import uuid4
 
 from odoo import SUPERUSER_ID, api, fields, models
@@ -200,7 +201,7 @@ class AssistantDataImportSession(models.Model):
         readonly=True,
     )
 
-    _sql_constraints = [
+    _sql_constraints: ClassVar[list[tuple[str, str, str]]] = [
         (
             "data_import_session_uuid_unique",
             "unique(session_uuid)",
@@ -508,7 +509,8 @@ class AssistantDataImportSession(models.Model):
                 session._process_one_chunk()
         except DataImportChunkRejected as error:
             session._record_rejected_chunk(error)
-        except Exception:  # noqa: BLE001 - cron boundary records only a sanitized failure
+        # Keep the cron boundary sanitized: raw native-import errors may contain row data.
+        except Exception:  # noqa: BLE001 - cron must contain and sanitize failures
             session.write(
                 {
                     "state": "failed",
@@ -523,6 +525,13 @@ class AssistantDataImportSession(models.Model):
 
     @api.model
     def _claim_next_session(self):
+        # The worker selects with raw SQL so it can use SKIP LOCKED.  Odoo may
+        # still have a terminal state buffered in the ORM write pipeline (most
+        # notably immediately after recording a rejected chunk), therefore the
+        # selector must flush that field before consulting PostgreSQL.  Without
+        # this boundary a second worker pass can reclaim the same rejected
+        # range and turn a valid partial receipt into a generic failure.
+        self.flush_model(["state"])
         self.env.cr.execute(
             """
             SELECT id
@@ -548,6 +557,7 @@ class AssistantDataImportSession(models.Model):
             self.mapping_json,
             headers=list(self.headers_json or []),
             safe_fields=safe_fields,
+            allow_persisted_column=True,
         )
         expected_import_fields = [item["field"] for item in mapping]
         import_fields = _import_fields(self.import_fields_json)
@@ -746,8 +756,11 @@ class AssistantDataImportChunk(models.Model):
     input_count = fields.Integer(required=True, readonly=True)
     imported_count = fields.Integer(required=True, readonly=True)
     failed_count = fields.Integer(required=True, readonly=True)
-    record_ids_json = fields.Json(required=True, readonly=True, copy=False, default=list)
-    messages_json = fields.Json(required=True, readonly=True, copy=False, default=list)
+    # Odoo 18 stores falsey Json values as SQL NULL. These fields are legitimately
+    # empty on rejected and successful chunks respectively, so they cannot carry a
+    # database NOT NULL constraint even though their public projection is always a list.
+    record_ids_json = fields.Json(readonly=True, copy=False, default=list)
+    messages_json = fields.Json(readonly=True, copy=False, default=list)
     state = fields.Selection(
         [("completed", "Completed"), ("rejected", "Rejected")],
         required=True,
@@ -757,7 +770,7 @@ class AssistantDataImportChunk(models.Model):
     receipt_fingerprint = fields.Char(required=True, readonly=True, index=True, size=71)
     completed_at = fields.Datetime(required=True, readonly=True, index=True)
 
-    _sql_constraints = [
+    _sql_constraints: ClassVar[list[tuple[str, str, str]]] = [
         (
             "data_import_chunk_session_sequence_unique",
             "unique(session_id, sequence)",
@@ -898,7 +911,7 @@ def _native_preview(env, *, raw, filename, target_model):
             },
             count=10,
         )
-    except Exception as error:  # noqa: BLE001 - native import errors are sanitized
+    except Exception as error:
         raise DataImportWorkflowError("data_import_csv_invalid") from error
     if not isinstance(preview, dict) or preview.get("error"):
         raise DataImportWorkflowError("data_import_csv_invalid")
@@ -979,7 +992,13 @@ def _chunk_import_options(value):
     return result
 
 
-def _normalized_mapping(mapping, *, headers, safe_fields):
+def _normalized_mapping(
+    mapping,
+    *,
+    headers,
+    safe_fields,
+    allow_persisted_column=False,
+):
     if not isinstance(mapping, list) or not mapping or len(mapping) > len(headers):
         raise DataImportWorkflowError("data_import_mapping_invalid")
     allowed = {item["name"] for item in safe_fields}
@@ -987,7 +1006,13 @@ def _normalized_mapping(mapping, *, headers, safe_fields):
     indices = set()
     fields_seen = set()
     for item in mapping:
-        if not isinstance(item, dict) or set(item) != {"column_index", "field"}:
+        if not isinstance(item, dict):
+            raise DataImportWorkflowError("data_import_mapping_invalid")
+        keys = set(item)
+        if keys != {"column_index", "field"} and not (
+            allow_persisted_column
+            and keys == {"column_index", "column", "field"}
+        ):
             raise DataImportWorkflowError("data_import_mapping_invalid")
         column_index = item.get("column_index")
         field_name = item.get("field")
@@ -998,6 +1023,10 @@ def _normalized_mapping(mapping, *, headers, safe_fields):
             or field_name not in allowed
             or column_index in indices
             or field_name in fields_seen
+            or (
+                "column" in item
+                and item.get("column") != headers[column_index]
+            )
         ):
             raise DataImportWorkflowError("data_import_mapping_invalid")
         indices.add(column_index)
@@ -1025,11 +1054,11 @@ def _mapped_rows(env, *, raw, filename, target_model, fields_vector, options):
         target_model=target_model,
     )
     try:
-        rows, import_fields = wizard._convert_import_data(  # noqa: SLF001
+        rows, import_fields = wizard._convert_import_data(
             fields_vector,
             dict(options),
         )
-    except Exception as error:  # noqa: BLE001 - native import errors are sanitized
+    except Exception as error:
         raise DataImportWorkflowError("data_import_csv_invalid") from error
     if not isinstance(rows, list) or not isinstance(import_fields, list):
         raise DataImportWorkflowError("data_import_csv_invalid")

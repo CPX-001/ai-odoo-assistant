@@ -8,8 +8,8 @@ from odoo import SUPERUSER_ID, api, fields, models
 from odoo.exceptions import AccessError
 
 from .data_import import (
-    DataImportWorkflowError,
     _MAX_CHUNKS_PER_SESSION,
+    DataImportWorkflowError,
     _bound_attachment,
     _duplicate_rows,
     _fingerprint,
@@ -641,6 +641,7 @@ def _revalidated_import_fields(env, system_session):
         system_session.mapping_json,
         headers=list(system_session.headers_json or []),
         safe_fields=safe_fields,
+        allow_persisted_column=True,
     )
     expected = [item["field"] for item in mapping]
     import_fields = _import_fields(system_session.import_fields_json)

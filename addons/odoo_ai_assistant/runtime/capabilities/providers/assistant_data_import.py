@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from odoo.exceptions import AccessError, UserError, ValidationError
 
+from ....models.data_import import DataImportWorkflowError
 from ..contracts import (
     CapabilityApproval,
     CapabilityContext,
@@ -15,7 +16,6 @@ from ..contracts import (
     CapabilityVerification,
 )
 from ..decorators import tool
-from ....models.data_import import DataImportWorkflowError
 
 _MAX_MAPPING_ITEMS = 64
 _DEFAULT_CHUNK_SIZE = 250
@@ -256,7 +256,7 @@ def _turn_bound(context: CapabilityContext):
             ],
             limit=1,
         )
-    except Exception as error:  # noqa: BLE001 - turn binding fails closed
+    except Exception as error:
         raise CapabilityError("data_import_turn_binding_invalid") from error
     if not turn:
         raise CapabilityError("data_import_turn_binding_invalid")

@@ -28,13 +28,16 @@ class TestPhase11DataImportSession(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         internal_group = cls.env.ref("base.group_user")
+        partner_manager_group = cls.env.ref("base.group_partner_manager")
         cls.user = cls.env["res.users"].create(
             {
                 "name": "P11 Import User",
                 "login": "p11-import-user",
                 "company_id": cls.env.company.id,
                 "company_ids": [Command.set([cls.env.company.id])],
-                "groups_id": [Command.set([internal_group.id])],
+                "groups_id": [
+                    Command.set([internal_group.id, partner_manager_group.id])
+                ],
             }
         )
         cls.other_user = cls.env["res.users"].create(
@@ -153,7 +156,14 @@ class TestPhase11DataImportSession(TransactionCase):
             2,
         )
 
-        self.assertFalse(worker._cron_process_pending())
+        worker._cron_process_pending()
+        replay_status = import_status(
+            context,
+            {"session_uuid": started["session_uuid"], "recent_chunks": 8},
+        )
+        self.assertEqual(replay_status["state"], "completed")
+        self.assertEqual(replay_status["imported_rows"], 2)
+        self.assertEqual(replay_status["chunk_count"], 2)
         self.assertEqual(
             env["res.partner"].search_count(
                 [("email", "in", ["p11-alpha@example.test", "p11-beta@example.test"])]
@@ -204,7 +214,15 @@ class TestPhase11DataImportSession(TransactionCase):
             env["res.partner"].search_count([("name", "=", "P11 Invalid")]),
             0,
         )
-        self.assertFalse(worker._cron_process_pending())
+        worker._cron_process_pending()
+        replay_status = import_status(
+            context,
+            {"session_uuid": started["session_uuid"], "recent_chunks": 8},
+        )
+        self.assertEqual(replay_status["state"], "partial")
+        self.assertEqual(replay_status["imported_rows"], 1)
+        self.assertEqual(replay_status["failed_rows"], 1)
+        self.assertEqual(replay_status["chunk_count"], 2)
         self.assertEqual(
             env["res.partner"].search_count([("name", "=", "P11 Valid")]),
             1,

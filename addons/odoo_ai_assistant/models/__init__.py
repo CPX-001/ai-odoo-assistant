@@ -1,3 +1,5 @@
+# ruff: noqa: I001 - Odoo model import order is dependency-sensitive.
+
 from . import action_execution as action_execution
 from . import assistant_diagnostics as assistant_diagnostics
 from . import chat_policy as chat_policy
