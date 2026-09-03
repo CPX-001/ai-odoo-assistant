@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="rule_odoo_ai_data_import_session_owner" model="ir.rule">
+        <field name="name">AI data import sessions visible to owner</field>
+        <field name="model_id" ref="model_odoo_ai_data_import_session"/>
+        <field name="domain_force">[('owner_user_id', '=', user.id), ('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="rule_odoo_ai_data_import_session_admin" model="ir.rule">
+        <field name="name">AI data import sessions administrators</field>
+        <field name="model_id" ref="model_odoo_ai_data_import_session"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('base.group_system'))]"/>
+    </record>
+
+    <record id="rule_odoo_ai_data_import_chunk_owner" model="ir.rule">
+        <field name="name">AI data import chunks visible through owned session</field>
+        <field name="model_id" ref="model_odoo_ai_data_import_chunk"/>
+        <field name="domain_force">[('session_id.owner_user_id', '=', user.id), ('session_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="rule_odoo_ai_data_import_chunk_admin" model="ir.rule">
+        <field name="name">AI data import chunks administrators</field>
+        <field name="model_id" ref="model_odoo_ai_data_import_chunk"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('base.group_system'))]"/>
+    </record>
+</odoo>
