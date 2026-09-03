@@ -311,6 +311,7 @@ def _start_preview(context: CapabilityContext, arguments):
 
 
 def _start_verify(context: CapabilityContext, arguments):
+    del arguments
     result = context.metadata.get("capability_result")
     if not isinstance(result, dict):
         raise CapabilityError("capability_verification_invalid")
@@ -325,11 +326,13 @@ def _start_verify(context: CapabilityContext, arguments):
             verified=False,
             summary={"session_uuid": session_uuid if isinstance(session_uuid, str) else ""},
         )
-    request = _request(context, arguments)
     verified = bool(
-        status["target_model"] == request["target_model"]
-        and status["mapping_fingerprint"] == request["mapping_fingerprint"]
-        and status["total_rows"] == request["total_rows"]
+        status["target_model"] == result.get("target_model")
+        and status["filename"] == result.get("filename")
+        and status["mapping_fingerprint"] == result.get("mapping_fingerprint")
+        and status["total_rows"] == result.get("total_rows")
+        and status["duplicate_rows"] == result.get("duplicate_rows")
+        and status["chunk_size"] == result.get("chunk_size")
         and status["state"] in {"queued", "running", "completed", "partial", "failed"}
     )
     return CapabilityVerification(
@@ -396,7 +399,7 @@ def inspect_csv(context: CapabilityContext, arguments):
     max_output_bytes=16 * 1024,
 )
 def start_csv(context: CapabilityContext, arguments):
-    _request(context, arguments)
+    _turn_bound(context)
     try:
         session = context.env["odoo.ai.data.import.session"].create_csv_session(
             turn_uuid=context.turn_id,
