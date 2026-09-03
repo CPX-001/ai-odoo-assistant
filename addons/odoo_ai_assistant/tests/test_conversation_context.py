@@ -74,6 +74,11 @@ class TestAssistantConversationContext(TransactionCase):
                             "position": 1,
                             "capability": "odoo.record.patch",
                             "state": "completed",
+                            "result": {
+                                "operation": "update",
+                                "model": "res.partner",
+                                "record_ids": [41, 42],
+                            },
                         }
                     ],
                 },
@@ -136,6 +141,11 @@ class TestAssistantConversationContext(TransactionCase):
                     "position": 1,
                     "capability": "odoo.record.patch",
                     "state": "completed",
+                    "operation": "update",
+                    "resource": {
+                        "model": "res.partner",
+                        "record_ids": [41, 42],
+                    },
                 }
             ],
         )

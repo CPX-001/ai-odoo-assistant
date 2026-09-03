@@ -14,17 +14,41 @@ const PANEL_STORAGE_VERSION = 1;
 const BATCH_PREVIEW_LIMIT = 5;
 
 export function batchPreviewRows(step, expanded = false) {
-    const rows = Array.isArray(step?.preview?.rows) ? step.preview.rows : [];
+    const preview = step?.preview;
+    const regular = Array.isArray(preview?.rows)
+        ? preview.rows
+        : Array.isArray(preview?.records)
+          ? preview.records
+          : [];
+    const protectedRows = Array.isArray(preview?.protected_records)
+        ? preview.protected_records.map((row) => ({ ...row, excluded: true }))
+        : [];
+    const rows = [...regular, ...protectedRows];
     const visible = expanded ? rows : rows.slice(0, BATCH_PREVIEW_LIMIT);
     return visible.map((row, index) => ({
         key: `${step?.step_id || "preview"}:${index}`,
         label: batchPreviewRowLabel(row, index),
+        excluded: row?.excluded === true,
     }));
 }
 
 export function batchPreviewRemaining(step, expanded = false) {
-    const rows = Array.isArray(step?.preview?.rows) ? step.preview.rows : [];
+    const rows = batchPreviewRows(step, true);
     return expanded ? 0 : Math.max(0, rows.length - BATCH_PREVIEW_LIMIT);
+}
+
+export function batchPreviewOmitted(step) {
+    const preview = step?.preview;
+    const omittedEligible = Number.isSafeInteger(preview?.omitted_count)
+        ? Math.max(0, preview.omitted_count)
+        : 0;
+    const sampledProtected = Array.isArray(preview?.protected_records)
+        ? preview.protected_records.length
+        : 0;
+    const omittedProtected = Number.isSafeInteger(preview?.excluded_count)
+        ? Math.max(0, preview.excluded_count - sampledProtected)
+        : 0;
+    return omittedEligible + omittedProtected;
 }
 
 function batchPreviewRowLabel(row, index) {
@@ -302,12 +326,20 @@ export class AssistantPanel extends Component {
         return this.state.result?.plan?.state === "authorized";
     }
 
+    get finalPresentation() {
+        return this.panel.finalUxPresentation?.() || {};
+    }
+
     batchPreviewRows(step) {
         return batchPreviewRows(step, this.previewExpansion[step.step_id] === true);
     }
 
     batchPreviewRemaining(step) {
         return batchPreviewRemaining(step, this.previewExpansion[step.step_id] === true);
+    }
+
+    batchPreviewOmitted(step) {
+        return batchPreviewOmitted(step);
     }
 
     toggleBatchPreview(step) {

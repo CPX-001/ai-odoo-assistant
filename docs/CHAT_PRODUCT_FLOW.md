@@ -212,6 +212,20 @@ equal subset of its approved record identities. Expanding the scope, changing ca
 unproven rollback, or an external/uncertain effect stops automatic repair and follows the normal approval/recovery
 path.
 
+Preparation and preflight failures cross no write barrier. They are also returned to the same bounded decision loop
+as structured evidence (`code`, phase, capability and sanitized details), so the model may inspect effective schema,
+visible records, Knowledge or installed-source Evidence and propose a corrected plan. A raw Python traceback is never
+provider or browser context. Capability failures during read/reasoning follow the same pattern; authority, policy and
+access denials remain terminal for further capability use, but the provider still gets one opportunity to explain the
+business reason naturally. If bounded correction budgets are exhausted, the host closes the turn with a safe natural
+fallback and discards incomplete effect proposals rather than presenting a protocol error as the answer.
+
+Completed effect checkpoints retain bounded exact resource references (`model` plus produced record identities).
+This lets later turns resolve ordinary follow-ups such as “elimínalos” or “todos los que creaste” without forcing the
+user to repeat technical identifiers. The target is always revalidated under current ACLs, record rules and preview.
+For contact deletion, both the current bulk capability and its legacy bounded route exclude active-user and company
+partners host-side, show those exclusions in the approval preview, and verify only the eligible deletion scope.
+
 ## 9. Safe compensation and recent effect journal
 
 P5.8 adds explicit host-side compensation for selected verified reversible operations. It is not a PostgreSQL transaction rollback.

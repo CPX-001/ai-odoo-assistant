@@ -316,7 +316,21 @@ class CapabilityExecutor:
                 title,
                 {**public_payload, "code": "capability_handler_failed"},
             )
-            raise CapabilityError("capability_handler_failed") from error
+            exception_type = type(error).__name__
+            details = {
+                "stage": stage,
+                **(
+                    {"exception_type": exception_type}
+                    if exception_type.isascii()
+                    and exception_type.replace("_", "").isalnum()
+                    and len(exception_type) <= 64
+                    else {}
+                ),
+            }
+            raise CapabilityError(
+                "capability_handler_failed",
+                details=details,
+            ) from error
         finally:
             _emit_capability_timing(
                 context,

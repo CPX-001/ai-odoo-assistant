@@ -32,7 +32,7 @@ P9 implementation and validation runbook are recorded in
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Supported product: `addons/odoo_ai_assistant`.
-- Current addon manifest version: `18.0.13.20.0`.
+- Current addon manifest version: `18.0.13.21.0`.
 - Current manifest dependencies remain `account`, `base`, `sale`, `web`.
 - Runtime is embedded in Odoo; the browser talks only to authenticated Odoo routes.
 - Odoo/PostgreSQL own conversation, turn, queue, effect/recovery, Evidence and Knowledge state.
@@ -105,7 +105,11 @@ The accepted P5/P6 runtime remains current:
 - EffectJournal and recovery-unit semantics;
 - Stop/corrections/interventions;
 - public activity, answer-delta streaming and final reconciliation;
-- per-turn immutable model/reasoning/autonomy/planning settings.
+- per-turn immutable model/reasoning/autonomy/planning settings;
+- exact bounded resource references from verified prior effects for natural cross-turn follow-ups;
+- structured capability/prepare/preflight/execution error feedback into the bounded model loop;
+- safe host-authored final fallbacks when correction budgets end, without executing incomplete plans;
+- protected-contact exclusions and explicit approval previews across both delete capability routes.
 
 P8/P9 do not replace this runtime or add another scheduler/database/agent loop.
 

@@ -134,6 +134,8 @@ class _Executor:
         self.calls.append((capability, dict(arguments), authority))
         error = self.errors.get(capability)
         if error:
+            if isinstance(error, CapabilityError):
+                raise error
             raise CapabilityError(error)
         return CapabilityResult(data=dict(self.results.get(capability, {"ok": True})))
 
@@ -318,6 +320,45 @@ class TestHostLoopContract(unittest.TestCase):
             ["access_denied"],
         )
 
+    def test_capability_failure_details_are_returned_for_diagnosis_and_repair(self):
+        executor = _Executor(
+            errors={
+                "odoo.get_effective_schema": CapabilityError(
+                    "action_rejected",
+                    details={"model": "res.partner", "operation": "delete"},
+                )
+            },
+            results={"odoo.query_records": {"records": []}},
+        )
+        decisions = [
+            ReasoningCapabilityCall(
+                "reasoning_capability_call",
+                "failed-1",
+                "odoo.get_effective_schema",
+                {"model": "res.partner"},
+            ),
+            ReasoningCapabilityCall(
+                "reasoning_capability_call",
+                "diagnose-1",
+                "odoo.query_records",
+                {"model": "res.partner", "schema_id": "known"},
+            ),
+            FinalAnswer("final_answer", "He ajustado el alcance.", "high"),
+        ]
+
+        result, _service, engine, _executor, _persisted = self._run(
+            decisions,
+            executor=executor,
+        )
+
+        self.assertEqual(result.answer, "He ajustado el alcance.")
+        failure = engine.inputs[1]["working_items"][-1]
+        self.assertEqual(failure["kind"], "capability_error")
+        self.assertEqual(
+            failure["data"]["details"],
+            {"model": "res.partner", "operation": "delete"},
+        )
+
     def test_restart_closes_pending_call_without_reexecuting_same_call_id(self):
         items = append_working_item((), "user_input", {"message": "test request"})
         items = append_working_item(
@@ -394,8 +435,10 @@ class TestHostLoopContract(unittest.TestCase):
             executor=_Executor(),
             decision_engine=engine,
         )
-        with self.assertRaisesRegex(AgentTurnError, "agent_provider_decision_budget_exceeded"):
-            asyncio.run(service.run(message="test request"))
+        result = asyncio.run(service.run(message="test request"))
+        self.assertIn("No pude completar", result.answer)
+        self.assertEqual(result.plan, ())
+        self.assertEqual(service.working_items[-1].data["discard_plan"], True)
         self.assertEqual(len(engine.inputs), 1)
 
 

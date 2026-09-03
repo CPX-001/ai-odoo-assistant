@@ -13,7 +13,7 @@
         </xpath>
 
         <xpath expr="//div[@t-if='state.errorCode']" position="replace">
-            <div t-if="state.errorCode and !executionPending and !recoveryReviewRequired"
+            <div t-if="finalPresentation.show_failure"
                 class="o_ai_assistant_failure alert alert-danger mt-3 mb-0"
                 role="alert" aria-label="Fallo del Assistant">
                 <div class="fw-semibold mb-1">No se pudo completar la petición</div>

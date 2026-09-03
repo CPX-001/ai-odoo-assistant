@@ -184,8 +184,6 @@ class EmbeddedAssistantEffectRecoveryRuntime(models.AbstractModel):
             raise EmbeddedRuntimeError(error.code) from error
         max_replans = policy.get("max_replans", 0) if isinstance(policy, dict) else 0
         replan_count = sum(item.kind == "plan_execution_error" for item in working_items)
-        if type(max_replans) is not int or replan_count >= max_replans:
-            raise EmbeddedRuntimeError(error.code) from error
 
         if error.phase == "execution":
             # The plan barrier was committed before execution. Everything afterwards belongs to
@@ -199,7 +197,7 @@ class EmbeddedAssistantEffectRecoveryRuntime(models.AbstractModel):
             journal._mark_turn_failure(turn)
             if not journal._all_turn_effects_rolled_back(turn):
                 raise EmbeddedRuntimeError(error.code) from error
-        elif error.phase == "preflight":
+        elif error.phase in {"prepare", "preflight"}:
             turn.invalidate_recordset(["write_barrier"])
             _ensure_turn_control_current(turn)
             if turn.write_barrier:
@@ -217,7 +215,7 @@ class EmbeddedAssistantEffectRecoveryRuntime(models.AbstractModel):
                 "phase": error.phase,
                 "details": dict(error.details),
                 "effect_state": "none",
-                "rolled_back": True,
+                "rolled_back": error.phase == "execution",
                 "replan": replan_count + 1,
             },
         )
@@ -271,6 +269,9 @@ class EmbeddedAssistantEffectRecoveryRuntime(models.AbstractModel):
             cancellation_requested=cancellation_requested,
             allow_plan_proposals=True,
         )
+        if type(max_replans) is not int or replan_count >= max_replans:
+            result = await service.finish_safely(error.code)
+            return self._read_only_response(turn, result, policy)
         activity_id = _new_reasoning_activity_id()
         context.emit(
             "reasoning.started",
@@ -299,7 +300,21 @@ class EmbeddedAssistantEffectRecoveryRuntime(models.AbstractModel):
         if not result.plan:
             return self._read_only_response(turn, result, policy)
 
-        prepared = await plans.prepare(result.plan)
+        try:
+            prepared = await plans.prepare(result.plan)
+        except CapabilityPlanStepError as prepare_error:
+            return await self._repair_recoverable_plan(
+                turn,
+                lease_token=lease_token,
+                envelope=envelope,
+                error=prepare_error,
+                plans=plans,
+                policy=policy,
+                registry=registry,
+                context=context,
+                executor=executor,
+                working_items=service.working_items,
+            )
         prepared_items = _append_plan_prepared(service.working_items, prepared)
         repaired_envelope = {
             "format_version": 1,

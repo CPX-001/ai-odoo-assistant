@@ -320,14 +320,20 @@ def _verified_effect_refs(turn):
         position = step.get("position")
         if type(position) is not int or position <= 0:
             position = index
-        refs.append(
-            {
-                "turn_id": turn.turn_uuid,
-                "position": position,
-                "capability": capability,
-                "state": "completed",
-            }
-        )
+        ref = {
+            "turn_id": turn.turn_uuid,
+            "position": position,
+            "capability": capability,
+            "state": "completed",
+        }
+        result = step.get("result")
+        resource = _effect_resource(result)
+        if resource is not None:
+            ref["resource"] = resource
+        operation = result.get("operation") if isinstance(result, dict) else None
+        if isinstance(operation, str) and _SAFE_TOKEN.fullmatch(operation):
+            ref["operation"] = operation
+        refs.append(ref)
     return _bounded_tail(refs, _MAX_EFFECT_REFS)
 
 
@@ -460,10 +466,9 @@ def _validate_evidence_ref(item):
 
 
 def _validate_effect_ref(item):
-    if (
-        not isinstance(item, dict)
-        or set(item) != {"turn_id", "position", "capability", "state"}
-    ):
+    required = {"turn_id", "position", "capability", "state"}
+    optional = {"operation", "resource"}
+    if not isinstance(item, dict) or not required <= set(item) <= required | optional:
         raise ValidationError("Invalid Assistant verified effect reference")
     if not isinstance(item["turn_id"], str) or not 1 <= len(item["turn_id"]) <= 64:
         raise ValidationError("Invalid Assistant effect turn id")
@@ -475,6 +480,52 @@ def _validate_effect_ref(item):
         or item["state"] != "completed"
     ):
         raise ValidationError("Invalid Assistant effect reference")
+    operation = item.get("operation")
+    if operation is not None and (
+        not isinstance(operation, str) or not _SAFE_TOKEN.fullmatch(operation)
+    ):
+        raise ValidationError("Invalid Assistant effect operation")
+    resource = item.get("resource")
+    if resource is not None:
+        _validate_effect_resource(resource)
+
+
+def _effect_resource(result):
+    if not isinstance(result, dict):
+        return None
+    model = result.get("model")
+    if not isinstance(model, str) or not _MODEL_NAME.fullmatch(model):
+        return None
+    record_ids = result.get("record_ids")
+    if not isinstance(record_ids, list):
+        record_id = result.get("record_id")
+        record_ids = [record_id] if type(record_id) is int else []
+    normalized = []
+    seen = set()
+    for record_id in record_ids:
+        if type(record_id) is not int or record_id <= 0 or record_id in seen:
+            return None
+        normalized.append(record_id)
+        seen.add(record_id)
+    if not normalized or len(normalized) > 500:
+        return None
+    return {"model": model, "record_ids": normalized}
+
+
+def _validate_effect_resource(resource):
+    if not isinstance(resource, dict) or set(resource) != {"model", "record_ids"}:
+        raise ValidationError("Invalid Assistant effect resource")
+    model = resource.get("model")
+    record_ids = resource.get("record_ids")
+    if (
+        not isinstance(model, str)
+        or not _MODEL_NAME.fullmatch(model)
+        or not isinstance(record_ids, list)
+        or not 1 <= len(record_ids) <= 500
+        or any(type(record_id) is not int or record_id <= 0 for record_id in record_ids)
+        or len(set(record_ids)) != len(record_ids)
+    ):
+        raise ValidationError("Invalid Assistant effect resource")
 
 
 def _validate_session_settings(value):

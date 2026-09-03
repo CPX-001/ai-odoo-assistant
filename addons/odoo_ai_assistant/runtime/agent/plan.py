@@ -83,11 +83,20 @@ class CapabilityPlanService:
                 "execute": _new_semantic_group_key(),
                 "verify": _new_semantic_group_key(),
             }
-            preview = await self._executor.preview(
-                definition.name,
-                requested.arguments,
-                semantic_group_key=semantic_groups["prepare"],
-            )
+            try:
+                preview = await self._executor.preview(
+                    definition.name,
+                    requested.arguments,
+                    semantic_group_key=semantic_groups["prepare"],
+                )
+            except CapabilityError as error:
+                raise CapabilityPlanStepError(
+                    error.code,
+                    step_id=requested.step_id or f"step-{position + 1}",
+                    capability=definition.name,
+                    phase="prepare",
+                    details=error.details,
+                ) from error
             approval_required = self._executor.approval_required(definition.name)
             requires_confirmation = requires_confirmation or approval_required
             steps.append(

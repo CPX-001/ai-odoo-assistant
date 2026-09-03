@@ -602,10 +602,14 @@ class TestCanonicalPlanHostLoop(TransactionCase):
             allow_plan_proposals=True,
         )
 
-        with self.assertRaises(AgentTurnError) as captured:
-            asyncio.run(service.run(message="Resuelve"))
+        result = asyncio.run(service.run(message="Resuelve"))
 
-        self.assertEqual(captured.exception.code, "agent_provider_decision_budget_exceeded")
+        self.assertEqual(result.plan, ())
+        self.assertEqual(result.confidence, "low")
+        self.assertEqual(
+            service.working_items[-1].data["host_fallback_code"],
+            "agent_provider_decision_budget_exceeded",
+        )
         self.assertEqual(underlying.calls, 2)
         self.assertEqual(
             [item.data["revision"] for item in service.working_items if item.kind == "task_plan"],
@@ -652,10 +656,13 @@ class TestCanonicalPlanHostLoop(TransactionCase):
             allow_plan_proposals=True,
         )
 
-        with self.assertRaises(AgentTurnError) as captured:
-            asyncio.run(service.run(message="Resuelve"))
+        result = asyncio.run(service.run(message="Resuelve"))
 
-        self.assertEqual(captured.exception.code, "agent_correctable_failure_budget_exceeded")
+        self.assertEqual(result.plan, ())
+        self.assertEqual(
+            service.working_items[-1].data["host_fallback_code"],
+            "agent_correctable_failure_budget_exceeded",
+        )
         self.assertEqual(underlying.calls, 3)
         errors = [item for item in service.working_items if item.kind == "task_plan_error"]
         self.assertEqual(

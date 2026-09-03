@@ -176,10 +176,10 @@ class TestProviderFailureNormalization(unittest.TestCase):
         self.assertIn('effect_state="none"', host)
         self.assertLess(
             host.index("FailureNormalizingDecisionEngine("),
-            host.index("service = AgentTurnService("),
+            host.index("def build_service("),
         )
         self.assertLess(
-            host.index("service = AgentTurnService("),
+            host.index("def build_service("),
             host.index("prepared = asyncio.run(plans.prepare(result.plan))"),
         )
 

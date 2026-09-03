@@ -150,3 +150,17 @@ test("approval failure and recovery remain explicit terminal product states", ()
     expect(finalTurnPresentation(recovery).state).toBe("recovery");
     expect(finalTurnPresentation(recovery).show_recovery).toBe(true);
 });
+
+test("approval takes precedence over stale failure metadata", () => {
+    const approval = scope();
+    approval.loading = false;
+    approval.turnState = "awaiting_confirmation";
+    approval.errorCode = "engine_timeout";
+    approval.failure = { code: "engine_timeout" };
+
+    const presentation = finalTurnPresentation(approval);
+
+    expect(presentation.state).toBe("approval");
+    expect(presentation.show_approval).toBe(true);
+    expect(presentation.show_failure).toBe(false);
+});

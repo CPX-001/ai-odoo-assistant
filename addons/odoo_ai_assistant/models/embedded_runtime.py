@@ -615,6 +615,15 @@ def _preview_summary(preview):
     changes = preview.get("changes")
     if isinstance(changes, list) and changes:
         parts.append(f"{len(changes)} cambio(s)")
+    count = preview.get("count")
+    requested_count = preview.get("requested_count")
+    excluded_count = preview.get("excluded_count")
+    if type(count) is int and count >= 0:
+        parts.append(f"{count} registro(s)")
+    if type(requested_count) is int and requested_count >= 0 and requested_count != count:
+        parts.append(f"{requested_count} solicitado(s)")
+    if type(excluded_count) is int and excluded_count > 0:
+        parts.append(f"{excluded_count} protegido(s) excluido(s)")
     return " · ".join(parts)[:500] or "Revisa el preview antes de continuar."
 
 

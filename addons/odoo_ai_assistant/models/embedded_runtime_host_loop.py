@@ -13,6 +13,7 @@ from ..runtime.agent import (
     AgentTurnService,
     AssistantExtensionDecisionEngine,
     CapabilityPlanError,
+    CapabilityPlanStepError,
     CapabilityPlanService,
     PostEffectDecisionEngine,
     current_codex_provider_profile,
@@ -188,17 +189,20 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                 },
             )
 
-        service = AgentTurnService(
-            registry=registry,
-            context=context,
-            executor=executor,
-            decision_engine=decision_engine,
-            working_items=working_items,
-            persist_working_items=persist,
-            cancellation_requested=cancellation_requested,
-            allow_plan_proposals=True,
-            on_work_started=on_work_started,
-        )
+        def build_service(items):
+            return AgentTurnService(
+                registry=registry,
+                context=context,
+                executor=executor,
+                decision_engine=decision_engine,
+                working_items=items,
+                persist_working_items=persist,
+                cancellation_requested=cancellation_requested,
+                allow_plan_proposals=True,
+                on_work_started=on_work_started,
+            )
+
+        service = build_service(working_items)
         try:
             result = asyncio.run(
                 service.run(
@@ -216,6 +220,35 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
                     {"activity_id": reasoning_activity_id},
                 )
             raise
+        prepared = None
+        while result.plan:
+            try:
+                prepared = asyncio.run(plans.prepare(result.plan))
+                break
+            except CapabilityPlanStepError as error:
+                repaired_items = _append_prepare_error(
+                    service.working_items,
+                    error,
+                )
+                persist(repaired_items)
+                replan_count = sum(
+                    item.kind == "plan_execution_error" for item in repaired_items
+                )
+                max_replans = policy_snapshot.get("max_replans", 0)
+                service = build_service(repaired_items)
+                if type(max_replans) is not int or replan_count > max_replans:
+                    result = asyncio.run(service.finish_safely(error.code))
+                    prepared = None
+                    break
+                result = asyncio.run(
+                    service.run(
+                        message=turn.input_message,
+                        conversation_summary=self._conversation_summary(turn),
+                    )
+                )
+                _ensure_turn_control_current(turn)
+                turn._capture_public_navigation_references(service.working_items)
+
         if reasoning_activity_id is not None:
             event_sink(
                 "reasoning.completed",
@@ -227,7 +260,8 @@ class EmbeddedAssistantHostLoopRuntime(models.AbstractModel):
             response["citations"] = extension_engine.browser_citations()
             return response
 
-        prepared = asyncio.run(plans.prepare(result.plan))
+        if prepared is None:
+            raise EmbeddedRuntimeError("capability_plan_corrupt")
         _ensure_turn_control_current(turn)
         prepared_items = _append_plan_prepared(service.working_items, prepared)
         envelope = {
@@ -436,6 +470,28 @@ def _ensure_turn_control_current(turn):
 
 def _new_reasoning_activity_id():
     return f"activity:v1:{secrets.token_hex(16)}"
+
+
+def _append_prepare_error(working_items, error):
+    payload = {
+        "code": error.code,
+        "step_id": error.step_id,
+        "capability": error.capability,
+        "phase": "prepare",
+        "details": dict(error.details),
+        "effect_state": "none",
+        "rolled_back": False,
+        "replan": 1 + sum(
+            item.kind == "plan_execution_error" for item in working_items
+        ),
+    }
+    try:
+        return append_working_item(working_items, "plan_execution_error", payload)
+    except WorkingTranscriptError as transcript_error:
+        if not payload["details"] or transcript_error.code != "agent_working_item_too_large":
+            raise EmbeddedRuntimeError(transcript_error.code) from transcript_error
+        payload.pop("details")
+        return append_working_item(working_items, "plan_execution_error", payload)
 
 
 def _append_plan_prepared(working_items, prepared):

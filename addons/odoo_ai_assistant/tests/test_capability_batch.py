@@ -8,13 +8,13 @@ from odoo.tests.common import TransactionCase
 from ..models.embedded_runtime import _browser_capability_plan
 from ..runtime.agent import (
     CapabilityPlanError,
+    CapabilityPlanStepError,
     CapabilityPlanService,
     PlannedCapability,
 )
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
-    CapabilityError,
     CapabilityExecutor,
     CapabilityPolicy,
     CapabilityRegistry,
@@ -366,9 +366,10 @@ class TestCapabilityBatchMutations(TransactionCase):
             ),
         )
 
-        with self.assertRaises(CapabilityError) as captured:
+        with self.assertRaises(CapabilityPlanStepError) as captured:
             asyncio.run(plans.prepare(invalid))
         self.assertEqual(captured.exception.code, "workflow_reference_invalid")
+        self.assertEqual(captured.exception.phase, "prepare")
 
     def test_batch_delete_requires_preview_and_verifies_absence(self):
         context, _registry, plans = self._runtime()
@@ -394,6 +395,37 @@ class TestCapabilityBatchMutations(TransactionCase):
         executed = asyncio.run(plans.execute(authorized, human_approved=True))
         self.assertFalse(context.env["res.partner"].browse(doomed.ids).exists())
         self.assertEqual(executed.payload["steps"][0]["verification"]["count"], 2)
+
+    def test_legacy_batch_delete_excludes_active_user_and_company_contacts(self):
+        context, _registry, plans = self._runtime()
+        protected_ids = [context.env.company.partner_id.id, self.batch_user.partner_id.id]
+        plan = (
+            PlannedCapability(
+                capability="odoo.records.batch_mutate",
+                arguments={
+                    "operation": "delete",
+                    "model": "res.partner",
+                    "record_ids": [*self.targets.ids, *protected_ids],
+                },
+                summary="Eliminar contactos eliminables",
+            ),
+        )
+
+        prepared = asyncio.run(plans.prepare(plan))
+        preview = prepared["steps"][0]["preview"]
+        self.assertEqual(preview["requested_count"], 4)
+        self.assertEqual(preview["count"], 2)
+        self.assertEqual(preview["excluded_count"], 2)
+        authorized = dict(prepared)
+        authorized["state"] = "authorized"
+        executed = asyncio.run(plans.execute(authorized, human_approved=True))
+
+        self.assertFalse(context.env["res.partner"].browse(self.targets.ids).exists())
+        self.assertEqual(
+            set(context.env["res.partner"].browse(protected_ids).exists().ids),
+            set(protected_ids),
+        )
+        self.assertEqual(executed.results[0].data["count"], 2)
 
     def test_batch_delete_executes_all_pages_in_one_approved_plan(self):
         context, registry, plans = self._runtime()
@@ -489,7 +521,7 @@ class TestCapabilityBatchMutations(TransactionCase):
     def test_batch_rejects_more_than_fifty_rows(self):
         _context, _registry, plans = self._runtime()
         oversized = self._patch_plan(record_ids=list(range(1, 52)))
-        with self.assertRaises(CapabilityError):
+        with self.assertRaises(CapabilityPlanStepError):
             asyncio.run(plans.prepare(oversized))
         self.targets.invalidate_recordset(["name"])
         self.assertEqual(self.targets.mapped("name"), ["AI BATCH A", "AI BATCH B"])
@@ -497,7 +529,7 @@ class TestCapabilityBatchMutations(TransactionCase):
     def test_partial_invalid_patch_is_rejected_without_any_write(self):
         _context, _registry, plans = self._runtime()
         invalid = self._patch_plan(record_ids=[self.targets[0].id, 2_147_483_647])
-        with self.assertRaises(CapabilityError):
+        with self.assertRaises(CapabilityPlanStepError):
             asyncio.run(plans.prepare(invalid))
         self.targets.invalidate_recordset(["name"])
         self.assertEqual(self.targets.mapped("name"), ["AI BATCH A", "AI BATCH B"])
@@ -515,7 +547,7 @@ class TestCapabilityBatchMutations(TransactionCase):
             }
         )
         _context, _registry, plans = self._runtime()
-        with self.assertRaises(CapabilityError):
+        with self.assertRaises(CapabilityPlanStepError):
             asyncio.run(plans.prepare(self._patch_plan()))
         self.targets.invalidate_recordset(["name"])
         self.assertEqual(self.targets.mapped("name"), ["AI BATCH A", "AI BATCH B"])

@@ -323,7 +323,9 @@ class AgentTurnService:
                 if isinstance(rejected, ReasoningCapabilityCall):
                     capability_calls += 1
                     if capability_calls > budgets.exploration.max_capability_calls:
-                        raise AgentTurnError("agent_capability_call_budget_exceeded") from error
+                        return await self.finish_safely(
+                            "agent_capability_call_budget_exceeded",
+                        )
                 if isinstance(rejected, RejectedTaskPlanUpdate):
                     await self._record_rejected_task_plan_revision(
                         rejected.rejected_revision,
@@ -335,7 +337,9 @@ class AgentTurnService:
                     await self._record_rejected_decision(rejected, error.code)
                 consecutive_failures += 1
                 if consecutive_failures > budgets.safety.max_consecutive_failures:
-                    raise AgentTurnError("agent_correctable_failure_budget_exceeded") from error
+                    return await self.finish_safely(
+                        "agent_correctable_failure_budget_exceeded",
+                    )
                 continue
             except (AgentTurnError, CapabilityError):
                 raise
@@ -346,7 +350,7 @@ class AgentTurnService:
                 raise AgentTurnError("agent_reasoning_failed") from error
 
             if terminal_error and not isinstance(decision, FinalAnswer):
-                raise AgentTurnError("agent_terminal_capability_error_requires_final")
+                return await self.finish_safely(terminal_error)
 
             if isinstance(decision, FinalAnswer):
                 answer = _validated_answer(decision.answer, decision.confidence)
@@ -413,7 +417,7 @@ class AgentTurnService:
                 )
                 await self._persist()
                 consecutive_failures = 0
-                terminal_error = False
+                terminal_error = None
                 if budgets.safety.max_effect_steps == 1:
                     plan = self._validate_plan(_proposed_plan(self._working_items), planning)
                     return AgentTurnResult(
@@ -429,7 +433,9 @@ class AgentTurnService:
 
             capability_calls += 1
             if capability_calls > budgets.exploration.max_capability_calls:
-                raise AgentTurnError("agent_capability_call_budget_exceeded")
+                return await self.finish_safely(
+                    "agent_capability_call_budget_exceeded",
+                )
 
             if _definition_call_count(self._working_items, decision.capability) >= _definition_max_calls(
                 reasoning,
@@ -448,7 +454,9 @@ class AgentTurnService:
                 await self._persist()
                 consecutive_failures += 1
                 if consecutive_failures > budgets.safety.max_consecutive_failures:
-                    raise AgentTurnError("agent_correctable_failure_budget_exceeded")
+                    return await self.finish_safely(
+                        "agent_correctable_failure_budget_exceeded",
+                    )
                 continue
 
             state = call_state(self._working_items, decision.call_id)
@@ -471,26 +479,21 @@ class AgentTurnService:
             try:
                 result = await self._execute_reasoning(decision)
             except CapabilityError as error:
-                self._working_items = append_working_item(
-                    self._working_items,
-                    "capability_error",
-                    {
-                        "call_id": decision.call_id,
-                        "capability": decision.capability,
-                        "code": error.code,
-                    },
+                await self._record_capability_error(
+                    call_id=decision.call_id,
+                    capability=decision.capability,
+                    code=error.code,
+                    details=dict(error.details),
                 )
-                await self._persist()
                 if error.code in _TERMINAL_CALL_ERRORS:
-                    terminal_error = True
+                    terminal_error = error.code
                     consecutive_failures = 0
                     continue
                 consecutive_failures += 1
-                if (
-                    error.code not in _CORRECTABLE_ERRORS
-                    or consecutive_failures > budgets.safety.max_consecutive_failures
-                ):
-                    raise AgentTurnError(error.code) from error
+                if consecutive_failures > budgets.safety.max_consecutive_failures:
+                    return await self.finish_safely(
+                        "agent_correctable_failure_budget_exceeded",
+                    )
                 continue
 
             try:
@@ -518,13 +521,74 @@ class AgentTurnService:
                 await self._persist()
                 consecutive_failures += 1
                 if consecutive_failures > budgets.safety.max_consecutive_failures:
-                    raise AgentTurnError("agent_correctable_failure_budget_exceeded")
+                    return await self.finish_safely(
+                        "agent_correctable_failure_budget_exceeded",
+                    )
                 continue
             await self._persist()
             consecutive_failures = 0
-            terminal_error = False
+            terminal_error = None
 
-        raise AgentTurnError("agent_provider_decision_budget_exceeded")
+        return await self.finish_safely(
+            terminal_error or "agent_provider_decision_budget_exceeded",
+        )
+
+    async def _record_capability_error(
+        self,
+        *,
+        call_id: str,
+        capability: str,
+        code: str,
+        details: dict[str, JsonValue] | None = None,
+    ) -> None:
+        payload: dict[str, object] = {
+            "call_id": call_id,
+            "capability": capability,
+            "code": code,
+        }
+        if details:
+            payload["details"] = details
+        try:
+            self._working_items = append_working_item(
+                self._working_items,
+                "capability_error",
+                payload,
+            )
+        except WorkingTranscriptError as error:
+            if not details or error.code != "agent_working_item_too_large":
+                raise AgentTurnError(error.code) from error
+            payload.pop("details", None)
+            self._working_items = append_working_item(
+                self._working_items,
+                "capability_error",
+                payload,
+            )
+        await self._persist()
+
+    async def finish_safely(
+        self,
+        code: str,
+    ) -> AgentTurnResult:
+        """Finish safely when the provider cannot turn host evidence into a final answer."""
+
+        answer = _safe_failure_answer(self._context, self._working_items, code)
+        self._working_items = append_working_item(
+            self._working_items,
+            "final_answer",
+            {
+                "answer": answer,
+                "confidence": "low",
+                "discard_plan": True,
+                "host_fallback_code": code,
+            },
+        )
+        await self._persist()
+        return AgentTurnResult(
+            answer=answer,
+            confidence="low",
+            plan=(),
+            task_plan=None,
+        )
 
     def _mark_work_started(self) -> None:
         """Publish work lazily only after the host accepts a non-final decision."""
@@ -649,13 +713,18 @@ class AgentTurnService:
         confidence = last.data.get("confidence")
         if not isinstance(answer, str) or not isinstance(confidence, str):
             raise AgentTurnError("agent_working_transcript_invalid")
-        proposed = _proposed_plan(self._working_items) if self._allow_plan_proposals else ()
+        discard_plan = last.data.get("discard_plan") is True
+        proposed = (
+            _proposed_plan(self._working_items)
+            if self._allow_plan_proposals and not discard_plan
+            else ()
+        )
         plan = self._validate_plan(proposed, planning) if proposed else ()
         return AgentTurnResult(
             answer=_validated_answer(answer, confidence),
             confidence=confidence,
             plan=plan,
-            task_plan=_latest_task_plan(self._working_items),
+            task_plan=None if discard_plan else _latest_task_plan(self._working_items),
         )
 
     async def _close_interrupted_calls(self) -> None:
@@ -842,13 +911,57 @@ def _trailing_failure_count(items: tuple[WorkingItem, ...]) -> int:
     return count
 
 
-def _terminal_error_pending(items: tuple[WorkingItem, ...]) -> bool:
+def _terminal_error_pending(items: tuple[WorkingItem, ...]) -> str | None:
     for item in reversed(_active_plan_epoch(items)):
         if item.kind == "capability_result":
-            return False
+            return None
         if item.kind == "capability_error":
-            return item.data.get("code") in _TERMINAL_CALL_ERRORS
-    return False
+            code = item.data.get("code")
+            if isinstance(code, str) and code in _TERMINAL_CALL_ERRORS:
+                return code
+            return None
+    return None
+
+
+def _safe_failure_answer(context, items: tuple[WorkingItem, ...], code: str) -> str:
+    confirmed = any(item.kind == "verified_effect_receipt" for item in items)
+    env_context = getattr(getattr(context, "env", None), "context", {})
+    lang = env_context.get("lang") if isinstance(env_context, dict) else None
+    spanish = not isinstance(lang, str) or lang.lower().startswith("es")
+    if confirmed:
+        return (
+            "La acción se completó y quedó verificada en Odoo, pero no pude generar el "
+            "resumen detallado."
+            if spanish
+            else "The action completed and was verified in Odoo, but I could not produce the detailed summary."
+        )
+    if code == "access_denied":
+        return (
+            "No pude acceder a los datos necesarios con tus permisos actuales. No se aplicó "
+            "ningún cambio."
+            if spanish
+            else "I could not access the required data with your current permissions. No changes were applied."
+        )
+    if code in {"record_not_found", "capability_not_available", "capability_not_registered"}:
+        return (
+            "No pude identificar con seguridad el registro o la función necesaria. No se aplicó "
+            "ningún cambio; indícame el registro concreto o abre su ficha y vuelve a intentarlo."
+            if spanish
+            else "I could not safely identify the required record or function. No changes were applied; specify the record or open it and try again."
+        )
+    if code == "action_rejected":
+        return (
+            "Odoo rechazó la operación por una restricción del registro. No quedó ningún cambio "
+            "aplicado; puedo intentarlo de nuevo con un alcance más preciso."
+            if spanish
+            else "Odoo rejected the operation because of a record constraint. No changes remained applied; I can retry with a narrower scope."
+        )
+    return (
+        "No pude completar la petición con suficiente seguridad. No se aplicó ningún cambio; "
+        "prueba a concretar el alcance o los registros afectados."
+        if spanish
+        else "I could not complete the request safely. No changes were applied; try clarifying the scope or affected records."
+    )
 
 
 def _definition_call_count(items: tuple[WorkingItem, ...], capability: str) -> int:
@@ -861,7 +974,7 @@ def _definition_call_count(items: tuple[WorkingItem, ...], capability: str) -> i
 
 
 def _active_plan_epoch(items: tuple[WorkingItem, ...]) -> tuple[WorkingItem, ...]:
-    """Return work after the latest fully rolled-back effect-plan attempt."""
+    """Return work after the latest host-proven no-effect plan attempt."""
 
     for index in range(len(items) - 1, -1, -1):
         if items[index].kind == "plan_execution_error":

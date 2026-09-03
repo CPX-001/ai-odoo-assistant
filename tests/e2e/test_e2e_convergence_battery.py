@@ -89,7 +89,7 @@ class TestE2EConvergenceBattery(unittest.TestCase):
         self.assertEqual(decisions[0]["host_result"], "access_denied")
         self.assertEqual(decisions[-1]["kind"], "final_answer")
         self.assertIn('"access_denied"', self.service)
-        self.assertIn("agent_terminal_capability_error_requires_final", self.service)
+        self.assertIn("finish_safely(terminal_error)", self.service)
 
     def test_unsupported_action(self):
         decisions = self._decisions("unsupported_action")

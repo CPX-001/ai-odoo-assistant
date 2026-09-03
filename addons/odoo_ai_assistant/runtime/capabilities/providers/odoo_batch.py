@@ -34,6 +34,11 @@ from .odoo_actions import (
     _verification_values,
     _write_descriptions,
 )
+from .odoo_bulk import (
+    _bulk_delete_preview,
+    _protected_delete_records,
+    bulk_delete,
+)
 
 _MAX_BATCH_ROWS = 50
 _MAX_BATCH_CALLS_PER_PLAN = 5
@@ -145,24 +150,8 @@ def _batch_preview(context: CapabilityContext, arguments):
             ),
         )
     if operation == "delete":
-        record_ids = _delete_input(model, arguments)
-        snapshots = []
-        for record_id in record_ids:
-            record = _record(context, model, record_id, access="unlink")
-            snapshots.append(
-                {"record_id": record_id, "display_name": _safe_name(record)}
-            )
-        return CapabilityPreview(
-            summary={
-                "operation": operation,
-                "model": model,
-                "records": snapshots,
-                "count": len(record_ids),
-            },
-            precondition_fingerprint=_fingerprint(
-                {"operation": operation, "model": model, "records": snapshots}
-            ),
-        )
+        _delete_input(model, arguments)
+        return _bulk_delete_preview(context, arguments)
     raise CapabilityError("batch_operation_invalid")
 
 
@@ -195,9 +184,15 @@ def _batch_verify(context: CapabilityContext, arguments):
                 )
     elif operation == "delete":
         requested_ids = _delete_input(model, arguments)
-        if list(requested_ids) != record_ids:
+        remaining = _model_set(context, model).browse(list(requested_ids)).exists()
+        protected = _protected_delete_records(context, model, remaining)
+        protected_ids = {item["record"].id for item in protected}
+        eligible_ids = [
+            record_id for record_id in requested_ids if record_id not in protected_ids
+        ]
+        if eligible_ids != record_ids:
             return CapabilityVerification(verified=False, summary={"count": len(record_ids)})
-        if _model_set(context, model).browse(record_ids).exists():
+        if set(remaining.ids) != protected_ids:
             return CapabilityVerification(verified=False, summary={"count": len(record_ids)})
     else:
         raise CapabilityError("capability_verification_invalid")
@@ -266,6 +261,7 @@ def batch_patch(context: CapabilityContext, arguments):
         "capability name is retained for compatibility, but it is now delete-only so reversible "
         "batch creates and updates cannot be misclassified as irreversible."
     ),
+    version="2",
     input_schema=_BATCH_DELETE_INPUT,
     output_schema=_BATCH_OUTPUT,
     risk=CapabilityRisk.ACTION,
@@ -310,17 +306,21 @@ def _execute_batch(context: CapabilityContext, arguments, *, expected_operation)
             raise CapabilityError("action_rejected") from None
         record_ids = list(record_ids)
     elif operation == "delete":
-        record_ids = _delete_input(model, arguments)
-        for record_id in record_ids:
-            _record(context, model, record_id, access="unlink")
-        try:
-            _model_set(context, model).browse(list(record_ids)).unlink()
-        except (AccessError, MissingError, ValidationError, UserError):
-            raise CapabilityError("action_rejected") from None
-        record_ids = list(record_ids)
+        requested_ids = _delete_input(model, arguments)
+        result = bulk_delete(context, arguments)
+        remaining = _model_set(context, model).browse(list(requested_ids)).exists()
+        protected = _protected_delete_records(context, model, remaining)
+        protected_ids = {item["record"].id for item in protected}
+        record_ids = [
+            record_id for record_id in requested_ids if record_id not in protected_ids
+        ]
+        if result.get("count") != len(record_ids):
+            raise CapabilityError("capability_output_invalid")
     else:
         raise CapabilityError("batch_operation_invalid")
-    if not 1 <= len(record_ids) <= _MAX_BATCH_ROWS:
+    if not 0 <= len(record_ids) <= _MAX_BATCH_ROWS or (
+        operation != "delete" and not record_ids
+    ):
         raise CapabilityError("capability_output_invalid")
     return {
         "operation": operation,

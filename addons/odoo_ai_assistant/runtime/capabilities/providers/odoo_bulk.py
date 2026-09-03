@@ -286,7 +286,11 @@ def bulk_delete(context: CapabilityContext, arguments):
     except (AccessError, MissingError, RedirectWarning, ValidationError, UserError) as error:
         raise CapabilityError(
             "action_rejected",
-            details={"model": model, "operation": "delete"},
+            details={
+                "model": model,
+                "operation": "delete",
+                "exception_type": type(error).__name__,
+            },
         ) from error
     return {
         "operation": "delete",

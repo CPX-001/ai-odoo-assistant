@@ -3,8 +3,11 @@ import asyncio
 from odoo import Command
 from odoo.tests.common import TransactionCase
 
+from ..models.embedded_runtime_host_loop import _append_prepare_error
 from ..runtime.agent.contracts import FinalAnswer, ReasoningCapabilityCall
+from ..runtime.agent.plan import CapabilityPlanStepError
 from ..runtime.agent.service import AgentTurnService
+from ..runtime.agent.working_transcript import append_working_item
 from ..runtime.capabilities import (
     CapabilityConfigResolver,
     CapabilityContext,
@@ -157,3 +160,22 @@ class TestHostLoopAgentRuntime(TransactionCase):
         self.assertEqual(len(errors), 1)
         self.assertEqual(errors[0].data["code"], "agent_capability_arguments_invalid")
         self.assertEqual(errors[0].data["capability"], "odoo.query_records")
+
+    def test_prepare_failure_becomes_no_effect_repair_evidence(self):
+        items = append_working_item((), "user_input", {"message": "Eliminar contactos"})
+        error = CapabilityPlanStepError(
+            "action_rejected",
+            step_id="delete-1",
+            capability="odoo.records.bulk_delete",
+            phase="prepare",
+            details={"model": "res.partner", "exception_type": "RedirectWarning"},
+        )
+
+        repaired = _append_prepare_error(items, error)
+
+        evidence = repaired[-1]
+        self.assertEqual(evidence.kind, "plan_execution_error")
+        self.assertEqual(evidence.data["phase"], "prepare")
+        self.assertEqual(evidence.data["effect_state"], "none")
+        self.assertFalse(evidence.data["rolled_back"])
+        self.assertEqual(evidence.data["details"]["model"], "res.partner")
