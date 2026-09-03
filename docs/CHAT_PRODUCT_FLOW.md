@@ -13,7 +13,7 @@ Odoo controllers/services
     |
     +--> conversation/message persistence
     +--> screen-context validation
-    +--> account/model/reasoning/planning/policy settings snapshot
+    +--> account/model/reasoning/response-detail/planning/policy settings snapshot
     v
 odoo.ai.turn (queued)
     |
@@ -52,7 +52,7 @@ Submitting a new ordinary message remains a short Odoo request:
 1. validate caller/message/screen hint;
 2. locate/create owned conversation;
 3. persist user message;
-4. snapshot turn-relevant model/reasoning/planning/policy/company/context settings;
+4. snapshot turn-relevant model/reasoning/response-detail/planning/policy/company/context settings;
 5. create durable queued `odoo.ai.turn`;
 6. trigger available native runner slots;
 7. return durable turn/conversation identity and state.
@@ -297,6 +297,18 @@ turn.failure
 
 Provisional prose is not authority. The final validated Odoo turn result reconciles it. After verified effects, the host may allow read-only post-effect reasoning so the provider synthesizes the natural final answer without receiving another PLAN opportunity.
 
+The browser presents only real `answer.delta` text. Bursty polling deliveries enter a
+small adaptive display queue: the UI reveals readable slices at a steady cadence and
+catches up when backlog grows. It never manufactures a stream from terminal-only text.
+When the received deltas already equal the validated final answer, the queue reconciles
+them before the provisional bubble is replaced, avoiding a last-frame jump.
+
+Provisional answers use the same safe Markdown renderer as settled answers. A bounded
+streaming preprocessor temporarily closes an unfinished inline delimiter (for example
+an opening `**`) before parsing, so raw Markdown punctuation does not flash while the
+next real delta is pending. Raw HTML remains text and the final stored answer is never
+rewritten by this presentation step.
+
 ## 12. Contextual navigation is a separate contract
 
 Turn correction changes what the active Assistant turn should do. Contextual navigation merely gives the user a validated place to open in Odoo. They are intentionally separate.
@@ -362,7 +374,17 @@ The same design keeps streaming activity compact while preserving access to usef
 
 ## 16. Settings while a turn runs
 
-Turn-sensitive execution settings remain snapshots. A turn queued with model/reasoning/planning/policy X continues with X even if the user changes selectors for future turns.
+Turn-sensitive execution settings remain snapshots. A turn queued with
+model/reasoning/response-detail/planning/policy X continues with X even if the user
+changes selectors for future turns.
+
+Response detail is a per-user `Concise / Normal / Extensive` preference with an
+administrator default (`Normal` initially). It maps to the provider's low/medium/high
+verbosity control and to one host instruction. It is deliberately adaptive, never a
+character, paragraph or token quota: task complexity and explicit requested content
+still determine what must be present. Concise removes secondary context and repetition
+before required evidence, caveats, reasoning or next steps; Extensive uses more relevant
+material when useful but does not pad greetings or narrow answers.
 
 Presentation preferences may change display without changing current turn authority.
 

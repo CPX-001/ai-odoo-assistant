@@ -217,6 +217,7 @@ def reset_business_fixtures() -> dict[str, object]:
             preference.set_current_planning_mode("adaptive")
             preference.set_current_reasoning_model(None)
             preference.set_current_reasoning_effort(None)
+            preference.set_current_response_detail(None)
         sale_model = admin_env["sale.order"]
         old_orders = sale_model.search([("client_order_ref", "=like", "PB-EVAL-%")])
         old_ids = old_orders.ids
@@ -553,6 +554,15 @@ def _run_prelude(
 def execute_trial(
     scenario: dict[str, object], fixture: dict[str, object]
 ) -> dict[str, object]:
+    response_detail = scenario.get("response_detail")
+    if response_detail:
+        fresh(
+            PERSONA_IDS[scenario["persona"]],
+            lambda user_env: user_env[
+                "odoo.ai.user.preference"
+            ].set_current_response_detail(response_detail),
+            lang=LANG_BY_CODE[scenario["language"]],
+        )
     if scenario["id"] in {"PB-ACT-004", "PB-ACT-010"}:
         fresh(
             PERSONA_IDS[scenario["persona"]],
@@ -646,6 +656,7 @@ def execute_trial(
             preference = user_env["odoo.ai.user.preference"]
             preference.set_current_reasoning_model("gpt-5.4")
             preference.set_current_reasoning_effort("high")
+            preference.set_current_response_detail("extensive")
             preference.set_current_agent_profile("strict")
 
         fresh(uid, change_preferences, lang=LANG_BY_CODE[scenario["language"]])
@@ -660,6 +671,7 @@ def execute_trial(
             second["settings"] != first_before["settings"]
             and second["settings"].get("reasoning_model") == "gpt-5.4"
             and second["settings"].get("reasoning_effort") == "high"
+            and second["settings"].get("response_detail") == "extensive"
             and second["settings"].get("autonomy_profile") == "strict"
         )
         cancel(running, first_uuid)
@@ -771,6 +783,18 @@ def scenario_failures(
         failures.append("five_point_structure_invalid")
     if "three_points" in expected and _structured_point_count(answer) != 3:
         failures.append("three_point_structure_invalid")
+    if "response_detail_snapshot" in expected:
+        settings = value.get("settings", {})
+        if settings.get("response_detail") != scenario.get("response_detail"):
+            failures.append("response_detail_not_captured")
+    if "four_required_sections" in expected:
+        required = ("conclusión", "evidencia", "riesgos", "próximos pasos")
+        if any(section not in lowered for section in required):
+            failures.append("concise_deep_analysis_became_superficial")
+    if "short_social_answer" in expected:
+        paragraphs = [item for item in re.split(r"\n\s*\n", answer.strip()) if item]
+        if len(answer) > 400 or len(paragraphs) > 2:
+            failures.append("extensive_profile_padded_social_answer")
     if "same_conversation" in expected and value.get("same_conversation_observed") is not True:
         failures.append("conversation_continuity_missing")
     if "contains_fixture_email" in expected and "acme@eval.invalid" not in lowered:

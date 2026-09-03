@@ -22,6 +22,7 @@ import {
     replayAssistantTurnLive,
     streamAssistantChatLive,
 } from "@odoo_ai_assistant/services/assistant_live_stream_client";
+import { createAnswerStreamPresenter } from "@odoo_ai_assistant/services/assistant_answer_stream_presenter";
 import {
     clearRecentActiveChat,
     loadRecentActiveChat,
@@ -61,6 +62,14 @@ function browserSessionStorage() {
 function pendingMessageId() {
     pendingMessageSequence += 1;
     return `local-user-pending-${Date.now()}-${pendingMessageSequence}`;
+}
+
+function pushAnswerDelta(presenter, text) {
+    try {
+        presenter.push(text);
+    } catch {
+        throw new AssistantFailureError("invalid_response");
+    }
 }
 
 export function conversationScopeKey(conversationId) {
@@ -307,11 +316,18 @@ async function restorePersistedTurn(state, scope, activeTurn) {
     scope.failure = null;
     scope.loading = ["queued", "running", "cancel_requested"].includes(activeTurn.state);
     projectIfActive(state, scope);
+    const presenter = createAnswerStreamPresenter({
+        writeText: (text) => {
+            scope.streamingText = text;
+            projectIfActive(state, scope);
+        },
+    });
 
     let cursor = 0;
     try {
         for (let attempt = 0; attempt < REPLAY_POLL_ATTEMPTS; attempt += 1) {
             if (scope.replayGeneration !== generation || scope.turnId !== activeTurn.turn_id) {
+                presenter.stop();
                 return false;
             }
             cursor = await replayAssistantTurnLive({
@@ -322,12 +338,7 @@ async function restorePersistedTurn(state, scope, activeTurn) {
                     projectIfActive(state, scope);
                 },
                 onDelta: async (text) => {
-                    const next = `${scope.streamingText || ""}${text}`;
-                    if (next.length > 16384) {
-                        throw new AssistantFailureError("invalid_response");
-                    }
-                    scope.streamingText = next;
-                    projectIfActive(state, scope);
+                    pushAnswerDelta(presenter, text);
                 },
             });
             const status = await rpc("/odoo_ai/v1/turn/status", {
@@ -349,6 +360,8 @@ async function restorePersistedTurn(state, scope, activeTurn) {
                     throw new AssistantFailureError(parsed.errorCode || "invalid_response");
                 }
                 scope.result = parsed.result;
+                await presenter.reconcile(parsed.result.answer);
+                presenter.stop();
                 scope.streamingText = "";
                 scope.loading = false;
                 appendAssistantAnswerOnce(
@@ -361,6 +374,7 @@ async function restorePersistedTurn(state, scope, activeTurn) {
                 return true;
             }
             if (status.state === "cancelled") {
+                presenter.stop();
                 scope.streamingText = "";
                 scope.loading = false;
                 appendAssistantAnswerOnce(scope, activeTurn.turn_id, status.answer, "cancelled");
@@ -368,6 +382,7 @@ async function restorePersistedTurn(state, scope, activeTurn) {
                 return true;
             }
             if (["failed", "recovery_required"].includes(status.state)) {
+                presenter.stop();
                 scope.streamingText = "";
                 scope.loading = false;
                 scope.errorCode = status.error_code || "runtime_unavailable";
@@ -378,11 +393,13 @@ async function restorePersistedTurn(state, scope, activeTurn) {
             projectIfActive(state, scope);
             await new Promise((resolve) => setTimeout(resolve, REPLAY_POLL_MS));
         }
+        presenter.stop();
         scope.loading = false;
         scope.errorCode = "engine_timeout";
         projectIfActive(state, scope);
         return false;
     } catch (error) {
+        presenter.stop();
         scope.loading = false;
         const parsed = failureFromError(error);
         scope.errorCode = parsed.code;
@@ -495,6 +512,12 @@ async function submitScopedTurn({
         },
     ];
     projectIfActive(state, scope);
+    const presenter = createAnswerStreamPresenter({
+        writeText: (text) => {
+            scope.streamingText = text;
+            projectIfActive(state, scope);
+        },
+    });
 
     try {
         const response = await streamAssistantChatLive({
@@ -534,14 +557,7 @@ async function submitScopedTurn({
                 projectIfActive(state, scope);
             },
             onDelta: async (text) => {
-                if (typeof text !== "string" || !text) {
-                    throw new AssistantFailureError("invalid_response");
-                }
-                const next = `${scope.streamingText || ""}${text}`;
-                if (next.length > 16384) {
-                    throw new AssistantFailureError("invalid_response");
-                }
-                scope.streamingText = next;
+                pushAnswerDelta(presenter, text);
                 if (scope.turnState === "queued") {
                     scope.turnState = "running";
                 }
@@ -550,6 +566,10 @@ async function submitScopedTurn({
             },
         });
         const parsed = normalizeChatResponse(response);
+        if (parsed.result) {
+            await presenter.reconcile(parsed.result.answer);
+        }
+        presenter.stop();
         scope.streamingText = "";
         scope.result = parsed.result;
         scope.errorCode = parsed.errorCode;
@@ -588,6 +608,7 @@ async function submitScopedTurn({
         projectIfActive(state, scope);
         return true;
     } catch (error) {
+        presenter.stop();
         const parsed = failureFromError(error);
         scope.streamingText = "";
         scope.result = null;
@@ -598,6 +619,7 @@ async function submitScopedTurn({
         projectIfActive(state, scope);
         return false;
     } finally {
+        presenter.stop();
         scope.loading = false;
         updateConversationList(state, scope);
         projectIfActive(state, scope);

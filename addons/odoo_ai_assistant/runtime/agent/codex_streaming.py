@@ -104,7 +104,10 @@ class StreamingCodexDecisionEngine(_BaseCodexDecisionEngine):
                     "runtimeWorkspaceRoots": [],
                     "sandbox": "read-only",
                     **_streaming_thread_options(self._settings),
-                    "baseInstructions": _decision_instructions(final_answer_only),
+                    "baseInstructions": _decision_instructions(
+                        final_answer_only,
+                        response_detail=self._settings.response_detail,
+                    ),
                 },
                 timeout=_remaining(deadline),
             )

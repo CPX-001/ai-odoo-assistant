@@ -70,6 +70,32 @@ class TestAssistantUserPreferences(TransactionCase):
         self.assertIsNone(preferences_a.current_reasoning_effort())
         self.assertEqual(preferences_b.current_reasoning_effort(), "low")
 
+    def test_response_detail_is_adaptive_user_override_with_admin_default(self):
+        preferences_a = self.env["odoo.ai.user.preference"].with_user(self.user_a)
+        preferences_b = self.env["odoo.ai.user.preference"].with_user(self.user_b)
+        self.env["ir.config_parameter"].set_param(
+            "odoo_ai_assistant.default_response_detail", "extensive"
+        )
+
+        self.assertEqual(preferences_a.current_response_detail(), "extensive")
+        self.assertEqual(preferences_b.current_response_detail(), "extensive")
+        self.assertEqual(
+            preferences_a.set_current_response_detail("concise"), "concise"
+        )
+        self.assertEqual(preferences_a.current_response_detail(), "concise")
+        self.assertEqual(preferences_b.current_response_detail(), "extensive")
+
+        response = preferences_a.response_detail_preferences()
+        self.assertEqual(response["selected_response_detail"], "concise")
+        self.assertEqual(response["default_response_detail"], "extensive")
+        self.assertEqual(response["effective_response_detail"], "concise")
+        self.assertIsNone(preferences_a.set_current_response_detail(None))
+        self.assertEqual(preferences_a.current_response_detail(), "extensive")
+
+        rejected = preferences_a.set_response_detail_preference("two_lines")
+        self.assertFalse(rejected["ok"])
+        self.assertEqual(rejected["error"]["code"], "invalid_context")
+
     def test_reasoning_effort_is_validated_against_effective_model(self):
         catalog = {
             "models": [

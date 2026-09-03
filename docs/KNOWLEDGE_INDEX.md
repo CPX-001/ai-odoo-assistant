@@ -228,6 +228,14 @@ runtime and installed source/XML Evidence so documented behavior can be compared
 the actual installation. Social-only turns remain retrieval-free, and internal/current-turn
 sources are ordered ahead of any external provider.
 
+Broad overview questions (for example, how an organization's network and systems are
+set up) request panoramic document coverage. If the best matching Knowledge source is
+short enough to fit the existing 64 KiB evidence budget and has at most eight chunks,
+the provider returns all of its current chunks in document order. Narrow questions keep
+the normal four ranked fetches. Longer documents retain ranked bounded retrieval rather
+than silently flooding the model context. The answer-detail preference never removes
+evidence needed for correctness.
+
 ## 11. Logs and diagnosis
 
 P8 configured-log Evidence supports bounded correlated diagnosis. Logs remain

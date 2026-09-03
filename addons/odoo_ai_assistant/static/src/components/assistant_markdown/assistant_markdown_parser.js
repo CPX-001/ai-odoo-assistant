@@ -34,6 +34,67 @@ export function safeMarkdownLink(value) {
     return null;
 }
 
+function openFenceAtEnd(source) {
+    let marker = null;
+    let minimumLength = 0;
+    for (const line of source.split("\n")) {
+        const fence = line.match(/^\s*(`{3,}|~{3,})\s*[A-Za-z0-9_+#.-]{0,32}\s*$/);
+        if (!fence) {
+            continue;
+        }
+        if (!marker) {
+            marker = fence[1][0];
+            minimumLength = fence[1].length;
+        } else if (fence[1][0] === marker && fence[1].length >= minimumLength) {
+            marker = null;
+            minimumLength = 0;
+        }
+    }
+    return marker !== null;
+}
+
+function unmatchedRepeatedMarker(source, marker) {
+    const positions = [];
+    let cursor = 0;
+    while (cursor < source.length) {
+        const position = source.indexOf(marker, cursor);
+        if (position < 0) {
+            break;
+        }
+        positions.push(position);
+        cursor = position + marker.length;
+    }
+    if (positions.length % 2 === 0) {
+        return null;
+    }
+    const partial =
+        marker.length === 2 &&
+        source.endsWith(marker[0]) &&
+        !source.endsWith(marker);
+    return {
+        position: positions[positions.length - 1],
+        closing: partial ? marker[0] : marker,
+    };
+}
+
+export function prepareStreamingMarkdown(value) {
+    const source = (typeof value === "string" ? value : "")
+        .slice(0, MAX_MARKDOWN_LENGTH)
+        .replace(/\r\n?/g, "\n");
+    if (!source || openFenceAtEnd(source)) {
+        return source;
+    }
+    const unmatched = [];
+    for (const marker of ["`", "~~", "__", "**"]) {
+        const candidate = unmatchedRepeatedMarker(source, marker);
+        if (candidate) {
+            unmatched.push(candidate);
+        }
+    }
+    unmatched.sort((left, right) => right.position - left.position);
+    return source + unmatched.map((item) => item.closing).join("");
+}
+
 function trimAutolink(value) {
     let href = value;
     let suffix = "";

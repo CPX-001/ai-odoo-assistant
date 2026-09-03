@@ -3,7 +3,10 @@
 import { Component } from "@odoo/owl";
 import { patch } from "@web/core/utils/patch";
 import { AssistantPanel } from "@odoo_ai_assistant/components/assistant_panel/assistant_panel";
-import { parseMarkdown } from "@odoo_ai_assistant/components/assistant_markdown/assistant_markdown_parser";
+import {
+    parseMarkdown,
+    prepareStreamingMarkdown,
+} from "@odoo_ai_assistant/components/assistant_markdown/assistant_markdown_parser";
 
 export class AssistantMarkdownInline extends Component {
     static template = "odoo_ai_assistant.AssistantMarkdownInline";
@@ -12,7 +15,7 @@ export class AssistantMarkdownInline extends Component {
 
 export class AssistantMarkdown extends Component {
     static template = "odoo_ai_assistant.AssistantMarkdown";
-    static props = { content: String };
+    static props = { content: String, streaming: { type: Boolean, optional: true } };
     static components = { AssistantMarkdownInline };
 
     setup() {
@@ -21,9 +24,12 @@ export class AssistantMarkdown extends Component {
     }
 
     get blocks() {
-        if (this._cachedContent !== this.props.content) {
-            this._cachedContent = this.props.content;
-            this._cachedBlocks = parseMarkdown(this.props.content);
+        const content = this.props.streaming
+            ? prepareStreamingMarkdown(this.props.content)
+            : this.props.content;
+        if (this._cachedContent !== content) {
+            this._cachedContent = content;
+            this._cachedBlocks = parseMarkdown(content);
         }
         return this._cachedBlocks;
     }

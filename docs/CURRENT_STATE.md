@@ -27,7 +27,7 @@ research/P11_FOCUSED_VALIDATION_RUNBOOK.md
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Supported addon: `addons/odoo_ai_assistant`.
-- Current addon version: `18.0.13.30.0`.
+- Current addon version: `18.0.13.31.0`.
 - Dependencies: `account`, `base`, `base_import`, `sale`, `web`.
 - Runtime is embedded in Odoo; the browser talks only to authenticated Odoo routes.
 - Odoo/PostgreSQL own conversations, turns, effects, recovery, Evidence, Knowledge and
@@ -76,6 +76,10 @@ per-conversation causality with cross-conversation concurrency, provider-neutral
 interventions/cancellation, public activity/answer streaming, immutable turn settings,
 resource references and post-effect reasoning.
 
+Public answers use paced real deltas, streaming-safe Markdown and final reconciliation.
+Immutable turn settings include adaptive Concise/Normal/Extensive response detail,
+with Normal as the initial administrator default and no fixed length quota.
+
 P7-P11 extend that runtime rather than creating a second scheduler, agent service or
 database.
 
@@ -89,8 +93,9 @@ still resolves through the same capability registry/executor/policy path.
 P8 supplies bounded provenance/freshness/access-aware installation Evidence including
 runtime, installed-addon source/XML and configured logs. P9 supplies Odoo-native
 company Knowledge with deterministic bounded document ingestion, PostgreSQL lexical
-FTS, citations and stale-version revalidation. Retrieved/file text is data, never
-policy.
+FTS, citations, stale-version revalidation and ordered whole-source coverage for a
+best-matching short document when a broad overview is requested. Retrieved/file text
+is data, never policy.
 
 Product-facing profiles remain exactly `user` and `technical`; autonomy is independent
 from technical reach.

@@ -228,6 +228,7 @@ class EmbeddedAssistantRuntime(models.AbstractModel):
             executable=status.executable,
             codex_home=paths.codex_home,
             model=turn.reasoning_model or None,
+            response_detail=turn.response_detail or "normal",
         )
 
     def _conversation_summary(self, turn):

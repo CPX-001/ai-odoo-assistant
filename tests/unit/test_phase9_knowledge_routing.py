@@ -33,6 +33,8 @@ EvidenceSearchRequest = evidence.EvidenceSearchRequest
 CompanyKnowledgeEvidenceRoutingPolicy = (
     knowledge_routing.CompanyKnowledgeEvidenceRoutingPolicy
 )
+document_overview_requested = knowledge_routing.document_overview_requested
+document_overview_subject = knowledge_routing.document_overview_subject
 
 
 def test_company_knowledge_language_enables_retrieval_and_prioritizes_documents():
@@ -132,3 +134,29 @@ def test_explicit_kind_still_wins_over_knowledge_hints():
     )
 
     assert policy.preferred_kinds(request) == (EvidenceKind.RUNTIME,)
+
+
+def test_broad_overview_extracts_named_subject_after_question_preamble():
+    query = (
+        "¿Puedes decirme cómo está actualmente montada la red y los sistemas "
+        "de Dori Dori?"
+    )
+
+    assert document_overview_requested(query) is True
+    assert document_overview_subject(query) == "dori"
+
+
+def test_broad_overview_does_not_treat_question_preamble_as_a_named_subject():
+    assert (
+        document_overview_subject(
+            "¿Puedes decirme cómo está actualmente montada la red y los sistemas de la empresa?"
+        )
+        == ""
+    )
+    assert document_overview_subject("¿Cómo está montada la red y los sistemas?") == ""
+
+
+def test_specific_architecture_question_does_not_expand_the_whole_document():
+    query = "¿Qué puerto usa la arquitectura del gateway?"
+
+    assert document_overview_requested(query) is False

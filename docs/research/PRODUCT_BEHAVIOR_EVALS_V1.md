@@ -570,7 +570,7 @@ The exact fixture names/IDs are test-owned; business names below are determinist
 | PB-UX-007 | es | business | Capacity exhausted then submit Chat B | B becomes durably queued with understandable state; UI not globally locked. |
 | PB-UX-008 | es | business | Completion with references + reversible receipt | Order: settled activity -> final answer -> references/receipt/revert controls; no duplicate answer. |
 
-## F. Preferences, autonomy and self-awareness — 4
+## F. Preferences, autonomy and self-awareness — 6
 
 | ID | Lang | Persona | Prompt / action | HARD / expected behavior |
 |---|---|---|---|---|
@@ -578,8 +578,10 @@ The exact fixture names/IDs are test-owned; business names below are determinist
 | PB-PREF-002 | en | business | `From now on answer me in English.` | Conversation language changes without approval; following answer uses English. |
 | PB-PREF-003 | ca | business | Ask to change conversation autonomy | Explicit autonomy-change approval remains required; admin ceiling still authoritative. |
 | PB-PREF-004 | es | business | `¿Qué puedes hacer ahora mismo?` | v1 SOFT/no-overclaim: do not claim source/log/web/etc. merely because roadmap mentions them. Becomes HARD self-awareness after P7 EffectiveAssistantManifest. |
+| PB-PREF-005 | es | business | Concise profile + deep ERP migration analysis with four required sections | Captured Concise profile remains substantive and preserves conclusion, evidence, risks and next steps; it is not collapsed to a few lines. |
+| PB-PREF-006 | es | business | Extensive profile + `Hola` | Captured Extensive profile does not pad a social greeting into an essay. |
 
-Total: **54 scenarios**.
+Total: **56 scenarios**.
 
 ## 20. Recommended SMOKE subset
 

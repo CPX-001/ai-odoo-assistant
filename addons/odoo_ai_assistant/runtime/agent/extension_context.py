@@ -30,7 +30,10 @@ from ..capabilities.evidence import (
     thaw_json,
 )
 from ..capabilities.evidence_runtime import AssistantEvidenceDecisionEngine
-from ..capabilities.knowledge_routing import CompanyKnowledgeEvidenceRoutingPolicy
+from ..capabilities.knowledge_routing import (
+    CompanyKnowledgeEvidenceRoutingPolicy,
+    document_overview_requested,
+)
 from .contracts import NextDecision
 
 _CACHE_METADATA_KEYS = (
@@ -75,6 +78,7 @@ class AssistantExtensionDecisionEngine:
         self._evidence_engine = AssistantEvidenceDecisionEngine(
             extensions.evidence_providers,
             routing_policy=self._evidence_routing,
+            max_fetches_per_decision=8,
         )
         self._evidence_ledger = EvidenceLedger()
 
@@ -149,17 +153,24 @@ class AssistantExtensionDecisionEngine:
         ):
             probe = EvidenceSearchRequest(query=message)
             if self._evidence_routing.should_retrieve(probe):
+                overview_requested = document_overview_requested(message)
                 request = EvidenceSearchRequest(
                     query=message,
                     provider_ids=active.evidence_provider_ids,
                     max_results=16,
                     max_excerpt_bytes=8 * 1024,
                     max_total_bytes=64 * 1024,
+                    metadata={
+                        "document_coverage": (
+                            "whole_short_document" if overview_requested else "ranked_excerpt"
+                        )
+                    },
                 )
                 evidence = self._evidence_engine.collect(
                     context,
                     request,
                     ledger=self._evidence_ledger,
+                    max_fetches=8 if overview_requested else 4,
                 )
                 evidence_host_item = {
                     "kind": "host_assistant_evidence",

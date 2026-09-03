@@ -18,10 +18,12 @@ from .evidence import (
     EvidenceSearchResult,
     EvidenceTrust,
 )
+from .knowledge_routing import document_overview_subject
 
 PROVIDER_ID = "assistant.company_knowledge"
 SOURCE_ID = "company.knowledge"
 _MAX_EXCERPT = 8 * 1024
+_MAX_WHOLE_DOCUMENT_CHUNKS = 8
 
 
 def _guard(context: CapabilityContext) -> bool:
@@ -36,10 +38,14 @@ def _search(context: CapabilityContext, request: EvidenceSearchRequest):
         return EvidenceSearchResult(provider_id=PROVIDER_ID, refs=())
     limit = min(request.max_results, 12)
     try:
+        search_query = request.query
+        if request.metadata.get("document_coverage") == "whole_short_document":
+            search_query = document_overview_subject(request.query) or search_query
         ranked = context.env["odoo.ai.knowledge.source"].lexical_search(
-            request.query,
+            search_query,
             limit=limit,
         )
+        ranked = _expand_whole_short_document(context, request, ranked)
     except Exception as error:
         raise CapabilityError("knowledge_search_failed") from error
     refs = tuple(_ref_for_chunk(context, chunk, score) for chunk, score in ranked)
@@ -48,6 +54,32 @@ def _search(context: CapabilityContext, request: EvidenceSearchRequest):
         refs=refs,
         truncated=len(refs) >= limit,
     )
+
+
+def _expand_whole_short_document(context, request, ranked):
+    """Return all ordered chunks when a broad query targets one bounded short source."""
+
+    if request.metadata.get("document_coverage") != "whole_short_document" or not ranked:
+        return ranked
+    source = ranked[0][0].source_id
+    chunk_count = int(source.chunk_count or 0)
+    limit = min(request.max_results, _MAX_WHOLE_DOCUMENT_CHUNKS)
+    if not 1 <= chunk_count <= limit:
+        return ranked
+    chunks = context.env["odoo.ai.knowledge.chunk"].search(
+        [
+            ("source_id", "=", source.id),
+            ("source_version", "=", source.version),
+        ],
+        order="sequence, id",
+        limit=limit + 1,
+    )
+    if len(chunks) != chunk_count:
+        return ranked
+    if sum(len(chunk.content or "") for chunk in chunks) > request.max_total_bytes:
+        return ranked
+    top_score = max(0.0, float(ranked[0][1] or 0.0))
+    return [(chunk, top_score) for chunk in chunks]
 
 
 def _fetch(context: CapabilityContext, requested: EvidenceRef) -> EvidenceItem:
@@ -156,6 +188,7 @@ def _ref_for_chunk(context: CapabilityContext, chunk, score: float) -> EvidenceR
             "access_mode": source.access_mode,
             "company_id": source.company_id.id,
             "indexed_fingerprint": source.indexed_fingerprint,
+            "document_chunk_count": source.chunk_count,
         },
     )
 

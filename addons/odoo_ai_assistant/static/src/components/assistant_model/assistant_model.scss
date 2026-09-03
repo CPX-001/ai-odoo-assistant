@@ -1,12 +1,14 @@
 .o_ai_assistant_panel {
     .o_ai_assistant_model_picker,
-    .o_ai_assistant_reasoning_picker {
+    .o_ai_assistant_reasoning_picker,
+    .o_ai_assistant_response_detail_picker {
         flex: 0 0 auto;
         margin-top: 0 !important;
     }
 
     .o_ai_assistant_model_picker .o_ai_assistant_picker_button,
-    .o_ai_assistant_reasoning_picker .o_ai_assistant_picker_button {
+    .o_ai_assistant_reasoning_picker .o_ai_assistant_picker_button,
+    .o_ai_assistant_response_detail_picker .o_ai_assistant_picker_button {
         max-width: 4.5rem;
     }
 

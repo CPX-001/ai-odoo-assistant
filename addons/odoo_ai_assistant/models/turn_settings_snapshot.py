@@ -13,13 +13,24 @@ from ..runtime.agent.planning import (
     parse_planning_strategy,
     resolve_planning_strategy,
 )
+from ..runtime.agent.response_detail import (
+    DEFAULT_RESPONSE_DETAIL,
+    RESPONSE_DETAIL_LEVELS,
+)
 from .chat_policy import resolve_capability_policy
 
-_SETTINGS_FORMAT_VERSION = 3
+_SETTINGS_FORMAT_VERSION = 4
+_PLANNING_SETTINGS_FORMAT_VERSION = 3
 _REASONING_SETTINGS_FORMAT_VERSION = 2
 _LEGACY_SETTINGS_FORMAT_VERSION = 1
 _BOUND_SETTINGS_FIELDS = frozenset(
-    {"reasoning_model", "reasoning_effort", "policy_payload", "execution_settings_payload"}
+    {
+        "reasoning_model",
+        "reasoning_effort",
+        "response_detail",
+        "policy_payload",
+        "execution_settings_payload",
+    }
 )
 _AUTONOMY_PROFILES = frozenset({"strict", "balanced", "autonomous", "full_access"})
 _EFFORT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -32,6 +43,15 @@ class AssistantTurnSettingsSnapshot(models.Model):
     _inherit = "odoo.ai.turn"
 
     execution_settings_payload = fields.Json(readonly=True, copy=False)
+    response_detail = fields.Selection(
+        selection=[
+            ("concise", "Concise"),
+            ("normal", "Normal"),
+            ("extensive", "Extensive"),
+        ],
+        readonly=True,
+        copy=False,
+    )
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -48,10 +68,15 @@ class AssistantTurnSettingsSnapshot(models.Model):
                 if "reasoning_effort" not in values:
                     effort = _reasoning_effort_for_user(self.env, values.get("user_id"))
                     values["reasoning_effort"] = effort or False
+                if "response_detail" not in values:
+                    values["response_detail"] = _response_detail_for_user(
+                        self.env, values.get("user_id")
+                    )
                 planning_mode = _planning_mode_for_new_turn(self.env)
                 values["execution_settings_payload"] = _build_settings_snapshot(
                     reasoning_model=values.get("reasoning_model"),
                     reasoning_effort=values.get("reasoning_effort"),
+                    response_detail=values.get("response_detail"),
                     policy=policy,
                     planning_mode=planning_mode,
                     message=values.get("input_message") or "",
@@ -83,6 +108,10 @@ class AssistantTurnSettingsSnapshot(models.Model):
             "reasoning_effort"
         ] != (self.reasoning_effort or None):
             raise ValidationError("Assistant turn settings snapshot does not match reasoning effort")
+        if validated["format_version"] >= _SETTINGS_FORMAT_VERSION and validated[
+            "response_detail"
+        ] != (self.response_detail or DEFAULT_RESPONSE_DETAIL):
+            raise ValidationError("Assistant turn settings snapshot does not match response detail")
         if validated["policy"] != (self.policy_payload or {}):
             raise ValidationError("Assistant turn settings snapshot does not match policy")
         return validated
@@ -92,6 +121,7 @@ def _build_settings_snapshot(
     *,
     reasoning_model,
     reasoning_effort,
+    response_detail=DEFAULT_RESPONSE_DETAIL,
     policy,
     planning_mode="adaptive",
     message="",
@@ -104,6 +134,9 @@ def _build_settings_snapshot(
         not isinstance(effort, str) or _EFFORT_PATTERN.fullmatch(effort) is None
     ):
         raise ValidationError("Invalid Assistant turn reasoning effort")
+    detail = response_detail or DEFAULT_RESPONSE_DETAIL
+    if detail not in RESPONSE_DETAIL_LEVELS:
+        raise ValidationError("Invalid Assistant turn response detail")
     try:
         strategy = resolve_planning_strategy(
             planning_mode,
@@ -116,6 +149,7 @@ def _build_settings_snapshot(
         "format_version": _SETTINGS_FORMAT_VERSION,
         "reasoning_model": reasoning_model or None,
         "reasoning_effort": effort,
+        "response_detail": detail,
         "autonomy_profile": _autonomy_profile_from_policy(policy),
         "planning_mode": strategy.requested_mode,
         "planning_strategy": strategy.payload(),
@@ -134,7 +168,8 @@ def _validate_settings_snapshot(value):
         "policy",
     }
     reasoning_keys = legacy_keys | {"reasoning_effort"}
-    current_keys = reasoning_keys | {"planning_mode", "planning_strategy"}
+    planning_keys = reasoning_keys | {"planning_mode", "planning_strategy"}
+    current_keys = planning_keys | {"response_detail"}
     if version == _LEGACY_SETTINGS_FORMAT_VERSION:
         if set(value) != legacy_keys:
             raise ValidationError("Invalid Assistant turn settings snapshot")
@@ -142,10 +177,15 @@ def _validate_settings_snapshot(value):
         if set(value) != reasoning_keys:
             raise ValidationError("Invalid Assistant turn settings snapshot")
         _validate_reasoning_effort(value.get("reasoning_effort"))
-    elif version == _SETTINGS_FORMAT_VERSION:
-        if set(value) != current_keys:
+    elif version in {_PLANNING_SETTINGS_FORMAT_VERSION, _SETTINGS_FORMAT_VERSION}:
+        expected_keys = (
+            current_keys if version == _SETTINGS_FORMAT_VERSION else planning_keys
+        )
+        if set(value) != expected_keys:
             raise ValidationError("Invalid Assistant turn settings snapshot")
         _validate_reasoning_effort(value.get("reasoning_effort"))
+        if version == _SETTINGS_FORMAT_VERSION:
+            _validate_response_detail(value.get("response_detail"))
         planning_mode = value.get("planning_mode")
         if planning_mode not in _PLANNING_MODES:
             raise ValidationError("Invalid Assistant turn planning mode")
@@ -178,6 +218,11 @@ def _validate_reasoning_effort(effort):
         raise ValidationError("Invalid Assistant turn reasoning effort")
 
 
+def _validate_response_detail(response_detail):
+    if response_detail not in RESPONSE_DETAIL_LEVELS:
+        raise ValidationError("Invalid Assistant turn response detail")
+
+
 def _reasoning_effort_for_user(env, user_id):
     if type(user_id) is not int or user_id <= 0:
         return None
@@ -186,6 +231,16 @@ def _reasoning_effort_for_user(env, user_id):
         return None
     preference = env["odoo.ai.user.preference"].with_user(user)
     return preference.current_reasoning_effort()
+
+
+def _response_detail_for_user(env, user_id):
+    if type(user_id) is not int or user_id <= 0:
+        return DEFAULT_RESPONSE_DETAIL
+    user = env["res.users"].browse(user_id).exists()
+    if not user:
+        return DEFAULT_RESPONSE_DETAIL
+    preference = env["odoo.ai.user.preference"].with_user(user)
+    return preference.current_response_detail()
 
 
 def _planning_mode_for_new_turn(env):

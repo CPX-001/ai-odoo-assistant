@@ -104,7 +104,11 @@ class AssistantEvidenceDecisionEngine:
         *,
         ledger: EvidenceLedger | None = None,
         fetch_reference_ids: Iterable[str] = (),
+        max_fetches: int | None = None,
     ) -> EvidenceWorkingContext:
+        fetch_limit = self._max_fetches if max_fetches is None else max_fetches
+        if type(fetch_limit) is not int or not 0 <= fetch_limit <= self._max_fetches:
+            raise CapabilityError("evidence_fetch_limit_invalid")
         active_ledger = ledger or EvidenceLedger()
         batch = self._catalog.search(
             context,
@@ -122,7 +126,7 @@ class AssistantEvidenceDecisionEngine:
             tuple(refs_by_id[item] for item in requested_ids if item in refs_by_id)
             if requested_ids
             else batch.refs
-        )[: self._max_fetches]
+        )[:fetch_limit]
 
         items: list[EvidenceItem] = []
         failures: list[EvidenceFetchFailure] = []

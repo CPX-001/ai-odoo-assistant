@@ -16,7 +16,7 @@ from .catalog import (
 def test_v1_catalog_is_complete_and_frozen() -> None:
     payload = load_catalog()
 
-    assert len(payload["scenarios"]) == 54
+    assert len(payload["scenarios"]) == 56
     assert tuple(payload["smoke_ids"]) == EXPECTED_SMOKE_IDS
 
 

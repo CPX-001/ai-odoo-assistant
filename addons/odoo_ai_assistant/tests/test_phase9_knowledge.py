@@ -21,6 +21,10 @@ from odoo.addons.odoo_ai_assistant.runtime.capabilities.evidence import (
 from odoo.addons.odoo_ai_assistant.runtime.capabilities.knowledge_evidence import (
     build_company_knowledge_evidence_provider,
 )
+from odoo.addons.odoo_ai_assistant.runtime.capabilities.knowledge_routing import (
+    document_overview_requested,
+    document_overview_subject,
+)
 from odoo.addons.odoo_ai_assistant.runtime.capabilities.registry import (
     discover_capabilities_for_env,
 )
@@ -217,6 +221,54 @@ class TestPhase9Knowledge(TransactionCase):
         self.assertTrue(any(chunk.source_id == source for chunk, _score in by_content))
         self.assertTrue(
             any(chunk.source_id == dori_source for chunk, _score in by_noisy_name)
+        )
+
+    def test_broad_infrastructure_question_expands_one_whole_short_document(self):
+        env = self._env(self.user_a)
+        paragraphs = [
+            "Dori Dori network systems overview marker. " + "gateway " * 430,
+            "Hyper-V servers and virtual machines. " + "server " * 430,
+            "Business applications, databases and access control. " + "application " * 330,
+            "Backups, risks and pending maintenance. " + "recovery " * 400,
+        ]
+        source = self._source(
+            env,
+            name="Dori Dori infrastructure",
+            text="\n\n".join(paragraphs),
+        )
+        self.assertGreater(source.chunk_count, 1)
+        self.assertLessEqual(source.chunk_count, 8)
+        question = (
+            "¿Puedes decirme cómo está actualmente montada la red y los sistemas "
+            "de Dori Dori?"
+        )
+        self.assertTrue(document_overview_requested(question))
+        self.assertEqual(document_overview_subject(question), "dori")
+        self.assertFalse(
+            document_overview_requested("¿Qué puerto usa la arquitectura del gateway?")
+        )
+
+        catalog = EvidenceProviderCatalog(
+            (build_company_knowledge_evidence_provider(),)
+        )
+        batch = catalog.search(
+            self._context(env),
+            EvidenceSearchRequest(
+                query=question,
+                kinds=(EvidenceKind.DOCUMENT,),
+                max_results=16,
+                max_total_bytes=64 * 1024,
+                metadata={"document_coverage": "whole_short_document"},
+            ),
+        )
+
+        self.assertEqual(len(batch.refs), source.chunk_count)
+        self.assertEqual(
+            [ref.citation["chunk"] for ref in batch.refs],
+            list(range(1, source.chunk_count + 1)),
+        )
+        self.assertTrue(
+            all(ref.citation["source_uuid"] == source.source_uuid for ref in batch.refs)
         )
 
     def test_company_private_acl_and_host_owned_index(self):

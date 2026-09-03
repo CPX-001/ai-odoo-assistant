@@ -61,6 +61,7 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         preference = env["odoo.ai.user.preference"]
         preference.set_current_reasoning_model("snapshot-model-a")
         preference.set_current_reasoning_effort("high")
+        preference.set_current_response_detail("extensive")
         preference.set_current_agent_profile("strict")
         # Historical/persisted deliberate remains readable but is no longer new-turn authority.
         preference.set_current_planning_mode("deliberate")
@@ -72,9 +73,10 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
             planning_mode="deliberate",
         )
         snapshot_a = turn_a.execution_settings_snapshot()
-        self.assertEqual(snapshot_a["format_version"], 3)
+        self.assertEqual(snapshot_a["format_version"], 4)
         self.assertEqual(snapshot_a["reasoning_model"], "snapshot-model-a")
         self.assertEqual(snapshot_a["reasoning_effort"], "high")
+        self.assertEqual(snapshot_a["response_detail"], "extensive")
         self.assertEqual(snapshot_a["autonomy_profile"], "strict")
         self.assertEqual(snapshot_a["planning_mode"], "deliberate")
         self.assertEqual(snapshot_a["planning_strategy"]["effective_mode"], "deliberate")
@@ -86,6 +88,7 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
 
         preference.set_current_reasoning_model("snapshot-model-b")
         preference.set_current_reasoning_effort("low")
+        preference.set_current_response_detail("concise")
         preference.set_current_agent_profile("full_access")
         # Deliberate stays stored on purpose to prove it cannot silently reactivate Plan.
         turn_a.invalidate_recordset()
@@ -99,6 +102,7 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         snapshot_b = turn_b.execution_settings_snapshot()
         self.assertEqual(snapshot_b["reasoning_model"], "snapshot-model-b")
         self.assertEqual(snapshot_b["reasoning_effort"], "low")
+        self.assertEqual(snapshot_b["response_detail"], "concise")
         self.assertEqual(snapshot_b["autonomy_profile"], "full_access")
         self.assertEqual(snapshot_b["planning_mode"], "adaptive")
         self.assertEqual(snapshot_b["planning_strategy"]["effective_mode"], "adaptive")
@@ -169,6 +173,8 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         with self.assertRaisesRegex(ValidationError, "execution settings are immutable"):
             technical.write({"reasoning_effort": "max"})
         with self.assertRaisesRegex(ValidationError, "execution settings are immutable"):
+            technical.write({"response_detail": "extensive"})
+        with self.assertRaisesRegex(ValidationError, "execution settings are immutable"):
             technical.write({"policy_payload": {}})
         with self.assertRaisesRegex(ValidationError, "execution settings are immutable"):
             technical.write({"execution_settings_payload": False})
@@ -185,6 +191,7 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
         preference = env["odoo.ai.user.preference"]
         preference.set_current_reasoning_model("snapshot-runtime-model-a")
         preference.set_current_reasoning_effort("xhigh")
+        preference.set_current_response_detail("concise")
         turn = self._enqueue(
             env,
             request_id="request.settings.snapshot.0004",
@@ -193,9 +200,11 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
 
         preference.set_current_reasoning_model("snapshot-runtime-model-b")
         preference.set_current_reasoning_effort("low")
+        preference.set_current_response_detail("extensive")
         turn.invalidate_recordset()
         self.assertEqual(turn.reasoning_model, "snapshot-runtime-model-a")
         self.assertEqual(turn.reasoning_effort, "xhigh")
+        self.assertEqual(turn.response_detail, "concise")
 
         detected = SimpleNamespace(
             ready=True,
@@ -213,3 +222,4 @@ class TestAssistantTurnSettingsSnapshot(TransactionCase):
 
         self.assertEqual(settings.model, "snapshot-runtime-model-a")
         self.assertEqual(settings.reasoning_effort, "xhigh")
+        self.assertEqual(settings.response_detail, "concise")

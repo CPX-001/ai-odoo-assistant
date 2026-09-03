@@ -33,6 +33,7 @@ from .decision_validation import (
     RejectedTaskPlanUpdate,
     validate_next_decision,
 )
+from .response_detail import DEFAULT_RESPONSE_DETAIL, response_detail_instructions
 from .social import is_simple_social_message
 
 _MAX_EVENTS = 2048
@@ -229,7 +230,10 @@ class CodexDecisionEngine:
                     "runtimeWorkspaceRoots": [],
                     "sandbox": "read-only",
                     **_model_thread_options(self._settings),
-                    "baseInstructions": _decision_instructions(final_answer_only),
+                    "baseInstructions": _decision_instructions(
+                        final_answer_only,
+                        response_detail=self._settings.response_detail,
+                    ),
                 },
                 timeout=_remaining(deadline),
             )
@@ -317,11 +321,18 @@ def _is_simple_social_message(message: object) -> bool:
     return is_simple_social_message(message)
 
 
-def _decision_instructions(final_answer_only: bool) -> str:
+def _decision_instructions(
+    final_answer_only: bool,
+    *,
+    response_detail: str | None = None,
+) -> str:
+    instructions = _DECISION_INSTRUCTIONS + response_detail_instructions(
+        response_detail or DEFAULT_RESPONSE_DETAIL
+    )
     if not final_answer_only:
-        return _DECISION_INSTRUCTIONS
+        return instructions
     return (
-        _DECISION_INSTRUCTIONS
+        instructions
         + "\nThe host classified this bounded input as simple social conversation. Return exactly "
         "one final_answer. Do not create a TaskPlan and do not request any capability or effect."
     )

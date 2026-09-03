@@ -11,6 +11,7 @@ import {
     failureFromError,
 } from "@odoo_ai_assistant/services/assistant_failure_contract";
 import { streamAssistantChatLive } from "@odoo_ai_assistant/services/assistant_live_stream_client";
+import { createAnswerStreamPresenter } from "@odoo_ai_assistant/services/assistant_answer_stream_presenter";
 
 const MAX_ACTIVITY_EVENTS = 1024;
 let pendingMessageSequence = 0;
@@ -70,6 +71,7 @@ export async function submitStreamingAssistantRequest({
     screenContext,
     message,
     streamCall = streamAssistantChatLive,
+    presenterFactory = createAnswerStreamPresenter,
 }) {
     if (state.loading || state.decisionLoading || recoveryPending(state)) {
         return false;
@@ -102,6 +104,11 @@ export async function submitStreamingAssistantRequest({
             created_at: submittedAt,
         },
     ];
+    const presenter = presenterFactory({
+        writeText: (text) => {
+            state.streamingText = text;
+        },
+    });
 
     try {
         const response = await streamCall({
@@ -113,14 +120,7 @@ export async function submitStreamingAssistantRequest({
             },
             onActivity: async (event) => appendActivity(state, event),
             onDelta: async (text) => {
-                if (typeof text !== "string" || !text) {
-                    throw new Error("invalid_stream");
-                }
-                const next = `${state.streamingText || ""}${text}`;
-                if (next.length > 16384) {
-                    throw new Error("invalid_stream");
-                }
-                state.streamingText = next;
+                presenter.push(text);
             },
             onTiming: async (timing) => {
                 if (
@@ -133,6 +133,10 @@ export async function submitStreamingAssistantRequest({
             },
         });
         const parsed = normalizeChatResponse(response);
+        if (parsed.result) {
+            await presenter.reconcile(parsed.result.answer);
+        }
+        presenter.stop();
         state.streamingText = "";
         state.result = parsed.result;
         state.errorCode = parsed.errorCode;
@@ -154,6 +158,7 @@ export async function submitStreamingAssistantRequest({
         ];
         return true;
     } catch (error) {
+        presenter.stop();
         const parsed = failureFromError(error);
         state.streamingText = "";
         state.result = null;
@@ -161,6 +166,7 @@ export async function submitStreamingAssistantRequest({
         state.failure = parsed.failure;
         return false;
     } finally {
+        presenter.stop();
         state.loading = false;
     }
 }

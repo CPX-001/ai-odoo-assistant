@@ -23,6 +23,12 @@ from ..capabilities import (
 )
 from ..capabilities.policy import ExecutionAuthority
 from ..capabilities.validation import validate_payload
+from .response_detail import (
+    DEFAULT_RESPONSE_DETAIL,
+    RESPONSE_DETAIL_LEVELS,
+    codex_verbosity,
+    response_detail_instructions,
+)
 from .service import AgentReasoningResult, AgentTurnError, PlannedCapability
 
 _MAX_FRAME_BYTES = 256 * 1024
@@ -140,6 +146,7 @@ class CodexAgentSettings:
     codex_home: Path
     model: str | None = None
     reasoning_effort: str | None = None
+    response_detail: str | None = None
     startup_timeout_seconds: float = 5.0
     turn_timeout_seconds: float = 120.0
     shutdown_timeout_seconds: float = 2.0
@@ -159,6 +166,8 @@ class CodexAgentSettings:
             or re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", self.reasoning_effort) is None
         ):
             raise CodexAgentError("codex_reasoning_effort_invalid")
+        if self.response_detail is not None and self.response_detail not in RESPONSE_DETAIL_LEVELS:
+            raise CodexAgentError("codex_response_detail_invalid")
         if not 0 < self.startup_timeout_seconds <= 60:
             raise CodexAgentError("codex_startup_timeout_invalid")
         if not 0 < self.turn_timeout_seconds <= 1800:
@@ -173,10 +182,13 @@ def _model_thread_options(settings: CodexAgentSettings) -> dict[str, object]:
     options: dict[str, object] = {}
     if settings.model:
         options["model"] = settings.model
+    config: dict[str, object] = {}
     if settings.reasoning_effort:
-        options["config"] = {
-            "model_reasoning_effort": settings.reasoning_effort,
-        }
+        config["model_reasoning_effort"] = settings.reasoning_effort
+    if settings.response_detail:
+        config["model_verbosity"] = codex_verbosity(settings.response_detail)
+    if config:
+        options["config"] = config
     return options
 
 
@@ -238,7 +250,10 @@ class CodexReasoningEngine:
                     "runtimeWorkspaceRoots": [],
                     "sandbox": "read-only",
                     **_model_thread_options(self._settings),
-                    "baseInstructions": _BASE_INSTRUCTIONS,
+                    "baseInstructions": _BASE_INSTRUCTIONS
+                    + response_detail_instructions(
+                        self._settings.response_detail or DEFAULT_RESPONSE_DETAIL
+                    ),
                 },
                 timeout=_remaining(deadline),
             )

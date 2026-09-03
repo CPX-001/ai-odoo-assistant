@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 ADDON_ROOT = Path(__file__).resolve().parents[2] / "addons/odoo_ai_assistant"
 for package_name, package_path in (
     ("addons.odoo_ai_assistant", ADDON_ROOT),
@@ -36,6 +38,9 @@ EvidenceRef = evidence.EvidenceRef
 EvidenceSearchRequest = evidence.EvidenceSearchRequest
 EvidenceTrust = evidence.EvidenceTrust
 AssistantEvidenceDecisionEngine = evidence_runtime.AssistantEvidenceDecisionEngine
+CapabilityError = importlib.import_module(
+    "addons.odoo_ai_assistant.runtime.capabilities.contracts"
+).CapabilityError
 
 
 def _context():
@@ -47,16 +52,16 @@ def _context():
     )
 
 
-def _provider(*, fail_fetch: bool = False) -> EvidenceProvider:
-    def build_ref() -> EvidenceRef:
+def _provider(*, fail_fetch: bool = False, ref_count: int = 1) -> EvidenceProvider:
+    def build_ref(index: int) -> EvidenceRef:
         return EvidenceRef(
-            evidence_id="fixture:document:one",
+            evidence_id=f"fixture:document:{index}",
             kind=EvidenceKind.DOCUMENT,
             provider_id="fixture.documents",
             locator=EvidenceLocator(
                 provider_id="fixture.documents",
                 source_id="fixture.docs",
-                key="one",
+                key=str(index),
             ),
             title="Document fixture",
             provenance="fixture document",
@@ -68,7 +73,7 @@ def _provider(*, fail_fetch: bool = False) -> EvidenceProvider:
         )
 
     def search(_context, _request):
-        return (build_ref(),)
+        return tuple(build_ref(index) for index in range(1, ref_count + 1))
 
     def fetch(_context, ref):
         if fail_fetch:
@@ -127,3 +132,30 @@ def test_fetch_failure_is_sanitized_and_does_not_expose_provider_exception():
     assert len(working.fetch_failures) == 1
     assert working.fetch_failures[0].error_code == "evidence_provider_fetch_failed"
     assert "private provider detail" not in repr(working.host_contract())
+
+
+def test_collect_can_raise_but_never_exceed_the_engine_fetch_bound():
+    engine = AssistantEvidenceDecisionEngine(
+        EvidenceProviderCatalog((_provider(ref_count=5),)),
+        max_fetches_per_decision=4,
+    )
+
+    working = engine.collect(
+        _context(),
+        EvidenceSearchRequest(
+            query="fixture overview",
+            kinds=(EvidenceKind.DOCUMENT,),
+        ),
+        max_fetches=3,
+    )
+
+    assert len(working.items) == 3
+    with pytest.raises(CapabilityError, match="evidence_fetch_limit_invalid"):
+        engine.collect(
+            _context(),
+            EvidenceSearchRequest(
+                query="fixture overview",
+                kinds=(EvidenceKind.DOCUMENT,),
+            ),
+            max_fetches=5,
+        )

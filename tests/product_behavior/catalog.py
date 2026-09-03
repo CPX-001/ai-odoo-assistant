@@ -24,14 +24,14 @@ EXPECTED_SMOKE_IDS = (
     "PB-UX-006",
     "PB-PREF-004",
 )
-EXPECTED_LANGUAGES = {"es": 32, "ca": 11, "en": 11}
+EXPECTED_LANGUAGES = {"es": 34, "ca": 11, "en": 11}
 EXPECTED_CATEGORIES = {
     "general": 8,
     "read": 14,
     "how_to": 7,
     "action": 13,
     "ux": 8,
-    "preference": 4,
+    "preference": 6,
 }
 PERSONAS = frozenset({"business_user", "limited_user", "admin_user"})
 
@@ -53,7 +53,7 @@ def validate_catalog(payload: object) -> None:
         raise CatalogError("catalog_version_invalid")
     scenarios = payload["scenarios"]
     smoke_ids = payload["smoke_ids"]
-    if not isinstance(scenarios, list) or len(scenarios) != 54:
+    if not isinstance(scenarios, list) or len(scenarios) != 56:
         raise CatalogError("catalog_scenario_count_invalid")
     if not isinstance(smoke_ids, list) or tuple(smoke_ids) != EXPECTED_SMOKE_IDS:
         raise CatalogError("catalog_smoke_invalid")
@@ -80,6 +80,12 @@ def validate_catalog(payload: object) -> None:
             raise CatalogError("scenario_bounds_invalid")
         if scenario.get("planning_mode", "adaptive") not in {"adaptive", "deliberate"}:
             raise CatalogError("scenario_planning_mode_invalid")
+        if scenario.get("response_detail", "normal") not in {
+            "concise",
+            "normal",
+            "extensive",
+        }:
+            raise CatalogError("scenario_response_detail_invalid")
         ids.append(scenario_id)
         languages[scenario["language"]] += 1
         categories[scenario["category"]] += 1

@@ -69,7 +69,55 @@ function reasoningEffortPillLabel(effort) {
     return labels[effort] || "R";
 }
 
+function responseDetailLabel(responseDetail) {
+    const labels = {
+        concise: _t("Concisa"),
+        normal: _t("Normal"),
+        extensive: _t("Extensa"),
+    };
+    return labels[responseDetail] || _t("Normal");
+}
+
+function responseDetailDescription(responseDetail) {
+    const descriptions = {
+        concise: _t(
+            "Reduce información secundaria, pero conserva la profundidad que requiera la tarea."
+        ),
+        normal: _t("Equilibra brevedad, explicación y cobertura."),
+        extensive: _t(
+            "Aprovecha más evidencia y contexto cuando aportan valor, sin rellenar respuestas simples."
+        ),
+    };
+    return descriptions[responseDetail] || "";
+}
+
 patch(AssistantPanel.prototype, {
+    get responseDetailOptions() {
+        return ["concise", "normal", "extensive"];
+    },
+
+    get responseDetailLabel() {
+        return responseDetailLabel(this.state.effectiveResponseDetail);
+    },
+
+    get responseDetailPillLabel() {
+        return { concise: "C", normal: "N", extensive: "E" }[
+            this.state.effectiveResponseDetail
+        ] || "N";
+    },
+
+    responseDetailOptionLabel(responseDetail) {
+        return responseDetailLabel(responseDetail);
+    },
+
+    responseDetailOptionDescription(responseDetail) {
+        return responseDetailDescription(responseDetail);
+    },
+
+    async selectResponseDetail(responseDetail) {
+        await this.panel.setResponseDetail(responseDetail || null);
+    },
+
     get reasoningModelOption() {
         const target = this.state.selectedReasoningModel || this.state.defaultReasoningModel;
         return this.state.modelOptions.find((item) => item.model === target) || null;

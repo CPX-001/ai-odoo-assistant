@@ -14,6 +14,8 @@ Frontend services hold reusable browser-side state and RPC/live coordination. Th
 | `assistant_stream_client.js` | authoritative turn status/event polling |
 | `assistant_live_stream_client.js` | independent activity/answer/readable-summary live polling |
 | `assistant_panel_streaming_service.js` | binds stream data to panel presentation state |
+| `assistant_answer_stream_presenter.js` | paces only real received answer deltas for smooth provisional rendering |
+| `assistant_response_detail_service.js` | loads and saves the per-user adaptive response-detail preference |
 | `assistant_public_activity_contract.js` | closed browser-safe public activity contract, including bounded contextual references |
 | `assistant_semantic_activity.js` | semantic reducer, detail profiles, transient filtering, navigation refs and render bounds |
 | `assistant_activity_preferences_service.js` | per-user presentation preferences, including expanded activity height; presentation only, never authority |

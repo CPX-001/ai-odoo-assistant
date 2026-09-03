@@ -7,7 +7,10 @@ from odoo.exceptions import AccessError, ValidationError
 from odoo.http import request
 
 from ..models.chat_preferences import recent_chat_limit
-from ..services.runtime_account import RuntimeAccountGateError, require_runtime_authenticated
+from ..services.runtime_account import (
+    RuntimeAccountGateError,
+    require_runtime_authenticated,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -35,7 +38,7 @@ class BrowserChatController(http.Controller):
             return _error(error.code)
         except (AccessError, ValidationError, ValueError, TypeError):
             return _error("invalid_context")
-        except Exception:  # noqa: BLE001 - browser boundary stays sanitized
+        except Exception:
             _logger.exception("Odoo-native Assistant history failed")
             return _error("chat_store_unavailable")
         return {"ok": True, **payload}
@@ -74,6 +77,30 @@ class BrowserChatController(http.Controller):
         return request.env[
             "odoo.ai.user.preference"
         ].set_chat_reasoning_effort_preference(effort)
+
+    @http.route(
+        "/odoo_ai/v1/response-detail",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def response_detail(self, **unexpected):
+        if unexpected:
+            return _error("invalid_context")
+        return request.env["odoo.ai.user.preference"].response_detail_preferences()
+
+    @http.route(
+        "/odoo_ai/v1/response-detail-set",
+        type="json",
+        auth="user",
+        methods=["POST"],
+    )
+    def set_response_detail(self, response_detail=None, **unexpected):
+        if unexpected:
+            return _error("invalid_context")
+        return request.env[
+            "odoo.ai.user.preference"
+        ].set_response_detail_preference(response_detail)
 
     @http.route(
         "/odoo_ai/v1/planning-mode",

@@ -4,6 +4,7 @@ import { mountWithCleanup } from "@web/../tests/web_test_helpers";
 import { AssistantMarkdown } from "@odoo_ai_assistant/components/assistant_markdown/assistant_markdown";
 import {
     parseMarkdown,
+    prepareStreamingMarkdown,
     safeMarkdownLink,
 } from "@odoo_ai_assistant/components/assistant_markdown/assistant_markdown_parser";
 
@@ -16,6 +17,24 @@ test("markdown parses emphasis without exposing delimiter text", () => {
     expect(blocks[0].type).toBe("paragraph");
     expect(blocks[0].tokens.map((token) => token.type).join("|")).toBe("text|strong|text|em|text");
     expect(blocks[0].tokens[1].text).toBe("correcto");
+});
+
+test("streaming markdown closes a partial strong span for provisional rendering", () => {
+    const prepared = prepareStreamingMarkdown("**Infraestructura actual");
+    const blocks = parseMarkdown(prepared);
+
+    expect(prepared).toBe("**Infraestructura actual**");
+    expect(blocks[0].tokens).toHaveLength(1);
+    expect(blocks[0].tokens[0].type).toBe("strong");
+    expect(blocks[0].tokens[0].text).toBe("Infraestructura actual");
+    expect(prepareStreamingMarkdown("**Completo**")).toBe("**Completo**");
+    expect(prepareStreamingMarkdown("campo_con_guiones")).toBe("campo_con_guiones");
+});
+
+test("streaming markdown leaves unfinished fenced code in code mode", () => {
+    const partial = "```python\nprint('seguro')";
+    expect(prepareStreamingMarkdown(partial)).toBe(partial);
+    expect(parseMarkdown(partial)[0].type).toBe("code");
 });
 
 test("markdown pipe syntax becomes a table with alignment metadata", () => {

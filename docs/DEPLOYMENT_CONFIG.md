@@ -84,6 +84,19 @@ odoo_ai_assistant.agent_allow_synthetic_data
 Policy values bound automatic execution; they never bypass Odoo permissions or
 capability-level constraints.
 
+## Response-detail setting
+
+```text
+odoo_ai_assistant.default_response_detail
+  concise | normal | extensive
+```
+
+`default_response_detail` is the adaptive default for users without a personal
+selection in the chat composer. `normal` is the product default. These values widen or
+narrow the useful amount of detail relative to the task; they are not character, paragraph
+or token limits. An explicitly requested deep analysis remains substantive under `concise`,
+while `extensive` does not pad greetings or simple facts.
+
 ## Cron/worker operation
 
 Long turns are persisted and processed by Odoo `ir.cron`. Deployment must allow the

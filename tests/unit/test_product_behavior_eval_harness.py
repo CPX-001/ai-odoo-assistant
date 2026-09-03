@@ -17,8 +17,8 @@ from tests.product_behavior.v1.selectors import select_product_behavior
 
 
 def test_catalog_matches_frozen_v1_shape():
-    assert len(SCENARIOS) == 54
-    assert len({scenario.id for scenario in SCENARIOS}) == 54
+    assert len(SCENARIOS) == 56
+    assert len({scenario.id for scenario in SCENARIOS}) == 56
     assert len(SMOKE_IDS) == 15
     assert {scenario.id for scenario in select_scenarios("smoke")} == set(SMOKE_IDS)
     assert select_scenarios("full") == SCENARIOS

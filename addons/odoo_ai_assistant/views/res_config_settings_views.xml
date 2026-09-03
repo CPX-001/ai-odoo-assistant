@@ -25,6 +25,12 @@
                         >
                             <field name="assistant_agent_allow_synthetic_data"/>
                         </setting>
+                        <setting
+                            string="Default response detail"
+                            help="Default for users without a personal choice. Concise, Normal and Extensive adapt to the task; none imposes a fixed answer length."
+                        >
+                            <field name="assistant_default_response_detail"/>
+                        </setting>
                     </block>
                     <block name="assistant_scheduler" title="Assistant scheduler">
                         <setting

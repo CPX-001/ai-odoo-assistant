@@ -184,6 +184,58 @@
                     </t>
                 </Dropdown>
             </div>
+
+            <div class="o_ai_assistant_response_detail_picker">
+                <Dropdown position="'top-end'"
+                    menuClass="'o_ai_assistant_picker_menu o_ai_assistant_response_detail_menu'">
+                    <button type="button" class="o_ai_assistant_picker_button"
+                        aria-label="Detalle de respuesta"
+                        t-att-title="'Detalle de respuesta: ' + responseDetailLabel"
+                        t-att-disabled="state.responseDetailSaving">
+                        <i t-if="state.responseDetailLoading or state.responseDetailSaving"
+                            class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                        <i t-else="" class="fa fa-align-left" aria-hidden="true"/>
+                        <span class="o_ai_assistant_picker_label"
+                            t-esc="responseDetailPillLabel"/>
+                        <i class="fa fa-angle-down o_ai_assistant_picker_caret"
+                            aria-hidden="true"/>
+                    </button>
+                    <t t-set-slot="content">
+                        <div class="o_ai_assistant_picker_menu_title small text-muted">
+                            Detalle de respuesta
+                        </div>
+                        <DropdownItem class="'o_ai_assistant_picker_option'"
+                            onSelected="() => this.selectResponseDetail(null)">
+                            <span class="o_ai_assistant_picker_option_icon">
+                                <i class="fa fa-magic" aria-hidden="true"/>
+                            </span>
+                            <span class="min-w-0 flex-grow-1">
+                                <span class="d-block fw-semibold">Predeterminado</span>
+                                <span class="d-block small text-muted">
+                                    <t t-esc="responseDetailOptionLabel(state.defaultResponseDetail)"/>
+                                    <t> · configuración general</t>
+                                </span>
+                            </span>
+                            <i t-if="!state.selectedResponseDetail" class="fa fa-check"
+                                aria-hidden="true"/>
+                        </DropdownItem>
+                        <DropdownItem t-foreach="responseDetailOptions" t-as="detailOption"
+                            t-key="detailOption" class="'o_ai_assistant_picker_option'"
+                            onSelected="() => this.selectResponseDetail(detailOption)">
+                            <span class="o_ai_assistant_picker_option_token"
+                                t-esc="responseDetailOptionLabel(detailOption).slice(0, 1)"/>
+                            <span class="min-w-0 flex-grow-1">
+                                <span class="d-block fw-semibold"
+                                    t-esc="responseDetailOptionLabel(detailOption)"/>
+                                <span class="d-block small text-muted"
+                                    t-esc="responseDetailOptionDescription(detailOption)"/>
+                            </span>
+                            <i t-if="detailOption === state.selectedResponseDetail"
+                                class="fa fa-check" aria-hidden="true"/>
+                        </DropdownItem>
+                    </t>
+                </Dropdown>
+            </div>
         </xpath>
 
         <xpath expr="//button[@aria-label='Cerrar AI Assistant']" position="before">

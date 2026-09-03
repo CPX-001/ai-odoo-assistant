@@ -43,6 +43,21 @@ class ResConfigSettings(models.TransientModel):
             "runner supports values from 1 to 2; excess work remains queued."
         ),
     )
+    assistant_default_response_detail = fields.Selection(
+        selection=[
+            ("concise", "Concise"),
+            ("normal", "Normal"),
+            ("extensive", "Extensive"),
+        ],
+        string="Default Assistant response detail",
+        default="normal",
+        config_parameter="odoo_ai_assistant.default_response_detail",
+        groups=SYSTEM_ADMIN_GROUP,
+        help=(
+            "Default flexible level of detail for users without a personal override. "
+            "It does not impose a fixed answer length."
+        ),
+    )
 
     @api.constrains("assistant_concurrent_turns")
     def _check_assistant_concurrent_turns(self):

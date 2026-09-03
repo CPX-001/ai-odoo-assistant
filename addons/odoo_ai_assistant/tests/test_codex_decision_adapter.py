@@ -13,6 +13,7 @@ from ..runtime.agent.codex_decision import (
     _DECISION_INSTRUCTIONS,
     CodexDecisionEngine,
     _codex_next_decision_schema,
+    _decision_instructions,
     _decision_result,
     _is_simple_social_message,
     _partition_provider_context,
@@ -45,6 +46,7 @@ class TestCodexDecisionAdapter(BaseCase):
             codex_home=Path("/tmp/codex-home"),
             model="gpt-5.6-terra",
             reasoning_effort="high",
+            response_detail="concise",
         )
         defaulted = CodexAgentSettings(
             executable=Path("/tmp/codex"),
@@ -55,10 +57,23 @@ class TestCodexDecisionAdapter(BaseCase):
             _model_thread_options(configured),
             {
                 "model": "gpt-5.6-terra",
-                "config": {"model_reasoning_effort": "high"},
+                "config": {
+                    "model_reasoning_effort": "high",
+                    "model_verbosity": "low",
+                },
             },
         )
         self.assertEqual(_model_thread_options(defaulted), {})
+
+    def test_response_detail_prompt_is_adaptive_not_a_hard_length_quota(self):
+        concise = _decision_instructions(False, response_detail="concise")
+        extensive_social = _decision_instructions(True, response_detail="extensive")
+
+        self.assertIn("not a character, paragraph, sentence or token quota", concise)
+        self.assertIn("still provide a substantive deep analysis", concise)
+        self.assertIn("never superficial", concise)
+        self.assertIn("Do not pad", extensive_social)
+        self.assertIn("simple social conversation", extensive_social)
 
     def test_wire_schema_wraps_four_neutral_decisions_and_encodes_open_arguments(self):
         schema = _codex_next_decision_schema()
