@@ -23,15 +23,19 @@ ProtectKernelModules=yes
 ProtectKernelLogs=yes
 ProtectControlGroups=yes
 ProtectSystem=strict
-ReadWritePaths=/etc/odoo/odoo.conf /var/lib/odoo-ai-host-broker /run/odoo-ai-host-broker
+ReadWritePaths=/etc/odoo /var/lib/odoo-ai-host-broker /run/odoo-ai-host-broker
 RestrictAddressFamilies=AF_UNIX
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
 
-# Deployment note:
-# The ReadWritePaths line matches example-policy.json only. Replace it with the exact
-# deployment-managed config targets; do not broaden it to a filesystem root. The broker
-# state/runtime directories must remain writable.
+# Deployment notes:
+# - The ReadWritePaths line matches example-policy.json only. Replace /etc/odoo with
+#   the exact parent directory of each deployment-managed config target. Atomic
+#   same-filesystem replacement needs create/rename access in that parent directory;
+#   allowlisting only the final file is insufficient for the implemented write path.
+# - Do not broaden writable access to /etc or another filesystem root. The broker
+#   still resolves one exact target file from its root-owned policy.
+# - The broker state/runtime directories must remain writable.
 
 [Install]
 WantedBy=multi-user.target
