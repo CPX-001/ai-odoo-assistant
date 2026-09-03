@@ -8,7 +8,9 @@ import re
 from odoo import SUPERUSER_ID, api, fields, models
 from odoo.exceptions import AccessError, ValidationError
 
-_ATTACHMENT_MARKER_RE = re.compile(r"(?:\r?\n)?\[\[odoo_ai_attachment:([0-9a-f]{32})\]\]")
+_ATTACHMENT_MARKER_RE = re.compile(
+    r"(?:\r?\n)?\[\[odoo_ai_attachment:([0-9a-f]{32})\]\]"
+)
 _ATTACHMENT_MARKER_PREFIX = "[[odoo_ai_attachment:"
 _MAX_ATTACHMENTS = 8
 _MAX_DESCRIPTOR_NAME = 180
@@ -22,6 +24,11 @@ class AssistantTurnKnowledgeAttachments(models.Model):
         "turn_id",
         string="Knowledge attachments",
         readonly=True,
+    )
+    knowledge_attachment_manifest = fields.Json(
+        string="Attachment display manifest",
+        readonly=True,
+        help="Safe file metadata retained with the turn after temporary file content expires.",
     )
 
     @api.model
@@ -38,7 +45,9 @@ class AssistantTurnKnowledgeAttachments(models.Model):
         effective_message = clean_message if tokens else message
         attachments = self.env["odoo.ai.knowledge.attachment"].browse()
         if tokens:
-            attachments = self.env["odoo.ai.knowledge.attachment"].owned_by_tokens(tokens)
+            attachments = self.env["odoo.ai.knowledge.attachment"].owned_by_tokens(
+                tokens
+            )
             bound = attachments.filtered("turn_id")
             if bound:
                 # A browser retry may replay the same marker payload after the durable turn was
@@ -97,7 +106,17 @@ class AssistantTurnKnowledgeAttachments(models.Model):
             }
         )
         turn.with_user(SUPERUSER_ID).write(
-            {"input_message": _augment_message(clean_message, descriptors)}
+            {
+                "input_message": _augment_message(clean_message, descriptors),
+                "knowledge_attachment_manifest": [
+                    {
+                        "name": item["filename"],
+                        "mimetype": item["mimetype"],
+                        "size": item["size"],
+                    }
+                    for item in descriptors
+                ],
+            }
         )
         return result
 

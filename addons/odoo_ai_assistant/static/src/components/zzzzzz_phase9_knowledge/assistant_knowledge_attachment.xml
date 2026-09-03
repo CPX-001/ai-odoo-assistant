@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
     <t t-inherit="odoo_ai_assistant.AssistantPanel" t-inherit-mode="extension">
+        <xpath expr="//div[contains(@class, 'o_ai_assistant_conversation')]//div[contains(@class, 'o_ai_assistant_message_content')]" position="after">
+            <div t-if="message.role === 'user' and (message.attachments || []).length"
+                class="o_ai_assistant_message_attachments d-flex flex-wrap gap-1 mt-2">
+                <div t-foreach="message.attachments || []" t-as="attachment"
+                    t-key="attachment.name + ':' + attachment_index"
+                    class="o_ai_assistant_knowledge_upload badge rounded-pill text-bg-light border d-inline-flex align-items-center gap-1">
+                    <i class="fa fa-file-text-o" aria-hidden="true"/>
+                    <span class="text-truncate" t-att-title="attachment.name" t-esc="attachment.name"/>
+                </div>
+            </div>
+        </xpath>
+
         <xpath expr="//form[contains(@class, 'o_ai_assistant_composer')]/div[contains(@class, 'o_ai_assistant_composer_row')]" position="before">
             <div t-if="(state.pendingKnowledgeUploads || []).length"
                 class="o_ai_assistant_knowledge_uploads d-flex flex-wrap gap-1 mb-2">
@@ -30,7 +42,7 @@
                 <i t-if="state.knowledgeUploadBusy" class="fa fa-spinner fa-spin" aria-hidden="true"/>
                 <i t-else="" class="fa fa-paperclip" aria-hidden="true"/>
                 <input type="file" class="d-none"
-                    accept=".txt,.md,.markdown,.rst,.csv,.json,.xml,text/plain,text/markdown,text/x-rst,text/csv,application/json,application/xml,text/xml"
+                    accept=".pdf,.txt,.md,.markdown,.rst,.csv,.json,.xml,application/pdf,text/plain,text/markdown,text/x-rst,text/csv,application/json,application/xml,text/xml"
                     t-att-disabled="state.loading or state.decisionLoading or recoveryPending or state.knowledgeUploadBusy"
                     t-on-change="onKnowledgeFileSelected"/>
             </label>

@@ -197,7 +197,7 @@ uploaded -> processing -> indexed -> active
                       \-> error
 ```
 
-The first pipeline deterministically handles bounded TXT, Markdown, RST, CSV, JSON and
+The first pipeline deterministically handles bounded PDF, TXT, Markdown, RST, CSV, JSON and
 XML. PostgreSQL `simple` FTS plus a GIN expression index and bounded substring fallback
 form the lexical baseline. Company/private record rules apply before retrieval.
 Fingerprint/version changes make old references stale. Embeddings/vector search remain

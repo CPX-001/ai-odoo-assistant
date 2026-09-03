@@ -68,7 +68,9 @@ class TestAssistantAdminUiHelp(TransactionCase):
             "odoo_ai_assistant.view_odoo_ai_assistant_diagnostics_form"
         ).arch_db
 
-        self.assertIn("Add a supported text document", knowledge_arch)
+        self.assertIn("Upload a PDF or supported text document", knowledge_arch)
         self.assertIn("Use a title your team will recognize", knowledge_arch)
+        self.assertIn('<field name="filename" invisible="1"/>', knowledge_arch)
+        self.assertNotIn('<field name="mimetype"', knowledge_arch)
         self.assertIn("This page is read-only", diagnostics_arch)
         self.assertIn("No action is required", diagnostics_arch)

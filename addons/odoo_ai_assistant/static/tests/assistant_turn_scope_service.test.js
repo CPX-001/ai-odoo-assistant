@@ -6,6 +6,7 @@ import {
     conversationScopeKey,
     createConversationTurnScope,
     normalizeSubmittedMessages,
+    normalizeVisibleAttachments,
     projectConversationTurnScope,
     refreshTurnScopeModelPreferences,
 } from "@odoo_ai_assistant/services/zzz_assistant_turn_scope_service";
@@ -18,6 +19,15 @@ test("transport-only attachment markers never enter the optimistic user projecti
         transport: `Añade este archivo.\n${marker}`,
         visible: "Añade este archivo.",
     });
+});
+
+test("visible attachment metadata is bounded and does not expose transport tokens", () => {
+    expect(
+        normalizeVisibleAttachments([
+            { name: "  manual.pdf  ", mimetype: "application/pdf", size: 1234 },
+            { name: "", token: "secret-transport-token" },
+        ])
+    ).toEqual([{ name: "manual.pdf", mimetype: "application/pdf", size: 1234 }]);
 });
 
 function scopedState() {

@@ -5,6 +5,7 @@ also contribute :class:`CapabilityProvider` markers; every executable operation 
 resolves to the same host-owned :class:`CapabilityDefinition` contract.
 """
 
+from .attachment_evidence import build_turn_attachment_evidence_provider
 from .config import CapabilityConfigResolver
 from .context import (
     ContextCollector,
@@ -188,6 +189,7 @@ __all__ = [
     "build_effective_assistant_manifest",
     "build_installed_source_evidence_provider",
     "build_odoo_log_evidence_provider",
+    "build_turn_attachment_evidence_provider",
     "canonical_fingerprint",
     "canonical_json_bytes",
     "clear_discovery_cache",

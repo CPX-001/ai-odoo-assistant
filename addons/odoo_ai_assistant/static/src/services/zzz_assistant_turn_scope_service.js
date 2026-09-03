@@ -428,18 +428,45 @@ export function normalizeSubmittedMessages(message, displayMessage = null) {
     return { transport, visible };
 }
 
+export function normalizeVisibleAttachments(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value.slice(0, 8).flatMap((item) => {
+        if (!item || typeof item !== "object" || typeof item.name !== "string") {
+            return [];
+        }
+        const name = item.name.trim().slice(0, 255);
+        if (!name) {
+            return [];
+        }
+        return [
+            {
+                name,
+                mimetype:
+                    typeof item.mimetype === "string"
+                        ? item.mimetype.trim().slice(0, 120)
+                        : "application/octet-stream",
+                size: Number.isSafeInteger(item.size) && item.size >= 0 ? item.size : 0,
+            },
+        ];
+    });
+}
+
 async function submitScopedTurn({
     state,
     screenContext,
     scope,
     message,
     displayMessage,
+    displayAttachments,
     onConversationBound,
 }) {
     if (scope.loading || scope.decisionLoading || recoveryPending(scope)) {
         return false;
     }
     const submission = normalizeSubmittedMessages(message, displayMessage);
+    const visibleAttachments = normalizeVisibleAttachments(displayAttachments);
     if (!submission) {
         scope.failure = null;
         scope.errorCode = "invalid_context";
@@ -464,6 +491,7 @@ async function submitScopedTurn({
             role: "user",
             content: submission.visible,
             created_at: new Date().toISOString(),
+            ...(visibleAttachments.length ? { attachments: visibleAttachments } : {}),
         },
     ];
     projectIfActive(state, scope);
@@ -734,6 +762,7 @@ patch(assistantPanelService, {
                 scope,
                 message,
                 displayMessage: options?.displayMessage ?? null,
+                displayAttachments: options?.displayAttachments ?? null,
                 onConversationBound: (conversationId) =>
                     saveRecentActiveChat(sessionStorage, conversationId),
             });

@@ -221,6 +221,13 @@ Future semantic enrichment may add more explicit model/field/method/view inherit
 relations and validators, but should preserve local installation evidence as the
 source of truth. Source modification is a separate later patch/test/deploy workflow.
 
+Company Knowledge retrieval is proactive: substantive user questions first probe the
+effective user's internal Knowledge even when the user does not say "RAG", "source" or
+"reference". Odoo/configuration/module/error questions additionally route to bounded
+runtime and installed source/XML Evidence so documented behavior can be compared with
+the actual installation. Social-only turns remain retrieval-free, and internal/current-turn
+sources are ordered ahead of any external provider.
+
 ## 11. Logs and diagnosis
 
 P8 configured-log Evidence supports bounded correlated diagnosis. Logs remain
@@ -245,14 +252,20 @@ become Knowledge merely because a file was attached.
 Initial deterministic ingestion supports:
 
 ```text
-TXT / Markdown / RST / CSV / JSON / XML
+PDF / TXT / Markdown / RST / CSV / JSON / XML
 8 MiB max file/source
 6,000 characters per chunk
 2,048 chunks per source
 ```
 
-Binary data stays in Odoo attachments. The runtime sees only a host-controlled
-attachment descriptor until bounded Evidence is fetched.
+Binary data stays in Odoo attachments. Odoo detects the media type from the uploaded
+filename; the user never supplies or edits it. PDF text is extracted with the PDF reader
+already provided by the Odoo Python environment. Image-only PDFs require OCR before upload.
+
+The runtime sees a host-controlled attachment descriptor plus bounded extracted sections
+through `assistant.turn_attachment` Evidence. Attachment text is untrusted current-turn data,
+never instruction or authority. It can answer the user's immediate question without first
+persisting the file as company Knowledge.
 
 Derived chunks are host-owned. Normal users cannot create/update/delete index chunks
 directly. Source reads/writes are constrained by effective Odoo owner/company record
@@ -273,7 +286,8 @@ chip. The visible UX states that persistence requires an explicit user request.
 
 On the next new turn the browser sends only an opaque attachment token marker. The
 server validates ownership/expiry, strips the marker from the persisted visible user
-message and adds a bounded host descriptor to the durable runtime input.
+message, retains safe filename/type/size metadata for the visible message and adds a
+bounded host descriptor to the durable runtime input.
 
 `assistant.knowledge.ingest_attachment` is a normal plan capability. It can act only
 on an attachment already bound to the current turn, creates the source under the

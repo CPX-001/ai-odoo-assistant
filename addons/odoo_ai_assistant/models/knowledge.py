@@ -6,9 +6,10 @@ import base64
 import hashlib
 import re
 from datetime import timedelta
+from io import BytesIO
 from uuid import uuid4
 
-from odoo import SUPERUSER_ID, api, fields, models
+from odoo import SUPERUSER_ID, _, api, fields, models
 from odoo.exceptions import AccessError, ValidationError
 
 _MAX_SOURCE_BYTES = 8 * 1024 * 1024
@@ -18,6 +19,7 @@ _MAX_CHUNKS = 2_048
 _MAX_SEARCH_RESULTS = 20
 _MAX_FILENAME = 255
 _MAX_ATTACHMENT_COUNT_PER_TURN = 8
+_MAX_PDF_PAGES = 500
 _TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
 _SEARCH_TERM_RE = re.compile(r"[0-9A-Za-zÀ-ÖØ-öø-ÿ_]{2,}")
 _SEARCH_STOP_WORDS = frozenset(
@@ -35,25 +37,34 @@ _SEARCH_STOP_WORDS = frozenset(
         "el",
         "en",
         "es",
+        "esto",
         "for",
         "from",
         "how",
         "la",
         "las",
         "los",
+        "alguna",
+        "alguno",
         "not",
         "para",
         "por",
         "que",
         "qué",
+        "referencia",
+        "referencias",
         "quien",
         "quién",
         "segun",
         "según",
         "the",
+        "tiene",
+        "tienes",
         "this",
         "una",
         "uno",
+        "fuente",
+        "fuentes",
         "use",
         "with",
         "without",
@@ -63,6 +74,7 @@ _SEARCH_STOP_WORDS = frozenset(
 _SUPPORTED_MIMETYPES = frozenset(
     {
         "application/json",
+        "application/pdf",
         "application/xml",
         "text/csv",
         "text/markdown",
@@ -72,8 +84,18 @@ _SUPPORTED_MIMETYPES = frozenset(
     }
 )
 _SUPPORTED_EXTENSIONS = frozenset(
-    {".csv", ".json", ".md", ".markdown", ".rst", ".txt", ".xml"}
+    {".csv", ".json", ".md", ".markdown", ".pdf", ".rst", ".txt", ".xml"}
 )
+_MIMETYPE_BY_EXTENSION = {
+    ".csv": "text/csv",
+    ".json": "application/json",
+    ".md": "text/markdown",
+    ".markdown": "text/markdown",
+    ".pdf": "application/pdf",
+    ".rst": "text/x-rst",
+    ".txt": "text/plain",
+    ".xml": "application/xml",
+}
 _SOURCE_INTERNAL_FIELDS = frozenset(
     {
         "source_uuid",
@@ -99,6 +121,7 @@ _ATTACHMENT_INTERNAL_FIELDS = frozenset(
         "conversation_id",
         "file_size",
         "fingerprint",
+        "extracted_text",
         "expires_at",
         "consumed_at",
         "knowledge_source_id",
@@ -110,8 +133,35 @@ class KnowledgeProcessingError(ValidationError):
     """Bounded ingestion failure with a stable public error code."""
 
     def __init__(self, code: str) -> None:
-        super().__init__(code)
+        super().__init__(_public_error_message(code))
         self.code = code
+
+
+def _public_error_message(code: str) -> str:
+    if code == "knowledge_empty_document":
+        return _(
+            "No searchable text could be extracted from this file. If it is a scanned PDF, "
+            "run OCR on it before uploading it."
+        )
+    if code == "knowledge_empty_upload":
+        return _("Choose a non-empty document to upload.")
+    if code == "knowledge_file_too_large":
+        return _("The document exceeds the 8 MB upload limit.")
+    if code == "knowledge_invalid_pdf":
+        return _("This PDF is damaged or cannot be read.")
+    if code == "knowledge_invalid_upload":
+        return _("The uploaded document could not be read.")
+    if code == "knowledge_pdf_dependency_missing":
+        return _("PDF text extraction is not available on this Odoo installation.")
+    if code == "knowledge_pdf_encrypted":
+        return _("Password-protected PDFs are not supported.")
+    if code == "knowledge_text_too_large":
+        return _("The extracted document text exceeds the 8 MB limit.")
+    if code == "knowledge_unsupported_document":
+        return _(
+            "Unsupported file format. Upload PDF, TXT, Markdown, RST, CSV, JSON or XML."
+        )
+    return _("The document could not be processed.")
 
 
 class AssistantKnowledgeSource(models.Model):
@@ -227,6 +277,7 @@ class AssistantKnowledgeSource(models.Model):
     mimetype = fields.Char(
         string="File type",
         required=True,
+        readonly=True,
         size=120,
         help=(
             "Technical document type detected from the upload or file extension. "
@@ -322,9 +373,11 @@ class AssistantKnowledgeSource(models.Model):
                 values["company_id"] = self.env.company.id
                 conversation_id = incoming.get("conversation_id")
                 if conversation_id:
-                    conversation = self.env["odoo.ai.conversation"].browse(
-                        int(conversation_id)
-                    ).exists()
+                    conversation = (
+                        self.env["odoo.ai.conversation"]
+                        .browse(int(conversation_id))
+                        .exists()
+                    )
                     if (
                         not conversation
                         or conversation.user_id.id != self.env.uid
@@ -354,11 +407,15 @@ class AssistantKnowledgeSource(models.Model):
         requested = dict(vals)
         if not self.env.su and set(requested) & _SOURCE_INTERNAL_FIELDS:
             raise AccessError("Knowledge lifecycle fields are host-owned")
-        content_change = any(key in requested for key in ("data", "filename", "mimetype"))
+        content_change = any(
+            key in requested for key in ("data", "filename", "mimetype")
+        )
         prepared = dict(requested)
         if content_change:
             if len(self) != 1:
-                raise ValidationError("Update Knowledge source files one record at a time")
+                raise ValidationError(
+                    "Update Knowledge source files one record at a time"
+                )
             filename = _filename(prepared.get("filename", self.filename))
             mimetype = _mimetype(prepared.get("mimetype", self.mimetype), filename)
             raw = _decode_binary(prepared.get("data", self.data))
@@ -409,9 +466,7 @@ class AssistantKnowledgeSource(models.Model):
         self.check_access("write")
         for source in self:
             state = "indexed" if source.indexed_fingerprint else source.state
-            source.with_user(SUPERUSER_ID).write(
-                {"enabled": False, "state": state}
-            )
+            source.with_user(SUPERUSER_ID).write({"enabled": False, "state": state})
         return True
 
     @api.model
@@ -434,7 +489,7 @@ class AssistantKnowledgeSource(models.Model):
             raw = _decode_binary(self.data)
             _validate_supported_document(self.filename, self.mimetype)
             fingerprint = hashlib.sha256(raw).hexdigest()
-            text = _extract_text(raw)
+            text = _extract_document_text(raw, self.filename, self.mimetype)
             chunks = _chunk_text(text)
             if not chunks:
                 raise KnowledgeProcessingError("knowledge_empty_document")
@@ -471,9 +526,7 @@ class AssistantKnowledgeSource(models.Model):
                 }
             )
         except KnowledgeProcessingError as error:
-            system_source.write(
-                {"state": "error", "error_code": error.code[:128]}
-            )
+            system_source.write({"state": "error", "error_code": error.code[:128]})
         except Exception:  # noqa: BLE001 - cron boundary records a sanitized failure
             system_source.write(
                 {"state": "error", "error_code": "knowledge_processing_failed"}
@@ -489,9 +542,7 @@ class AssistantKnowledgeSource(models.Model):
         query = " ".join(query.split())[:4_096]
         if not 1 <= int(limit) <= _MAX_SEARCH_RESULTS:
             raise ValidationError("Invalid Knowledge result limit")
-        source_ids = self.search(
-            [("enabled", "=", True), ("state", "=", "active")]
-        ).ids
+        source_ids = self.search([("enabled", "=", True), ("state", "=", "active")]).ids
         if not source_ids:
             return []
         exact = f"%{query[:1_000]}%"
@@ -505,28 +556,52 @@ class AssistantKnowledgeSource(models.Model):
         if not terms:
             return []
         lexical_query = " | ".join(terms)
-        minimum_matches = (
-            1 if len(terms) == 1 else min(3, (len(terms) * 3 + 4) // 5)
-        )
+        minimum_matches = 1 if len(terms) == 1 else min(3, (len(terms) * 3 + 4) // 5)
         self.env.cr.execute(
             """
             SELECT c.id,
-                   CASE WHEN c.content ILIKE %s THEN 1 ELSE 0 END AS exact_match,
+                   CASE
+                       WHEN translate(COALESCE(s.name, ''), '_-', '  ') ILIKE %s
+                            OR translate(COALESCE(s.filename, ''), '_-', '  ') ILIKE %s
+                       THEN 3
+                       WHEN c.content ILIKE %s THEN 2
+                       ELSE 0
+                   END AS exact_match,
                    ts_rank_cd(
                        to_tsvector('simple', COALESCE(c.content, '')),
                        to_tsquery('simple', %s)
+                   ) + 2 * ts_rank_cd(
+                       to_tsvector(
+                           'simple',
+                           translate(COALESCE(s.name, ''), '_-', '  ') || ' ' ||
+                           translate(COALESCE(s.filename, ''), '_-', '  ')
+                       ),
+                       to_tsquery('simple', %s)
                    ) AS rank
               FROM odoo_ai_knowledge_chunk AS c
+              JOIN odoo_ai_knowledge_source AS s ON s.id = c.source_id
              WHERE c.source_id = ANY(%s)
                AND (
                     c.content ILIKE %s
+                    OR translate(COALESCE(s.name, ''), '_-', '  ') ILIKE %s
+                    OR translate(COALESCE(s.filename, ''), '_-', '  ') ILIKE %s
                     OR (
-                        to_tsvector('simple', COALESCE(c.content, ''))
+                        to_tsvector(
+                            'simple',
+                            COALESCE(c.content, '') || ' ' ||
+                            translate(COALESCE(s.name, ''), '_-', '  ') || ' ' ||
+                            translate(COALESCE(s.filename, ''), '_-', '  ')
+                        )
                             @@ to_tsquery('simple', %s)
                         AND (
                             SELECT COUNT(*)
                               FROM unnest(%s::text[]) AS search_term
-                             WHERE to_tsvector('simple', COALESCE(c.content, ''))
+                             WHERE to_tsvector(
+                                       'simple',
+                                       COALESCE(c.content, '') || ' ' ||
+                                       translate(COALESCE(s.name, ''), '_-', '  ') || ' ' ||
+                                       translate(COALESCE(s.filename, ''), '_-', '  ')
+                                   )
                                    @@ plainto_tsquery('simple', search_term)
                         ) >= %s
                     )
@@ -536,8 +611,13 @@ class AssistantKnowledgeSource(models.Model):
             """,
             (
                 exact,
+                exact,
+                exact,
+                lexical_query,
                 lexical_query,
                 source_ids,
+                exact,
+                exact,
                 exact,
                 lexical_query,
                 list(terms),
@@ -548,7 +628,9 @@ class AssistantKnowledgeSource(models.Model):
         ranked = self.env.cr.fetchall()
         if not ranked:
             return []
-        rank_by_id = {row[0]: float(row[2] or 0.0) + float(row[1] or 0.0) for row in ranked}
+        rank_by_id = {
+            row[0]: float(row[2] or 0.0) + float(row[1] or 0.0) for row in ranked
+        }
         chunks = self.env["odoo.ai.knowledge.chunk"].search(
             [("id", "in", list(rank_by_id))]
         )
@@ -642,6 +724,7 @@ class AssistantKnowledgeAttachment(models.Model):
     data = fields.Binary(required=True, readonly=True, attachment=True)
     file_size = fields.Integer(required=True, readonly=True)
     fingerprint = fields.Char(required=True, readonly=True, index=True, size=64)
+    extracted_text = fields.Text(required=True, readonly=True)
     expires_at = fields.Datetime(required=True, readonly=True, index=True)
     consumed_at = fields.Datetime(readonly=True)
 
@@ -667,10 +750,14 @@ class AssistantKnowledgeAttachment(models.Model):
             mimetype = _mimetype(values.get("mimetype"), filename)
             raw = _decode_binary(values.get("data"))
             _validate_supported_document(filename, mimetype)
+            text = _extract_document_text(raw, filename, mimetype)
+            if not text:
+                raise KnowledgeProcessingError("knowledge_empty_document")
             values["filename"] = filename
             values["mimetype"] = mimetype
             values["file_size"] = len(raw)
             values["fingerprint"] = hashlib.sha256(raw).hexdigest()
+            values["extracted_text"] = text
             values.setdefault("expires_at", fields.Datetime.now() + timedelta(hours=24))
             prepared.append(values)
         return super().create(prepared)
@@ -735,23 +822,17 @@ def _filename(value) -> str:
 
 
 def _mimetype(value, filename: str) -> str:
+    extension = _extension(filename)
+    detected = _MIMETYPE_BY_EXTENSION.get(extension)
+    if detected:
+        return detected
     if isinstance(value, str) and value.strip():
         normalized = value.split(";", 1)[0].strip().lower()[:120]
     else:
         normalized = ""
     if normalized:
         return normalized
-    extension = _extension(filename)
-    defaults = {
-        ".csv": "text/csv",
-        ".json": "application/json",
-        ".md": "text/markdown",
-        ".markdown": "text/markdown",
-        ".rst": "text/x-rst",
-        ".txt": "text/plain",
-        ".xml": "application/xml",
-    }
-    return defaults.get(extension, "application/octet-stream")
+    return "application/octet-stream"
 
 
 def _extension(filename: str) -> str:
@@ -760,7 +841,10 @@ def _extension(filename: str) -> str:
 
 
 def _validate_supported_document(filename: str, mimetype: str) -> None:
-    if _extension(filename) not in _SUPPORTED_EXTENSIONS and mimetype not in _SUPPORTED_MIMETYPES:
+    extension = _extension(filename)
+    if (extension and extension not in _SUPPORTED_EXTENSIONS) or (
+        not extension and mimetype not in _SUPPORTED_MIMETYPES
+    ):
         raise KnowledgeProcessingError("knowledge_unsupported_document")
 
 
@@ -781,8 +865,52 @@ def _decode_binary(value) -> bytes:
     return raw
 
 
+def _extract_document_text(raw: bytes, filename: str, mimetype: str) -> str:
+    if _extension(filename) == ".pdf" or mimetype == "application/pdf":
+        return _extract_pdf_text(raw)
+    return _extract_text(raw)
+
+
+def _extract_pdf_text(raw: bytes) -> str:
+    if not raw.startswith(b"%PDF-"):
+        raise KnowledgeProcessingError("knowledge_invalid_pdf")
+    try:
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            from PyPDF2 import PdfReader
+    except ImportError as error:
+        raise KnowledgeProcessingError("knowledge_pdf_dependency_missing") from error
+    try:
+        reader = PdfReader(BytesIO(raw), strict=False)
+        if reader.is_encrypted:
+            raise KnowledgeProcessingError("knowledge_pdf_encrypted")
+        pages = reader.pages
+        if len(pages) > _MAX_PDF_PAGES:
+            raise KnowledgeProcessingError("knowledge_text_too_large")
+        parts = []
+        used = 0
+        for page in pages:
+            part = (page.extract_text() or "").replace("\x00", "").strip()
+            if not part:
+                continue
+            used += len(part) + (2 if parts else 0)
+            if used > _MAX_SOURCE_TEXT_CHARS:
+                raise KnowledgeProcessingError("knowledge_text_too_large")
+            parts.append(part)
+    except KnowledgeProcessingError:
+        raise
+    except Exception as error:
+        raise KnowledgeProcessingError("knowledge_invalid_pdf") from error
+    return _normalize_text("\n\n".join(parts))
+
+
 def _extract_text(raw: bytes) -> str:
-    text = raw.decode("utf-8-sig", errors="replace").replace("\x00", "")
+    return _normalize_text(raw.decode("utf-8-sig", errors="replace"))
+
+
+def _normalize_text(value: str) -> str:
+    text = value.replace("\x00", "")
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = "\n".join(line.rstrip() for line in text.split("\n"))
     text = text.strip()

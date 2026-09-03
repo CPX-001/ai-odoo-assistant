@@ -22,6 +22,24 @@ function pendingUploads(state) {
     return Array.isArray(state.pendingKnowledgeUploads) ? state.pendingKnowledgeUploads : [];
 }
 
+function uploadErrorMessage(code) {
+    const messages = {
+        knowledge_empty_document: _t(
+            "No se pudo extraer texto. Los PDF escaneados necesitan OCR."
+        ),
+        knowledge_file_too_large: _t("El archivo supera el límite de 8 MB."),
+        knowledge_invalid_pdf: _t("El PDF está dañado o no se puede leer."),
+        knowledge_pdf_dependency_missing: _t(
+            "Esta instalación de Odoo no tiene disponible la lectura de PDF."
+        ),
+        knowledge_pdf_encrypted: _t("No se pueden leer PDF protegidos con contraseña."),
+        knowledge_unsupported_document: _t(
+            "Formato no soportado. Usa PDF, TXT, Markdown, RST, CSV, JSON o XML."
+        ),
+    };
+    return messages[code] || _t("No se pudo adjuntar el archivo.");
+}
+
 patch(AssistantPanel.prototype, {
     async onKnowledgeFileSelected(event) {
         const input = event?.target;
@@ -55,13 +73,7 @@ patch(AssistantPanel.prototype, {
                 attachment,
             ];
         } catch (error) {
-            const code = error?.message;
-            this.state.knowledgeUploadError =
-                code === "knowledge_file_too_large"
-                    ? _t("El archivo supera el límite de 8 MB.")
-                    : code === "knowledge_unsupported_document"
-                      ? _t("Formato no soportado todavía. Usa TXT, Markdown, RST, CSV, JSON o XML.")
-                      : _t("No se pudo adjuntar el archivo.");
+            this.state.knowledgeUploadError = uploadErrorMessage(error?.message);
         } finally {
             this.state.knowledgeUploadBusy = false;
             input.value = "";
@@ -111,7 +123,14 @@ patch(AssistantPanel.prototype, {
         this.panel.setDraft("");
         let sent = false;
         try {
-            sent = await this.panel.submit(markedDraft, { displayMessage: question });
+            sent = await this.panel.submit(markedDraft, {
+                displayMessage: question,
+                displayAttachments: uploads.map((item) => ({
+                    name: item.name,
+                    mimetype: item.mimetype,
+                    size: item.size,
+                })),
+            });
         } catch {
             if (!this.state.errorCode) {
                 this.state.errorCode = "service_unavailable";

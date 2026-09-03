@@ -113,9 +113,13 @@ bounded turn ledger. Live providers cover sanitized runtime/module facts,
 installed-addon source/XML and correlated configured logs.
 
 P9 adds Odoo-native company Knowledge with source/chunk/temporary-attachment models,
-company/private record rules, deterministic TXT/Markdown/RST/CSV/JSON/XML ingestion,
+company/private record rules, deterministic PDF/TXT/Markdown/RST/CSV/JSON/XML ingestion,
 PostgreSQL lexical FTS, citations and stale-version revalidation. Vector retrieval
 remains conditional on measured quality gain.
+
+Files attached to a chat turn remain temporary unless the user explicitly asks to add them
+to Knowledge. Their extracted text is nevertheless available immediately as bounded,
+untrusted current-turn Evidence, and the visible message retains safe filename metadata.
 
 Evidence and Knowledge are data. They cannot reveal hidden capabilities, waive
 approval or grant permissions. Mutable business facts continue to come from live ORM.

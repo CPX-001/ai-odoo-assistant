@@ -155,13 +155,17 @@ class AssistantConversation(models.Model):
             else self.env["odoo.ai.turn"].browse()
         )
         activity_by_message = self._history_activity_by_message(messages)
+        attachments_by_message = self._history_attachments_by_message(messages)
         return {
             "active_conversation_id": (
                 selected.conversation_uuid if selected else None
             ),
             "conversations": [item._history_view() for item in conversations],
             "messages": [
-                item._history_view(activity=activity_by_message.get(item.id))
+                item._history_view(
+                    activity=activity_by_message.get(item.id),
+                    attachments=attachments_by_message.get(item.id),
+                )
                 for item in messages
             ],
             "active_turn": (
@@ -214,9 +218,9 @@ class AssistantConversation(models.Model):
                     continue
                 item = row.live_browser_view()
                 key = f"{item['item_id']}:{item['summary_index']}"
-                reasoning_parts[key] = (
-                    reasoning_parts.get(key, "") + item["text"]
-                )[:8_192]
+                reasoning_parts[key] = (reasoning_parts.get(key, "") + item["text"])[
+                    :8_192
+                ]
             if not events and not reasoning_parts:
                 continue
             result[turn.assistant_message_id.id] = {
@@ -228,6 +232,45 @@ class AssistantConversation(models.Model):
                     if text
                 ],
             }
+        return result
+
+    def _history_attachments_by_message(self, messages):
+        user_ids = [item.id for item in messages if item.role == "user"]
+        if not user_ids:
+            return {}
+        turns = self.env["odoo.ai.turn"].search(
+            [
+                ("user_message_id", "in", user_ids),
+                ("user_id", "=", self.env.uid),
+                ("conversation_id", "in", messages.mapped("conversation_id").ids),
+            ],
+            order="id asc",
+        )
+        result = {}
+        for turn in turns:
+            manifest = turn.knowledge_attachment_manifest
+            if not isinstance(manifest, list):
+                continue
+            rows = []
+            for item in manifest[:8]:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("name")
+                mimetype = item.get("mimetype")
+                size = item.get("size")
+                if not isinstance(name, str) or not name.strip():
+                    continue
+                rows.append(
+                    {
+                        "name": name[:255],
+                        "mimetype": mimetype[:120]
+                        if isinstance(mimetype, str)
+                        else "application/octet-stream",
+                        "size": size if type(size) is int and size >= 0 else 0,
+                    }
+                )
+            if rows:
+                result[turn.user_message_id.id] = rows
         return result
 
     @api.model
@@ -348,7 +391,7 @@ class AssistantMessage(models.Model):
         ),
     ]
 
-    def _history_view(self, *, activity=None):
+    def _history_view(self, *, activity=None, attachments=None):
         self.ensure_one()
         result = {
             "message_id": self.message_uuid,
@@ -358,6 +401,8 @@ class AssistantMessage(models.Model):
         }
         if self.role == "assistant" and isinstance(activity, dict):
             result["activity"] = activity
+        if self.role == "user" and isinstance(attachments, list) and attachments:
+            result["attachments"] = attachments
         return result
 
 

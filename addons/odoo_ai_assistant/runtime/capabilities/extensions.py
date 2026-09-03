@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+from .attachment_evidence import build_turn_attachment_evidence_provider
 from .context import (
     ContextContribution,
     ContextProvider,
@@ -121,7 +122,9 @@ class AssistantExtensionCatalog:
         available_context_ids = tuple(
             item.provider_id for item in self.context_providers.available(context)
         )
-        available_evidence, evidence_statuses = self.evidence_providers.availability(context)
+        available_evidence, evidence_statuses = self.evidence_providers.availability(
+            context
+        )
         available_evidence_ids = tuple(item.provider_id for item in available_evidence)
         requested_ids = tuple(evidence_provider_ids)
         available_set = set(available_evidence_ids)
@@ -266,6 +269,7 @@ def discover_assistant_extensions_for_env(
     registry = capability_registry or discover_capabilities_for_env(env)
     providers = discover_odoo_capability_providers(env)
     builtin_evidence = (
+        build_turn_attachment_evidence_provider(),
         build_runtime_inventory_evidence_provider(),
         build_installed_source_evidence_provider(),
         build_odoo_log_evidence_provider(),

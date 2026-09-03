@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import base64
 from datetime import UTC, datetime
+from io import BytesIO
 
 from odoo import Command
+from odoo.addons.odoo_ai_assistant.runtime.capabilities.attachment_evidence import (
+    build_turn_attachment_evidence_provider,
+)
 from odoo.addons.odoo_ai_assistant.runtime.capabilities.contracts import (
     CapabilityContext,
 )
@@ -22,6 +26,7 @@ from odoo.addons.odoo_ai_assistant.runtime.capabilities.registry import (
 )
 from odoo.exceptions import AccessError
 from odoo.tests.common import TransactionCase, tagged
+from reportlab.pdfgen import canvas
 
 
 @tagged("post_install", "-at_install")
@@ -55,6 +60,13 @@ class TestPhase9Knowledge(TransactionCase):
 
     def _binary(self, text: str) -> bytes:
         return base64.b64encode(text.encode("utf-8"))
+
+    def _pdf_binary(self, text: str) -> bytes:
+        buffer = BytesIO()
+        document = canvas.Canvas(buffer)
+        document.drawString(72, 760, text)
+        document.save()
+        return base64.b64encode(buffer.getvalue())
 
     def _source(self, env, *, name: str, text: str, access_mode="company"):
         source = env["odoo.ai.knowledge.source"].create(
@@ -106,7 +118,9 @@ class TestPhase9Knowledge(TransactionCase):
         self.assertGreater(source.chunk_count, 0)
         self.assertEqual(source.content_fingerprint, source.indexed_fingerprint)
 
-        catalog = EvidenceProviderCatalog((build_company_knowledge_evidence_provider(),))
+        catalog = EvidenceProviderCatalog(
+            (build_company_knowledge_evidence_provider(),)
+        )
         context = self._context(env)
         batch = catalog.search(
             context,
@@ -159,6 +173,41 @@ class TestPhase9Knowledge(TransactionCase):
         self.assertTrue(new_batch.refs)
         self.assertEqual(new_batch.refs[0].citation["version"], 2)
 
+    def test_pdf_type_is_detected_and_text_is_indexed(self):
+        env = self._env(self.user_a)
+        source = env["odoo.ai.knowledge.source"].create(
+            {
+                "name": "PDF architecture notes",
+                "filename": "architecture-hardening.pdf",
+                "mimetype": "pdf",
+                "data": self._pdf_binary("Architecture hardening recovery boundary"),
+                "access_mode": "company",
+            }
+        )
+
+        self.assertEqual(source.mimetype, "application/pdf")
+        source.action_process_now()
+        self.assertEqual(source.state, "active")
+        self.assertIn("Architecture hardening", source.chunk_ids[0].content)
+
+    def test_knowledge_search_uses_content_and_filename_as_retrieval_signals(self):
+        env = self._env(self.user_a)
+        source = self._source(
+            env,
+            name="Architecture_Hardening_Packet",
+            text="The recovery boundary rejects an unverified write barrier.",
+        )
+
+        by_name = env["odoo.ai.knowledge.source"].lexical_search(
+            "¿Tienes alguna referencia de architecture hardening?"
+        )
+        by_content = env["odoo.ai.knowledge.source"].lexical_search(
+            "recovery boundary unverified write barrier"
+        )
+
+        self.assertTrue(any(chunk.source_id == source for chunk, _score in by_name))
+        self.assertTrue(any(chunk.source_id == source for chunk, _score in by_content))
+
     def test_company_private_acl_and_host_owned_index(self):
         env_a = self._env(self.user_a)
         env_b = self._env(self.user_b)
@@ -184,9 +233,7 @@ class TestPhase9Knowledge(TransactionCase):
             )
         )
         self.assertFalse(
-            env_b["odoo.ai.knowledge.source"].lexical_search(
-                "private-only-marker-p9"
-            )
+            env_b["odoo.ai.knowledge.source"].lexical_search("private-only-marker-p9")
         )
 
         with self.assertRaises(AccessError):
@@ -222,11 +269,39 @@ class TestPhase9Knowledge(TransactionCase):
         )
         self.assertTrue(result["ok"])
         turn = env["odoo.ai.turn"]._owned_turn(result["turn_id"])
-        self.assertEqual(turn.user_message_id.content, "Añade este archivo a Knowledge.")
+        self.assertEqual(
+            turn.user_message_id.content, "Añade este archivo a Knowledge."
+        )
         self.assertNotIn("odoo_ai_attachment", turn.user_message_id.content)
         self.assertIn("Host attachment references", turn.input_message)
         self.assertIn(f'"attachment_id":{attachment.id}', turn.input_message)
         self.assertEqual(attachment.turn_id.id, turn.id)
+        self.assertEqual(
+            turn.knowledge_attachment_manifest,
+            [{"name": "chat-source.txt", "mimetype": "text/plain", "size": 21}],
+        )
+
+        history = env["odoo.ai.conversation"].history_payload(
+            conversation_uuid=turn.conversation_id.conversation_uuid
+        )
+        user_row = next(item for item in history["messages"] if item["role"] == "user")
+        self.assertEqual(user_row["attachments"][0]["name"], "chat-source.txt")
+
+        attachment_catalog = EvidenceProviderCatalog(
+            (build_turn_attachment_evidence_provider(),)
+        )
+        context = self._context(env, turn_id=turn.turn_uuid)
+        batch = attachment_catalog.search(
+            context,
+            EvidenceSearchRequest(
+                query=turn.input_message,
+                kinds=(EvidenceKind.DOCUMENT,),
+            ),
+        )
+        self.assertTrue(batch.refs)
+        evidence_item = attachment_catalog.fetch(context, batch.refs[0])
+        self.assertIn("chat-ingest-marker-p9", evidence_item.excerpt)
+        self.assertEqual(batch.refs[0].citation["source_type"], "turn_attachment")
 
         retry = env["odoo.ai.turn"].enqueue_for_current_user(
             message=message,
