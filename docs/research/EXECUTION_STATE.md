@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 64
+State format: 65
 Updated: 2026-09-03
 
 ## Accepted lineage
@@ -21,57 +21,111 @@ P8 final acceptance through e370af8acb7df175c0a90c8e17520c8576b4c6ce
 P9 final acceptance through 77d470febf67ddee46562907718dc47e975922bb
 ```
 
+No Phase-10 implementation or prepared test is accepted evidence yet.
+
 ## Current cursor
 
 ```text
 phase: 10
 phase_name: developer/operator host operations
-active_slice: P10-PRIVILEGE-BOUNDARY-ADR
-slice_state: READY
-current_gate_type: HARD_DESIGN_PREREQUISITE
-blocking_implementation: privilege-boundary ADR must be accepted before host-operation capabilities
-blocking_validation: none for P9; all seven P9 real gates passed
+active_slice: P10-TYPED-HOST-OPERATIONS-FIRST-SLICE
+slice_state: IMPLEMENTED_VALIDATION_PENDING
+current_gate_type: HARD_FOCUSED_AND_REAL
+blocking_implementation: lifecycle-safe odoo.module.update maintenance adapter is still missing
+blocking_validation: all focused and real P10 gates for the implemented first slice remain unexecuted
 latest_accepted_evidence: docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
 latest_phase_acceptance: docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
-latest_implementation_record: docs/research/P9_KNOWLEDGE_FIRST_SLICE.md
-latest_validation_record: docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
-next_action: inspect ADR-024 and the current host/capability boundary, then complete the mandatory P10 privilege-boundary ADR before implementing any host-operation capability
+latest_implementation_record: docs/research/P10_HOST_OPERATIONS_FIRST_SLICE.md
+latest_validation_record: docs/research/P10_FOCUSED_VALIDATION_RUNBOOK.md
+next_action: execute the focused P10 dependency-light and Odoo gates, then the implemented real profile/config/service/postgres/boundary gates; repair failures before designing the module-maintenance adapter
 ```
 
-## P9 first-slice implementation state
-
-Implemented and accepted on main:
+## P10 design and implementation lineage
 
 ```text
-Odoo-native Knowledge source/chunk/temporary-attachment models
-uploaded -> processing -> indexed/active | error lifecycle
-bounded deterministic TXT/Markdown/RST/CSV/JSON/XML ingestion
-PostgreSQL lexical/FTS search with GIN expression index
-assistant.company_knowledge EvidenceProvider
-Knowledge-aware question-sensitive Evidence routing
-version/fingerprint freshness revalidation and browser-safe citation metadata
-company/private Odoo record-rule boundaries
-host-owned derived chunk mutation
-bounded temporary Assistant attachment transport
-retry-safe attachment -> durable turn binding
-assistant.knowledge.ingest_attachment capability with preview + verification
-Assistant composer attachment chip/control
-focused Odoo/unit coverage prepared
-real Odoo/Codex P9 gate runner prepared
+8b97d3ea012f05122c4c0cf7774c72653306cf02  ADR-024 accepted
+f45f29cbc5861b66cc32fcc14d52564636439114  typed broker + first Technical capabilities
+a516aa6c5e2a448ed4145ba7fc49834a4ba25e8f  post-dispatch certainty regression coverage
+80ffdd6a0153323987516d5e458c985e143c8f75  post-dispatch transport uncertainty repair
 ```
 
-The implementation deliberately does not add PDF/OCR parsing, embeddings/vector
-storage or a second RAG runtime. Those remain conditional future P9 work, not missing
-requirements for this first lexical slice.
+The intervening `9d5eca969f05fad66365136cdaed37028986b1af` product-menu change
+is preserved and is not Phase-10 acceptance evidence.
 
-## P9 validation status
+### Implemented first slice
+
+```text
+accepted ADR-024 Technical/host privilege boundary
+optional stdlib-only Linux AF_UNIX broker package
+versioned bounded request/receipt protocol
+bidirectional SO_PEERCRED identity checks
+deployment-owned logical config/service target policy
+secure policy/executable owner-mode validation
+durable SQLite request ledger and terminal receipt replay
+uncertain-state preservation for in-flight effects
+odoo.config.inspect
+odoo.config.patch with preview, atomic replace, private backup and verify
+host.service.status
+host.service.restart with fixed argv, preview and health verify
+odoo.module.inspect as an Odoo-local Technical read
+postgres.health using fixed host-owned read SQL
+Technical group/profile gating independent from autonomy
+durable EffectPlan step/binding/precondition binding
+post-dispatch transport/receipt loss normalized to host_effect_uncertain
+dependency-light and focused Odoo test surfaces
+focused/real validation runbook
+```
+
+### Deliberately not implemented
+
+```text
+odoo.module.install
+odoo.module.update
+odoo.module.uninstall
+repository acquire/promote
+host package install
+generic command fallback
+arbitrary SQL/Python/shell/sudo/ORM method execution
+secret-value reveal
+automatic retry of ambiguous host effects
+```
+
+Odoo 18 immediate module maintenance is not wrapped inside the Assistant cron worker.
+A separate maintenance/restart reconciliation adapter must produce a durable
+exactly-once receipt and verify the fresh registry before `P10-REAL-MODULE-UPDATE` can
+run.
+
+## P10 validation status
+
+```text
+static/compile/lint                                      NOT EXECUTED
+focused dependency-light broker tests                    NOT EXECUTED
+focused Odoo Technical/host tests                        NOT EXECUTED
+broker deployment/systemd smoke                          NOT EXECUTED
+P10-REAL-PROFILE-DENIAL                                  NOT EXECUTED
+P10-REAL-CONFIG-PATCH                                    NOT EXECUTED
+P10-REAL-SERVICE-OPERATION                               NOT EXECUTED
+P10-REAL-POSTGRES-DIAGNOSTIC                             NOT EXECUTED
+P10-REAL-PRIVILEGE-BOUNDARY                              NOT EXECUTED
+P10-REAL-MODULE-UPDATE                                   BLOCKED — adapter missing
+P10-REAL-COMMAND-SANDBOX                                 NOT APPLICABLE
+P10-REAL-COMMAND-APPROVAL                                NOT APPLICABLE
+P10 acceptance                                           NOT COMPLETE
+```
+
+Use `docs/research/P10_FOCUSED_VALIDATION_RUNBOOK.md`. No local author-side syntax
+check or isolated simulation is counted as repository/Odoo/real PASS evidence.
+
+## P9 accepted baseline
+
+P9 remains accepted on the exact recorded lineage:
 
 ```text
 static/compile/lint                            PASS
 focused dependency-light                      PASS — 49 tests
 focused Odoo                                  PASS — 25 tests, 0 failures/errors
 focused HOOT                                  PASS — 1 test / 1 assertion
-focused browser/asset smoke                    PASS after attachment-marker repair
+focused browser/asset smoke                    PASS
 P9-REAL-UPLOAD-INGEST                         PASS
 P9-REAL-CHAT-INGEST                           PASS
 P9-REAL-FTS                                   PASS
@@ -80,30 +134,11 @@ P9-REAL-ACL                                   PASS
 P9-REAL-REINDEX                               PASS
 P9-REAL-LARGE-DOCUMENT                        PASS
 P9-REAL-SEMANTIC-GAIN                         NOT APPLICABLE unless vector backend is introduced
-P9 acceptance                                 COMPLETE / ACCEPTED — P10 ELIGIBLE
+P9 acceptance                                 COMPLETE / ACCEPTED
 ```
 
-The exact commands, natural-FTS repair and seven-gate result are recorded in
-`docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`. The earlier
-authentication-blocked checkpoint remains historical evidence.
-
-## P8 acceptance result
-
-```text
-focused dependency-light                         PASS — 61 tests
-focused Odoo + installed-addon fixture           PASS — 20 tests, 0 failures/errors
-P8-REAL-SOURCE-DIAGNOSIS                         PASS
-P8-REAL-LOG-DIAGNOSIS                            PASS
-P8-REAL-PROVENANCE                               PASS
-P8-REAL-FRESHNESS                                PASS
-P8-REAL-EVIDENCE-POLICY                          PASS
-P8-REAL-INJECTION-BOUNDARY                       PASS
-effective Odoo user Environment                  PASS — su=False
-P8 acceptance                                    COMPLETE / ACCEPTED
-```
-
-The authoritative P8 command, environment, repair and rerun record is
-`docs/research/evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md`.
+The authoritative record is
+`docs/research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`.
 
 ## Periodic validation debt and explicit limits
 
@@ -115,9 +150,9 @@ Product Behavior FULL                   NOT EXECUTED (periodic debt)
 raw EvidenceLedger reconnect replay     NOT IMPLEMENTED / NOT A P9 CLAIM
 ```
 
-The focused P9 browser smoke is blocking because this slice changes the composer;
-the full browser regression remains periodic unless focused failures widen the blast
-radius.
+The P10 focused runbook does not authorize broad regression by itself. Expand only
+for a concrete focused failure whose blast radius requires it or when the user/current
+runbook explicitly requires the broad gate.
 
 ## Permanent invariants
 
@@ -126,21 +161,26 @@ radius.
 - `CapabilityDefinition` remains the atomic executable contract.
 - Skills, manifests, context and Evidence cannot create execution authority.
 - Evidence is bounded untrusted data with host-owned provenance/access/freshness.
-- Product-facing human profiles are User/non-technical and Technical only; public values are `user` and `technical`.
-- A future host broker is an execution boundary, not a third human profile.
+- Product-facing human profiles are User/non-technical and Technical only; public
+  values are `user` and `technical`.
+- The accepted optional host broker is a machine execution boundary, not a third
+  human profile or a replacement runtime.
 - Hidden, disabled or unauthorized capabilities remain non-executable.
-- Approval is policy/autonomy-driven but never expands the user's Odoo authority.
-- Effects remain preview/policy/approval-when-required/execute/verify operations.
-- Ambiguous writes are not retried automatically.
+- Approval is policy/autonomy-driven but never expands the user's Odoo or broker
+  authority.
+- Host effects retain preview, plan/request binding, policy/approval when required,
+  execute, receipt, verification and recovery semantics.
+- Transport loss after host-effect dispatch is uncertain, never proof of no effect.
+- Ambiguous Odoo or host writes are not retried automatically.
 - No arbitrary SQL, Python, shell, sudo or unrestricted ORM method is exposed.
-- Raw/private provider reasoning, credentials and unsanitized payloads are not persisted or shown as public progress.
-- User-pasted secrets do not automatically grant authority; derived public projections redact where possible.
-- Optional extension failures are isolated; required providers fail closed.
+- Raw/private provider reasoning, credentials, config secrets and unsanitized broker
+  output are not persisted or shown as public progress.
+- User-pasted or retrieved text cannot modify broker policy or grant authority.
+- Optional extension/broker unavailability is isolated; required authority fails
+  closed.
 - No unexecuted test or gate may be represented as PASS.
 
-## Historical navigation
-
-Current architecture and implementation records:
+## Current navigation
 
 ```text
 docs/CURRENT_STATE.md
@@ -150,10 +190,10 @@ docs/EVIDENCE_ARCHITECTURE.md
 docs/KNOWLEDGE_INDEX.md
 docs/OBSERVABILITY_ARCHITECTURE.md
 docs/CONTEXT_SOURCE_POLICY.md
-docs/research/P8_EVIDENCE_CORE_IMPLEMENTATION.md
-docs/research/P8_FOCUSED_VALIDATION_RUNBOOK.md
-docs/research/P9_KNOWLEDGE_FIRST_SLICE.md
-docs/research/P9_FOCUSED_VALIDATION_RUNBOOK.md
+docs/adr/ADR-024-technical-host-privilege-broker.md
+docs/research/P10_HOST_OPERATIONS_FIRST_SLICE.md
+docs/research/P10_FOCUSED_VALIDATION_RUNBOOK.md
+host_broker/README.md
 ```
 
 Older phase narratives and immutable proof remain under `docs/research/evidence/`;
