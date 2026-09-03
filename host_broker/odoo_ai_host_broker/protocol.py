@@ -234,10 +234,10 @@ def validate_receipt(value: Any) -> dict[str, Any]:
 
 
 __all__ = [
-    "BrokerProtocolError",
     "MAX_REQUEST_BYTES",
     "MAX_RESPONSE_BYTES",
     "PROTOCOL_VERSION",
+    "BrokerProtocolError",
     "canonical_json",
     "canonical_sha256",
     "validate_receipt",

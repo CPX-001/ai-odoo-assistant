@@ -42,7 +42,7 @@ class BrokerPolicy:
     socket_gid: int | None = None
 
     @classmethod
-    def from_mapping(cls, value: Any) -> "BrokerPolicy":
+    def from_mapping(cls, value: Any) -> BrokerPolicy:
         if not isinstance(value, dict):
             raise BrokerProtocolError("broker_policy_invalid")
         allowed = {

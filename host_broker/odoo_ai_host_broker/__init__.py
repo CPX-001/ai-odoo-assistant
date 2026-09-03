@@ -4,4 +4,4 @@ from .operations import BrokerEngine
 from .policy import BrokerPolicy
 from .protocol import PROTOCOL_VERSION
 
-__all__ = ["BrokerEngine", "BrokerPolicy", "PROTOCOL_VERSION"]
+__all__ = ["PROTOCOL_VERSION", "BrokerEngine", "BrokerPolicy"]

@@ -5,14 +5,20 @@ from __future__ import annotations
 import hashlib
 import re
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .config_ops import ConfigOperations
 from .ledger import ExecutionLedger
 from .outcome import BrokerOperationError, OperationOutcome
 from .policy import BrokerPolicy
-from .protocol import BrokerProtocolError, PROTOCOL_VERSION, canonical_sha256, validate_request
+from .protocol import (
+    PROTOCOL_VERSION,
+    BrokerProtocolError,
+    canonical_sha256,
+    validate_request,
+)
 from .service_ops import CommandRunner, ServiceOperations
 
 
@@ -44,7 +50,9 @@ class BrokerEngine:
             outcome = self._dispatch(validated)
         except BrokerOperationError as error:
             outcome = error.outcome
-        except Exception:
+        # The broker is a public trust boundary: unexpected preview/read failures
+        # must become a bounded receipt instead of escaping with host details.
+        except Exception:  # noqa: BLE001
             outcome = OperationOutcome(status="error", error_code="broker_internal_error")
         return self._receipt(validated, outcome, current)
 
@@ -115,7 +123,9 @@ class BrokerEngine:
             outcome = implementation()
         except BrokerOperationError as error:
             outcome = error.outcome
-        except Exception:
+        # Once the durable ledger row exists, any unexpected implementation failure
+        # may have followed an external effect and therefore must remain uncertain.
+        except Exception:  # noqa: BLE001
             outcome = OperationOutcome(
                 status="uncertain",
                 effect_state="unknown",
@@ -125,7 +135,7 @@ class BrokerEngine:
         receipt = self._receipt(request, outcome, started_at)
         try:
             self.ledger.finish(receipt)
-        except Exception:
+        except Exception:  # noqa: BLE001
             # The privileged effect may already have happened. A ledger durability failure
             # must never be projected as a proven no-effect error. Leave the stored row in
             # ``running`` so every replay also fails closed as uncertain.

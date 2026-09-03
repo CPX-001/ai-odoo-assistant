@@ -242,7 +242,9 @@ def _binding_from_durable_plan(
         envelope = turn.capability_plan_payload
     except CapabilityError:
         raise
-    except Exception:
+    # The durable-plan lookup crosses the Odoo ORM/registry boundary. Fail closed
+    # for any host-side lookup failure without exposing implementation details.
+    except Exception:  # noqa: BLE001
         raise CapabilityError("host_broker_plan_binding_missing") from None
 
     plan = envelope.get("plan") if isinstance(envelope, dict) else None

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 import subprocess
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .outcome import BrokerOperationError, OperationOutcome
 from .policy import BrokerPolicy, ServiceTarget

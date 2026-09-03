@@ -110,7 +110,10 @@ class TestPhase10HostOperations(TransactionCase):
         ).data
         self.assertEqual(module["module"], "odoo_ai_assistant")
         self.assertEqual(module["state"], "installed")
-        self.assertIsInstance(module["dependencies"], tuple)
+        # CapabilityResult preserves JSON array identity while freezing mutations.
+        self.assertIsInstance(module["dependencies"], list)
+        with self.assertRaises(TypeError):
+            module["dependencies"].append({"name": "injected", "state": "installed"})
 
         postgres = asyncio.run(executor.execute("postgres.health", {})).data
         self.assertTrue(postgres["server_version"])

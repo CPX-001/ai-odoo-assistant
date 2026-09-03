@@ -15,9 +15,9 @@ from .ledger import ExecutionLedger
 from .operations import BrokerEngine
 from .policy import load_policy
 from .protocol import (
-    BrokerProtocolError,
     MAX_REQUEST_BYTES,
     MAX_RESPONSE_BYTES,
+    BrokerProtocolError,
     canonical_json,
 )
 
@@ -58,7 +58,7 @@ class BrokerServer:
             while not self._stop:
                 try:
                     connection, _ = listener.accept()
-                except socket.timeout:
+                except TimeoutError:
                     continue
                 with connection:
                     try:

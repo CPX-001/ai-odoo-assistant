@@ -95,7 +95,9 @@ def _module_record(context: CapabilityContext, arguments):
             module.check_access("read")
     except AccessError:
         raise CapabilityError("access_denied") from None
-    except Exception:
+    # This capability boundary must sanitize ORM/registry failures from arbitrary
+    # installed module implementations instead of exposing internals to the model.
+    except Exception:  # noqa: BLE001
         raise CapabilityError("module_inspection_failed") from None
     if not module:
         raise CapabilityError("module_not_found")
@@ -183,7 +185,9 @@ def postgres_health(context: CapabilityContext, arguments):
             """
         )
         backend_count, active_count, waiting_count = cr.fetchone()
-    except Exception:
+    # Cursor/driver failures are deliberately collapsed into the public bounded
+    # diagnostic error; provider-specific database exceptions must not leak out.
+    except Exception:  # noqa: BLE001
         raise CapabilityError("postgres_diagnostic_unavailable") from None
     return {
         "server_version": str(version)[:80],

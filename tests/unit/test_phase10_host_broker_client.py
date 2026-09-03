@@ -122,9 +122,11 @@ class Phase10HostBrokerClientTests(unittest.TestCase):
             expected_uid=0,
         )
 
-        with patch.object(client_module.socket, "socket", return_value=connection):
-            with self.assertRaises(CapabilityError) as captured:
-                self._call(client, effectful=True)
+        with (
+            patch.object(client_module.socket, "socket", return_value=connection),
+            self.assertRaises(CapabilityError) as captured,
+        ):
+            self._call(client, effectful=True)
 
         self.assertTrue(connection.sent)
         self.assertTrue(connection.closed)
@@ -141,9 +143,11 @@ class Phase10HostBrokerClientTests(unittest.TestCase):
             expected_uid=0,
         )
 
-        with patch.object(client_module.socket, "socket", return_value=connection):
-            with self.assertRaises(CapabilityError) as captured:
-                self._call(client, effectful=False)
+        with (
+            patch.object(client_module.socket, "socket", return_value=connection),
+            self.assertRaises(CapabilityError) as captured,
+        ):
+            self._call(client, effectful=False)
 
         self.assertEqual(captured.exception.code, "host_broker_unavailable")
 
@@ -154,9 +158,11 @@ class Phase10HostBrokerClientTests(unittest.TestCase):
             expected_uid=0,
         )
 
-        with patch.object(client_module.socket, "socket", return_value=connection):
-            with self.assertRaises(CapabilityError) as captured:
-                self._call(client, effectful=True)
+        with (
+            patch.object(client_module.socket, "socket", return_value=connection),
+            self.assertRaises(CapabilityError) as captured,
+        ):
+            self._call(client, effectful=True)
 
         self.assertFalse(connection.sent)
         self.assertEqual(captured.exception.code, "host_broker_peer_unverified")
