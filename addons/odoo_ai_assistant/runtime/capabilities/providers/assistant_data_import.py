@@ -138,6 +138,7 @@ _START_OUTPUT = {
         "total_rows": {"type": "integer"},
         "duplicate_rows": {"type": "integer"},
         "chunk_size": {"type": "integer"},
+        "planned_chunk_count": {"type": "integer"},
         "mapping_fingerprint": {"type": "string"},
     },
     "required": [
@@ -148,6 +149,7 @@ _START_OUTPUT = {
         "total_rows",
         "duplicate_rows",
         "chunk_size",
+        "planned_chunk_count",
         "mapping_fingerprint",
     ],
     "additionalProperties": False,
@@ -214,6 +216,7 @@ _STATUS_OUTPUT = {
         "remaining_rows": {"type": "integer"},
         "duplicate_rows": {"type": "integer"},
         "chunk_size": {"type": "integer"},
+        "planned_chunk_count": {"type": "integer"},
         "chunk_count": {"type": "integer"},
         "mapping_fingerprint": {"type": "string"},
         "last_error_code": {"type": "string"},
@@ -232,6 +235,7 @@ _STATUS_OUTPUT = {
         "remaining_rows",
         "duplicate_rows",
         "chunk_size",
+        "planned_chunk_count",
         "chunk_count",
         "mapping_fingerprint",
         "last_error_code",
@@ -278,7 +282,7 @@ def _inspect(context: CapabilityContext, arguments):
 def _request(context: CapabilityContext, arguments):
     _turn_bound(context)
     try:
-        return context.env["odoo.ai.data.import.session"].validate_csv_request(
+        return context.env["odoo.ai.data.import.session"]._prepare_csv_request(
             turn_uuid=context.turn_id,
             attachment_id=arguments.get("attachment_id"),
             target_model=arguments.get("model"),
@@ -302,6 +306,7 @@ def _start_preview(context: CapabilityContext, arguments):
             "total_rows": request["total_rows"],
             "duplicate_rows": request["duplicate_rows"],
             "chunk_size": request["chunk_size"],
+            "planned_chunks": request["planned_chunks"],
             "mapping_fingerprint": request["mapping_fingerprint"],
             "execution": "durable_background_chunks",
             "partial_failure_semantics": "whole_invalid_chunk_rejected",
@@ -333,6 +338,7 @@ def _start_verify(context: CapabilityContext, arguments):
         and status["total_rows"] == result.get("total_rows")
         and status["duplicate_rows"] == result.get("duplicate_rows")
         and status["chunk_size"] == result.get("chunk_size")
+        and status["planned_chunk_count"] == result.get("planned_chunk_count")
         and status["state"] in {"queued", "running", "completed", "partial", "failed"}
     )
     return CapabilityVerification(
@@ -375,10 +381,10 @@ def inspect_csv(context: CapabilityContext, arguments):
     description=(
         "Queue a validated CSV attached to the CURRENT turn for durable create-only import "
         "into one eligible Odoo business model. First call assistant.data_import.inspect_csv "
-        "and use an explicit column_index-to-field mapping. The host revalidates the exact "
-        "artifact, target ACL, mapping and row count, previews the request, applies policy/"
-        "approval, then background workers dry-run and execute one bounded ORM chunk per "
-        "transaction. Completed chunks have durable receipts and are not blindly replayed."
+        "and use an explicit column_index-to-field mapping. The host revalidates and stages "
+        "the exact mapped rows once, applies policy/approval, then background workers import "
+        "one bounded canonical chunk per transaction. Completed chunks have durable receipts "
+        "and are not blindly replayed."
     ),
     input_schema=_START_INPUT,
     output_schema=_START_OUTPUT,
@@ -419,6 +425,7 @@ def start_csv(context: CapabilityContext, arguments):
         "total_rows": session.total_rows,
         "duplicate_rows": session.duplicate_rows,
         "chunk_size": session.chunk_size,
+        "planned_chunk_count": session.planned_chunk_count,
         "mapping_fingerprint": session.mapping_fingerprint,
     }
 
