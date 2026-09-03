@@ -14,44 +14,39 @@ P7 COMPLETE / ACCEPTED at 092ac57fe58a3a36765b115e78b2eca687f5dbbc
 P8 COMPLETE / ACCEPTED at e370af8acb7df175c0a90c8e17520c8576b4c6ce
 P9 COMPLETE / ACCEPTED at 77d470febf67ddee46562907718dc47e975922bb
 P10 COMPLETE / ACCEPTED at bde508b737c132140e237cdfde31aee9b37eca5f
+P11 FIRST DURABLE CSV SLICE IMPLEMENTED / VALIDATION PENDING
 ```
 
-P10 is the latest accepted phase. Its evidence is
+P10 remains the latest accepted phase. Its evidence is
 `research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`.
+P11 is not accepted yet; implementation or prepared tests are not PASS evidence.
 
-P10's accepted design and current implementation records are:
+Current P11 records:
 
 ```text
-adr/ADR-024-technical-host-privilege-broker.md
-research/P10_HOST_OPERATIONS_FIRST_SLICE.md
-research/P10_FOCUSED_VALIDATION_RUNBOOK.md
+research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md
+research/P11_FOCUSED_VALIDATION_RUNBOOK.md
 ```
-
-Code or a prepared test is not PASS evidence.
 
 ## 1. Product and deployment baseline
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Supported addon: `addons/odoo_ai_assistant`.
-- Current addon manifest version: `18.0.13.26.0`.
-- Current dependencies remain `account`, `base`, `sale`, `web`.
-- The addon is exposed as an Odoo application with Knowledge, Diagnostics and
-  Configuration menus; chat remains globally available from the systray.
+- Current addon manifest version: `18.0.13.28.0`.
+- Current dependencies: `account`, `base`, `base_import`, `sale`, `web`.
 - Runtime is embedded in Odoo; the browser talks only to authenticated Odoo routes.
-- Odoo/PostgreSQL own conversations, turns, queue, effects, recovery, Evidence and
-  Knowledge state.
-- Long turns and bounded Knowledge ingestion use native `ir.cron` workers.
+- Odoo/PostgreSQL own conversations, turns, queue, effects, recovery, Evidence,
+  Knowledge and durable import-session state.
+- Long turns, Knowledge ingestion and P11 import chunks use native `ir.cron` workers.
 - Business operations run as the effective Odoo user with `su=False`.
 - Codex App Server is the current concrete reasoning provider and remains an
   ephemeral/provider-owned subprocess.
+- The addon is an Odoo application for Knowledge, Diagnostics and Configuration;
+  chat remains globally available from the systray.
 - The retired FastAPI/Uvicorn Assistant sidecar is not part of the supported product.
-- Knowledge and Diagnostics expose short customer-facing field help: editable inputs
-  explain what to provide, while host-calculated and read-only values explain what they
-  mean and what action, if any, the administrator should take.
 
-The optional P10 host broker is a separate machine privilege adapter for finite host
-operations. It is not the Assistant runtime, does not run the model and does not own
-conversation/turn state.
+The optional P10 host broker is a separate finite machine-privilege adapter. It is not
+the Assistant runtime and does not own conversation, turn or P11 import state.
 
 ## 2. Authority and effect model
 
@@ -70,10 +65,14 @@ verification / recovery / receipts
 public progress projection
 Evidence access / freshness / trust
 Knowledge ownership / indexing lifecycle
+artifact/model/mapping validation
+P11 durable import cursor + chunk receipts
 ```
 
 `CapabilityDefinition` remains the atomic executable unit. There is no arbitrary SQL,
-Python, shell, sudo or unrestricted ORM-method escape hatch.
+Python, shell, sudo or unrestricted ORM-method escape hatch. Fixed host-owned SQL may
+be used internally for bounded infrastructure such as queue claiming; it is never a
+model-authored SQL surface.
 
 Effects use:
 
@@ -89,10 +88,8 @@ discover / resolve
  -> receipt / recovery
 ```
 
-Approval is policy/autonomy-driven. Full-control may remove a redundant confirmation
-only for an operation already available to the effective user and allowed by trusted
-policy. It never enlarges Odoo or broker authority. Ambiguous effects are not blindly
-retried.
+Approval is policy/autonomy-driven but never enlarges Odoo, field or broker authority.
+Ambiguous effects are not blindly retried.
 
 ## 3. Durable agent runtime
 
@@ -110,31 +107,18 @@ The accepted P5/P6 runtime remains current:
 - immutable per-turn model/reasoning/autonomy/planning settings;
 - bounded exact resource references from verified effects for natural follow-ups;
 - structured prepare/preflight/execution failure feedback;
-- safe host-authored fallback when correction budgets end;
 - no replay of a completed or uncertain effect.
 
-P7-P10 extend this runtime rather than adding another scheduler, database or agent loop.
+P7-P11 extend this embedded runtime rather than adding another general agent service or
+database.
 
-## 4. Extension framework and product profiles
+## 4. Extension framework and profiles
 
-The live framework includes:
-
-```text
-CapabilityProvider
-SkillDefinition / SkillCatalog
-ContextProvider / ContextProviderCatalog
-EvidenceProvider / EvidenceProviderCatalog
-AssistantExtensionCatalog
-ProviderProfile
-EffectiveAssistantManifest
-Odoo-registry provider discovery/composition
-optional-provider failure isolation
-progressive-disclosure state model
-```
-
-Trusted installed extensions may contribute definitions, Skills, ContextProviders and
-EvidenceProviders. Every executable operation still resolves through the same
-registry, executor, policy and effective user.
+The live framework includes `CapabilityProvider`, Skills, ContextProviders,
+EvidenceProviders, `ProviderProfile`, `EffectiveAssistantManifest`, installed-addon
+provider discovery, optional-provider isolation and progressive disclosure.
+Every executable operation still resolves through the same registry, executor, policy
+and effective user.
 
 Product-facing profiles are exactly:
 
@@ -143,44 +127,17 @@ user
 technical
 ```
 
-Historical `business`/`developer` values are internal compatibility names only.
-Profile projection grants no permission, and autonomy is independent from technical
-reach.
+Autonomy is independent from technical reach.
 
 ## 5. Evidence and installation intelligence — accepted P8
 
-The shared non-executable Evidence layer provides:
-
-```text
-EvidenceKind / EvidenceTrust / EvidenceFreshness
-EvidenceAccessScope / EvidenceLocator
-EvidenceRef / EvidenceItem
-EvidenceSearchRequest / EvidenceSearchResult
-EvidenceProvider / EvidenceProviderStatus
-EvidenceProviderCatalog
-EvidenceRoutingPolicy
-EvidenceLedger / EvidenceLedgerSnapshot
-AssistantEvidenceDecisionEngine / EvidenceWorkingContext
-```
-
-Important properties:
-
-- bounded/canonical immutable JSON;
-- logical locators rather than model-authored arbitrary paths;
-- access scope, provenance, fingerprint and freshness;
-- secret redaction;
-- optional-provider failure isolation;
-- fetch-time access and freshness recheck;
-- question-sensitive routing rather than a rigid intent router;
-- retrieved text remains untrusted data and never grants authority.
-
-Current live providers include runtime inventory, installed-addon source/XML and
-configured-log Evidence. Installation-specific answers can use bounded current source
-and log evidence; mutable business truth remains live ORM authority.
+The shared Evidence layer is bounded, provenance-aware, freshness-aware, ACL-aware and
+non-executable. Current providers cover runtime inventory, installed-addon source/XML
+and configured logs. Retrieved text is untrusted data and cannot grant authority.
 
 ## 6. Company Knowledge — accepted P9
 
-P9 adds:
+P9 provides:
 
 ```text
 odoo.ai.knowledge.source
@@ -190,32 +147,18 @@ assistant.company_knowledge
 assistant.knowledge.ingest_attachment
 ```
 
-Source lifecycle is:
+Knowledge handles bounded PDF/TXT/Markdown/RST/CSV/JSON/XML ingestion and PostgreSQL
+lexical FTS with current ACL/provenance/fingerprint semantics. Chat attachments are
+short-lived current-turn artifacts until an authorized capability persists them.
+Embeddings/vector retrieval remain conditional on measured gain.
 
-```text
-uploaded -> processing -> indexed -> active
-                      \-> error
-```
+## 7. Technical and host operations — accepted P10
 
-The first pipeline deterministically handles bounded PDF, TXT, Markdown, RST, CSV, JSON and
-XML. PostgreSQL `simple` FTS plus a GIN expression index and bounded substring fallback
-form the lexical baseline. Company/private record rules apply before retrieval.
-Fingerprint/version changes make old references stale. Embeddings/vector search remain
-conditional on measured gain.
-
-## 7. P10 Technical and host operations — accepted
-
-ADR-024 is accepted. The first slice implements two Odoo-local Technical reads:
+P10 provides Technical-only local reads and optional broker-backed operations:
 
 ```text
 odoo.module.inspect
 postgres.health
-```
-
-It also implements an optional Linux AF_UNIX privilege broker and five broker-backed
-capabilities:
-
-```text
 odoo.config.inspect
 odoo.config.patch
 host.service.status
@@ -223,90 +166,114 @@ host.service.restart
 odoo.module.update
 ```
 
-The broker boundary provides:
+ADR-024 owns the privilege boundary: exact deployment logical targets, `SO_PEERCRED`,
+fixed argv, bounded request/receipt schemas, durable replay ledger, precondition/effect
+binding and explicit uncertain-state handling. Module update runs through the accepted
+external maintenance adapter rather than immediate upgrade inside the Assistant cron
+worker.
 
-- exact logical targets from deployment-owned policy;
-- bidirectional Linux `SO_PEERCRED` checks;
-- bounded versioned request/receipt schemas;
-- canonical args and EffectPlan binding fingerprints;
-- fixed-argv service operations with `shell=False`;
-- policy-bound module/database/runtime/UID/GID maintenance targets;
-- external transient systemd module update plus fresh-registry verification;
-- atomic config replacement, fsync and private backup;
-- a durable SQLite execution ledger;
-- terminal receipt replay for the exact request;
-- replay mismatch denial;
-- `uncertain` state for in-flight or post-dispatch transport/receipt loss;
-- sanitized structured output only.
+Not implemented by P10: module install/uninstall, repository/package promotion,
+generic shell fallback, secret reveal or arbitrary SQL/Python/sudo.
 
-Technical capabilities require `base.group_system`. User/non-technical accounts cannot
-discover or execute them even under full autonomy. Broker availability is an
-additional guard and never a permission source.
+## 8. Advanced imports/artifacts — P11 first slice implemented
 
-Effectful broker operations retain the existing PLAN lifecycle with HOST risk/effect,
-policy approval, preview, durable request binding, execute, verify and external
-recovery classification.
+P11 now has a first durable create-only CSV workflow. It deliberately does not turn a
+large file into hundreds or thousands of ordinary CRUD tool calls.
 
-### P10 explicit limits
-
-Not implemented:
+New durable models:
 
 ```text
-odoo.module.install/uninstall
-repository acquisition/promotion
-host package installation
-config rollback capability
-secret-value reveal
-generic command fallback
-arbitrary SQL/Python/shell/sudo
+odoo.ai.data.import.session
+odoo.ai.data.import.chunk
 ```
 
-Odoo module update is deliberately not called as an immediate ORM action from the
-Assistant cron worker. It runs in a separate transient systemd unit under the
-configured non-root identity and must pass a fresh-registry version check.
-
-The reference systemd broker unit must be adapted and tested against exact deployment
-paths. A disposable auxiliary service should be used for the first restart gate;
-support for restarting the Odoo service itself is not inferred without lifecycle
-reconciliation evidence.
-
-## 8. Validation truth
-
-Accepted P9 validation:
+New capabilities:
 
 ```text
-49 focused dependency-light tests
-25 focused Odoo tests
-focused HOOT + browser/asset smoke
-7/7 real Odoo/Codex Knowledge gates
+assistant.data_import.inspect_csv   READ
+assistant.data_import.start_csv     PLAN / policy-controlled effect
+assistant.data_import.status        READ
 ```
 
-P10 status:
+The flow is currently:
 
 ```text
-focused static/compile/lint                        PASS — bde508b
-dependency-light broker/client tests               PASS — 18 tests
-focused Odoo Technical/host tests                  PASS — 5 methods, 0 failures/errors
-broker deployment/systemd smoke                    PASS
-P10-REAL-PROFILE-DENIAL                            PASS
-P10-REAL-CONFIG-PATCH                              PASS
-P10-REAL-SERVICE-OPERATION                         PASS
-P10-REAL-POSTGRES-DIAGNOSTIC                       PASS
-P10-REAL-PRIVILEGE-BOUNDARY                        PASS
-P10-REAL-MODULE-UPDATE                             PASS
-P10 acceptance                                     COMPLETE / ACCEPTED
+current-turn CSV attachment
+ -> Odoo-native base_import preview / type + mapping suggestions
+ -> host-filter target model and direct writable scalar fields
+ -> explicit model-proposed column_index -> field map
+ -> host revalidation + artifact/model/mapping/row fingerprints
+ -> preview / policy / approval
+ -> durable import session
+ -> bounded background chunks under originating user, su=False
+ -> per-chunk created-record ids + receipt fingerprint
+ -> exact imported / rejected / remaining counters
 ```
 
-Use `research/P10_FOCUSED_VALIDATION_RUNBOOK.md`. Broad repository/addon/HOOT/Product
-Behavior regressions remain periodic debt unless an explicit gate or a focused failure
+The session copies the binary attachment before background execution, so expiry of the
+short-lived chat upload does not destroy queued work. The model only receives bounded
+artifact metadata/examples, not binary/base64 payloads.
+
+Current field scope is intentionally direct scalar create fields only:
+
+```text
+boolean / char / date / datetime / float / integer / monetary / selection / text
+```
+
+Relational paths, protected fields, external/database id upserts and arbitrary related
+record creation are not accepted in this slice.
+
+Chunk claiming uses `FOR UPDATE SKIP LOCKED` only against the host-owned Assistant
+session table. A chunk's business rows, cursor advance and durable receipt share one
+PostgreSQL transaction boundary: a pre-commit crash rolls them back together; a
+committed chunk is not blindly replayed.
+
+For a validation-invalid chunk, the declared first-slice behavior is whole-chunk
+rejection. Earlier committed chunks remain, the session becomes `partial` when
+appropriate, and later unprocessed rows remain visible as `remaining_rows`.
+
+Still deferred inside P11:
+
+```text
+XLS/XLSX/ODS durable sessions
+relational import paths
+external-id update/upsert
+row-level salvage inside a rejected chunk
+model-assisted row cleanup/enrichment and non-zero corrected_rows
+interactive remap/resume after validation rejection
+automatic final chat synthesis when background import completes
+cross-session semantic duplicate matching
+```
+
+## 9. Validation truth
+
+P10 is fully accepted on its immutable evidence.
+
+P11 current status:
+
+```text
+static/compile/lint                                      NOT EXECUTED
+addon install/update + security/XML load                 NOT EXECUTED
+focused Odoo TestPhase11DataImportSession                NOT EXECUTED — prepared 4 methods
+P11-REAL-CSV-IMPORT                                      NOT EXECUTED
+P11-REAL-LARGE-IMPORT                                    NOT EXECUTED
+P11-REAL-MAPPING-CORRECTION                              NOT EXECUTED
+P11-REAL-PARTIAL-INVALID                                 NOT EXECUTED
+P11-REAL-RESUME-NO-DUPLICATE                             NOT EXECUTED
+P11-REAL-IMPORT-RECEIPT                                  NOT EXECUTED
+P11 acceptance                                           NOT COMPLETE
+```
+
+Use `research/P11_FOCUSED_VALIDATION_RUNBOOK.md`. Broad repository/addon/HOOT/Product
+Behavior regressions remain periodic debt unless a focused failure or explicit gate
 requires them.
 
-## 9. Current follow-up scope
+## 10. Current follow-up scope
 
-The next roadmap work is Phase 11: inspect the current artifact/import seams and
-design the largest coherent durable `DataImportSession` slice before implementation.
+The immediate roadmap action is the focused P11 static/module/Odoo gate. Repair any
+failure before consuming the slice in real P11 gates. After the six real import gates,
+use their evidence to decide whether row-level correction/enrichment/remap is required
+before P11 acceptance.
 
-Other later work still includes richer citation navigation, durable Evidence-ledger
-reconnect restoration, masked/reveal secret UX, PDF/OCR/XLSX parsing, optional
-semantic retrieval, advanced imports, controlled source modification, additional
-surfaces and additional providers.
+Later phases still include controlled source modification, multimodal/web evidence,
+additional surfaces/automation and additional providers.
