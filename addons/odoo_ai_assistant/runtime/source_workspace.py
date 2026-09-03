@@ -146,7 +146,7 @@ class SourceWorkspaceStore:
     def workspace_root(self) -> Path:
         return self._workspace_root
 
-    def ensure(self) -> "SourceWorkspaceStore":
+    def ensure(self) -> SourceWorkspaceStore:
         self._workspace_root = _ensure_private_directory(self._workspace_root)
         return self
 
@@ -749,8 +749,8 @@ def _fsync_directory(path: Path) -> None:
 
 __all__ = [
     "FORMAT_VERSION",
-    "MAX_FILE_BYTES",
     "MAX_FILES",
+    "MAX_FILE_BYTES",
     "MAX_TOTAL_BYTES",
     "SourceFileEntry",
     "SourceWorkspaceError",

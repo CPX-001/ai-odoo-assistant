@@ -3,7 +3,9 @@ from __future__ import annotations
 from uuid import uuid4
 
 from odoo import Command
-from odoo.addons.odoo_ai_assistant.runtime.capabilities.contracts import CapabilityContext
+from odoo.addons.odoo_ai_assistant.runtime.capabilities.contracts import (
+    CapabilityContext,
+)
 from odoo.addons.odoo_ai_assistant.runtime.source_workspace import (
     SourceWorkspaceError,
     delete_installed_module_workspace,
