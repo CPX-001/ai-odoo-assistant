@@ -1,12 +1,12 @@
 # Architecture
 
 Current architecture for `CPX-001/ai-odoo-assistant`. Code plus accepted ADRs are
-authoritative. `CURRENT_STATE.md` summarizes the implementation and
-`research/EXECUTION_STATE.md` owns the roadmap cursor/validation debt.
+authoritative. `CURRENT_STATE.md` summarizes implementation and
+`research/EXECUTION_STATE.md` owns the roadmap cursor and validation debt.
 
-## 1. Deployment unit
+## 1. Deployment units
 
-The supported product is an Odoo 18 Community addon with an embedded agent runtime.
+The supported product is an Odoo 18 Community addon with an embedded agent runtime:
 
 ```text
 Browser / OWL
@@ -16,20 +16,34 @@ Browser / OWL
 Odoo 18 + odoo_ai_assistant
     |
     +-- Odoo PostgreSQL
-    +-- native ir.cron turn workers
+    +-- native ir.cron turn/Knowledge workers
     +-- provider-owned CODEX_HOME
-    +-- Codex App Server subprocess
+    +-- ephemeral Codex App Server subprocess
 ```
 
-The supported product requires no FastAPI/Uvicorn Assistant sidecar, second Assistant
-database, internal sidecar HTTP port or shared machine secret. The obsolete
-`auth="none"` inventory callback, addon-local machine-auth primitive and residual
-addon inventory service are removed.
+The supported product requires no Assistant HTTP sidecar, second Assistant database,
+internal sidecar port or shared machine secret.
 
-Future host-level privilege may require a narrow local broker. ADR-024 is proposed
-only; that broker must not become a general sidecar or passwordless-root Odoo process.
+Phase 10 adds an optional local machine adapter only when deployment-owned host
+privilege is required:
 
-## 2. Authority boundary
+```text
+Odoo EffectPlan
+    |
+    | bounded canonical request over AF_UNIX
+    v
+odoo-ai-host-broker
+    |
+    +-- deployment policy
+    +-- durable request/receipt ledger
+    +-- exact managed config/service target
+```
+
+The broker is not the Assistant runtime. It does not run the model, own conversation
+state or replace the Odoo queue. ADR-024 forbids turning it into a general sidecar,
+shell or passwordless-root Odoo process.
+
+## 2. Authority boundaries
 
 Odoo/host code owns:
 
@@ -48,32 +62,45 @@ audit/public progress projections
 scheduler/backpressure
 ```
 
-The model proposes. It cannot grant permissions, approve itself, reveal hidden tools
-or turn Evidence into authority.
+The optional broker owns only its finite privileged target boundary:
+
+```text
+caller UID policy
+broker peer identity
+operation and phase allowlist
+logical target -> exact path/service mapping
+request lifetime/size/binding validation
+host precondition checks
+effect request replay ledger
+sanitized receipt/recovery classification
+```
+
+The model proposes. It cannot grant permissions, approve itself, reveal hidden tools,
+turn Evidence into authority, create a broker target or supply a command/path.
 
 Normal business operations use the effective Odoo `Environment` with `su=False`.
-Narrow host facts such as the installed-module set may use Odoo-owned internal host
-metadata helpers; that does not create a generic sudo/business-record path and the
-resulting Evidence is still bound to the requesting user/company scope.
+Technical profile and autonomy are independent. Full autonomy cannot make a User
+profile Technical or widen broker policy.
 
 ## 3. Durable turn runtime
 
-A submitted message is persisted before long-running provider work. The current
-accepted P5/P6 path provides:
+A submitted message is persisted before long-running provider work. The accepted
+P5/P6 path provides:
 
 - queued/running/approval/terminal states;
-- lease/attempt/cancellation/stale recovery;
+- lease, attempt, cancellation and stale recovery;
 - native cron claim workers and bounded concurrency;
 - one active causal turn per conversation;
-- cross-conversation parallelism/fairness;
+- cross-conversation parallelism and fairness;
 - immutable per-turn model/reasoning/autonomy/planning settings;
-- persisted public/live events and reconnectable status.
+- persisted public/live events and reconnectable status;
+- a durable write barrier and recovery-unit checkpoints.
 
 A browser connection does not own the server turn.
 
 ## 4. Provider-neutral agent loop
 
-`AgentTurnService` and the provider-neutral decision layer operate conceptually as:
+`AgentTurnService` and the provider-neutral decision layer operate as:
 
 ```text
 provider decision
@@ -90,8 +117,7 @@ schema, budgets, policy and effect state.
 host-authorized effect proposal. Neither is private chain-of-thought.
 
 Codex-specific code stays below this boundary and owns App Server transport,
-Structured Outputs translation, provider events/errors, streaming deltas and
-steer/interrupt mechanics.
+Structured Outputs translation, provider events/errors, streaming and interruption.
 
 ## 5. Capability architecture
 
@@ -105,19 +131,18 @@ CapabilityProvider
       -> EvidenceProvider selectors
 ```
 
-The current provider API is versioned (`CAPABILITY_PROVIDER_API_VERSION = "1"`).
-Core provider/resource namespaces are reserved. API mismatch, loader/collision,
-dependency/cycle, guard and Evidence failures are isolated to attributable optional
-providers; required authority fails closed.
+The provider API is versioned. Core namespaces are reserved. API mismatch,
+loader/collision, dependency/cycle, guard and Evidence failures are isolated to
+attributable optional providers; required authority fails closed.
 
-The same registry/executor is the intended authority source for future chat,
+The same registry/executor is the intended authority source for chat, future
 automation, AI-field and MCP projections. No parallel tool registry is introduced.
 
 There is no arbitrary SQL, Python, shell, sudo or unrestricted ORM-method surface.
 
 ## 6. Context architecture
 
-Turns start with a small bounded base derived from host state:
+Turns start with a small bounded base:
 
 ```text
 user/company/lang/tz
@@ -127,15 +152,15 @@ effective Assistant manifest
 immutable turn settings
 ```
 
-`ContextProvider`s add just-in-time contextual data selected by active Skills. Their
-content is deeply immutable untrusted data and cannot change permissions/policy/tool
-authority.
+`ContextProvider`s add just-in-time data selected by active Skills. Their content is
+deeply immutable untrusted contextual data and cannot change permissions, policy or
+tool authority.
 
 Global installation knowledge is not dumped into every prompt.
 
-## 7. Evidence architecture
+## 7. Evidence and Knowledge architecture
 
-P8 introduces a shared non-executable Evidence layer:
+Evidence is non-executable:
 
 ```text
 EvidenceProvider
@@ -148,22 +173,14 @@ EvidenceProvider
       bounded selected refs/items for continuation/citations
 ```
 
-`EvidenceProviderCatalog` handles availability/search/fetch isolation and
-`EvidenceRoutingPolicy` prioritizes source classes according to the question without
-becoming a rigid intent router. Generic/social turns can select no provider.
+Search/fetch rechecks access and freshness. Retrieved prompt-injection text stays in
+the untrusted-data partition.
 
-Evidence is always data. Search/fetch access is checked against the current context;
-fetch revalidates access and freshness. Retrieved prompt-injection text remains in the
-untrusted-data partition.
+Current providers cover runtime inventory, installed-addon source/XML, configured
+Odoo logs and company Knowledge. Live Odoo ORM remains authority for mutable business
+truth. Company/private source rules are enforced before lexical retrieval.
 
-The first real provider, `assistant.runtime_inventory`, exposes bounded current
-installation facts (release, sanitized DB identity, installed modules, registry
-fingerprint). The installed module set comes from Odoo's own narrow host metadata
-primitive so normal users do not need `ir.module.module` read ACL. It exposes no
-business records, addon roots or credentials. Mutable business truth remains live ORM
-authority.
-
-The first live retrieval seam is implemented:
+The live decision seam is:
 
 ```text
 AssistantExtensionDecisionEngine
@@ -175,28 +192,12 @@ AssistantExtensionDecisionEngine
  -> reasoning provider
 ```
 
-The current live ledger is turn-scoped. Durable reconnect restoration and richer
-end-user citation rendering are not claimed yet.
+Generic/social turns may retrieve nothing.
 
-See `EVIDENCE_ARCHITECTURE.md`.
-
-## 8. Source scope
-
-P8 source intelligence must prefer the current installation and avoid accidental
-contamination from retired implementation lineages.
-
-Default current sources include the active addon, installed/trusted addons, Odoo 18
-core/addons and current tests when behavior evidence is requested. Historical
-`service/`, `installer/`, root migrations, old task packets and evidence archives are
-excluded from normal current context by policy, not deleted.
-
-See `CONTEXT_SOURCE_POLICY.md` and
-`addons/odoo_ai_assistant/runtime/context_source_policy.json`.
-
-## 9. Effective Assistant manifest
+## 8. Effective Assistant manifest
 
 `EffectiveAssistantManifest` is a host-derived self-description, not an authority
-registry. It projects sanitized effective state such as:
+registry. It projects:
 
 ```text
 provider profile/features
@@ -208,11 +209,9 @@ EvidenceProvider IDs
 configuration/availability summaries
 ```
 
-Retrieved Evidence content, secrets and host-only details do not belong in the
-manifest. Settings/admin projection derives the same effective available Evidence
-provider IDs rather than maintaining a separate list.
+Retrieved content, secrets and host-only broker details do not belong in the manifest.
 
-## 10. Product profiles and autonomy
+## 9. Product profiles and autonomy
 
 Product-facing profile values are exactly:
 
@@ -221,44 +220,96 @@ user
 technical
 ```
 
-Internal historical `business`/`developer` names may map to these two values for
-compatibility. The future Technical/host broker is an execution boundary, not another
-human profile.
+Historical internal `business`/`developer` names may map to these values. The broker
+is a machine execution boundary, not a third user profile.
 
-Autonomy is independent of technical reach. Full-control can suppress redundant
-confirmation only when trusted policy allows an effect the effective user is already
-permitted to perform. It cannot expand Odoo authority.
+Autonomy is independent of technical reach. It may suppress a redundant confirmation
+only when trusted policy allows an operation already available to the effective user.
+It cannot expand ACLs or broker targets.
 
-## 11. Effect lifecycle and recovery
+## 10. Effect lifecycle and recovery
 
-Current bounded effects use:
+Effects use:
 
 ```text
 typed proposals
- -> prepare/preview + preconditions
+ -> preview + preconditions
  -> policy / approval when required
  -> revalidate binding/preconditions
  -> recovery-unit checkpoint / write barrier
- -> execute as effective user
+ -> execute
  -> verify
  -> receipt / EffectJournal / recovery state
 ```
 
-Recovery semantics distinguish Odoo-atomic, segmented and external/uncertain units.
-Persisted in-flight effects are never blindly replayed and ambiguous writes are not
-auto-retried.
+Recovery distinguishes Odoo-atomic, segmented and external/uncertain units. Persisted
+in-flight effects are never blindly replayed.
+
+For broker-backed effects, the request additionally binds:
+
+```text
+turn + conversation + Odoo uid
+hashed database identity
+capability + plan step
+canonical args
+plan binding fingerprint
+preview precondition fingerprint
+```
+
+The broker stores an effect request as `running` before its host barrier. Exact
+terminal replay returns the stored receipt; changed replay is denied; an unresolved
+running request is uncertain.
+
+Transport/framing/receipt loss after effect dispatch is `host_effect_uncertain`, not a
+safe-to-retry broker outage.
+
+## 11. P10 Technical/host architecture
+
+The implemented first slice separates operations that need no privilege:
+
+```text
+odoo.module.inspect
+postgres.health
+```
+
+from operations that cross the machine boundary:
+
+```text
+odoo.config.inspect
+odoo.config.patch
+host.service.status
+host.service.restart
+```
+
+All are Technical-only. Broker-backed capabilities also require a live configured
+socket and final peer/policy validation.
+
+The Linux reference adapter provides:
+
+- AF_UNIX one-request/one-receipt framing;
+- bidirectional `SO_PEERCRED`;
+- secure policy and executable owner/mode checks;
+- logical config/service targets;
+- fixed-argv `systemctl`, `shell=False`;
+- bounded parsed output;
+- atomic config replace, fsync and private backup;
+- durable SQLite replay ledger;
+- explicit `none | applied | unknown` effect state.
+
+Effectful module install/update/uninstall is not implemented. Odoo 18 immediate module
+maintenance must not execute inside the Assistant cron worker; a separate lifecycle-
+safe maintenance adapter is required.
+
+Repository/package promotion and a generic command fallback are also absent.
 
 ## 12. Public activity and streaming
 
 Public progress is a sanitized projection of host-observed work, not model private
 reasoning. Persisted activity, TaskPlan/reasoning summary and answer streaming are
-separate data surfaces.
+separate surfaces.
 
-The browser currently consumes authenticated Odoo polling/live cursors. Polling vs
-bus/SSE remains an optimization; durable Odoo state is authoritative.
-
-Raw prompts, private reasoning, sensitive tool arguments/results and credentials must
-not be emitted as public progress.
+Raw prompts, private reasoning, sensitive arguments/results, broker policy, config
+secrets and credentials must not be emitted as public progress.
 
 ## 13. Observability
 
@@ -273,26 +324,23 @@ effect preview / approval wait / execute / verify
 public-delivery checkpoint
 ```
 
-Default telemetry is metadata/timing/outcome/counts/bytes, not full sensitive
-content. Detailed diagnostic content requires explicit authorization, redaction,
-bounds and retention policy.
-
-No second tracing database or mandatory sidecar is introduced.
+Default telemetry is metadata/timing/outcome/counts/bytes, not full sensitive content.
+The P10 broker adds sanitized request/receipt identity and outcome boundaries; it does
+not become a second tracing warehouse.
 
 ## 14. Secret handling
 
-Secret-looking values in Evidence/metadata are redacted by bounded normalization.
-A secret pasted by the user is data, not authority, and should not automatically
-block otherwise safe work. Derived traces/Evidence/progress should avoid reproducing
-it and the user should be warned without unnecessary re-emission.
+Secret-looking values in Evidence/metadata are redacted. A secret pasted by the user
+is data, not authority.
 
-Assistant-presented secrets require a dedicated masked/copy/reveal UI before that
-behavior can be claimed complete.
+The first P10 config adapter denies secret-like option names even if accidentally
+allowlisted. Assistant-presented secrets require a dedicated masked/copy/reveal UI
+before that behavior can be claimed.
 
 ## 15. Module/domain architecture
 
-The current core manifest still depends on `sale` and `account`. P7 makes future
-Odoo-native domain/link addons possible:
+The core manifest still depends on `sale` and `account`. P7 permits future Odoo-native
+link/domain addons:
 
 ```text
 odoo_ai_assistant
@@ -301,53 +349,52 @@ odoo_ai_assistant_account
 ...
 ```
 
-This split is not performed merely for aesthetics. It must preserve one customer
-product/install experience and be proven with clean install/update/uninstall tests.
-Odoo's `auto_install` link-module pattern is the preferred reference where correct.
+A split must preserve one customer install experience and pass clean
+install/update/uninstall tests. It is not performed for aesthetics.
 
-## 16. Future repository/host operations
+## 16. Repository and maintenance direction
 
-The direction is **discovery + bounded Evidence + typed promotion**, not shell or ORM
+The direction is discovery + bounded Evidence + typed promotion, not shell or ORM
 escape hatches.
 
-A future `ModuleAcquisitionSession` can resolve arbitrary candidate repositories,
-perform bounded web/repo/manifest/license/dependency/static preflight, assess
-compatibility/risk, then select a policy-driven direct or staged path. Allowlists may
-be trust signals/customer policy but are not universal product requirements.
+A future `ModuleAcquisitionSession` may resolve arbitrary candidate repositories,
+perform bounded manifest/license/dependency/static preflight and choose a policy-
+driven direct or staged path.
 
-Operations that truly cross the OS/service/filesystem privilege boundary belong
-behind the minimal ADR-024 broker with fixed schemas, managed roots/targets,
-request binding, time/output bounds, receipts and recovery.
+Any operation crossing service/filesystem privilege uses ADR-024-style fixed schemas,
+managed targets, request binding, time/output bounds, receipts and recovery.
+
+Odoo module maintenance additionally needs a worker/service lifecycle adapter that
+can verify a fresh registry after restart. It remains the blocking implementation for
+full P10 acceptance.
 
 ## 17. Persistence
 
-Operational state stays Odoo-native:
+Operational state remains Odoo-native:
 
 - conversations/messages/turns;
 - queue/lease/recovery;
 - working items and public events;
 - effect plans/receipts/EffectJournal;
 - configuration;
-- bounded Evidence ledger/state when continuation requires durability.
+- bounded Evidence state when continuation requires durability.
 
-No P8 design restores the retired Assistant SQLAlchemy database.
+The broker persists only its small privileged request/receipt ledger and private
+operation backups. It does not restore the retired Assistant SQLAlchemy database.
 
 ## 18. Validation architecture
 
-Validation is incremental and evidence-based:
+Validation is incremental:
 
 ```text
 changed contract
  -> focused unit/contract tests
- -> directly affected Odoo/browser boundary
- -> named real gates when required
- -> periodic full regression only when the runbook/user requires it
+ -> directly affected Odoo/broker boundary
+ -> named real gates
+ -> periodic full regression only when required
 ```
 
-P7 and P8 are accepted. P8's provider-neutral Evidence projection, runtime inventory,
-installed-addon source/XML provider, configured-log provider and browser-safe
-citations passed 61 focused dependency-light tests, 20 focused Odoo tests and all six
-real Evidence gates. Broad regression suites remain explicit periodic debt.
-
-See `research/P8_FOCUSED_VALIDATION_RUNBOOK.md` and
+P0-P9 are accepted. P10's first slice is implemented but its focused and real gates
+remain unexecuted. `P10-REAL-MODULE-UPDATE` is blocked until the maintenance adapter
+exists. See `research/P10_FOCUSED_VALIDATION_RUNBOOK.md` and
 `research/EXECUTION_STATE.md`.
