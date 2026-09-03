@@ -32,7 +32,7 @@ P9 implementation and validation runbook are recorded in
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Supported product: `addons/odoo_ai_assistant`.
-- Current addon manifest version: `18.0.13.21.0`.
+- Current addon manifest version: `18.0.13.23.0`.
 - Current manifest dependencies remain `account`, `base`, `sale`, `web`.
 - Runtime is embedded in Odoo; the browser talks only to authenticated Odoo routes.
 - Odoo/PostgreSQL own conversation, turn, queue, effect/recovery, Evidence and Knowledge state.
@@ -40,6 +40,9 @@ P9 implementation and validation runbook are recorded in
 - Business operations run as the effective Odoo user with `su=False`.
 - Codex App Server is the current concrete reasoning provider and remains an ephemeral/provider-owned runtime boundary.
 - The retired FastAPI/Uvicorn Assistant sidecar is not part of the supported product.
+- Administrators use a standalone `AI Assistant` application menu for Knowledge,
+  Diagnostics and Configuration. Operational surfaces are not hidden below Odoo's
+  inline General Settings navigation.
 
 The obsolete sidecar-testing GitHub Actions workflow, the `auth="none"` inventory
 controller, its addon-local machine-authentication primitive and the residual

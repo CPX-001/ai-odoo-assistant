@@ -114,6 +114,34 @@ def test_account_ui_polls_and_settings_target_exists_in_odoo_18() -> None:
     assert 'addEventListener?.("visibilitychange"' in static_source
 
 
+def test_admin_surfaces_live_under_a_standalone_assistant_app_menu() -> None:
+    navigation = ElementTree.parse(
+        ADDON_ROOT / "views/assistant_navigation_views.xml"
+    ).getroot()
+    root_menu = navigation.find(".//menuitem[@id='menu_odoo_ai_assistant_root']")
+    assert root_menu is not None
+    assert root_menu.get("parent") is None
+    assert root_menu.get("web_icon") == (
+        "odoo_ai_assistant,static/description/icon.svg"
+    )
+
+    expected_children = {
+        "views/knowledge_views.xml": "menu_odoo_ai_knowledge_source",
+        "views/assistant_diagnostics_views.xml": (
+            "menu_odoo_ai_assistant_diagnostics"
+        ),
+        "views/res_config_settings_views.xml": "menu_odoo_ai_assistant_settings",
+    }
+    for relative_path, menu_id in expected_children.items():
+        tree = ElementTree.parse(ADDON_ROOT / relative_path)
+        child = tree.find(f".//menuitem[@id='{menu_id}']")
+        assert child is not None
+        assert child.get("parent") == "menu_odoo_ai_assistant_root"
+
+    manifest = (ADDON_ROOT / "__manifest__.py").read_text(encoding="utf-8")
+    assert '"application": True' in manifest
+
+
 def test_internal_endpoint_and_secret_are_not_duplicated_in_views() -> None:
     source = "\n".join(
         path.read_text(encoding="utf-8") for path in (ADDON_ROOT / "views").glob("*.xml")

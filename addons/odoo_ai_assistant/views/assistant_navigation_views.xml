@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem
+        id="menu_odoo_ai_assistant_root"
+        name="AI Assistant"
+        sequence="75"
+        web_icon="odoo_ai_assistant,static/description/icon.svg"
+        groups="base.group_system"
+    />
+</odoo>

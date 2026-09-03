@@ -38,4 +38,22 @@
             </xpath>
         </field>
     </record>
+
+    <record id="action_odoo_ai_assistant_settings" model="ir.actions.act_window">
+        <field name="name">AI Assistant Configuration</field>
+        <field name="path">ai-assistant-settings</field>
+        <field name="res_model">res.config.settings</field>
+        <field name="view_mode">form</field>
+        <field name="target">inline</field>
+        <field name="context">{'module': 'odoo_ai_assistant', 'bin_size': False}</field>
+    </record>
+
+    <menuitem
+        id="menu_odoo_ai_assistant_settings"
+        name="Configuration"
+        parent="menu_odoo_ai_assistant_root"
+        action="action_odoo_ai_assistant_settings"
+        sequence="90"
+        groups="base.group_system"
+    />
 </odoo>

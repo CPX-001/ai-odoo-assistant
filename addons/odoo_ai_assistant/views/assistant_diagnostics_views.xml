@@ -49,10 +49,10 @@
 
     <menuitem
         id="menu_odoo_ai_assistant_diagnostics"
-        name="AI Assistant"
-        parent="base.menu_administration"
+        name="Diagnostics"
+        parent="menu_odoo_ai_assistant_root"
         action="action_odoo_ai_assistant_diagnostics"
-        sequence="95"
+        sequence="20"
         groups="base.group_system"
     />
 </odoo>

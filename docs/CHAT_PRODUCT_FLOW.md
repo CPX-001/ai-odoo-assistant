@@ -40,6 +40,11 @@ OWL observes Odoo status + live cursor
 
 The browser never calls Codex directly and never owns provider credentials, provider turn/thread IDs or capability authority.
 
+Administrators reach the product's operational surfaces from the standalone
+`AI Assistant` application menu: `Knowledge`, `Diagnostics` and `Configuration`.
+The chat remains globally available from the systray; Knowledge and diagnostics are
+not buried as sibling items of Odoo's inline General Settings screen.
+
 ## 2. Submit is short and durable
 
 Submitting a new ordinary message remains a short Odoo request:
