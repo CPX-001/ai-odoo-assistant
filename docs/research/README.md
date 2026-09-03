@@ -19,12 +19,9 @@ Unexecuted validation is never PASS.
 ## Current cursor
 
 ```text
-P0-P10 COMPLETE / ACCEPTED
-P10 latest accepted phase at bde508b737c132140e237cdfde31aee9b37eca5f
-P11 ADVANCED IMPORTS CSV CORE IMPLEMENTED
-P11 DETERMINISTIC CLEANUP + REPAIR/RESUME IMPLEMENTED
-P11 FOCUSED + REAL VALIDATION PENDING
-P11 NOT ACCEPTED
+P0-P11 COMPLETE / ACCEPTED
+P11 accepted through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
+P12 CONTROLLED SOURCE-CODE MODIFICATION ELIGIBLE / NOT STARTED
 ```
 
 Use `EXECUTION_STATE.md` for exact lineage, blockers, gates and next action.
@@ -37,6 +34,7 @@ Use `EXECUTION_STATE.md` for exact lineage, blockers, gates and next action.
 | `P11_ADVANCED_IMPORTS_FIRST_SLICE.md` | Durable CSV artifact/staging/chunk contract. |
 | `P11_IMPORT_CLEANUP_REPAIR_SLICE.md` | Deterministic cleanup and rejected-window repair/resume contract. |
 | `P11_FOCUSED_VALIDATION_RUNBOOK.md` | Focused and six HARD real P11 gates. |
+| `evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md` | P11 focused and real acceptance evidence. |
 | `P10_HOST_OPERATIONS_FIRST_SLICE.md` | Accepted Technical/broker implementation record. |
 | `P10_FOCUSED_VALIDATION_RUNBOOK.md` | Executed P10 validation contract. |
 | `P9_KNOWLEDGE_FIRST_SLICE.md` | Accepted P9 Knowledge record. |
@@ -89,19 +87,18 @@ execution authority.
 
 ## Validation truth
 
-P10 acceptance evidence remains immutable at:
+The latest acceptance evidence is:
 
-`evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`
+`evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`
 
-P11 currently has 8 prepared focused Odoo methods across:
+P11 executed 8 focused Odoo methods across:
 
 ```text
 TestPhase11DataImportSession
 TestPhase11DataImportCleanupRepair
 ```
 
-None has been executed in the supported Odoo environment in this ChatGPT run. The six
-HARD real gates are also unexecuted:
+All eight passed on Odoo 18, and all six HARD real gates passed:
 
 ```text
 P11-REAL-CSV-IMPORT
@@ -124,6 +121,7 @@ P7 acceptance evidence/phase7/2026-09-02/P7-ACCEPTANCE-092ac57.md
 P8 acceptance evidence/phase8/2026-09-02/P8-ACCEPTANCE-e370af8.md
 P9 acceptance evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md
 P10 acceptance evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
+P11 acceptance evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md
 ```
 
 Historical blocker/focused records are not rewritten after later acceptance.

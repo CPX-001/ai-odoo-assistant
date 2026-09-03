@@ -6,19 +6,16 @@ direction and validation evidence.
 ## Current formal state
 
 ```text
-P0-P10 COMPLETE / ACCEPTED
-P11 ADVANCED IMPORTS CSV CORE IMPLEMENTED
-P11 CLEANUP + REJECTED-WINDOW REPAIR IMPLEMENTED
-P11 FOCUSED + REAL VALIDATION PENDING
-P11 NOT ACCEPTED
+P0-P11 COMPLETE / ACCEPTED
+P11 accepted through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
+P12 CONTROLLED SOURCE-CODE MODIFICATION ELIGIBLE / NOT STARTED
 ```
 
-P10 remains the latest accepted phase through
-`bde508b737c132140e237cdfde31aee9b37eca5f`; its evidence is
-[`research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`](research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md).
+P11 is the latest accepted phase. Its evidence is
+[`research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`](research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md).
 
 P11 now has executable durable CSV staging/chunks, deterministic cleanup, rejected-row
-inspection and explicit repair/resume. No P11 gate is represented as PASS yet. The
+inspection and explicit repair/resume. All focused and six real HARD gates passed. The
 exact cursor is [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
 
 ## Primary reading path
@@ -32,7 +29,7 @@ exact cursor is [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
 7. [`adr/ADR-024-technical-host-privilege-broker.md`](adr/ADR-024-technical-host-privilege-broker.md) — accepted P10 host boundary.
 8. [`research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md`](research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md) — durable CSV staging/chunk contract.
 9. [`research/P11_IMPORT_CLEANUP_REPAIR_SLICE.md`](research/P11_IMPORT_CLEANUP_REPAIR_SLICE.md) — deterministic cleanup + repair/resume contract.
-10. [`research/P11_FOCUSED_VALIDATION_RUNBOOK.md`](research/P11_FOCUSED_VALIDATION_RUNBOOK.md) — immediate focused and real P11 gates.
+10. [`research/P11_FOCUSED_VALIDATION_RUNBOOK.md`](research/P11_FOCUSED_VALIDATION_RUNBOOK.md) — executed focused and real P11 gates.
 11. [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) — exact roadmap cursor.
 
 ## Architecture at a glance

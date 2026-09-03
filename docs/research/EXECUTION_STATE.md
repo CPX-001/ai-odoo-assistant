@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 69
+State format: 70
 Updated: 2026-09-03
 
 ## Accepted lineage
@@ -13,26 +13,27 @@ P7 final acceptance through 092ac57fe58a3a36765b115e78b2eca687f5dbbc
 P8 final acceptance through e370af8acb7df175c0a90c8e17520c8576b4c6ce
 P9 final acceptance through 77d470febf67ddee46562907718dc47e975922bb
 P10 final acceptance through bde508b737c132140e237cdfde31aee9b37eca5f
+P11 final acceptance through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
 ```
 
-P10 remains the latest accepted phase. P11 core implementation is present on `main`
-but has no focused or real PASS evidence yet.
+P11 is the latest accepted phase. P12 is eligible but has no implementation or PASS
+claim yet.
 
 ## Current cursor
 
 ```text
-phase: 11
-phase_name: advanced imports and artifact workflows
-active_slice: P11-ADVANCED-IMPORTS-CORE
-slice_state: IMPLEMENTED_VALIDATION_PENDING
-current_gate_type: HARD_FOCUSED_AND_REAL
-blocking_implementation: none for the bounded create-only CSV core; wider spreadsheet/relational/upsert breadth remains explicitly deferred
-blocking_validation: focused static/module/Odoo validation and all six P11 HARD real gates remain unexecuted
-latest_accepted_evidence: docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
-latest_phase_acceptance: docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
+phase: 12
+phase_name: controlled source-code modification
+active_slice: P12.1-BOUNDED-WORKSPACE-SOURCE-ROOTS
+slice_state: READY_NOT_STARTED
+current_gate_type: HARD_AUTHORITY_AND_DESIGN
+blocking_implementation: P12 has not started; no source-edit capability, patch/deploy path or new privilege grant exists
+blocking_validation: none for entering P12; every P12 implementation slice must define and pass its own focused gates before the five named real gates
+latest_accepted_evidence: docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md
+latest_phase_acceptance: docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md
 latest_implementation_record: docs/research/P11_IMPORT_CLEANUP_REPAIR_SLICE.md
-latest_validation_record: docs/research/P11_FOCUSED_VALIDATION_RUNBOOK.md
-next_action: execute the focused P11 static/module/Odoo gate, repair any failures, then execute P11-REAL-CSV-IMPORT, LARGE-IMPORT, MAPPING-CORRECTION, PARTIAL-INVALID, RESUME-NO-DUPLICATE and IMPORT-RECEIPT before accepting P11
+latest_validation_record: docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md
+next_action: begin P12.1 by specifying bounded workspace/source roots, identities, fingerprints and the no-production-mutation privilege boundary before exposing any source-edit capability
 ```
 
 ## P11 implementation lineage
@@ -49,6 +50,8 @@ a0868240865b508426c949d10a1299f41236771a  cleanup/repair capability surface
 f750c76352c3ccbce3420475325295bd2cb4aaec  focused cleanup/repair tests
 866e956ba793426b71fddf3b7730320705fc9d41  register focused repair test class
 2ff209c9f7dc9ccd8ec1729ac2d04e6ceb587714  addon version 18.0.13.30.0
+36d52ec07cd48a1402a0730502ff641e10407d07  validation repairs: persisted mapping, nullable empty receipts and flushed worker claim
+72b4b826bddffc20f99f5cd72f14ed95111eab5c  reproducible real Odoo/Codex P11 gate runner
 ```
 
 ## Implemented P11 core
@@ -119,35 +122,35 @@ These are explicit scope boundaries, not hidden claims. The current safe CSV cor
 intended to satisfy the P11 product goal unless real HARD gates demonstrate that one
 of these broader features is required.
 
-## P11 validation status
+## P11 validation and acceptance
 
 ```text
-static/compile/lint                                      NOT EXECUTED
-addon install/update + security/XML/model load           NOT EXECUTED
-focused TestPhase11DataImportSession                     NOT EXECUTED — prepared 4 methods
-focused TestPhase11DataImportCleanupRepair               NOT EXECUTED — prepared 4 methods
-P11-REAL-CSV-IMPORT                                      NOT EXECUTED
-P11-REAL-LARGE-IMPORT                                    NOT EXECUTED
-P11-REAL-MAPPING-CORRECTION                              NOT EXECUTED
-P11-REAL-PARTIAL-INVALID                                 NOT EXECUTED
-P11-REAL-RESUME-NO-DUPLICATE                             NOT EXECUTED
-P11-REAL-IMPORT-RECEIPT                                  NOT EXECUTED
-P11 acceptance                                           NOT COMPLETE
+static/compile/lint                                      PASS
+addon install/update + security/XML/model load           PASS
+focused TestPhase11DataImportSession                     PASS — 4 methods
+focused TestPhase11DataImportCleanupRepair               PASS — 4 methods
+P11-REAL-CSV-IMPORT                                      PASS
+P11-REAL-LARGE-IMPORT                                    PASS — 1,200 rows / 6 x 200
+P11-REAL-MAPPING-CORRECTION                              PASS
+P11-REAL-PARTIAL-INVALID                                 PASS
+P11-REAL-RESUME-NO-DUPLICATE                             PASS
+P11-REAL-IMPORT-RECEIPT                                  PASS
+P11 acceptance                                           COMPLETE / P12 ELIGIBLE
 ```
 
-Use `docs/research/P11_FOCUSED_VALIDATION_RUNBOOK.md`. Repository inspection, prepared
-tests or author-side reasoning are not PASS evidence.
+Immutable execution detail is in
+`docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`. The checked-in
+real runner is `tests/e2e/p11_real_import_gate.py`.
 
-## P10 accepted baseline
+## P11 accepted baseline
 
-P10 remains accepted on the immutable evidence at:
+P11 is accepted on the immutable evidence at:
 
-`docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`
+`docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`
 
-Its focused Technical/host tests, broker smoke and applicable real
-profile/config/service/PostgreSQL/privilege/module-update gates are recorded PASS in
-that evidence. P10 command-sandbox/approval gates remain NOT APPLICABLE because no
-generic command fallback shipped.
+P10 remains accepted at its earlier evidence anchor. P11 validation covered the exact
+focused Odoo classes plus all six mandatory real attached-file/import/recovery gates.
+The explicit CSV create-only breadth boundary remains in force.
 
 ## Periodic validation debt
 
@@ -192,7 +195,8 @@ docs/research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md
 docs/research/P11_IMPORT_CLEANUP_REPAIR_SLICE.md
 docs/research/P11_FOCUSED_VALIDATION_RUNBOOK.md
 docs/research/REAL_ENV_VALIDATION_PROTOCOL.md
-docs/research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md
+docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md
+docs/research/AGENTIC_PRODUCT_EVOLUTION_PLAYBOOK.md#phase-12
 ```
 
 Older phase narratives and immutable proof remain historical evidence rather than the

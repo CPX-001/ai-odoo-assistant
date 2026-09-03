@@ -7,13 +7,13 @@ For the exact roadmap cursor and validation truth use
 ## Accepted lineage
 
 ```text
-P0-P10 COMPLETE / ACCEPTED
-P10 accepted at bde508b737c132140e237cdfde31aee9b37eca5f
-P11 ADVANCED IMPORTS CORE IMPLEMENTED / VALIDATION PENDING
+P0-P11 COMPLETE / ACCEPTED
+P11 accepted through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
+P12 CONTROLLED SOURCE-CODE MODIFICATION ELIGIBLE / NOT STARTED
 ```
 
-P10 remains the latest accepted phase. P11 code and prepared tests are not PASS
-evidence.
+P11 is the latest accepted phase. Its focused and six real HARD gates are recorded in
+`research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`.
 
 Current P11 records:
 
@@ -27,7 +27,7 @@ research/P11_FOCUSED_VALIDATION_RUNBOOK.md
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Supported addon: `addons/odoo_ai_assistant`.
-- Current addon version: `18.0.13.31.0`.
+- Current addon version: `18.0.13.32.0`.
 - Dependencies: `account`, `base`, `base_import`, `sale`, `web`.
 - Runtime is embedded in Odoo; the browser talks only to authenticated Odoo routes.
 - Odoo/PostgreSQL own conversations, turns, effects, recovery, Evidence, Knowledge and
@@ -119,7 +119,7 @@ request/receipts, fixed argv, durable replay ledger, explicit uncertainty and th
 external lifecycle-safe module-update adapter. Generic shell, module install/uninstall,
 repository/package promotion and secret reveal are not implied.
 
-## 6. Advanced imports/artifacts — P11 implemented core
+## 6. Advanced imports/artifacts — accepted P11
 
 P11 now implements a durable create-only CSV workflow rather than decomposing a large
 file into hundreds or thousands of ordinary CRUD tool calls.
@@ -226,25 +226,25 @@ These are deferred breadth decisions, not missing authority shortcuts.
 
 ## 7. Validation truth
 
-P10 remains accepted on immutable evidence.
+P10 remains accepted on its immutable evidence. P11 is accepted through `72b4b82`.
 
-P11 is currently:
+P11 validation:
 
 ```text
-static/compile/lint                                      NOT EXECUTED
-addon install/update + security/XML/model load           NOT EXECUTED
-TestPhase11DataImportSession                             NOT EXECUTED — 4 prepared methods
-TestPhase11DataImportCleanupRepair                       NOT EXECUTED — 4 prepared methods
-P11-REAL-CSV-IMPORT                                      NOT EXECUTED
-P11-REAL-LARGE-IMPORT                                    NOT EXECUTED
-P11-REAL-MAPPING-CORRECTION                              NOT EXECUTED
-P11-REAL-PARTIAL-INVALID                                 NOT EXECUTED
-P11-REAL-RESUME-NO-DUPLICATE                             NOT EXECUTED
-P11-REAL-IMPORT-RECEIPT                                  NOT EXECUTED
-P11 acceptance                                           NOT COMPLETE
+static/compile/lint                                      PASS
+addon install/update + security/XML/model load           PASS
+TestPhase11DataImportSession                             PASS — 4 methods
+TestPhase11DataImportCleanupRepair                       PASS — 4 methods
+P11-REAL-CSV-IMPORT                                      PASS
+P11-REAL-LARGE-IMPORT                                    PASS — 1,200 rows / 6 chunks
+P11-REAL-MAPPING-CORRECTION                              PASS
+P11-REAL-PARTIAL-INVALID                                 PASS
+P11-REAL-RESUME-NO-DUPLICATE                             PASS
+P11-REAL-IMPORT-RECEIPT                                  PASS
+P11 acceptance                                           COMPLETE / P12 ELIGIBLE
 ```
 
-The immediate next action is to execute
-[`research/P11_FOCUSED_VALIDATION_RUNBOOK.md`](research/P11_FOCUSED_VALIDATION_RUNBOOK.md),
-repair failures if any, then run all six real P11 gates. Broad unrelated regressions
-remain periodic debt unless a focused failure demonstrates wider blast radius.
+The immediate next action is P12.1: define bounded workspace/source roots, identities,
+fingerprints and the privilege boundary before adding any source-edit capability.
+Broad unrelated regressions remain periodic debt unless a focused failure demonstrates
+a wider blast radius.

@@ -1,7 +1,10 @@
 # P11 focused validation runbook
 
-State: `READY / NOT EXECUTED`  
+State: `EXECUTED / PASS / P11 ACCEPTED`
 Scope: durable create-only CSV import core, including deterministic cleanup and rejected-window repair/resume
+
+Acceptance evidence:
+`evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`.
 
 Implementation records:
 
@@ -210,4 +213,5 @@ formats, relational imports, external-id upserts and generic transformation scri
 are explicitly outside this acceptance boundary unless a HARD gate proves one is
 required for the stated P11 product goal.
 
-Do not create P11 acceptance evidence before actual execution.
+The acceptance evidence above was created only after the focused gate and all six real
+gates executed successfully on the recorded environment and tested SHA.
