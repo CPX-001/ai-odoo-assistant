@@ -3,6 +3,7 @@ from . import assistant_diagnostics as assistant_diagnostics
 from . import chat_policy as chat_policy
 from . import chat_preferences as chat_preferences
 from . import chat_storage as chat_storage
+from . import data_import as data_import
 from . import knowledge as knowledge
 from . import knowledge_attachment_link as knowledge_attachment_link
 from . import knowledge_fts_index as knowledge_fts_index

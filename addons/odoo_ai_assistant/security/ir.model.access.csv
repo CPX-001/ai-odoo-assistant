@@ -13,3 +13,7 @@ access_odoo_ai_knowledge_source_internal,odoo.ai.knowledge.source internal,model
 access_odoo_ai_knowledge_chunk_internal,odoo.ai.knowledge.chunk internal,model_odoo_ai_knowledge_chunk,base.group_user,1,0,0,0
 access_odoo_ai_knowledge_chunk_system,odoo.ai.knowledge.chunk system,model_odoo_ai_knowledge_chunk,base.group_system,1,1,1,1
 access_odoo_ai_knowledge_attachment_internal,odoo.ai.knowledge.attachment internal,model_odoo_ai_knowledge_attachment,base.group_user,1,0,1,1
+access_odoo_ai_data_import_session_internal,odoo.ai.data.import.session internal,model_odoo_ai_data_import_session,base.group_user,1,0,0,0
+access_odoo_ai_data_import_session_system,odoo.ai.data.import.session system,model_odoo_ai_data_import_session,base.group_system,1,1,1,1
+access_odoo_ai_data_import_chunk_internal,odoo.ai.data.import.chunk internal,model_odoo_ai_data_import_chunk,base.group_user,1,0,0,0
+access_odoo_ai_data_import_chunk_system,odoo.ai.data.import.chunk system,model_odoo_ai_data_import_chunk,base.group_system,1,1,1,1
