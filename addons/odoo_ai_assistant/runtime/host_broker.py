@@ -60,7 +60,7 @@ class HostBrokerClient:
             or type(self.expected_uid) is not int
             or self.expected_uid < 0
             or not isinstance(self.timeout_seconds, (int, float))
-            or not 0.1 <= float(self.timeout_seconds) <= 30.0
+            or not 0.1 <= float(self.timeout_seconds) <= 600.0
         ):
             raise CapabilityError("host_broker_configuration_invalid")
 

@@ -118,6 +118,32 @@ _SERVICE_RESTART_OUTPUT = {
     ],
     "additionalProperties": False,
 }
+_MODULE_UPDATE_OUTPUT = {
+    "type": "object",
+    "properties": {
+        "receipt_id": {"type": "string"},
+        "target": {"type": "string"},
+        "module": {"type": "string"},
+        "state": {"type": "string"},
+        "previous_database_version": {"type": ["string", "null"]},
+        "database_version": {"type": ["string", "null"]},
+        "source_version": {"type": ["string", "null"]},
+        "postcondition_fingerprint": {"type": "string"},
+        "recovery_classification": {"type": "string"},
+    },
+    "required": [
+        "receipt_id",
+        "target",
+        "module",
+        "state",
+        "previous_database_version",
+        "database_version",
+        "source_version",
+        "postcondition_fingerprint",
+        "recovery_classification",
+    ],
+    "additionalProperties": False,
+}
 
 
 def _broker_guard(_context: CapabilityContext) -> bool:
@@ -129,6 +155,32 @@ def _broker_guard(_context: CapabilityContext) -> bool:
 
 def _broker(timeout_seconds=5.0):
     return HostBrokerClient(timeout_seconds=timeout_seconds)
+
+
+def _module_update_guard(context: CapabilityContext) -> bool:
+    try:
+        client = _broker()
+        if not client.available():
+            return False
+        receipt = client.call(
+            context,
+            capability="broker.status",
+            operation="broker.status",
+            phase="preview",
+            payload={},
+        )
+        summary = receipt.get("summary")
+        operations = summary.get("operations") if isinstance(summary, dict) else None
+        targets = summary.get("module_targets") if isinstance(summary, dict) else None
+        return bool(
+            isinstance(summary, dict)
+            and isinstance(operations, list)
+            and "odoo.module.update" in operations
+            and isinstance(targets, list)
+            and targets
+        )
+    except CapabilityError:
+        return False
 
 
 def _summary(receipt):
@@ -424,4 +476,110 @@ def service_restart(context: CapabilityContext, arguments):
     }
 
 
-__all__ = ["config_inspect", "config_patch", "service_restart", "service_status"]
+def _module_update_preview(context: CapabilityContext, arguments):
+    receipt = _broker(timeout_seconds=120).call(
+        context,
+        capability="odoo.module.update",
+        operation="odoo.module.update",
+        phase="preview",
+        payload=arguments,
+    )
+    fingerprint = receipt.get("precondition_fingerprint")
+    if not isinstance(fingerprint, str):
+        raise CapabilityError("host_broker_response_invalid")
+    return CapabilityPreview(
+        summary={
+            "operation": "module_update",
+            **dict(_summary(receipt)),
+            "verification": "fresh_registry_version_match",
+        },
+        precondition_fingerprint=fingerprint,
+    )
+
+
+def _module_update_verify(context: CapabilityContext, arguments):
+    result = context.metadata.get("capability_result")
+    if not isinstance(result, dict):
+        raise CapabilityError("capability_verification_invalid")
+    receipt = _broker(timeout_seconds=120).call(
+        context,
+        capability="odoo.module.update",
+        operation="odoo.module.update",
+        phase="verify",
+        payload={
+            "target": arguments["target"],
+            "receipt_id": result.get("receipt_id"),
+            "postcondition_fingerprint": result.get(
+                "postcondition_fingerprint"
+            ),
+        },
+    )
+    return CapabilityVerification(
+        verified=_required_bool(_summary(receipt), "verified"),
+        summary=dict(_summary(receipt)),
+    )
+
+
+@tool(
+    name="odoo.module.update",
+    title="Update a deployment-managed Odoo module",
+    description=(
+        "Update exactly one deployment-approved Odoo module through the lifecycle-safe "
+        "maintenance broker. Technical users only. The broker fixes the database, module, "
+        "Odoo executable, configuration and addon paths; the model supplies only a logical "
+        "target. Execution occurs outside the Assistant cron worker and is verified through "
+        "a fresh Odoo registry."
+    ),
+    input_schema=_SERVICE_INPUT,
+    output_schema=_MODULE_UPDATE_OUTPUT,
+    risk=CapabilityRisk.HOST,
+    effect=CapabilityEffect.HOST,
+    exposure=CapabilityExposure.PLAN,
+    approval=CapabilityApproval.POLICY,
+    required_groups=_TECHNICAL_GROUPS,
+    guard=_module_update_guard,
+    preview=_module_update_preview,
+    verify=_module_update_verify,
+    tags=("odoo", "technical", "module", "update", "host"),
+    audit_metadata={
+        "recovery_mode": "external",
+        "journal_classification": "external_or_unknown",
+    },
+    max_calls=1,
+    timeout_seconds=600,
+)
+def module_update(context: CapabilityContext, arguments):
+    receipt = _broker(timeout_seconds=600).call(
+        context,
+        capability="odoo.module.update",
+        operation="odoo.module.update",
+        phase="execute",
+        payload=arguments,
+        effectful=True,
+    )
+    summary = _summary(receipt)
+    postcondition = receipt.get("postcondition_fingerprint")
+    if not isinstance(postcondition, str):
+        raise CapabilityError("host_broker_response_invalid")
+    return {
+        "receipt_id": _required_receipt_id(receipt),
+        "target": _required_string(summary, "target", maximum=64),
+        "module": _required_string(summary, "module", maximum=128),
+        "state": _required_string(summary, "state", maximum=64),
+        "previous_database_version": _optional_string(
+            summary, "previous_database_version"
+        ),
+        "database_version": _optional_string(summary, "database_version"),
+        "source_version": _optional_string(summary, "source_version"),
+        "postcondition_fingerprint": postcondition,
+        "recovery_classification": _recovery(receipt)[0],
+    }
+
+
+__all__ = [
+    "config_inspect",
+    "config_patch",
+    "module_update",
+    "service_restart",
+    "service_status",
+]

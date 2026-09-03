@@ -36,6 +36,9 @@ MemoryDenyWriteExecute=yes
 # - Do not broaden writable access to /etc or another filesystem root. The broker
 #   still resolves one exact target file from its root-owned policy.
 # - The broker state/runtime directories must remain writable.
+# - Module updates run in a separate transient unit under the policy-owned non-root
+#   UID/GID. Keep systemd-run deployment-owned and preserve AF_UNIX access to the
+#   system manager; do not replace it with a shell wrapper.
 
 [Install]
 WantedBy=multi-user.target

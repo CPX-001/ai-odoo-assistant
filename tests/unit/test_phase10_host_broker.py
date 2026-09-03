@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import subprocess
 import sys
 import tempfile
@@ -20,7 +22,15 @@ def _fingerprint(char="a"):
     return "sha256:" + char * 64
 
 
-def _request(operation, phase, payload, *, request_id=None, precondition=None):
+def _request(
+    operation,
+    phase,
+    payload,
+    *,
+    request_id=None,
+    precondition=None,
+    database_fingerprint=None,
+):
     now = int(time.time())
     return {
         "protocol_version": 1,
@@ -33,7 +43,7 @@ def _request(operation, phase, payload, *, request_id=None, precondition=None):
             "turn_id": "turn-test-0001",
             "conversation_id": "conversation-test-0001",
             "odoo_uid": 7,
-            "database_fingerprint": _fingerprint("d"),
+            "database_fingerprint": database_fingerprint or _fingerprint("d"),
             "capability": operation,
             "step_id": "step-1" if phase == "execute" else None,
             "args_sha256": canonical_sha256(payload),
@@ -66,16 +76,52 @@ class FakeSystemctl:
         raise AssertionError(argv)
 
 
+class FakeModuleRunner:
+    def __init__(self, *, fail_update=False):
+        self.database_version = "18.0.1.0.0"
+        self.source_version = "18.0.2.0.0"
+        self.update_calls = 0
+        self.fail_update = fail_update
+
+    def __call__(self, argv, *, timeout, input_text):
+        del timeout, input_text
+        self.asserted_identity = tuple(argv[:4])
+        if "shell" in argv:
+            value = {
+                "module": "odoo_ai_p10_fixture",
+                "state": "installed",
+                "database_version": self.database_version,
+                "source_version": self.source_version,
+            }
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout="ODOO_AI_MODULE_STATE:" + json.dumps(value) + "\n",
+                stderr="",
+            )
+        if "--update=odoo_ai_p10_fixture" in argv:
+            self.update_calls += 1
+            if self.fail_update:
+                return subprocess.CompletedProcess(
+                    argv, 1, stdout="", stderr="sanitized test failure"
+                )
+            self.database_version = self.source_version
+            return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+        raise AssertionError(argv)
+
+
 class Phase10BrokerTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
+        self.root = root
         self.config = root / "odoo.conf"
         self.config.write_text(
             "[options]\nworkers = 2\nadmin_passwd = secret-value\n",
             encoding="utf-8",
         )
         self.runner = FakeSystemctl()
+        self.module_runner = FakeModuleRunner()
         self.policy = BrokerPolicy.from_mapping(
             {
                 "protocol_version": 1,
@@ -91,6 +137,19 @@ class Phase10BrokerTests(unittest.TestCase):
                 "service_targets": {
                     "demo": {"unit": "odoo-ai-demo.service", "timeout_seconds": 10}
                 },
+                "module_targets": {
+                    "fixture": {
+                        "module": "odoo_ai_p10_fixture",
+                        "database": "testdb",
+                        "odoo_python": "/opt/odoo/venv/bin/python3",
+                        "odoo_bin": "/opt/odoo/odoo-bin",
+                        "config_path": "/etc/odoo.conf",
+                        "addons_path": ["/opt/odoo/addons"],
+                        "run_as_uid": 109,
+                        "run_as_gid": 112,
+                        "timeout_seconds": 540,
+                    }
+                },
             }
         )
         self.ledger = ExecutionLedger(root / "ledger.sqlite3")
@@ -99,6 +158,7 @@ class Phase10BrokerTests(unittest.TestCase):
             ledger=self.ledger,
             backups_dir=root / "backups",
             runner=self.runner,
+            module_runner=self.module_runner,
         )
 
     def tearDown(self):
@@ -291,6 +351,119 @@ class Phase10BrokerTests(unittest.TestCase):
             ),
         )
         self.assertEqual(denied["status"], "denied")
+
+    def test_module_update_runs_outside_worker_and_verifies_fresh_registry(self):
+        database_fingerprint = "sha256:" + hashlib.sha256(b"testdb").hexdigest()
+        preview = self.engine.handle(
+            peer_uid=1000,
+            request=_request(
+                "odoo.module.update",
+                "preview",
+                {"target": "fixture"},
+                request_id="req:v1:" + "1" * 32,
+                database_fingerprint=database_fingerprint,
+            ),
+        )
+        self.assertEqual(preview["summary"]["database_version"], "18.0.1.0.0")
+        self.assertEqual(preview["summary"]["source_version"], "18.0.2.0.0")
+        execute = _request(
+            "odoo.module.update",
+            "execute",
+            {"target": "fixture"},
+            request_id="req:v1:" + "2" * 32,
+            precondition=preview["precondition_fingerprint"],
+            database_fingerprint=database_fingerprint,
+        )
+        first = self.engine.handle(peer_uid=1000, request=execute)
+        replay = self.engine.handle(
+            peer_uid=1000,
+            request={
+                **execute,
+                "issued_at": execute["issued_at"] + 1,
+                "expires_at": execute["expires_at"] + 1,
+            },
+        )
+        self.assertEqual(first, replay)
+        self.assertEqual(first["status"], "ok")
+        self.assertEqual(first["summary"]["database_version"], "18.0.2.0.0")
+        self.assertEqual(self.module_runner.update_calls, 1)
+        self.assertEqual(
+            self.module_runner.asserted_identity,
+            (
+                "/usr/bin/systemd-run",
+                "--quiet",
+                "--wait",
+                "--pipe",
+            ),
+        )
+
+        verify = self.engine.handle(
+            peer_uid=1000,
+            request=_request(
+                "odoo.module.update",
+                "verify",
+                {
+                    "target": "fixture",
+                    "receipt_id": first["receipt_id"],
+                    "postcondition_fingerprint": first[
+                        "postcondition_fingerprint"
+                    ],
+                },
+                request_id="req:v1:" + "3" * 32,
+                database_fingerprint=database_fingerprint,
+            ),
+        )
+        self.assertTrue(verify["summary"]["verified"])
+
+    def test_module_update_is_bound_to_the_configured_database(self):
+        denied = self.engine.handle(
+            peer_uid=1000,
+            request=_request(
+                "odoo.module.update",
+                "preview",
+                {"target": "fixture"},
+                request_id="req:v1:" + "4" * 32,
+            ),
+        )
+        self.assertEqual(denied["status"], "denied")
+        self.assertEqual(denied["error_code"], "broker_database_denied")
+
+    def test_module_update_failure_is_uncertain_and_not_replayed(self):
+        runner = FakeModuleRunner(fail_update=True)
+        engine = BrokerEngine(
+            policy=self.policy,
+            ledger=self.ledger,
+            backups_dir=self.root / "failed-backups",
+            runner=self.runner,
+            module_runner=runner,
+        )
+        database_fingerprint = "sha256:" + hashlib.sha256(b"testdb").hexdigest()
+        preview = engine.handle(
+            peer_uid=1000,
+            request=_request(
+                "odoo.module.update",
+                "preview",
+                {"target": "fixture"},
+                request_id="req:v1:" + "5" * 32,
+                database_fingerprint=database_fingerprint,
+            ),
+        )
+        request = _request(
+            "odoo.module.update",
+            "execute",
+            {"target": "fixture"},
+            request_id="req:v1:" + "6" * 32,
+            precondition=preview["precondition_fingerprint"],
+            database_fingerprint=database_fingerprint,
+        )
+        first = engine.handle(peer_uid=1000, request=request)
+        replay = engine.handle(peer_uid=1000, request=request)
+
+        self.assertEqual(first, replay)
+        self.assertEqual(first["status"], "uncertain")
+        self.assertEqual(first["effect_state"], "unknown")
+        self.assertEqual(first["error_code"], "broker_module_update_failed")
+        self.assertEqual(runner.update_calls, 1)
 
     def test_known_running_request_is_uncertain_and_not_replayed(self):
         preview = self.engine.handle(

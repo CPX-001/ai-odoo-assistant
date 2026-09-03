@@ -11,6 +11,7 @@ from typing import Any
 
 from .config_ops import ConfigOperations
 from .ledger import ExecutionLedger
+from .module_ops import ModuleMaintenanceOperations, ModuleRunner
 from .outcome import BrokerOperationError, OperationOutcome
 from .policy import BrokerPolicy
 from .protocol import (
@@ -32,11 +33,13 @@ class BrokerEngine:
         ledger: ExecutionLedger,
         backups_dir: str | Path,
         runner: CommandRunner | None = None,
+        module_runner: ModuleRunner | None = None,
     ) -> None:
         self.policy = policy
         self.ledger = ledger
         self.config = ConfigOperations(policy, backups_dir)
         self.services = ServiceOperations(policy, runner)
+        self.modules = ModuleMaintenanceOperations(policy, module_runner)
 
     def handle(self, *, peer_uid: int, request: dict[str, Any], now: int | None = None):
         current = int(time.time()) if now is None else now
@@ -64,7 +67,16 @@ class BrokerEngine:
                     "protocol_version": PROTOCOL_VERSION,
                     "config_targets": sorted(self.policy.config_targets),
                     "service_targets": sorted(self.policy.service_targets),
-                    "operation_count": 5,
+                    "module_targets": sorted(self.policy.module_targets),
+                    "operations": [
+                        "broker.status",
+                        "host.service.restart",
+                        "host.service.status",
+                        "odoo.config.inspect",
+                        "odoo.config.patch",
+                        "odoo.module.update",
+                    ],
+                    "operation_count": 6,
                 }
             )
         if operation == "odoo.config.inspect" and phase == "preview":
@@ -98,6 +110,29 @@ class BrokerEngine:
                 )
             if phase == "verify":
                 return self.services.verify_restart(payload)
+        if operation == "odoo.module.update":
+            database_fingerprint = request["binding"]["database_fingerprint"]
+            if phase == "preview":
+                return self.modules.preview_update(
+                    payload,
+                    database_fingerprint=database_fingerprint,
+                )
+            if phase == "execute":
+                return self._effectful(
+                    request,
+                    lambda: self.modules.execute_update(
+                        payload,
+                        database_fingerprint=database_fingerprint,
+                        expected_precondition=request["binding"].get(
+                            "precondition_fingerprint"
+                        ),
+                    ),
+                )
+            if phase == "verify":
+                return self.modules.verify_update(
+                    payload,
+                    database_fingerprint=database_fingerprint,
+                )
         raise BrokerOperationError("broker_operation_not_allowed")
 
     def _effectful(self, request: dict[str, Any], implementation: Callable[[], OperationOutcome]):

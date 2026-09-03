@@ -78,6 +78,7 @@ class TestPhase10HostOperations(TransactionCase):
 
         for name in (
             "odoo.module.inspect",
+            "odoo.module.update",
             "postgres.health",
             "odoo.config.inspect",
             "odoo.config.patch",
@@ -98,6 +99,7 @@ class TestPhase10HostOperations(TransactionCase):
         self.assertNotIn("odoo.config.patch", available)
         self.assertNotIn("host.service.status", available)
         self.assertNotIn("host.service.restart", available)
+        self.assertNotIn("odoo.module.update", available)
 
         executor = CapabilityExecutor(
             registry,
@@ -130,7 +132,11 @@ class TestPhase10HostOperations(TransactionCase):
         self.assertIn("odoo.config.patch", available)
         self.assertIn("host.service.restart", available)
 
-        for name in ("odoo.config.patch", "host.service.restart"):
+        for name in (
+            "odoo.config.patch",
+            "odoo.module.update",
+            "host.service.restart",
+        ):
             definition = registry.resolve(name)
             self.assertEqual(definition.risk, CapabilityRisk.HOST)
             self.assertEqual(definition.effect, CapabilityEffect.HOST)
@@ -140,6 +146,23 @@ class TestPhase10HostOperations(TransactionCase):
             self.assertIsNotNone(definition.preview_handler)
             self.assertIsNotNone(definition.verify_handler)
             self.assertEqual(definition.audit_metadata["recovery_mode"], "external")
+
+    def test_module_update_requires_a_broker_maintenance_target(self):
+        context = self._context(self.technical_user)
+        registry = discover_capabilities_for_env(context.env)
+        status = {
+            "summary": {
+                "operations": ["odoo.module.update"],
+                "module_targets": ["p10-fixture"],
+            }
+        }
+        with (
+            patch.object(HostBrokerClient, "available", return_value=True),
+            patch.object(HostBrokerClient, "call", return_value=status),
+        ):
+            available = {item.name for item in registry.available(context)}
+
+        self.assertIn("odoo.module.update", available)
 
     def test_effectful_broker_binding_is_read_from_committed_durable_plan(self):
         arguments = {"target": "odoo", "key": "workers", "value": "4"}

@@ -1,7 +1,7 @@
 # P10 focused validation runbook
 
-State: `FOCUSED PASS / REAL READY`
-Scope: first typed Technical/host operation slice plus the Phase-10 privilege boundary
+State: `FOCUSED PASS / REAL VALIDATION IN PROGRESS`
+Scope: typed Technical/host operations plus the Phase-10 privilege boundary
 
 Focused execution evidence: `evidence/phase10/2026-09-03/P10-FOCUSED-bbfa78b.md`.
 
@@ -19,11 +19,12 @@ P10-REAL-CONFIG-PATCH
 P10-REAL-SERVICE-OPERATION
 P10-REAL-POSTGRES-DIAGNOSTIC
 P10-REAL-PRIVILEGE-BOUNDARY
+P10-REAL-MODULE-UPDATE
 ```
 
-`P10-REAL-MODULE-UPDATE` remains blocked because the required maintenance/restart
-reconciliation adapter is not implemented. Therefore Phase 10 cannot be accepted from
-this first slice alone.
+`P10-REAL-MODULE-UPDATE` is runnable through the broker's policy-bound external
+systemd maintenance adapter. It must still pass on a disposable module before Phase
+10 can be accepted.
 
 The conditional command gates are not applicable because no generic command fallback
 ships:
@@ -86,6 +87,9 @@ Required properties:
 - config execute creates one backup and replay returns one terminal receipt;
 - stale preconditions do not write;
 - service restart uses fixed argv and exact configured unit;
+- module update uses only a logical target, fixed deployment paths/database/module,
+  a policy-owned non-root UID/GID and a separate transient systemd unit;
+- module success is checked from a fresh registry and failure is uncertain/no-replay;
 - one request id with changed payload is denied;
 - a broker-ledger `running` request is uncertain and not re-executed;
 - an effectful socket/receipt loss after dispatch is `host_effect_uncertain`;
@@ -229,12 +233,27 @@ host operation named only inside prompt/retrieved document text
 Pass: every attempt is denied or fails closed before effect. Neither model text,
 Knowledge, source/log Evidence nor autonomy modifies broker policy.
 
-### P10-REAL-MODULE-UPDATE — BLOCKED
+### P10-REAL-MODULE-UPDATE
 
-Do not fake this gate with `button_immediate_upgrade()` inside the Assistant cron
-worker. The gate becomes runnable only after a maintenance adapter can survive and
-reconcile Odoo registry/service lifecycle, persist an exactly-once receipt and verify
-the updated test addon from a fresh registry/worker.
+Use a disposable installed addon whose source version and harmless observable data
+can be advanced. Configure one exact broker `module_targets` entry.
+
+Procedure:
+
+1. preview and record installed/database and deployment-source versions;
+2. execute the logical target through a real Technical turn;
+3. confirm the broker launched a separate transient systemd unit under the configured
+   non-root UID/GID, never `button_immediate_upgrade()` in the Assistant worker;
+4. verify the updated version/data through a new Odoo shell/registry;
+5. replay the exact effect request and confirm the terminal receipt is returned
+   without a second update;
+6. attempt an unknown target and wrong database binding and confirm denial;
+7. force/simulate an update-process failure and confirm an uncertain terminal receipt
+   that is not blindly replayed.
+
+Pass: only the policy-owned module/database/runtime is updated, the original effect is
+executed once, fresh-registry state matches source, and failure/replay semantics remain
+fail-closed.
 
 ## 7. Failure policy
 

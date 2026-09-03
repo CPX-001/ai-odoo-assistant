@@ -1,6 +1,6 @@
 # P10 typed host-operations first slice
 
-State: `IMPLEMENTED / VALIDATION PENDING / PHASE NOT ACCEPTED`  
+State: `IMPLEMENTED / REAL VALIDATION IN PROGRESS / PHASE NOT YET ACCEPTED`
 Date: 2026-09-03  
 ADR: `docs/adr/ADR-024-technical-host-privilege-broker.md`
 
@@ -55,6 +55,7 @@ odoo.config.inspect
 odoo.config.patch
 host.service.status
 host.service.restart
+odoo.module.update
 ```
 
 The broker-backed definitions are available only to `base.group_system` users and
@@ -75,6 +76,12 @@ preview + execute + verify
 They therefore use the existing protected-risk policy and cannot become executable
 because the model merely knows their names.
 
+`odoo.module.update` uses that same HOST/PLAN/policy lifecycle. Its input is only a
+logical maintenance target. Broker policy fixes the module, database, Python/Odoo
+executables, config, addons paths, non-root OS identity and timeout. It launches a
+separate transient systemd unit outside the Assistant cron worker and verifies the
+result from a second fresh Odoo registry before returning success.
+
 ## 3. Optional local broker package
 
 The root `host_broker/` package is a stdlib-only Linux adapter with:
@@ -86,6 +93,7 @@ The root `host_broker/` package is a stdlib-only Linux adapter with:
 - strict request lifetime, size, schema, operation, target, fingerprint and binding
   checks;
 - fixed-argv `systemctl` calls with `shell=False`;
+- fixed-argv `systemd-run` module maintenance under a policy-owned non-root UID/GID;
 - atomic config replacement, fsync and private backup;
 - bounded parsed service/config results rather than raw stdout/stderr;
 - a durable SQLite execution ledger for effect request replay and uncertainty;
@@ -149,6 +157,7 @@ socket group
 exact config target paths
 allowed non-secret config keys
 exact systemd service units
+exact module/database/Odoo runtime targets and maintenance UID/GID
 operation timeouts
 ```
 
@@ -166,10 +175,10 @@ and must not be inferred from the generic service capability.
 
 ## 7. Explicitly not implemented
 
-This first slice does not implement:
+P10 still does not implement:
 
 ```text
-odoo.module.install/update/uninstall
+odoo.module.install/uninstall
 repository acquisition or promotion
 host package installation
 postgres arbitrary activity/query inspection
@@ -177,12 +186,11 @@ config rollback capability
 generic Developer command fallback
 ```
 
-Odoo 18 immediate module maintenance cannot safely execute inside the current
-Assistant `ir.cron` worker. A separate maintenance adapter must survive/reconcile the
-registry/service lifecycle and produce a durable receipt before
-`P10-REAL-MODULE-UPDATE` can pass.
-
-P10 therefore remains incomplete even after the implemented first-slice gates pass.
+Odoo 18 module updates therefore do not call `button_immediate_upgrade()` inside the
+Assistant `ir.cron` worker. The implemented maintenance adapter runs the fixed Odoo
+CLI operation separately, persists the broker receipt exactly once and inspects a
+fresh registry. Install/uninstall, repository acquisition and arbitrary module names
+remain outside the surface.
 
 ## 8. Failure and recovery semantics
 
@@ -199,6 +207,9 @@ P10 therefore remains incomplete even after the implemented first-slice gates pa
 | Transport/receipt lost after effect dispatch | `host_effect_uncertain`; recovery review |
 | Config patch verified | Receipt + postcondition fingerprint + private backup token |
 | Service restart cannot be proven healthy | external/unknown recovery state |
+| Module target/database differs from policy | Denied before maintenance launch |
+| Module update fails or times out | Durable uncertain receipt; no blind replay |
+| Module update succeeds | Fresh-registry source/database versions must match |
 
 ## 9. Prepared validation surface
 
@@ -226,6 +237,7 @@ interpreter/Odoo environment. Real acceptance is defined by
 3. Execute the implemented real gates for profile denial, config patch, service
    operation, PostgreSQL diagnostics and privilege-boundary denial on disposable
    targets.
-4. Keep `P10-REAL-MODULE-UPDATE` blocked until the maintenance adapter exists.
+4. Execute `P10-REAL-MODULE-UPDATE` against a disposable addon through the real
+   cron/provider/broker/systemd path, including replay and fresh-registry proof.
 5. Only after all P10 gates pass create immutable acceptance evidence and advance to
    Phase 11.

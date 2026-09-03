@@ -262,6 +262,7 @@ broker-backed Technical reads/effects
   odoo.config.patch
   host.service.status
   host.service.restart
+  odoo.module.update
 ```
 
 All require `base.group_system`. Broker-backed definitions are additionally guarded by
@@ -288,8 +289,9 @@ plan binding fingerprint
 preview precondition fingerprint
 ```
 
-The deployment-owned broker policy maps logical target ids to exact config paths or
-systemd units. Model text never supplies an executable or filesystem path.
+The deployment-owned broker policy maps logical target ids to exact config paths,
+systemd units or module-maintenance contracts. Model text never supplies an
+executable, database, module name, OS identity or filesystem path.
 
 The broker independently validates peer UID, request lifetime, operation/phase, shape,
 target, args hash and precondition.
@@ -348,12 +350,21 @@ Read-only broker calls retain normal unavailable/invalid-response behavior.
 - reads one current Odoo module and bounded metadata;
 - performs no install/update/uninstall method.
 
+### Module update
+
+- input contains one logical maintenance target;
+- policy fixes the module, database, Odoo executable/config/addons paths, non-root
+  UID/GID and timeout;
+- broker launches a separate transient systemd unit outside the Assistant cron;
+- execute remains exactly-once/uncertain through the broker ledger;
+- success requires a second fresh registry where database/source versions match.
+
 ## 18. Unsupported host breadth
 
 Not implemented:
 
 ```text
-odoo.module.install/update/uninstall
+odoo.module.install/uninstall
 repository acquire/promote
 host package install
 config rollback capability
@@ -361,10 +372,9 @@ secret reveal
 generic command fallback
 ```
 
-Odoo 18 immediate module maintenance cannot safely run inside the current Assistant
-cron worker. A separate lifecycle-safe maintenance adapter must persist an
-exactly-once receipt and verify a fresh registry before
-`P10-REAL-MODULE-UPDATE` can pass.
+Odoo 18 module update therefore uses the external maintenance adapter rather than an
+immediate ORM method in the current Assistant cron worker. Arbitrary module names and
+install/uninstall remain unavailable.
 
 A generic command fallback remains forbidden unless a separate ADR and its conditional
 real gates are accepted.
@@ -395,9 +405,9 @@ For broker-backed operations additionally answer:
 
 ## 20. Validation state
 
-P0-P9 contracts are accepted on their recorded lineages. P10's first implementation
-and test surfaces exist, but focused and real gates remain unexecuted.
-`P10-REAL-MODULE-UPDATE` is blocked by the missing maintenance adapter.
+P0-P9 contracts are accepted on their recorded lineages. P10's typed operations,
+module-maintenance adapter and focused test surfaces exist; named real gates still
+require acceptance evidence.
 
 See:
 

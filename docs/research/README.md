@@ -22,9 +22,9 @@ Unexecuted validation is never PASS.
 P0-P9 COMPLETE / ACCEPTED
 P10 PRIVILEGE-BOUNDARY ADR ACCEPTED
 P10 TYPED HOST-OPERATIONS FIRST SLICE IMPLEMENTED
+P10 MODULE-UPDATE MAINTENANCE ADAPTER IMPLEMENTED
 P10 FOCUSED VALIDATION PASS
-P10 REAL VALIDATION PENDING
-P10 MODULE-UPDATE ADAPTER NOT IMPLEMENTED
+P10 REAL VALIDATION IN PROGRESS
 ```
 
 P9 remains the latest accepted phase, anchored at
@@ -87,6 +87,8 @@ odoo.module.inspect
 postgres.health
 odoo.config.inspect / odoo.config.patch
 host.service.status / host.service.restart
+odoo.module.update through a policy-bound external systemd maintenance unit
+fresh-registry module version verification
 optional AF_UNIX broker with logical-target policy
 peer credentials, bounded protocol and durable replay ledger
 post-dispatch uncertainty preservation
@@ -110,16 +112,17 @@ be used by a User/non-technical profile merely because autonomy is high.
 ## Validation truth
 
 Accepted P8/P9 evidence remains immutable. P10 focused static, dependency-light and
-Odoo tests pass at `bbfa78b`; the real-environment runbook remains pending.
+Odoo checks pass on the current work; the real-environment runbook is in progress and
+still requires an immutable acceptance record.
 
 Current P10 blockers:
 
 ```text
-focused dependency-light tests                   PASS — 14 tests
-focused Odoo tests                               PASS — 4 tests, 0 failures/errors
-broker deployment/systemd smoke                  NOT EXECUTED — deployment absent
-profile/config/service/postgres/boundary gates   NOT EXECUTED
-P10-REAL-MODULE-UPDATE                           BLOCKED — maintenance adapter missing
+focused dependency-light tests                   PASS — 18 tests on current work
+focused Odoo tests                               PASS — 5 methods, 0 failures/errors
+broker deployment/systemd smoke                  EXECUTED — evidence record pending
+profile/config/service/postgres/boundary gates   EXECUTED — evidence record pending
+P10-REAL-MODULE-UPDATE                           IN PROGRESS
 P10 acceptance                                   NOT COMPLETE
 ```
 

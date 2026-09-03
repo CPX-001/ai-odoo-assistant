@@ -15,13 +15,15 @@ odoo.config.inspect
 odoo.config.patch
 host.service.status
 host.service.restart
+odoo.module.update
 ```
 
 `odoo.module.inspect` and `postgres.health` are implemented in the addon without
-privilege escalation. Effectful module install/update/uninstall is intentionally not
-implemented here yet: Odoo 18 immediate module operations cannot safely run from the
-Assistant cron worker and require a dedicated maintenance/restart reconciliation
-adapter.
+privilege escalation. `odoo.module.update` maps one logical target to a fixed module,
+database, Odoo executable/config/addons set and unprivileged UID/GID. The broker asks
+systemd to run the bounded Odoo CLI update outside the Assistant cron worker, then
+opens a second fresh Odoo shell/registry to verify database and source versions.
+Install and uninstall remain intentionally unavailable.
 
 There is no shell, arbitrary executable, arbitrary filesystem path, Python, sudo
 wrapper or arbitrary SQL endpoint.
@@ -81,7 +83,9 @@ Start from `example-policy.json`. Replace the example UID and targets with value
 the deployment. Only keys in `allowed_keys` can be read/patched. Secret-like option names are also
 denied by the broker in this first slice even if accidentally allowlisted; secret
 configuration needs a later masked/reveal lifecycle. Only exact service targets in
-`service_targets` can be inspected/restarted.
+`service_targets` can be inspected/restarted. Only exact `module_targets` can be
+updated; the model cannot select a database, module, executable, config path, addons
+path, OS identity or command-line option.
 
 Do not add secret options such as `admin_passwd` to `allowed_keys` merely to make them
 visible to the Assistant. The first slice is designed for non-secret operational
@@ -98,12 +102,23 @@ Configuration patches keep a private backup in the broker state directory. Servi
 restart is classified `external_or_unknown`; a timeout/failure after the restart
 barrier requires review rather than an automatic second restart.
 
+Module updates use the same durable effect ledger and are also
+`external_or_unknown`. A non-zero, timed-out or interrupted update is never blindly
+replayed. A successful receipt is emitted only after a separate fresh registry sees
+the module installed at the deployment source version.
+
 ## systemd
 
 `systemd/odoo-ai-host-broker.service` is a reference unit, not a universal installer.
 Its hardening must be reconciled with the exact config paths/services managed by the
 deployment. If filesystem sandboxing is tightened further, explicitly grant only the
 required targets.
+
+The broker invokes the deployment-owned `systemd-run` path for module maintenance.
+The transient unit fixes the configured non-root UID/GID and applies
+`NoNewPrivileges`, a private temporary directory, kernel/control-group protections
+and an AF_UNIX-only address-family policy. The broker service itself still needs
+access to the system manager's Unix socket.
 
 ## Tests
 

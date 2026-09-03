@@ -279,6 +279,7 @@ odoo.config.inspect
 odoo.config.patch
 host.service.status
 host.service.restart
+odoo.module.update
 ```
 
 All are Technical-only. Broker-backed capabilities also require a live configured
@@ -289,16 +290,18 @@ The Linux reference adapter provides:
 - AF_UNIX one-request/one-receipt framing;
 - bidirectional `SO_PEERCRED`;
 - secure policy and executable owner/mode checks;
-- logical config/service targets;
+- logical config/service/module targets;
 - fixed-argv `systemctl`, `shell=False`;
+- fixed-argv transient `systemd-run` module maintenance under a policy-owned
+  non-root UID/GID;
 - bounded parsed output;
 - atomic config replace, fsync and private backup;
 - durable SQLite replay ledger;
 - explicit `none | applied | unknown` effect state.
 
-Effectful module install/update/uninstall is not implemented. Odoo 18 immediate module
-maintenance must not execute inside the Assistant cron worker; a separate lifecycle-
-safe maintenance adapter is required.
+Effectful module install/uninstall is not implemented. Update is intentionally not an
+immediate ORM action: the broker launches a separate bounded Odoo CLI process and
+uses another fresh registry to verify the installed/source version before success.
 
 Repository/package promotion and a generic command fallback are also absent.
 
@@ -364,9 +367,9 @@ driven direct or staged path.
 Any operation crossing service/filesystem privilege uses ADR-024-style fixed schemas,
 managed targets, request binding, time/output bounds, receipts and recovery.
 
-Odoo module maintenance additionally needs a worker/service lifecycle adapter that
-can verify a fresh registry after restart. It remains the blocking implementation for
-full P10 acceptance.
+Odoo module update uses a worker-independent systemd maintenance adapter with a fresh
+registry check. Repository acquisition, install/uninstall and arbitrary maintenance
+commands remain absent.
 
 ## 17. Persistence
 
@@ -394,7 +397,7 @@ changed contract
  -> periodic full regression only when required
 ```
 
-P0-P9 are accepted. P10's first slice is implemented but its focused and real gates
-remain unexecuted. `P10-REAL-MODULE-UPDATE` is blocked until the maintenance adapter
-exists. See `research/P10_FOCUSED_VALIDATION_RUNBOOK.md` and
+P0-P9 are accepted. P10's typed operations and module-maintenance adapter are
+implemented; focused checks pass and named real gates require acceptance evidence.
+See `research/P10_FOCUSED_VALIDATION_RUNBOOK.md` and
 `research/EXECUTION_STATE.md`.

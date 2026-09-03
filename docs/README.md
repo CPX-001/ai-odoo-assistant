@@ -9,9 +9,9 @@ direction and validation evidence.
 P0-P9 COMPLETE / ACCEPTED
 P10 PRIVILEGE-BOUNDARY ADR ACCEPTED
 P10 TYPED HOST-OPERATIONS FIRST SLICE IMPLEMENTED
+P10 MODULE-UPDATE MAINTENANCE ADAPTER IMPLEMENTED
 P10 FOCUSED VALIDATION PASS
-P10 REAL VALIDATION PENDING
-P10 MODULE-UPDATE ADAPTER MISSING
+P10 REAL VALIDATION IN PROGRESS
 P10 NOT ACCEPTED
 ```
 
@@ -95,8 +95,9 @@ Transport loss after dispatch of a host effect is treated as uncertain.
 - [`adr/ADR-024-technical-host-privilege-broker.md`](adr/ADR-024-technical-host-privilege-broker.md)
 - [`../host_broker/README.md`](../host_broker/README.md)
 
-ADR-024 is accepted. The first broker-backed capabilities exist, but their focused and
-real validation remains pending and effectful module maintenance remains unavailable.
+ADR-024 is accepted. The broker-backed capabilities and external module-update
+maintenance adapter exist; named real validation and acceptance evidence remain the
+gate to Phase 10 acceptance.
 
 ### Execution, evals and evidence
 
