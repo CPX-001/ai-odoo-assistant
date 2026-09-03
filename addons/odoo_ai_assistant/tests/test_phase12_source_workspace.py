@@ -83,6 +83,9 @@ class TestPhase12SourceWorkspace(TransactionCase):
             )
             self.assertEqual(checked.binding_fingerprint, receipt.binding_fingerprint)
 
+            # P12.2 may expose typed capabilities through its provider, but the P12.1
+            # workspace primitive itself remains a non-decorated host utility rather than a
+            # second executable registry.
             registry = discover_capabilities_for_env(context.env)
             self.assertFalse(
                 any(
@@ -90,13 +93,9 @@ class TestPhase12SourceWorkspace(TransactionCase):
                     for definition in registry.definitions
                 )
             )
-            for namespace in (
-                "assistant.source",
-                "assistant.workspace",
-                "odoo.source",
-                "odoo.workspace",
-            ):
-                self.assertFalse(registry.by_namespace(namespace))
+            available = {item.name for item in registry.available(context)}
+            self.assertIn("assistant.source_workspace.prepare", available)
+            self.assertIn("assistant.source_workspace.inspect", available)
         finally:
             delete_installed_module_workspace(context, receipt.workspace_id)
 
