@@ -120,41 +120,83 @@ class AssistantKnowledgeSource(models.Model):
     _order = "write_date desc, id desc"
 
     source_uuid = fields.Char(
+        string="Source ID",
         required=True,
         readonly=True,
         index=True,
         default=lambda self: uuid4().hex,
+        help=(
+            "Automatic identifier used to keep citations linked to this source. "
+            "You do not need to edit it."
+        ),
     )
-    name = fields.Char(required=True, size=160)
+    name = fields.Char(
+        string="Knowledge title",
+        required=True,
+        size=160,
+        help=(
+            "Enter a short, recognizable title that helps people identify this "
+            "document in Knowledge and citations."
+        ),
+    )
     owner_user_id = fields.Many2one(
         "res.users",
+        string="Owner",
         required=True,
         readonly=True,
         index=True,
         default=lambda self: self.env.user,
         ondelete="restrict",
+        help=(
+            "Person responsible for this source. Odoo sets the owner automatically "
+            "when the source is created."
+        ),
     )
     company_id = fields.Many2one(
         "res.company",
+        string="Company",
         required=True,
         readonly=True,
         index=True,
         default=lambda self: self.env.company,
         ondelete="cascade",
+        help=(
+            "Company whose users may access this source when visibility is set to "
+            "Company. Odoo fills it automatically."
+        ),
     )
     conversation_id = fields.Many2one(
         "odoo.ai.conversation",
+        string="Source conversation",
         readonly=True,
         index=True,
         ondelete="set null",
+        help=(
+            "Chat where this source was added, when it originated from an Assistant "
+            "attachment. It is filled automatically."
+        ),
     )
     access_mode = fields.Selection(
         [("private", "Private"), ("company", "Company")],
+        string="Who can use it",
         required=True,
         default="company",
         index=True,
+        help=(
+            "Choose Private for your use only, or Company to let permitted users in "
+            "the current company retrieve it through the Assistant."
+        ),
     )
-    enabled = fields.Boolean(required=True, default=True, index=True)
+    enabled = fields.Boolean(
+        string="Available to the Assistant",
+        required=True,
+        default=True,
+        index=True,
+        help=(
+            "Shows whether the Assistant is allowed to retrieve this source. Use "
+            "Disable or Activate to change it safely."
+        ),
+    )
     state = fields.Selection(
         [
             ("uploaded", "Uploaded"),
@@ -167,21 +209,97 @@ class AssistantKnowledgeSource(models.Model):
         readonly=True,
         default="uploaded",
         index=True,
+        string="Status",
+        help=(
+            "Current processing status. A source can answer questions only when its "
+            "status is Active."
+        ),
     )
-    filename = fields.Char(required=True, size=_MAX_FILENAME)
-    mimetype = fields.Char(required=True, size=120)
-    data = fields.Binary(required=True, attachment=True)
-    file_size = fields.Integer(readonly=True)
-    content_fingerprint = fields.Char(readonly=True, index=True, size=64)
-    indexed_fingerprint = fields.Char(readonly=True, index=True, size=64)
-    version = fields.Integer(required=True, readonly=True, default=0)
-    chunk_count = fields.Integer(required=True, readonly=True, default=0)
-    indexed_at = fields.Datetime(readonly=True)
-    error_code = fields.Char(readonly=True, size=128)
+    filename = fields.Char(
+        string="File name",
+        required=True,
+        size=_MAX_FILENAME,
+        help=(
+            "Original name of the uploaded document. The upload control normally "
+            "fills it for you."
+        ),
+    )
+    mimetype = fields.Char(
+        string="File type",
+        required=True,
+        size=120,
+        help=(
+            "Technical document type detected from the upload or file extension. "
+            "You normally do not need to change it."
+        ),
+    )
+    data = fields.Binary(
+        string="Document",
+        required=True,
+        attachment=True,
+        help=(
+            "Upload the information the Assistant should consult. Supported formats "
+            "are TXT, Markdown, CSV, JSON, XML and RST, up to 8 MB."
+        ),
+    )
+    file_size = fields.Integer(
+        string="File size",
+        readonly=True,
+        help="Size of the uploaded document, calculated automatically by Odoo.",
+    )
+    content_fingerprint = fields.Char(
+        string="Current document signature",
+        readonly=True,
+        index=True,
+        size=64,
+        help="Automatic signature of the current file, used to detect document changes.",
+    )
+    indexed_fingerprint = fields.Char(
+        string="Indexed document signature",
+        readonly=True,
+        index=True,
+        size=64,
+        help=(
+            "Signature of the file version currently available for search. A "
+            "difference means the source needs indexing."
+        ),
+    )
+    version = fields.Integer(
+        string="Index version",
+        required=True,
+        readonly=True,
+        default=0,
+        help="Number of successful indexing runs for this source. Odoo increases it automatically.",
+    )
+    chunk_count = fields.Integer(
+        string="Search sections",
+        required=True,
+        readonly=True,
+        default=0,
+        help=(
+            "Number of searchable sections created from the document. Zero means "
+            "there is no searchable content yet."
+        ),
+    )
+    indexed_at = fields.Datetime(
+        string="Last indexed",
+        readonly=True,
+        help="Date and time when this document was last prepared for Assistant search.",
+    )
+    error_code = fields.Char(
+        string="Processing issue",
+        readonly=True,
+        size=128,
+        help=(
+            "Safe issue code recorded when indexing fails. Replace or correct the "
+            "file, then queue indexing again."
+        ),
+    )
     chunk_ids = fields.One2many(
         "odoo.ai.knowledge.chunk",
         "source_id",
         string="Indexed chunks",
+        help="Searchable sections generated automatically from this document.",
     )
 
     _sql_constraints = [  # noqa: RUF012 - Odoo model metadata

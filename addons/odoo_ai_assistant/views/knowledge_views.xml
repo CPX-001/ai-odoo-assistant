@@ -23,19 +23,54 @@
         <field name="arch" type="xml">
             <form string="AI Knowledge Source">
                 <header>
-                    <button name="action_queue_processing" type="object" string="Queue indexing" class="btn-primary" invisible="state == 'processing'"/>
-                    <button name="action_process_now" type="object" string="Process now" groups="base.group_system" invisible="state == 'processing'"/>
-                    <button name="action_disable" type="object" string="Disable" invisible="state != 'active'"/>
-                    <button name="action_activate" type="object" string="Activate" invisible="state != 'indexed'"/>
+                    <button
+                        name="action_queue_processing"
+                        type="object"
+                        string="Queue indexing"
+                        class="btn-primary"
+                        invisible="state == 'processing'"
+                        help="Prepare this document for Assistant search in the background."
+                    />
+                    <button
+                        name="action_process_now"
+                        type="object"
+                        string="Process now"
+                        groups="base.group_system"
+                        invisible="state == 'processing'"
+                        help="Index this document immediately instead of waiting for the background job."
+                    />
+                    <button
+                        name="action_disable"
+                        type="object"
+                        string="Disable"
+                        invisible="state != 'active'"
+                        help="Keep the source but stop the Assistant from using it in answers."
+                    />
+                    <button
+                        name="action_activate"
+                        type="object"
+                        string="Activate"
+                        invisible="state != 'indexed'"
+                        help="Make the indexed document available to the Assistant."
+                    />
                     <field name="state" widget="statusbar" statusbar_visible="uploaded,processing,indexed,active,error"/>
                 </header>
                 <sheet>
+                    <div class="alert alert-info mb-3" role="status">
+                        Add a supported text document, choose who may use it, and wait for
+                        the status to become Active. Odoo calculates the technical values automatically.
+                    </div>
                     <div class="oe_title">
                         <label for="name"/>
-                        <h1><field name="name"/></h1>
+                        <h1>
+                            <field name="name" placeholder="For example: Customer support handbook"/>
+                        </h1>
+                        <div class="text-muted">
+                            Use a title your team will recognize in Assistant citations.
+                        </div>
                     </div>
                     <group>
-                        <group string="Source">
+                        <group string="Document">
                             <field name="source_uuid" readonly="1"/>
                             <field name="filename"/>
                             <field name="mimetype"/>
@@ -43,7 +78,7 @@
                             <field name="file_size" readonly="1"/>
                             <field name="content_fingerprint" readonly="1"/>
                         </group>
-                        <group string="Access and lifecycle">
+                        <group string="Availability">
                             <field name="access_mode"/>
                             <field name="enabled" readonly="1"/>
                             <field name="owner_user_id" readonly="1"/>

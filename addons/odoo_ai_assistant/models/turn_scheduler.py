@@ -93,9 +93,30 @@ class AssistantTurnScheduler(models.Model):
 class AssistantSchedulerDiagnostics(models.TransientModel):
     _inherit = "odoo.ai.assistant.diagnostics"
 
-    scheduler_capacity = fields.Char(readonly=True)
-    scheduler_queue = fields.Char(readonly=True)
-    scheduler_wait = fields.Char(readonly=True)
+    scheduler_capacity = fields.Char(
+        string="Current capacity",
+        readonly=True,
+        help=(
+            "Shows how many Assistant requests are running now, the installation "
+            "limit and the remaining free slots."
+        ),
+    )
+    scheduler_queue = fields.Char(
+        string="Waiting requests",
+        readonly=True,
+        help=(
+            "Summarizes requests waiting to run, ready to start, blocked by "
+            "conversation order or awaiting approval."
+        ),
+    )
+    scheduler_wait = fields.Char(
+        string="Queue wait",
+        readonly=True,
+        help=(
+            "Shows how long the oldest request has waited and how many users currently "
+            "have queued or active work."
+        ),
+    )
 
     def _diagnostic_values(self):
         values = super()._diagnostic_values()

@@ -9,7 +9,7 @@ def _static_text() -> str:
     return "\n".join(
         path.read_text(encoding="utf-8")
         for path in (ADDON_ROOT / "static").rglob("*")
-        if path.is_file()
+        if path.is_file() and path.suffix in {".js", ".scss", ".svg", ".xml"}
     )
 
 
@@ -122,7 +122,7 @@ def test_admin_surfaces_live_under_a_standalone_assistant_app_menu() -> None:
     assert root_menu is not None
     assert root_menu.get("parent") is None
     assert root_menu.get("web_icon") == (
-        "odoo_ai_assistant,static/description/icon.svg"
+        "odoo_ai_assistant,static/description/icon.png"
     )
 
     expected_children = {

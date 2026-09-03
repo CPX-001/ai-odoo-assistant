@@ -37,11 +37,43 @@ _UNUSABLE_ERRORS = frozenset(
 class AssistantDiagnosticsCodexAccount(models.TransientModel):
     _inherit = "odoo.ai.assistant.diagnostics"
 
-    codex_account_state = fields.Char(readonly=True)
-    codex_account_identity = fields.Char(readonly=True)
-    codex_account_plan = fields.Char(readonly=True)
-    codex_account_usage = fields.Text(readonly=True)
-    codex_account_detail = fields.Char(readonly=True)
+    codex_account_state = fields.Char(
+        string="Connection status",
+        readonly=True,
+        help=(
+            "Shows whether the installation's shared Codex account is connected and "
+            "ready to answer Assistant requests."
+        ),
+    )
+    codex_account_identity = fields.Char(
+        string="Connected account",
+        readonly=True,
+        help=(
+            "Email or account identity used by this Odoo installation. Individual "
+            "Odoo users do not need to connect separately."
+        ),
+    )
+    codex_account_plan = fields.Char(
+        string="Account plan",
+        readonly=True,
+        help="Subscription plan reported by the connected Codex account.",
+    )
+    codex_account_usage = fields.Text(
+        string="Usage limits",
+        readonly=True,
+        help=(
+            "Current usage windows reported by Codex, including consumption and "
+            "reset times when available."
+        ),
+    )
+    codex_account_detail = fields.Char(
+        string="Recommended action",
+        readonly=True,
+        help=(
+            "Plain-language explanation of the connection status and the next step "
+            "when attention is required."
+        ),
+    )
 
     def _diagnostic_values(self):
         values = super()._diagnostic_values()

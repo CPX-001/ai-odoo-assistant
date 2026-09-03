@@ -8,10 +8,38 @@ class AssistantDiagnostics(models.TransientModel):
     _name = "odoo.ai.assistant.diagnostics"
     _description = "Odoo AI Assistant Diagnostics"
 
-    readiness = fields.Char(readonly=True)
-    diagnostic_errors = fields.Text(readonly=True)
-    diagnostic_warnings = fields.Text(readonly=True)
-    diagnostic_ok = fields.Text(readonly=True)
+    readiness = fields.Char(
+        string="Runtime mode",
+        readonly=True,
+        help=(
+            "Shows where the Assistant is running. The supported value confirms "
+            "that it is hosted safely inside Odoo."
+        ),
+    )
+    diagnostic_errors = fields.Text(
+        string="Problems requiring attention",
+        readonly=True,
+        help=(
+            "Blocking problems that should be resolved before relying on the "
+            "Assistant."
+        ),
+    )
+    diagnostic_warnings = fields.Text(
+        string="Warnings and pending checks",
+        readonly=True,
+        help=(
+            "Non-blocking items that may reduce availability or are still waiting "
+            "to complete."
+        ),
+    )
+    diagnostic_ok = fields.Text(
+        string="Healthy checks",
+        readonly=True,
+        help=(
+            "Checks that are currently working as expected. No action is required "
+            "for these items."
+        ),
+    )
 
     @api.model
     def default_get(self, field_names):

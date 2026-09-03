@@ -10,21 +10,41 @@
                     <button name="action_open_settings" type="object" string="Open Settings"/>
                 </header>
                 <sheet>
+                    <div class="alert alert-info mb-3" role="status">
+                        This page is read-only and updates automatically. Use Refresh Diagnostics
+                        after changing configuration or when support asks for a fresh status.
+                    </div>
                     <group string="Embedded runtime">
                         <field name="readiness"/>
+                        <div class="text-muted" colspan="2">
+                            Confirms that the Assistant is running in the supported Odoo environment.
+                        </div>
                     </group>
                     <group string="Scheduler">
                         <field name="scheduler_capacity"/>
                         <field name="scheduler_queue"/>
                         <field name="scheduler_wait"/>
+                        <div class="text-muted" colspan="2">
+                            These values explain whether requests can start immediately or are
+                            waiting for capacity, order or approval.
+                        </div>
                     </group>
                     <group string="Errors" col="1" invisible="not diagnostic_errors">
+                        <div class="text-muted">
+                            Resolve these items before depending on the Assistant for daily work.
+                        </div>
                         <field name="diagnostic_errors" nolabel="1"/>
                     </group>
                     <group string="Warnings / pending" col="1" invisible="not diagnostic_warnings">
+                        <div class="text-muted">
+                            The Assistant may still work, but these items can reduce availability.
+                        </div>
                         <field name="diagnostic_warnings" nolabel="1"/>
                     </group>
                     <group string="Healthy checks" col="1" invisible="not diagnostic_ok">
+                        <div class="text-muted">
+                            No action is required for the checks listed here.
+                        </div>
                         <field name="diagnostic_ok" nolabel="1"/>
                     </group>
                     <group string="Codex account">
@@ -33,6 +53,10 @@
                         <field name="codex_account_plan" invisible="not codex_account_plan"/>
                         <field name="codex_account_detail"/>
                         <field name="codex_account_usage" nolabel="1" invisible="not codex_account_usage"/>
+                        <div class="text-muted" colspan="2">
+                            One installation-level account serves all permitted Odoo users;
+                            each user keeps their own Odoo access rights.
+                        </div>
                     </group>
                 </sheet>
             </form>

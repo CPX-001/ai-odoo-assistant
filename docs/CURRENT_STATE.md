@@ -33,7 +33,7 @@ Code or a prepared test is not PASS evidence.
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Supported addon: `addons/odoo_ai_assistant`.
-- Current addon manifest version: `18.0.13.24.0`.
+- Current addon manifest version: `18.0.13.25.0`.
 - Current dependencies remain `account`, `base`, `sale`, `web`.
 - The addon is exposed as an Odoo application with Knowledge, Diagnostics and
   Configuration menus; chat remains globally available from the systray.
@@ -45,6 +45,9 @@ Code or a prepared test is not PASS evidence.
 - Codex App Server is the current concrete reasoning provider and remains an
   ephemeral/provider-owned subprocess.
 - The retired FastAPI/Uvicorn Assistant sidecar is not part of the supported product.
+- Knowledge and Diagnostics expose short customer-facing field help: editable inputs
+  explain what to provide, while host-calculated and read-only values explain what they
+  mean and what action, if any, the administrator should take.
 
 The optional P10 host broker is a separate machine privilege adapter for finite host
 operations. It is not the Assistant runtime, does not run the model and does not own
