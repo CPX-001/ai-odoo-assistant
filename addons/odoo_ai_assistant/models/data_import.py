@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import base64
+import csv
 import hashlib
+import io
 import json
+import math
 from datetime import timedelta
 from uuid import uuid4
 
@@ -24,6 +27,8 @@ _MAX_SAMPLE_VALUE = 160
 _DEFAULT_CHUNK_SIZE = 250
 _MIN_CHUNK_SIZE = 1
 _MAX_CHUNK_SIZE = 1_000
+_MAX_CHUNKS_PER_SESSION = 4_096
+_MAX_PREPARED_ROWS_BYTES = 16 * 1024 * 1024
 _MAX_RECENT_CHUNKS = 20
 _MAX_PUBLIC_MESSAGES = 8
 _MAX_PUBLIC_MESSAGE = 240
@@ -62,7 +67,7 @@ class DataImportWorkflowError(RuntimeError):
 
 
 class DataImportChunkRejected(DataImportWorkflowError):
-    """A bounded chunk failed Odoo's dry-run/real validation."""
+    """A bounded chunk failed Odoo's native import validation."""
 
     def __init__(
         self,
@@ -127,16 +132,43 @@ class AssistantDataImportSession(models.Model):
     )
     filename = fields.Char(required=True, readonly=True, size=255)
     mimetype = fields.Char(required=True, readonly=True, size=120)
-    file_data = fields.Binary(required=True, readonly=True, attachment=True, copy=False)
+    file_data = fields.Binary(
+        required=True,
+        readonly=True,
+        attachment=True,
+        copy=False,
+        groups="base.group_system",
+    )
     file_size = fields.Integer(required=True, readonly=True)
     file_fingerprint = fields.Char(required=True, readonly=True, index=True, size=64)
     target_model = fields.Char(required=True, readonly=True, index=True, size=128)
     headers_json = fields.Json(required=True, readonly=True, copy=False, default=list)
     mapping_json = fields.Json(required=True, readonly=True, copy=False, default=list)
+    import_fields_json = fields.Json(
+        required=True,
+        readonly=True,
+        copy=False,
+        default=list,
+        groups="base.group_system",
+    )
+    prepared_rows_json = fields.Json(
+        required=True,
+        readonly=True,
+        copy=False,
+        default=list,
+        groups="base.group_system",
+    )
+    prepared_rows_fingerprint = fields.Char(
+        required=True,
+        readonly=True,
+        index=True,
+        size=71,
+    )
     import_options_json = fields.Json(required=True, readonly=True, copy=False, default=dict)
     request_fingerprint = fields.Char(required=True, readonly=True, index=True, size=71)
     mapping_fingerprint = fields.Char(required=True, readonly=True, index=True, size=71)
     chunk_size = fields.Integer(required=True, readonly=True, default=_DEFAULT_CHUNK_SIZE)
+    planned_chunk_count = fields.Integer(required=True, readonly=True, default=0)
     total_rows = fields.Integer(required=True, readonly=True, default=0)
     duplicate_rows = fields.Integer(required=True, readonly=True, default=0)
     next_row = fields.Integer(required=True, readonly=True, default=0)
@@ -266,7 +298,7 @@ class AssistantDataImportSession(models.Model):
         }
 
     @api.model
-    def validate_csv_request(
+    def _prepare_csv_request(
         self,
         *,
         turn_uuid,
@@ -295,13 +327,23 @@ class AssistantDataImportSession(models.Model):
             attachment_id=attachment_id,
         )
         raw = _attachment_bytes(attachment)
-        exact_rows = _mapped_rows(
+        exact_rows, import_fields = _mapped_rows(
             self.env,
             raw=raw,
             filename=attachment.filename,
             target_model=inspection["target_model"],
             fields_vector=fields_vector,
             options=inspection["import_options"],
+        )
+        total_rows = len(exact_rows)
+        if total_rows <= 0:
+            raise DataImportWorkflowError("data_import_no_rows")
+        planned_chunks = math.ceil(total_rows / chunk_size)
+        if planned_chunks > _MAX_CHUNKS_PER_SESSION:
+            raise DataImportWorkflowError("data_import_too_many_chunks")
+        prepared_rows_fingerprint = _prepared_rows_fingerprint(
+            import_fields,
+            exact_rows,
         )
         duplicate_rows = _duplicate_rows(exact_rows)
         mapping_fingerprint = _fingerprint(
@@ -318,13 +360,18 @@ class AssistantDataImportSession(models.Model):
                 "mapping": normalized_mapping,
                 "options": inspection["import_options"],
                 "chunk_size": chunk_size,
+                "prepared_rows": prepared_rows_fingerprint,
             }
         )
         return {
             **inspection,
             "mapping": normalized_mapping,
+            "import_fields": import_fields,
+            "prepared_rows": exact_rows,
+            "prepared_rows_fingerprint": prepared_rows_fingerprint,
             "chunk_size": chunk_size,
-            "total_rows": len(exact_rows),
+            "planned_chunks": planned_chunks,
+            "total_rows": total_rows,
             "duplicate_rows": duplicate_rows,
             "mapping_fingerprint": mapping_fingerprint,
             "request_fingerprint": request_fingerprint,
@@ -344,15 +391,13 @@ class AssistantDataImportSession(models.Model):
 
         if self.env.su:
             raise AccessError("Assistant import creation requires the effective user")
-        request = self.validate_csv_request(
+        request = self._prepare_csv_request(
             turn_uuid=turn_uuid,
             attachment_id=attachment_id,
             target_model=target_model,
             mapping=mapping,
             chunk_size=chunk_size,
         )
-        if request["total_rows"] <= 0:
-            raise DataImportWorkflowError("data_import_no_rows")
         attachment = _bound_attachment(
             self.env,
             turn_uuid=turn_uuid,
@@ -385,10 +430,14 @@ class AssistantDataImportSession(models.Model):
                 "target_model": request["target_model"],
                 "headers_json": request["headers"],
                 "mapping_json": request["mapping"],
+                "import_fields_json": request["import_fields"],
+                "prepared_rows_json": request["prepared_rows"],
+                "prepared_rows_fingerprint": request["prepared_rows_fingerprint"],
                 "import_options_json": request["import_options"],
                 "request_fingerprint": request["request_fingerprint"],
                 "mapping_fingerprint": request["mapping_fingerprint"],
                 "chunk_size": request["chunk_size"],
+                "planned_chunk_count": request["planned_chunks"],
                 "total_rows": request["total_rows"],
                 "duplicate_rows": request["duplicate_rows"],
                 "state": "queued",
@@ -438,6 +487,7 @@ class AssistantDataImportSession(models.Model):
             ),
             "duplicate_rows": self.duplicate_rows,
             "chunk_size": self.chunk_size,
+            "planned_chunk_count": self.planned_chunk_count,
             "chunk_count": self.chunk_count,
             "mapping_fingerprint": self.mapping_fingerprint,
             "last_error_code": self.last_error_code or "",
@@ -447,7 +497,7 @@ class AssistantDataImportSession(models.Model):
 
     @api.model
     def _cron_process_pending(self):
-        """Process at most one chunk; transaction commit is the chunk receipt boundary."""
+        """Process at most one chunk; transaction commit is the receipt boundary."""
 
         system_model = self.with_user(SUPERUSER_ID)
         session = system_model._claim_next_session()
@@ -499,28 +549,16 @@ class AssistantDataImportSession(models.Model):
             headers=list(self.headers_json or []),
             safe_fields=safe_fields,
         )
-        fields_vector = _fields_vector(list(self.headers_json or []), mapping)
-        raw = _session_bytes(self)
-        options = _safe_import_options(self.import_options_json)
-        options["skip"] = self.next_row
-        options["limit"] = self.chunk_size
+        expected_import_fields = [item["field"] for item in mapping]
+        import_fields = _import_fields(self.import_fields_json)
+        if import_fields != expected_import_fields:
+            raise DataImportWorkflowError("data_import_mapping_stale")
 
-        wizard = _native_wizard(
-            effective_env,
-            raw=raw,
-            filename=self.filename,
-            target_model=self.target_model,
-        )
-        try:
-            remaining, _import_fields = wizard._convert_import_data(  # noqa: SLF001
-                fields_vector,
-                dict(options),
-            )
-        except Exception as error:  # noqa: BLE001 - Odoo importer failures are sanitized
-            raise DataImportWorkflowError("data_import_csv_invalid") from error
+        prepared_rows = self.prepared_rows_json
+        if not isinstance(prepared_rows, list) or len(prepared_rows) != self.total_rows:
+            raise DataImportWorkflowError("data_import_artifact_corrupt")
 
-        input_count = min(self.chunk_size, len(remaining))
-        if input_count <= 0:
+        if self.next_row >= self.total_rows:
             self.write(
                 {
                     "state": "completed",
@@ -531,9 +569,18 @@ class AssistantDataImportSession(models.Model):
             )
             return
 
+        row_offset = self.next_row
+        chunk_rows = prepared_rows[row_offset : row_offset + self.chunk_size]
+        chunk_rows = _chunk_rows(chunk_rows, import_fields=import_fields)
+        input_count = len(chunk_rows)
+        if input_count <= 0:
+            raise DataImportWorkflowError("data_import_artifact_corrupt")
+
         sequence = self.chunk_count + 1
-        row_start = self.next_row + 1
-        row_end = self.next_row + input_count
+        if sequence > self.planned_chunk_count:
+            raise DataImportWorkflowError("data_import_chunk_sequence_invalid")
+        row_start = row_offset + 1
+        row_end = row_offset + input_count
         self.write(
             {
                 "state": "running",
@@ -541,30 +588,21 @@ class AssistantDataImportSession(models.Model):
             }
         )
 
-        dryrun = wizard.execute_import(
-            fields_vector,
-            list(self.headers_json),
-            dict(options),
-            dryrun=True,
+        raw_chunk = _canonical_chunk_csv(import_fields, chunk_rows)
+        wizard = _native_wizard(
+            effective_env,
+            raw=raw_chunk,
+            filename=f"assistant-import-{self.session_uuid}-{sequence}.csv",
+            target_model=self.target_model,
         )
-        dry_messages = dryrun.get("messages") if isinstance(dryrun, dict) else None
-        if dry_messages:
-            raise DataImportChunkRejected(
-                sequence=sequence,
-                row_start=row_start,
-                row_end=row_end,
-                input_count=input_count,
-                messages=dry_messages,
-            )
-
         result = wizard.execute_import(
-            fields_vector,
-            list(self.headers_json),
-            dict(options),
+            import_fields,
+            import_fields,
+            _chunk_import_options(self.import_options_json),
             dryrun=False,
         )
         messages = result.get("messages") if isinstance(result, dict) else None
-        if messages:
+        if _has_import_errors(messages):
             raise DataImportChunkRejected(
                 sequence=sequence,
                 row_start=row_start,
@@ -580,12 +618,8 @@ class AssistantDataImportSession(models.Model):
         ):
             raise DataImportWorkflowError("data_import_result_invalid")
 
-        nextrow = result.get("nextrow")
-        if type(nextrow) is int and nextrow > self.next_row:
-            next_row = nextrow
-        else:
-            next_row = self.next_row + input_count
-        complete = nextrow == 0 or next_row >= self.total_rows
+        next_row = row_offset + input_count
+        complete = next_row >= self.total_rows
         receipt_fingerprint = _fingerprint(
             {
                 "session": self.session_uuid,
@@ -594,6 +628,7 @@ class AssistantDataImportSession(models.Model):
                 "row_end": row_end,
                 "record_ids": record_ids,
                 "mapping": self.mapping_fingerprint,
+                "prepared_rows": self.prepared_rows_fingerprint,
             }
         )
         self.env["odoo.ai.data.import.chunk"].with_user(SUPERUSER_ID).create(
@@ -606,7 +641,7 @@ class AssistantDataImportSession(models.Model):
                 "imported_count": input_count,
                 "failed_count": 0,
                 "record_ids_json": record_ids,
-                "messages_json": [],
+                "messages_json": _sanitize_messages(messages),
                 "state": "completed",
                 "receipt_fingerprint": receipt_fingerprint,
                 "completed_at": fields.Datetime.now(),
@@ -649,6 +684,7 @@ class AssistantDataImportSession(models.Model):
                         "row_end": error.row_end,
                         "failed_count": error.input_count,
                         "mapping": self.mapping_fingerprint,
+                        "prepared_rows": self.prepared_rows_fingerprint,
                     }
                 ),
                 "completed_at": fields.Datetime.now(),
@@ -886,12 +922,18 @@ def _column_examples(raw_preview, headers):
     values = raw_preview if isinstance(raw_preview, list) else []
     result = []
     for index, header in enumerate(headers):
-        raw_examples = values[index] if index < len(values) and isinstance(values[index], list) else []
+        raw_examples = (
+            values[index]
+            if index < len(values) and isinstance(values[index], list)
+            else []
+        )
         examples = []
         for value in raw_examples[:_MAX_SAMPLE_VALUES]:
             sample = " ".join(str(value or "").replace("\x00", "").split())
             examples.append(sample[:_MAX_SAMPLE_VALUE])
-        result.append({"column_index": index, "column": header, "examples": examples})
+        result.append(
+            {"column_index": index, "column": header, "examples": examples}
+        )
     return result
 
 
@@ -919,6 +961,21 @@ def _safe_import_options(value):
         raise DataImportWorkflowError("data_import_options_invalid")
     if not isinstance(result["quoting"], str) or len(result["quoting"]) > 4:
         raise DataImportWorkflowError("data_import_options_invalid")
+    return result
+
+
+def _chunk_import_options(value):
+    result = _safe_import_options(value)
+    result.update(
+        {
+            "has_headers": True,
+            "separator": ",",
+            "quoting": '"',
+            "encoding": "utf-8",
+        }
+    )
+    result.pop("skip", None)
+    result.pop("limit", None)
     return result
 
 
@@ -968,22 +1025,93 @@ def _mapped_rows(env, *, raw, filename, target_model, fields_vector, options):
         target_model=target_model,
     )
     try:
-        rows, _fields = wizard._convert_import_data(  # noqa: SLF001
+        rows, import_fields = wizard._convert_import_data(  # noqa: SLF001
             fields_vector,
             dict(options),
         )
     except Exception as error:  # noqa: BLE001 - native import errors are sanitized
         raise DataImportWorkflowError("data_import_csv_invalid") from error
+    if not isinstance(rows, list) or not isinstance(import_fields, list):
+        raise DataImportWorkflowError("data_import_csv_invalid")
+    import_fields = _import_fields(import_fields)
+    _validate_prepared_rows(rows, import_fields=import_fields)
+    return rows, import_fields
+
+
+def _import_fields(value):
+    if (
+        not isinstance(value, list)
+        or not 1 <= len(value) <= _MAX_COLUMNS
+        or any(not isinstance(item, str) or not item for item in value)
+        or len(value) != len(set(value))
+    ):
+        raise DataImportWorkflowError("data_import_mapping_stale")
+    return list(value)
+
+
+def _validate_prepared_rows(rows, *, import_fields):
     if not isinstance(rows, list):
         raise DataImportWorkflowError("data_import_csv_invalid")
-    return rows
+    width = len(import_fields)
+    for row in rows:
+        if (
+            not isinstance(row, list)
+            or len(row) != width
+            or any(not isinstance(value, str) for value in row)
+        ):
+            raise DataImportWorkflowError("data_import_csv_invalid")
+    try:
+        encoded = json.dumps(
+            rows,
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise DataImportWorkflowError("data_import_csv_invalid") from error
+    if len(encoded) > _MAX_PREPARED_ROWS_BYTES:
+        raise DataImportWorkflowError("data_import_prepared_rows_too_large")
+
+
+def _prepared_rows_fingerprint(import_fields, rows):
+    _validate_prepared_rows(rows, import_fields=import_fields)
+    return _fingerprint({"fields": import_fields, "rows": rows})
+
+
+def _chunk_rows(value, *, import_fields):
+    if not isinstance(value, list) or not value:
+        raise DataImportWorkflowError("data_import_artifact_corrupt")
+    width = len(import_fields)
+    result = []
+    for row in value:
+        if (
+            not isinstance(row, list)
+            or len(row) != width
+            or any(not isinstance(item, str) for item in row)
+        ):
+            raise DataImportWorkflowError("data_import_artifact_corrupt")
+        result.append(list(row))
+    return result
+
+
+def _canonical_chunk_csv(import_fields, rows):
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(
+        buffer,
+        delimiter=",",
+        quotechar='"',
+        lineterminator="\n",
+    )
+    writer.writerow(import_fields)
+    writer.writerows(rows)
+    return buffer.getvalue().encode("utf-8")
 
 
 def _duplicate_rows(rows):
     seen = set()
     duplicates = 0
     for row in rows:
-        key = tuple(str(value) for value in row)
+        key = tuple(row)
         if key in seen:
             duplicates += 1
         else:
@@ -999,27 +1127,16 @@ def _chunk_size(value):
 
 def _attachment_bytes(attachment):
     try:
-        payload = attachment.data.encode("ascii") if isinstance(attachment.data, str) else attachment.data
+        payload = (
+            attachment.data.encode("ascii")
+            if isinstance(attachment.data, str)
+            else attachment.data
+        )
         raw = base64.b64decode(payload, validate=True)
     except Exception as error:
         raise DataImportWorkflowError("data_import_attachment_invalid") from error
     if not raw or hashlib.sha256(raw).hexdigest() != attachment.fingerprint:
         raise DataImportWorkflowError("data_import_attachment_stale")
-    return raw
-
-
-def _session_bytes(session):
-    try:
-        payload = session.file_data.encode("ascii") if isinstance(session.file_data, str) else session.file_data
-        raw = base64.b64decode(payload, validate=True)
-    except Exception as error:
-        raise DataImportWorkflowError("data_import_artifact_corrupt") from error
-    if (
-        not raw
-        or len(raw) != session.file_size
-        or hashlib.sha256(raw).hexdigest() != session.file_fingerprint
-    ):
-        raise DataImportWorkflowError("data_import_artifact_corrupt")
     return raw
 
 
@@ -1039,6 +1156,16 @@ def _effective_user_env(session):
     return env
 
 
+def _has_import_errors(messages):
+    return bool(
+        isinstance(messages, list)
+        and any(
+            isinstance(item, dict) and item.get("type") == "error"
+            for item in messages
+        )
+    )
+
+
 def _sanitize_messages(messages):
     if not isinstance(messages, list):
         return []
@@ -1050,7 +1177,9 @@ def _sanitize_messages(messages):
         message = item.get("message")
         if kind not in {"error", "warning"}:
             kind = "error"
-        public = " ".join(str(message or "Import validation failed.").replace("\x00", "").split())
+        public = " ".join(
+            str(message or "Import validation failed.").replace("\x00", "").split()
+        )
         result.append({"type": kind, "message": public[:_MAX_PUBLIC_MESSAGE]})
     return result
 
