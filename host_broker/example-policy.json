@@ -1,0 +1,23 @@
+{
+  "protocol_version": 1,
+  "allowed_peer_uids": [1001],
+  "socket_gid": 1001,
+  "systemctl_path": "/usr/bin/systemctl",
+  "config_targets": {
+    "odoo": {
+      "path": "/etc/odoo/odoo.conf",
+      "allowed_keys": [
+        "workers",
+        "limit_time_cpu",
+        "limit_time_real"
+      ],
+      "max_bytes": 262144
+    }
+  },
+  "service_targets": {
+    "odoo-test": {
+      "unit": "odoo-test.service",
+      "timeout_seconds": 60
+    }
+  }
+}

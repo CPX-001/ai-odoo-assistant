@@ -1,0 +1,37 @@
+[Unit]
+Description=Odoo AI Assistant typed host privilege broker
+After=local-fs.target
+Before=odoo.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+UMask=0077
+RuntimeDirectory=odoo-ai-host-broker
+RuntimeDirectoryMode=0755
+StateDirectory=odoo-ai-host-broker
+StateDirectoryMode=0700
+ExecStart=/usr/bin/python3 -m odoo_ai_host_broker --policy /etc/odoo-ai-host-broker/policy.json --socket /run/odoo-ai-host-broker/broker.sock --state-db /var/lib/odoo-ai-host-broker/execution.sqlite3 --backups-dir /var/lib/odoo-ai-host-broker/backups
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectSystem=strict
+ReadWritePaths=/etc/odoo/odoo.conf /var/lib/odoo-ai-host-broker /run/odoo-ai-host-broker
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+# Deployment note:
+# The ReadWritePaths line matches example-policy.json only. Replace it with the exact
+# deployment-managed config targets; do not broaden it to a filesystem root. The broker
+# state/runtime directories must remain writable.
+
+[Install]
+WantedBy=multi-user.target
