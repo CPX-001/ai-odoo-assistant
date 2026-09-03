@@ -1,78 +1,72 @@
 # Odoo AI Assistant documentation
 
-Code on current `main` plus accepted ADRs is technical authority. Current-state docs
-summarize that code; dated research/PDFs and external projects are design evidence.
+Current code plus accepted ADRs are authoritative. Use this index for the supported
+Odoo 18 product; dated reports and immutable evidence remain historical proof rather
+than the current cursor.
 
 ## Current formal state
 
 ```text
 P0-P11 COMPLETE / ACCEPTED
-P11 accepted through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
-P12.1 BOUNDED SOURCE WORKSPACES FOCUSED ACCEPTED / P12.2 ELIGIBLE
+P12.1 BOUNDED SOURCE WORKSPACES FOCUSED ACCEPTED
+P12.2 TYPED PATCH/DIFF IMPLEMENTED / VALIDATION PENDING
 P12 NOT ACCEPTED
+post-P11 spreadsheet/chat import breadth IMPLEMENTED / VALIDATION PENDING
 ```
 
 P11 acceptance evidence:
 [`research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`](research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md).
 
-P12.1 adds no source-edit capability. Its focused authority gate passed, so the
-path/fingerprint/workspace prerequisite defined by ADR-025 is ready for P12.2.
+P12.1 focused evidence:
+[`research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md`](research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md).
+
+The exact current cursor and unexecuted gates are in
+[`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
 
 ## Primary reading path
 
-1. [`CURRENT_STATE.md`](CURRENT_STATE.md) — supported implementation snapshot.
+1. [`CURRENT_STATE.md`](CURRENT_STATE.md) — current implementation snapshot.
 2. [`ARCHITECTURE.md`](ARCHITECTURE.md) — runtime and authority boundaries.
 3. [`PRODUCT_VISION.md`](PRODUCT_VISION.md) — product direction.
 4. [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md) — executable extension contract.
 5. [`EVIDENCE_ARCHITECTURE.md`](EVIDENCE_ARCHITECTURE.md) — retrieval/Evidence contract.
 6. [`KNOWLEDGE_INDEX.md`](KNOWLEDGE_INDEX.md) — company Knowledge.
 7. [`adr/ADR-024-technical-host-privilege-broker.md`](adr/ADR-024-technical-host-privilege-broker.md) — finite privileged host boundary.
-8. [`adr/ADR-025-controlled-source-workspaces.md`](adr/ADR-025-controlled-source-workspaces.md) — P12 source/workspace/deploy authority prerequisite.
-9. [`research/P12_SOURCE_WORKSPACE_FOUNDATION.md`](research/P12_SOURCE_WORKSPACE_FOUNDATION.md) — implemented P12.1 contract.
-10. [`research/P12_FOCUSED_VALIDATION_RUNBOOK.md`](research/P12_FOCUSED_VALIDATION_RUNBOOK.md) — executed P12.1 focused gate and later real gates.
-11. [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) — exact roadmap cursor.
+8. [`adr/ADR-025-controlled-source-workspaces.md`](adr/ADR-025-controlled-source-workspaces.md) — source workspace/deploy authority boundary.
+9. [`research/P11_SPREADSHEET_CHAT_IMPORT_EXTENSION.md`](research/P11_SPREADSHEET_CHAT_IMPORT_EXTENSION.md) — post-P11 Excel/chat breadth and validation debt.
+10. [`research/P12_SOURCE_WORKSPACE_FOUNDATION.md`](research/P12_SOURCE_WORKSPACE_FOUNDATION.md) — accepted P12.1 implementation contract.
+11. [`research/P12_PATCH_DIFF_CONTRACT.md`](research/P12_PATCH_DIFF_CONTRACT.md) — implemented P12.2 contract.
+12. [`research/P12.2_FOCUSED_VALIDATION_RUNBOOK.md`](research/P12.2_FOCUSED_VALIDATION_RUNBOOK.md) — immediate validation gate.
+13. [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) — exact roadmap cursor.
 
-## Architecture at a glance
+## Current architecture at a glance
 
 ```mermaid
 flowchart TB
-    UI[OWL chat / admin surfaces] --> TURN[Durable Odoo turn]
-    TURN --> HOST[Provider-neutral host decision loop]
-    HOST <--> MODEL[Codex App Server adapter]
-    HOST --> EXT[Capabilities + Skills + Context + Evidence]
-    EXT --> ORM[Effective-user Odoo ORM, su=False]
-    HOST --> EFFECT[EffectPlan / policy / approval / verify]
-    EFFECT --> ORM
-    EFFECT --> BROKER[Optional typed P10 broker]
-    EVID[Installed source/log/Knowledge Evidence] --> HOST
-    SRC[Installed addon source] --> WS[P12 private bounded workspace]
-    WS -. future P12.2/P12.3 .-> TEST[Typed diff + tests]
-    TEST -. future P12.4 .-> DEPLOY[Separately authorized deployment]
+    UI[OWL chat / Odoo surfaces] --> TURN[Durable Odoo turn]
+    TURN --> HOST[Provider-neutral host loop]
+    HOST <--> MODEL[Reasoning provider]
+    HOST --> CAT[Effective CapabilityRegistry]
+    HOST --> EVD[Evidence / Knowledge]
+    CAT --> EXEC[Executor + policy + approval]
+    EXEC --> ORM[Effective Odoo user, su=False]
+    EXEC --> BROKER[Finite optional P10 host broker]
+    UI --> ART[Short-lived turn attachments]
+    ART --> IMPORT[P11 durable import sessions]
+    SRC[Installed addon source] --> WS[P12.1 private workspace]
+    WS --> PATCH[P12.2 typed diff + derived workspace]
+    PATCH -. future exact test receipt .-> DEPLOY[future managed deploy]
 ```
 
-Installed source and workspace contents are data/preconditions, not authority. The
-model never receives a generic filesystem command surface.
+A spreadsheet attached through chat is a temporary artifact for the turn/import path,
+not automatically a Knowledge source. A P12 staged patch is a private workspace effect,
+not a production source deployment.
 
-## Current implementation records
+## Authority rule
 
-```text
-research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md
-research/P11_IMPORT_CLEANUP_REPAIR_SLICE.md
-research/P11_FOCUSED_VALIDATION_RUNBOOK.md
-research/P12_SOURCE_WORKSPACE_FOUNDATION.md
-research/P12_FOCUSED_VALIDATION_RUNBOOK.md
-research/REAL_ENV_VALIDATION_PROTOCOL.md
-```
+A capability name, file, retrieved excerpt, workspace, model proposal or approved diff
+never creates authority by itself. The host still validates effective user/group,
+schema, policy, approval, binding, preconditions, execution and verification.
 
-Historical evidence remains under `research/evidence/` and must not be rewritten to
-make old states appear current.
-
-## Status terminology
-
-- **Implemented:** code exists on the supported path.
-- **Implemented / validation pending:** code exists but required gates remain open.
-- **Accepted:** required gates/evidence are green for the recorded lineage.
-- **Target/proposed:** product direction only.
-- **Historical:** retained for lineage/evidence.
-
-No unexecuted gate may be represented as PASS.
+When documents disagree, prefer current code + accepted ADRs, then current subsystem
+docs/tests/evidence, then dated research.

@@ -1,6 +1,6 @@
 # Stabilization execution state
 
-State format: 72
+State format: 73
 Updated: 2026-09-03
 
 ## Accepted lineage
@@ -14,10 +14,12 @@ P8 final acceptance through e370af8acb7df175c0a90c8e17520c8576b4c6ce
 P9 final acceptance through 77d470febf67ddee46562907718dc47e975922bb
 P10 final acceptance through bde508b737c132140e237cdfde31aee9b37eca5f
 P11 final acceptance through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
+P12.1 focused slice accepted through bd2fc35024d1cada7cc922ccd2dcad3a61a16baa
 ```
 
-P11 remains the latest fully accepted phase. P12.1 has passed its focused authority
-gate and is accepted as a Phase-12 slice; full P12 remains incomplete.
+P11 remains the latest fully accepted phase. P12.1 is an accepted Phase-12 foundation.
+P12.2 is implemented on `main` but unvalidated. A post-P11 spreadsheet/chat breadth
+fix is also implemented but unvalidated and does not rewrite P11 acceptance evidence.
 
 ## Current cursor
 
@@ -25,128 +27,167 @@ gate and is accepted as a Phase-12 slice; full P12 remains incomplete.
 phase: 12
 phase_name: controlled source-code modification
 active_slice: P12.2-PROPOSED-PATCH-DIFF-CONTRACT
-slice_state: READY_NOT_STARTED
-current_gate_type: HARD_AUTHORITY_AND_DESIGN
-blocking_implementation: P12.2 is not implemented; no typed workspace patch/diff capability or approved-diff fingerprint exists
-blocking_validation: none for P12.1; P12 real gates remain pending until their corresponding P12.2-P12.4 contracts exist
+slice_state: IMPLEMENTED_FOCUSED_VALIDATION_PENDING
+current_gate_type: HARD_FOCUSED_AUTHORITY
+blocking_implementation: none for P12.2; P12.3 test-execution remains intentionally unimplemented until the P12.2 focused authority gate is green
+blocking_validation: P12.2 dependency-light/Odoo focused gate plus the spreadsheet/chat regression are unexecuted
 latest_accepted_evidence: docs/research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md
 latest_phase_acceptance: docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md
-latest_implementation_record: docs/research/P12_SOURCE_WORKSPACE_FOUNDATION.md
-latest_validation_record: docs/research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md
-next_action: begin P12.2 by defining a typed proposed patch/diff contract restricted to the bound workspace, with exact before/after/diff fingerprints and no physical-path or free-form command input
+latest_implementation_record: docs/research/P12_PATCH_DIFF_CONTRACT.md
+latest_validation_record: docs/research/P12.2_FOCUSED_VALIDATION_RUNBOOK.md
+next_action: execute focused P12.2 source-patch gates and the XLSX/chat regression on the committed SHA; repair failures; then run the applicable real diff-approval gate before beginning P12.3 tests-before-deploy
 ```
 
-## P12.1 implementation
+## Post-P11 spreadsheet/chat import breadth
 
-Authority decision:
+Implementation lineage:
 
 ```text
-ADR-025 controlled source workspaces before patch/test/deploy
+da9bdac59ba3c7ea6e4be1e2511ea24fb4979ce3  allow spreadsheet imports from chat attachments
+```
+
+Implemented:
+
+```text
+paperclip accepts CSV/XLS/XLSX/ODS in addition to P9 document formats
+short-lived XLS/XLSX/ODS artifacts can bind to a durable turn
+spreadsheet artifacts are not automatically persisted as Company Knowledge
+Odoo base_import performs native workbook parsing during preparation
+assistant.data_import.inspect_file
+assistant.data_import.start_file
+existing P11 staged-row/chunk/receipt/no-replay execution remains unchanged
+```
+
+Validation:
+
+```text
+TestPhase11SpreadsheetImport             NOT EXECUTED — prepared 2 methods
+TestPhase11DataImportSession             accepted baseline, focused regression rerun pending
+real browser .xlsx paperclip/upload      NOT EXECUTED
+post-P11 spreadsheet breadth             NOT ACCEPTED / VALIDATION PENDING
+```
+
+The immutable P11 acceptance remains the create-only CSV evidence recorded at
+`docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`.
+
+## P12.1 accepted foundation
+
+ADR-025 remains authoritative:
+
+```text
+workspace-first source modification
 installed source is read-only to ordinary Assistant mutation
-module identity resolves source root host-side
-no model-supplied absolute path
-private workspace beneath RuntimePaths.source/workspaces
-workspace/source roots must be disjoint
-no followed source symlinks or special files
-source/workspace fingerprints exclude timestamps and physical paths
-public workspace metadata contains no physical paths or raw database name
-workspace is bound to Odoo uid/company/database fingerprint/originating turn
-no source-edit/test/deploy capability is registered in P12.1
+host resolves installed module -> exact root
+logical workspace ids only
+uid/company/database-hash/turn binding
+source/workspace deterministic fingerprints
+no generic shell/Git/sudo/filesystem-write authority
+production deployment is a separate effect boundary
 ```
 
-Implemented runtime primitive:
+Formal P12.1 committed-SHA checks:
 
 ```text
-addons/odoo_ai_assistant/runtime/source_workspace.py
-SourceWorkspaceStore.prepare / inspect / delete
-prepare_installed_module_workspace
-inspect_installed_module_workspace
-delete_installed_module_workspace
+python compileall                              PASS
+Ruff                                           PASS
+SourceWorkspaceTests                           PASS — 10 tests
+TestPhase12SourceWorkspace                     PASS — 3 methods / 0 failures / 0 errors
 ```
-
-Hard ceilings:
-
-```text
-max files               4096
-max total bytes          64 MiB
-max file bytes           8 MiB
-max relative path        512 chars
-max path depth           24
-workspace dirs           0700
-workspace files          0600
-```
-
-Fingerprint chain:
-
-```text
-installed source baseline fingerprint
- -> workspace baseline fingerprint
- -> current workspace fingerprint
- -> future approved diff fingerprint (P12.2)
- -> future exact test receipt fingerprint (P12.3)
- -> future deploy precondition/receipt (P12.4)
-```
-
-A later deploy must also prove that the installed source baseline remains current. A
-stale source must be reprepared/rebased rather than overwritten.
-
-## P12.1 validation and acceptance
-
-Formal committed-SHA checks on `ad1378be0836fa3d49e4f24019288aa3a6e71b46`:
-
-```text
-python compileall                                      PASS
-Ruff                                                   PASS
-SourceWorkspaceTests                                   PASS — 10 tests
-TestPhase12SourceWorkspace                             PASS — 3 methods / 0 failures / 0 errors
-```
-
-They cover Technical access, path-free installed-addon workspace preparation, source
-freshness, non-Technical denial, cross-user denial, cross-turn denial, source
-immutability, path/symlink/secret bounds and owner-bound cleanup.
-
-P12.1 acceptance: **COMPLETE / P12.2 ELIGIBLE**.
 
 Evidence:
 `docs/research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md`.
 
-## Later Phase-12 real gates
+## P12.2 implemented contract
 
-All remain unexecuted:
+Implementation lineage:
 
 ```text
-P12-REAL-PATH-BOUNDARY
-P12-REAL-DIFF-APPROVAL
-P12-REAL-TEST-BEFORE-DEPLOY
-P12-REAL-DEPLOY-VERIFY
-P12-REAL-FAILED-DEPLOY-RECOVERY
+41cb1dc26948d332baa324637a1be4e138f8b443  typed staged source patch contract
 ```
 
-P12.1 supplies the tested foundation for the first gate; P12.2-P12.4 must implement
-the remaining contracts before any Phase-12 real gate can be claimed PASS.
+New runtime primitive:
 
-## P11 accepted baseline
+```text
+addons/odoo_ai_assistant/runtime/source_patch.py
+```
 
-P11 focused static/module tests, 8 focused Odoo methods and all six real import gates
-are PASS on:
+Capability surface:
 
-`docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`.
+```text
+assistant.source_workspace.prepare         PLAN / Technical
+assistant.source_workspace.inspect         READ / Technical
+assistant.source_workspace.read_file       READ / Technical
+assistant.source_workspace.preview_patch   READ / Technical
+assistant.source_workspace.apply_patch     PLAN / ACTION / POLICY / Technical
+assistant.source_workspace.inspect_patch   READ / Technical
+```
 
-Its create-only CSV breadth boundary remains explicit.
+Patch semantics:
+
+```text
+logical workspace id + exact expected workspace fingerprint
+bounded typed create/delete/exact-text replacement
+finite patchable text/source suffixes
+no physical path / command / Git / Python execution input
+complete bounded unified diff or reject
+before workspace fingerprint
+after workspace fingerprint
+diff fingerprint
+approval fingerprint
+apply creates a new derived workspace; parent remains unchanged
+private patch receipt binds parent/child/binding/fingerprints/changed logical paths
+installed source remains untouched
+```
+
+Hard P12.2 ceilings:
+
+```text
+changed files                 12
+edits per file                16
+total edits                   48
+one patchable file            512 KiB
+aggregate proposal text       2 MiB
+approval diff                 48 KiB
+bounded staged file read      240 lines / 32 KiB
+```
+
+Prepared validation:
+
+```text
+SourcePatchTests                          NOT EXECUTED — prepared 9 tests
+TestPhase12SourcePatch                    NOT EXECUTED — prepared 3 methods
+TestPhase12SourceWorkspace neighbor       focused rerun pending after capability promotion
+P12-REAL-DIFF-APPROVAL                    NOT EXECUTED
+P12.2 acceptance                          NOT COMPLETE
+```
+
+Use `docs/research/P12.2_FOCUSED_VALIDATION_RUNBOOK.md`.
+
+## Remaining Phase-12 real gates
+
+```text
+P12-REAL-PATH-BOUNDARY                    NOT EXECUTED
+P12-REAL-DIFF-APPROVAL                    NOT EXECUTED
+P12-REAL-TEST-BEFORE-DEPLOY               BLOCKED — P12.3 missing
+P12-REAL-DEPLOY-VERIFY                    BLOCKED — P12.4 missing
+P12-REAL-FAILED-DEPLOY-RECOVERY           BLOCKED — P12.4 missing
+P12 acceptance                            NOT COMPLETE
+```
 
 ## Permanent invariants
 
 - Odoo is operational/persistence authority.
 - Business execution uses the effective user Environment with `su=False`.
-- `CapabilityDefinition` is the atomic executable contract.
-- Skills, Evidence, file contents and workspace contents never grant authority.
+- `CapabilityDefinition` remains the atomic executable contract.
+- Skills, Evidence, attachments and workspace contents never grant authority.
+- Binary/base64 and complete large staged payloads are not dumped into prompts.
 - The model never selects a production filesystem path.
 - A writable OS path is not automatically an authorized Assistant mutation target.
-- Source edits are workspace-first; protected production deployment is separately
+- Source editing is workspace-first; protected production deployment is separately
   typed and policy-bound.
 - No arbitrary SQL, Python, shell, sudo, unrestricted ORM method, Git command or
   arbitrary filesystem-write capability is exposed.
-- Approved diff, test receipt and deploy receipt must bind exact fingerprints.
+- Approved diff, future test receipt and future deploy receipt bind exact fingerprints.
 - Stale source is not overwritten silently.
 - Uncertain post-deploy effects are never blindly retried.
 - No unexecuted test/gate may be represented as PASS.
@@ -155,8 +196,10 @@ Its create-only CSV breadth boundary remains explicit.
 
 ```text
 docs/adr/ADR-025-controlled-source-workspaces.md
+docs/research/P11_SPREADSHEET_CHAT_IMPORT_EXTENSION.md
 docs/research/P12_SOURCE_WORKSPACE_FOUNDATION.md
-docs/research/P12_FOCUSED_VALIDATION_RUNBOOK.md
+docs/research/P12_PATCH_DIFF_CONTRACT.md
+docs/research/P12.2_FOCUSED_VALIDATION_RUNBOOK.md
 docs/research/REAL_ENV_VALIDATION_PROTOCOL.md
 docs/research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md
 docs/research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md

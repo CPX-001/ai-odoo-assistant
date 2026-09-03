@@ -9,28 +9,29 @@ For the exact roadmap cursor and validation truth use
 ```text
 P0-P11 COMPLETE / ACCEPTED
 P11 accepted through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
-P12.1 BOUNDED SOURCE WORKSPACES FOCUSED ACCEPTED / P12.2 ELIGIBLE
+P12.1 BOUNDED SOURCE WORKSPACES FOCUSED ACCEPTED
+P12.2 TYPED PATCH/DIFF IMPLEMENTED / FOCUSED VALIDATION PENDING
 P12 NOT ACCEPTED
 ```
 
-P11 remains the latest fully accepted phase. P12.1 has passed its focused authority
-gate and establishes the source/workspace boundary required before patch/test/deploy;
-it does not expose production source editing.
+P11 remains the latest fully accepted phase. P12.1 is an accepted Phase-12 authority
+foundation. P12.2 code exists but is not PASS evidence until its focused gate executes.
 
 ## Product baseline
 
 - Target: Odoo 18 Community, self-hosted Linux.
 - Supported addon: `addons/odoo_ai_assistant`.
-- Current addon version: `18.0.13.33.0`.
+- Current addon version: `18.0.13.35.0`.
 - Dependencies: `account`, `base`, `base_import`, `sale`, `web`.
 - Runtime is embedded in Odoo; the browser talks only to authenticated Odoo routes.
 - Business capabilities execute under the effective Odoo user with `su=False`.
 - `CapabilityDefinition` remains the atomic executable contract.
 - Codex App Server is the current ephemeral reasoning provider, not product authority.
-- No arbitrary SQL, Python, shell, sudo or unrestricted ORM-method surface is exposed.
+- No arbitrary SQL, Python, shell, sudo, Git command or unrestricted ORM-method surface
+  is exposed.
 
-Product-facing human profiles remain exactly `user` and `technical`. Autonomy never
-creates permissions or enlarges the P10 broker/P12 filesystem authority boundary.
+Product-facing human profiles remain exactly `user` and `technical`. Autonomy cannot
+create Odoo permissions or enlarge host/filesystem authority.
 
 ## Durable agent, Evidence and Knowledge
 
@@ -41,42 +42,52 @@ Capability/Skill/Context/Evidence extension framework.
 Accepted P8 provides bounded provenance/freshness/access-aware runtime, source/XML and
 log Evidence. Accepted P9 provides Odoo-native company Knowledge with bounded document
 ingestion, PostgreSQL lexical FTS, citations and stale-reference handling. Retrieved or
-uploaded text is untrusted data and cannot grant executable authority.
+uploaded content is untrusted data and cannot grant executable authority.
 
 ## Accepted P10 Technical/host operations
 
-Technical operations include `odoo.module.inspect`, `postgres.health`, managed config
-inspect/patch, service status/restart and lifecycle-safe module update. ADR-024 governs
-the optional AF_UNIX broker with deployment-owned logical targets, peer credentials,
-fixed argv, durable effect receipts and explicit uncertainty. The broker is not a
-shell, a third human profile or the Assistant runtime.
+Technical operations include module inspect/update, PostgreSQL health, managed config
+inspect/patch and service status/restart. ADR-024 governs the optional AF_UNIX broker
+with deployment-owned logical targets, peer credentials, fixed argv, durable effect
+receipts and explicit uncertainty. It is not a general shell or Assistant sidecar.
 
-## Accepted P11 advanced imports
+## Accepted P11 advanced imports plus post-acceptance spreadsheet breadth
 
-P11 implements durable create-only CSV workflows instead of thousands of ordinary CRUD
-tool calls. It includes mapped-row staging, bounded background chunks, exact receipts,
-no-blind-replay recovery, deterministic cleanup and explicit rejected-window
-repair/resume under the originating effective user.
+The accepted P11 evidence proves durable create-only CSV import, mapped-row staging,
+bounded background chunks, exact receipts, no-blind-replay recovery, deterministic
+cleanup and rejected-window repair/resume.
 
-P11 focused tests and all six named real gates are PASS on the accepted evidence at:
-`research/evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md`.
+A post-acceptance product-path fix now additionally lets the chat paperclip carry
+short-lived tabular artifacts:
+
+```text
+CSV / XLS / XLSX / ODS
+```
+
+The reason for this extension is concrete: the chat uploader still inherited P9's
+Knowledge document allowlist, so Excel could not reach the P11 workflow. Spreadsheet
+artifacts are now temporary turn-bound files; they are not automatically indexed into
+Company Knowledge. Native preparation delegates workbook parsing to Odoo `base_import`,
+then reuses the same P11 staged-row/chunk/receipt execution.
+
+Format-neutral capability aliases are now present:
+
+```text
+assistant.data_import.inspect_file
+assistant.data_import.start_file
+```
+
+The original CSV ids remain compatible. This spreadsheet breadth is **validation
+pending** and does not retroactively alter the immutable P11 acceptance evidence. See
+`research/P11_SPREADSHEET_CHAT_IMPORT_EXTENSION.md`.
 
 ## P12.1 controlled source workspace — focused accepted
 
-ADR-025 establishes a workspace-first source-modification boundary.
+ADR-025 establishes a workspace-first source-modification boundary. A bounded installed
+addon snapshot is copied beneath the Assistant runtime source workspace using a
+host-generated logical id. Physical paths remain host-internal.
 
-Current P12.1 code may copy a bounded snapshot of one installed Odoo addon into:
-
-```text
-<data_dir>/odoo_ai_assistant/source/workspaces/<host-generated-id>/
-```
-
-The model never chooses an absolute source/workspace path. Host code reuses the
-installed-source resolver to map an installed module name to its effective addon root.
-The source root is treated as read-only by this workflow even when the Odoo OS account
-could technically write it.
-
-The workspace contract provides:
+The P12.1 contract includes:
 
 ```text
 source_id = odoo-addon:<module>
@@ -84,55 +95,81 @@ workspace_id = workspace:v1:<32hex>
 private 0700 directories / 0600 files
 no followed symlinks
 no source/workspace-root overlap
-bounded regular-file snapshot
-4096 file ceiling
-64 MiB total ceiling
-8 MiB single-file ceiling
-canonical source/workspace SHA-256 fingerprints
-separate source-stale vs workspace-changed state
-opaque user/company/database/turn binding fingerprint
+4096 file ceiling / 64 MiB total / 8 MiB per file
+deterministic source/workspace SHA-256 fingerprints
+source-stale vs workspace-changed state
+uid/company/database-hash/turn binding
 path-free public metadata
-bounded owner-bound deletion
 ```
 
-Physical addon roots, `data_dir`, workspace paths and raw database names are not part
-of the public projection.
+Formal P12.1 focused validation passed on the recorded evidence at
+`research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md`.
 
-P12.1 deliberately registers **no** source-edit, patch, test-execution or deploy
-capability. Future slices must compose through the same boundary:
+## P12.2 typed patch/diff — implemented, validation pending
+
+P12.2 promotes the private workspace through the existing capability framework without
+creating an arbitrary filesystem editor.
+
+Current capabilities:
 
 ```text
-P12.2 explicit workspace diff/patch contract
-P12.3 tests bound to exact post-patch workspace fingerprint
-P12.4 separately typed deploy + verification + recovery boundary
+assistant.source_workspace.prepare
+assistant.source_workspace.inspect
+assistant.source_workspace.read_file
+assistant.source_workspace.preview_patch
+assistant.source_workspace.apply_patch
+assistant.source_workspace.inspect_patch
 ```
 
-A future protected-source deployment must use ADR-024's finite broker pattern or an
-equivalently narrow deployment adapter. Generic shell/Git/sudo/arbitrary filesystem
-write remains outside the product contract.
-
-## P12.1 validation truth
-
-Formal committed-SHA validation executed:
+`apply_patch` is Technical-only PLAN/ACTION/POLICY. Input is a bounded structured edit
+contract over logical paths only:
 
 ```text
-compileall + focused Ruff                           PASS
-SourceWorkspaceTests                               PASS — 10 tests
-TestPhase12SourceWorkspace                         PASS — 3 methods
+modify -> exact old fragment + replacement
+create -> bounded UTF-8 content
+delete -> logical path
 ```
 
-P12.1 is accepted on
-`research/evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md`. P12.2 is eligible;
-the immediate next action is to define a typed workspace-only proposed patch/diff
-contract with exact before/after fingerprints and no physical-path or free-form command
-input.
+The host requires an exact current workspace fingerprint. A modify fragment must match
+exactly once. Path traversal, absolute paths, VCS/runtime/secret paths, binary files and
+unsupported suffixes fail closed.
 
-The later Phase-12 real gates remain unexecuted:
+Preview computes and exposes the complete bounded unified diff plus:
 
 ```text
-P12-REAL-PATH-BOUNDARY
-P12-REAL-DIFF-APPROVAL
-P12-REAL-TEST-BEFORE-DEPLOY
-P12-REAL-DEPLOY-VERIFY
-P12-REAL-FAILED-DEPLOY-RECOVERY
+before workspace fingerprint
+after workspace fingerprint
+diff fingerprint
+approval fingerprint
 ```
+
+A diff larger than the approval ceiling is rejected instead of silently truncated.
+Applying the patch revalidates the proposal and creates a **new derived private
+workspace**; the parent remains unchanged. A private receipt binds parent/child,
+binding, changed logical paths and all fingerprints. Installed source is still not
+modified.
+
+P12.2 therefore stops at `workspace -> approved derived workspace`. P12.3 must bind
+actual tests to that exact after-workspace fingerprint. P12.4 must separately implement
+managed deploy, verification and recovery.
+
+## Validation truth
+
+```text
+P11 accepted CSV focused + six real gates                 PASS (immutable evidence)
+post-P11 XLSX/chat regression                             NOT EXECUTED
+P12.1 compile/Ruff + 10 unit + 3 Odoo methods            PASS
+P12.2 SourcePatchTests                                   NOT EXECUTED — 9 prepared
+P12.2 TestPhase12SourcePatch                             NOT EXECUTED — 3 prepared
+P12.2 direct P12.1 Odoo neighbor rerun                   NOT EXECUTED
+P12-REAL-PATH-BOUNDARY                                   NOT EXECUTED
+P12-REAL-DIFF-APPROVAL                                   NOT EXECUTED
+P12-REAL-TEST-BEFORE-DEPLOY                              BLOCKED — P12.3 missing
+P12-REAL-DEPLOY-VERIFY                                   BLOCKED — P12.4 missing
+P12-REAL-FAILED-DEPLOY-RECOVERY                          BLOCKED — P12.4 missing
+P12 acceptance                                           NOT COMPLETE
+```
+
+Use `research/P12.2_FOCUSED_VALIDATION_RUNBOOK.md`. The next implementation phase is
+P12.3 only after the focused P12.2 authority gate is green and any applicable real
+diff-approval gate is resolved.

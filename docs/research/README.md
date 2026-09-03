@@ -7,10 +7,10 @@ immutable evidence. Current code plus accepted ADRs outrank dated research.
 
 ```text
 P0-P11 COMPLETE / ACCEPTED
-P11 accepted through 72b4b826bddffc20f99f5cd72f14ed95111eab5c
 P12.1 BOUNDED SOURCE WORKSPACES FOCUSED ACCEPTED
-P12.2 PROPOSED PATCH/DIFF CONTRACT ELIGIBLE / NOT STARTED
+P12.2 TYPED PATCH/DIFF IMPLEMENTED / FOCUSED VALIDATION PENDING
 P12 NOT ACCEPTED
+post-P11 spreadsheet/chat breadth IMPLEMENTED / VALIDATION PENDING
 ```
 
 Use `EXECUTION_STATE.md` for exact lineage, blockers and next action.
@@ -20,40 +20,38 @@ Use `EXECUTION_STATE.md` for exact lineage, blockers and next action.
 | Document | Purpose |
 | --- | --- |
 | `EXECUTION_STATE.md` | Exact roadmap cursor and validation truth. |
-| `P12_SOURCE_WORKSPACE_FOUNDATION.md` | P12.1 source/workspace identity, bounds and no-production-mutation contract. |
-| `P12_FOCUSED_VALIDATION_RUNBOOK.md` | Executed P12.1 gate and five later Phase-12 real gates. |
+| `P11_SPREADSHEET_CHAT_IMPORT_EXTENSION.md` | Post-P11 XLS/XLSX/ODS chat/import breadth and focused debt. |
+| `P12_SOURCE_WORKSPACE_FOUNDATION.md` | Accepted P12.1 source/workspace identity and bounds. |
+| `P12_PATCH_DIFF_CONTRACT.md` | Implemented P12.2 typed private-workspace edit/diff contract. |
+| `P12.2_FOCUSED_VALIDATION_RUNBOOK.md` | Immediate P12.2 + spreadsheet regression gate. |
+| `P12_FOCUSED_VALIDATION_RUNBOOK.md` | Executed P12.1 gate and Phase-12 real-gate names. |
 | `evidence/phase12/2026-09-03/P12.1-FOCUSED-ad1378b.md` | P12.1 focused authority acceptance. |
 | `../adr/ADR-025-controlled-source-workspaces.md` | Accepted P12 staging/path/fingerprint authority decision. |
-| `P11_IMPORT_CLEANUP_REPAIR_SLICE.md` | Latest accepted P11 implementation record. |
-| `evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md` | P11 immutable acceptance. |
+| `evidence/phase11/2026-09-03/P11-ACCEPTANCE-72b4b82.md` | Immutable accepted P11 CSV evidence. |
 | `REAL_ENV_VALIDATION_PROTOCOL.md` | Named real product-path gates. |
-| `PERIODIC_FULL_REGRESSION_RUNBOOK.md` | Expensive broad regression when explicitly required. |
 
 ## P12 authority direction
 
 ```text
 installed addon source (read-only to ordinary Assistant mutation)
- -> host-resolved bounded private workspace
- -> explicit approved diff/patch
- -> tests bound to exact workspace fingerprint
- -> separately typed deploy
- -> verify / recovery
+ -> host-resolved bounded private workspace                 P12.1 accepted
+ -> typed approved diff + derived workspace                P12.2 implemented
+ -> tests bound to exact workspace fingerprint             P12.3 pending
+ -> separately typed deploy -> verify / recovery           P12.4 pending
 ```
 
-P12.1 provides only the first arrow. It exposes no filesystem editor, patch executor,
-test command or deployment effect to the model.
+P12.2 still does not grant production source write, generic filesystem access, shell,
+Git or arbitrary command execution. A protected deploy must use ADR-024's finite
+broker model or an equivalently narrow adapter.
 
-The source/workspace foundation reuses P8 installed-source resolution and the private
-runtime source area. A future protected deploy must use ADR-024's finite broker model
-or an equivalently narrow deployment adapter; generic shell/Git/sudo remains forbidden.
+## Current validation truth
 
-## P12 validation truth
+P12.1 committed-SHA compile/Ruff, 10 dependency-light workspace tests and 3 focused
+Odoo methods passed. P12.2 has 9 dependency-light and 3 Odoo methods prepared but not
+executed. The spreadsheet/chat extension has 2 focused Odoo methods prepared plus a
+required real composer `.xlsx` check; none is represented PASS yet.
 
-Committed-SHA compile/Ruff, all 10 workspace unit tests and the focused 3-method Odoo
-authority gate passed. P12.1 is focused accepted and P12.2 may begin; full Phase-12
-acceptance still requires the later contracts and real gates.
-
-Later HARD real gates remain:
+Later HARD Phase-12 gates remain:
 
 ```text
 P12-REAL-PATH-BOUNDARY
@@ -75,5 +73,5 @@ inspect main + AGENTS.md + EXECUTION_STATE
  -> update code/tests/docs/evidence coherently
 ```
 
-No GitHub Actions are used for this roadmap while repository policy says runners are
-unavailable. Unexecuted validation is never PASS.
+No GitHub Actions are used while repository policy says runners are unavailable.
+Unexecuted validation is never PASS.
