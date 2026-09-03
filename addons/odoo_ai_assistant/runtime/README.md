@@ -10,6 +10,8 @@ flowchart TB
     AG --> EVD[Evidence/<br/>catalog + ledger]
     CAT --> ORM[Effective-user Odoo ORM]
     EVD --> ORM
+    CAT --> HB[host_broker.py<br/>optional typed client]
+    HB --> PB[AF_UNIX privilege broker]
     ACCT[account.py / worker<br/>provider lifecycle] --> CX
     PATH[paths.py<br/>safe runtime paths] --> ACCT
 ```
@@ -20,7 +22,8 @@ flowchart TB
 |---|---|
 | `agent/` | provider-neutral iterative decision loop, streaming/failure/public projections |
 | `capabilities/` | executable capability contract, Skills/Context/Evidence extension framework, policy/execution |
-| `context_source_policy.json` | default current-vs-historical source scope for P8 evidence/source intelligence |
+| `host_broker.py`, `host_broker_wire.py` | bounded Odoo-side P10 client and wire validation for the optional broker |
+| `context_source_policy.json` | default current-vs-historical source scope for Evidence/source intelligence |
 | `codex.py` | lower-level Codex process/protocol support |
 | `account.py`, `account_worker.py` | provider account/login/status lifecycle |
 | `paths.py` | safe provider/runtime filesystem roots beneath Odoo `data_dir` |
@@ -39,6 +42,10 @@ The runtime does not need:
 - Celery/Redis/RabbitMQ;
 - a generic SQL/shell/Python bridge for the model.
 
+The optional root `host_broker/` package is a finite machine adapter, not a restored
+Assistant server. The embedded runtime talks to it only for accepted high-level
+Technical capabilities.
+
 ## Authority model
 
 ```text
@@ -46,15 +53,17 @@ reasoning provider:  what should happen next?
 capability host:     is this operation defined/available/valid?
 Evidence layer:      what bounded evidence is available/fresh/accessible?
 Odoo authority:      may this effective user read/change this resource?
+broker policy:       may this exact privileged operation target this exact host resource?
 ```
 
 Evidence, Skills, context and manifests do not grant authority. Even if retrieved
-source/docs name a Python function, Odoo method or command, it is non-executable data
-unless trusted host code exposes an effective typed capability.
+source/docs name a Python function, Odoo method, path or command, it is non-executable
+data unless trusted host code exposes an effective typed capability and, where
+required, broker policy resolves its logical target.
 
 Business operations use the effective Odoo Environment with `su=False`.
 
-## P7/P8 extension model
+## P7-P10 extension model
 
 Current composition is:
 
@@ -66,16 +75,18 @@ CapabilityProvider
   +-- EvidenceProvider[]
 ```
 
-The provider API is versioned (`CAPABILITY_PROVIDER_API_VERSION = "1"`) and optional
-provider/resource failures are isolated.
+The provider API is versioned and optional provider/resource failures are isolated.
+P8/P9 provide runtime/source/log/Knowledge Evidence through the same extension seam.
 
-P8 Evidence currently provides common bounded contracts/catalog/routing/ledger and a
-runtime/installation inventory provider. Live source/XML/log/Knowledge/web Evidence
-belongs to later slices.
+P10 adds Technical-only Odoo-local diagnostics plus broker-backed config/service
+capabilities. Broker-backed effects still use `CapabilityDefinition`, EffectPlan,
+policy, durable binding, verification and recovery; no second capability registry is
+introduced.
 
 ## Runtime filesystem
 
-Mutable state belongs below the effective Odoo `data_dir`, conceptually:
+Mutable provider/runtime state belongs below the effective Odoo `data_dir`,
+conceptually:
 
 ```text
 <odoo data_dir>/odoo_ai_assistant/
@@ -86,10 +97,13 @@ Mutable state belongs below the effective Odoo `data_dir`, conceptually:
 ```
 
 Provider credentials/cache must not be copied into source checkout, prompts or normal
-PostgreSQL fields simply for convenience.
+PostgreSQL fields.
 
-Future source/host operations must use explicit logical/managed roots and typed
-capabilities; P8 Evidence locators are not permission to execute arbitrary paths.
+Broker ledger, backups, policy and socket belong to deployment-owned paths outside the
+model-writable runtime tree. Their reference locations are documented in
+`../../../host_broker/README.md`.
+
+Source/Evidence locators are never permission to execute arbitrary paths.
 
 ## Extending the runtime
 
@@ -99,28 +113,40 @@ capabilities; P8 Evidence locators are not permission to execute arbitrary paths
 - New JIT contextual projection → `ContextProvider`.
 - New retrievable source/facts → `EvidenceProvider`.
 - New reasoning provider → implement the provider seam; do not fork capability/policy logic.
-- New host integration → prefer a high-level bounded operation, not a generic command primitive.
+- New host integration → high-level typed operation + broker policy, never generic command composition.
 
 ## Product profiles
 
-Public product semantics currently expose only:
+Public product semantics expose only:
 
 ```text
 User / non-technical
 Technical
 ```
 
-The future Technical/host privilege broker is a machine execution boundary, not a
-third human product profile.
+The accepted optional Technical/host broker is a machine execution boundary, not a
+third human product profile. Full autonomy cannot make broker-backed capabilities
+available to a User profile.
+
+## Host-effect certainty
+
+An effectful broker request is bound to the durable EffectPlan step and precondition.
+Once dispatch starts, transport/framing/receipt loss is `host_effect_uncertain`; it is
+never ordinary unavailability or permission for a blind retry.
+
+The broker's durable ledger returns the same terminal receipt for the exact request,
+denies changed replay and treats unresolved running requests as uncertain.
 
 ## What should remain detachable
 
-The model provider, transport projections and UI are replaceable.
+The model provider, transport projections, broker deployment adapter and UI are
+replaceable.
 
 Odoo persistence, effective-user authority, `CapabilityDefinition`, durable
-effect/recovery semantics and host-side validation are architectural invariants.
+effect/recovery semantics and host-side validation are invariants.
 
 Read [`agent/README.md`](agent/README.md),
-[`capabilities/README.md`](capabilities/README.md) and
-[`../../../docs/EVIDENCE_ARCHITECTURE.md`](../../../docs/EVIDENCE_ARCHITECTURE.md)
+[`capabilities/README.md`](capabilities/README.md),
+[`../../../docs/EVIDENCE_ARCHITECTURE.md`](../../../docs/EVIDENCE_ARCHITECTURE.md) and
+[`../../../docs/adr/ADR-024-technical-host-privilege-broker.md`](../../../docs/adr/ADR-024-technical-host-privilege-broker.md)
 next.
