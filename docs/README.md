@@ -7,22 +7,19 @@ direction and validation evidence.
 
 ```text
 P0-P10 COMPLETE / ACCEPTED
-P10 PRIVILEGE-BOUNDARY ADR ACCEPTED
-P10 TYPED HOST-OPERATIONS FIRST SLICE IMPLEMENTED
-P10 MODULE-UPDATE MAINTENANCE ADAPTER IMPLEMENTED
-P10 FOCUSED VALIDATION PASS
-P10 REAL VALIDATION PASS
-P11 READY FOR DESIGN
+P11 DURABLE CSV FIRST SLICE IMPLEMENTED
+P11 FOCUSED + REAL VALIDATION PENDING
+P11 NOT ACCEPTED
 ```
 
-P9 remains accepted through `77d470febf67ddee46562907718dc47e975922bb`.
-Its acceptance record is
-[`research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md`](research/evidence/phase9/2026-09-03/P9-ACCEPTANCE-77d470f.md).
-
-P10 is accepted through `bde508b737c132140e237cdfde31aee9b37eca5f`. Its focused
-and real broker/profile/config/service/PostgreSQL/privilege/module gates are recorded
-in
+P10 remains the latest accepted phase through
+`bde508b737c132140e237cdfde31aee9b37eca5f`. Its focused and real
+broker/profile/config/service/PostgreSQL/privilege/module gates are recorded in
 [`research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`](research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md).
+
+P11 now has executable durable CSV session/chunk code and three Assistant capabilities,
+but no P11 gate is represented as PASS yet. The exact cursor remains
+[`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md).
 
 ## Primary reading path
 
@@ -33,9 +30,9 @@ in
 5. [`EVIDENCE_ARCHITECTURE.md`](EVIDENCE_ARCHITECTURE.md) — retrieval/Evidence contract.
 6. [`KNOWLEDGE_INDEX.md`](KNOWLEDGE_INDEX.md) — P9 Knowledge lifecycle and retrieval.
 7. [`adr/ADR-024-technical-host-privilege-broker.md`](adr/ADR-024-technical-host-privilege-broker.md) — accepted P10 privilege boundary.
-8. [`research/P10_HOST_OPERATIONS_FIRST_SLICE.md`](research/P10_HOST_OPERATIONS_FIRST_SLICE.md) — implemented P10 scope and deferrals.
-9. [`research/P10_FOCUSED_VALIDATION_RUNBOOK.md`](research/P10_FOCUSED_VALIDATION_RUNBOOK.md) — executed P10 gate contract.
-10. [`research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`](research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md) — P10 acceptance evidence.
+8. [`research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md`](research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md) — current P11 implementation contract.
+9. [`research/P11_FOCUSED_VALIDATION_RUNBOOK.md`](research/P11_FOCUSED_VALIDATION_RUNBOOK.md) — immediate P11 focused/real gates.
+10. [`research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md`](research/evidence/phase10/2026-09-03/P10-ACCEPTANCE-bde508b.md) — latest phase acceptance evidence.
 11. [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md) — exact roadmap cursor.
 
 ## Architecture at a glance
@@ -56,17 +53,20 @@ flowchart TB
     EFFECT --> ORM
     EFFECT --> BROKER[Optional typed host broker]
     BROKER --> TARGET[Policy-owned config/service/module target]
+    EFFECT --> IMPORT[Durable P11 import session]
+    IMPORT --> CHUNK[Bounded effective-user chunks + receipts]
+    CHUNK --> ORM
     HOST --> LIVE[TaskPlan/activity/answer/final projection]
     LIVE --> UI
 ```
 
-`CapabilityDefinition` remains executable authority. `CapabilityProvider`, Skills,
-ContextProviders, EvidenceProviders, manifests and ledgers enrich reasoning but cannot
-bypass registry, executor or policy.
+`CapabilityDefinition` remains executable authority. Skills, ContextProviders,
+EvidenceProviders, manifests, ledgers and file contents enrich reasoning but cannot
+bypass registry, executor, Odoo ACLs or policy.
 
 The optional host broker is a second authority boundary only for explicitly configured
-machine targets. It receives no free-form command and cannot elevate a User profile.
-Transport loss after dispatch of a host effect is treated as uncertain.
+machine targets. P11 imports do not use it: their business writes stay inside Odoo
+under the originating user and `su=False`.
 
 ## Current subsystem documents
 
@@ -79,7 +79,7 @@ Transport loss after dispatch of a host effect is treated as uncertain.
 - [`UNIFIED_AGENT_RUNTIME.md`](UNIFIED_AGENT_RUNTIME.md)
 - [`TURN_LIFECYCLE_COMPOSITION.md`](TURN_LIFECYCLE_COMPOSITION.md)
 
-### Capabilities, Context, Evidence and Knowledge
+### Capabilities, Context, Evidence, Knowledge and artifacts
 
 - [`CAPABILITY_FRAMEWORK.md`](CAPABILITY_FRAMEWORK.md)
 - [`EVIDENCE_ARCHITECTURE.md`](EVIDENCE_ARCHITECTURE.md)
@@ -87,6 +87,7 @@ Transport loss after dispatch of a host effect is treated as uncertain.
 - [`CONTEXT_SOURCE_POLICY.md`](CONTEXT_SOURCE_POLICY.md)
 - [`QUERY_CONTRACT.md`](QUERY_CONTRACT.md)
 - [`adr/ADR-022-evidence-core-and-ledger.md`](adr/ADR-022-evidence-core-and-ledger.md)
+- [`research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md`](research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md)
 
 ### Observability and Technical boundary
 
@@ -101,28 +102,24 @@ adapter are accepted on the recorded P10 lineage.
 ### Execution, evals and evidence
 
 - [`research/EXECUTION_STATE.md`](research/EXECUTION_STATE.md)
+- [`research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md`](research/P11_ADVANCED_IMPORTS_FIRST_SLICE.md)
+- [`research/P11_FOCUSED_VALIDATION_RUNBOOK.md`](research/P11_FOCUSED_VALIDATION_RUNBOOK.md)
 - [`research/P10_HOST_OPERATIONS_FIRST_SLICE.md`](research/P10_HOST_OPERATIONS_FIRST_SLICE.md)
 - [`research/P10_FOCUSED_VALIDATION_RUNBOOK.md`](research/P10_FOCUSED_VALIDATION_RUNBOOK.md)
 - [`research/P9_KNOWLEDGE_FIRST_SLICE.md`](research/P9_KNOWLEDGE_FIRST_SLICE.md)
-- [`research/P9_FOCUSED_VALIDATION_RUNBOOK.md`](research/P9_FOCUSED_VALIDATION_RUNBOOK.md)
 - [`research/P8_EVIDENCE_CORE_IMPLEMENTATION.md`](research/P8_EVIDENCE_CORE_IMPLEMENTATION.md)
-- [`research/P8_FOCUSED_VALIDATION_RUNBOOK.md`](research/P8_FOCUSED_VALIDATION_RUNBOOK.md)
 - [`research/REAL_ENV_VALIDATION_PROTOCOL.md`](research/REAL_ENV_VALIDATION_PROTOCOL.md)
 - [`research/PRODUCT_BEHAVIOR_EVALS_V1.md`](research/PRODUCT_BEHAVIOR_EVALS_V1.md)
 - [`research/PERIODIC_FULL_REGRESSION_RUNBOOK.md`](research/PERIODIC_FULL_REGRESSION_RUNBOOK.md)
 
 ## Supported-path cleanup
 
-The embedded Odoo addon remains the product runtime. The obsolete GitHub Actions
-workflow, unauthenticated sidecar inventory callback, addon-local machine-auth
-primitive and residual addon inventory service are removed from the supported tree.
+The embedded Odoo addon remains the product runtime. Historical `service/`,
+`installer/`, migration/task/evidence records may remain for lineage, but are excluded
+from current source context by [`CONTEXT_SOURCE_POLICY.md`](CONTEXT_SOURCE_POLICY.md).
 
-Historical `service/`, `installer/`, migration/task/evidence records may remain for
-lineage, but are excluded from current source context by
-[`CONTEXT_SOURCE_POLICY.md`](CONTEXT_SOURCE_POLICY.md).
-
-The P10 `host_broker/` directory is not a restored sidecar. It has no model/runtime
-logic and exposes only the finite ADR-024 operation protocol.
+The P10 `host_broker/` directory is not a restored sidecar. It has no reasoning/model
+logic and exposes only the finite ADR-024 machine-operation protocol.
 
 ## Current versus target notation
 
