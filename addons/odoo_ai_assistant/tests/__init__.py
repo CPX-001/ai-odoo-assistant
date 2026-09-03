@@ -40,6 +40,7 @@ from . import test_phase9_knowledge_capability as test_phase9_knowledge_capabili
 from . import test_phase10_host_operations as test_phase10_host_operations
 from . import test_phase11_data_import as test_phase11_data_import
 from . import test_phase11_data_import_repair as test_phase11_data_import_repair
+from . import test_phase11_spreadsheet_import as test_phase11_spreadsheet_import
 from . import test_phase12_source_workspace as test_phase12_source_workspace
 from . import test_planning_preferences as test_planning_preferences
 from . import test_post_effect_reasoning as test_post_effect_reasoning

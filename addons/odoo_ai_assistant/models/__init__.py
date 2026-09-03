@@ -7,8 +7,10 @@ from . import chat_preferences as chat_preferences
 from . import chat_storage as chat_storage
 from . import data_import as data_import
 from . import data_import_repair as data_import_repair
+from . import data_import_spreadsheet as data_import_spreadsheet
 from . import knowledge as knowledge
 from . import knowledge_attachment_link as knowledge_attachment_link
+from . import knowledge_spreadsheet_attachment as knowledge_spreadsheet_attachment
 from . import knowledge_fts_index as knowledge_fts_index
 from . import embedded_runtime as embedded_runtime
 from . import res_config_settings as res_config_settings

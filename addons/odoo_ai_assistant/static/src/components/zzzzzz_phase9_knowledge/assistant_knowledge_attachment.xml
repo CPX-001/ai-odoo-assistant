@@ -29,7 +29,7 @@
                     </button>
                 </div>
                 <div class="w-100 small text-muted mt-1">
-                    El archivo sólo se añadirá a Knowledge si lo pides explícitamente en el mensaje.
+                    El archivo queda ligado a este turno; sólo se añade a Knowledge si lo pides explícitamente.
                 </div>
             </div>
             <div t-if="state.knowledgeUploadError" class="small text-danger mb-2" role="status"
@@ -42,7 +42,7 @@
                 <i t-if="state.knowledgeUploadBusy" class="fa fa-spinner fa-spin" aria-hidden="true"/>
                 <i t-else="" class="fa fa-paperclip" aria-hidden="true"/>
                 <input type="file" class="d-none"
-                    accept=".pdf,.txt,.md,.markdown,.rst,.csv,.json,.xml,application/pdf,text/plain,text/markdown,text/x-rst,text/csv,application/json,application/xml,text/xml"
+                    accept=".pdf,.txt,.md,.markdown,.rst,.csv,.xls,.xlsx,.ods,.json,.xml,application/pdf,text/plain,text/markdown,text/x-rst,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet,application/json,application/xml,text/xml"
                     t-att-disabled="state.loading or state.decisionLoading or recoveryPending or state.knowledgeUploadBusy"
                     t-on-change="onKnowledgeFileSelected"/>
             </label>

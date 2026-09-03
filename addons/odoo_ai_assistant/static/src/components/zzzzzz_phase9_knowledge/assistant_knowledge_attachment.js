@@ -34,7 +34,10 @@ function uploadErrorMessage(code) {
         ),
         knowledge_pdf_encrypted: _t("No se pueden leer PDF protegidos con contraseña."),
         knowledge_unsupported_document: _t(
-            "Formato no soportado. Usa PDF, TXT, Markdown, RST, CSV, JSON o XML."
+            "Formato no soportado para Knowledge. Usa PDF, TXT, Markdown, RST, CSV, JSON o XML."
+        ),
+        knowledge_unsupported_attachment: _t(
+            "Formato no soportado. Puedes adjuntar PDF, texto, CSV, XLS, XLSX, ODS, JSON o XML."
         ),
     };
     return messages[code] || _t("No se pudo adjuntar el archivo.");
